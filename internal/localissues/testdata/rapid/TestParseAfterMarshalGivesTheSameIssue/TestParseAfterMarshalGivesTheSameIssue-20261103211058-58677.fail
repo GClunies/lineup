@@ -1,0 +1,25 @@
+# 2026/11/03 21:10:58.577074 [TestParseAfterMarshalGivesTheSameIssue] [rapid] draw title: "\x00"
+# 2026/11/03 21:10:58.577080 [TestParseAfterMarshalGivesTheSameIssue] [rapid] draw repo: ""
+# 2026/11/03 21:10:58.577080 [TestParseAfterMarshalGivesTheSameIssue] [rapid] draw status: "todo"
+# 2026/11/03 21:10:58.577082 [TestParseAfterMarshalGivesTheSameIssue] [rapid] draw body: "\x00"
+# 2026/11/03 21:10:58.577083 [TestParseAfterMarshalGivesTheSameIssue] [rapid] draw blocked: []int{}
+# 2026/11/03 21:10:58.577085 [TestParseAfterMarshalGivesTheSameIssue] round trip
+#  got localissues.Issue{N:0, Title:"\x00", Repo:"", Status:"todo", BlockedBy:[]string(nil), Body:"\n\x00"}
+# want localissues.Issue{N:0, Title:"\x00", Repo:"", Status:"todo", BlockedBy:[]string(nil), Body:"\x00"}
+# file "---\ntitle: \x00\nstatus: todo\n---\n\n\x00"
+# 
+v0.4.8#12294876141568673190
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x5555555555555
+0x0
+0x0
+0x0
+0x0
+0x0

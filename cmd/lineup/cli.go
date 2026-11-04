@@ -1,0 +1,225 @@
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"text/tabwriter"
+	"time"
+
+	"github.com/gclunies/lineup/internal/github"
+	"github.com/gclunies/lineup/internal/localissues"
+	"github.com/gclunies/lineup/internal/scheduler"
+)
+
+// clientCommands are the commands that call the Scheduler. The Orchestrator uses them.
+var clientCommands = map[string]func(c scheduler.Client, args []string, out io.Writer) error{
+	"add":     cmdAdd,
+	"start":   cmdStart,
+	"ls":      cmdLs,
+	"watch":   cmdWatch,
+	"show":    cmdShow,
+	"steer":   cmdSteer,
+	"set":     cmdSet,
+	"cap":     cmdCap,
+	"rerun":   cmdRerun,
+	"merge":   simple("merge"),
+	"close":   simple("close"),
+	"archive": simple("archive"),
+}
+
+var errUsage = errors.New("usage")
+
+func parse(name, usage string, args []string, setup func(*flag.FlagSet)) (*flag.FlagSet, error) {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.Usage = func() { fmt.Fprintf(fs.Output(), "usage: lineup %s %s\n", name, usage) }
+	if setup != nil {
+		setup(fs)
+	}
+	return fs, fs.Parse(args)
+}
+
+func cmdAdd(c scheduler.Client, args []string, out io.Writer) error {
+	var repo string
+	fs, err := parse("add", "<ISSUE> | --repo <repo> \"<text>\"", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&repo, "repo", "", "the Repo, as a name such as data or a path")
+	})
+	if err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		fs.Usage()
+		return errUsage
+	}
+	req := scheduler.Request{Op: "add", Repo: repo}
+	if repo != "" && !looksLikeIssue(fs.Arg(0)) {
+		req.Text = fs.Arg(0)
+	} else {
+		req.Issue = fs.Arg(0)
+	}
+	var v scheduler.TaskView
+	if err := c.Do(req, &v); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "%s queued in %s: %s\n", v.ID, v.Repo, v.Title)
+	return nil
+}
+
+// looksLikeIssue matches an Issue ID: ENG-123, owner/repo#12, or local-7.
+func looksLikeIssue(s string) bool {
+	switch scheduler.KindOf(s) {
+	case scheduler.KindGitHub:
+		_, _, err := github.ParseIssueID(s)
+		return err == nil
+	case scheduler.KindLocal:
+		_, err := localissues.ParseID(s)
+		return err == nil
+	}
+	team, num, ok := strings.Cut(s, "-")
+	if !ok || team == "" || num == "" || strings.ToUpper(team) != team {
+		return false
+	}
+	for _, r := range num {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func cmdStart(c scheduler.Client, args []string, out io.Writer) error {
+	var over bool
+	fs, err := parse("start", "[--over-cap] <task>", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&over, "over-cap", false, "start once over the WIP cap; only with the user's yes")
+	})
+	if err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		fs.Usage()
+		return errUsage
+	}
+	if err := c.Do(scheduler.Request{Op: "start", Task: fs.Arg(0), OverCap: over}, nil); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "%s started\n", fs.Arg(0))
+	return nil
+}
+
+func cmdLs(c scheduler.Client, args []string, out io.Writer) error {
+	var asJSON bool
+	if _, err := parse("ls", "[--json]", args, func(fs *flag.FlagSet) { fs.BoolVar(&asJSON, "json", false, "print JSON") }); err != nil {
+		return err
+	}
+	var v scheduler.BoardView
+	if err := c.Do(scheduler.Request{Op: "ls"}, &v); err != nil {
+		return err
+	}
+	if asJSON {
+		return json.NewEncoder(out).Encode(v)
+	}
+	fmt.Fprintf(out, "WIP %d/%d", v.Started, v.Cap)
+	if v.OverCap > 0 {
+		fmt.Fprintf(out, " +%d over", v.OverCap)
+	}
+	fmt.Fprintln(out)
+	tw := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
+	for _, t := range v.Tasks {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.Group, t.Stage, t.Repo, t.Title, t.Note)
+	}
+	return tw.Flush()
+}
+
+func cmdShow(c scheduler.Client, args []string, out io.Writer) error {
+	var asJSON bool
+	fs, err := parse("show", "[--json] <task>", args, func(fs *flag.FlagSet) { fs.BoolVar(&asJSON, "json", false, "print JSON") })
+	if err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		fs.Usage()
+		return errUsage
+	}
+	var d scheduler.TaskDetail
+	if err := c.Do(scheduler.Request{Op: "show", Task: fs.Arg(0)}, &d); err != nil {
+		return err
+	}
+	if asJSON {
+		return json.NewEncoder(out).Encode(d)
+	}
+	fmt.Fprintf(out, "%s  %s\n%s in %s (%s)\n", d.ID, d.Title, d.Stage, d.Repo, d.Branch)
+	if d.Note != "" {
+		fmt.Fprintln(out, d.Note)
+	}
+	for _, u := range []string{d.IssueURL, d.PRURL, d.Worktree} {
+		if u != "" {
+			fmt.Fprintln(out, u)
+		}
+	}
+	for _, e := range d.Events {
+		fmt.Fprintf(out, "  %s  %-26s %s -> %s  %s\n", e.At.Local().Format(time.DateTime), e.Signal, e.From, e.To, e.Detail)
+	}
+	return nil
+}
+
+func cmdSteer(c scheduler.Client, args []string, out io.Writer) error {
+	if len(args) != 2 {
+		return fmt.Errorf("%w: lineup steer <task> \"<text>\"", errUsage)
+	}
+	return c.Do(scheduler.Request{Op: "steer", Task: args[0], Text: args[1]}, nil)
+}
+
+func cmdSet(c scheduler.Client, args []string, out io.Writer) error {
+	if len(args) != 2 {
+		return fmt.Errorf("%w: lineup set <task> key=value", errUsage)
+	}
+	k, v, ok := strings.Cut(args[1], "=")
+	if !ok || k == "" {
+		return fmt.Errorf("%w: lineup set <task> key=value", errUsage)
+	}
+	return c.Do(scheduler.Request{Op: "set", Task: args[0], Key: k, Value: v}, nil)
+}
+
+func cmdCap(c scheduler.Client, args []string, out io.Writer) error {
+	var n int
+	if len(args) != 1 {
+		return fmt.Errorf("%w: lineup cap <n>", errUsage)
+	}
+	if _, err := fmt.Sscan(args[0], &n); err != nil {
+		return fmt.Errorf("%w: lineup cap <n>", errUsage)
+	}
+	return c.Do(scheduler.Request{Op: "cap", N: n}, nil)
+}
+
+func cmdRerun(c scheduler.Client, args []string, out io.Writer) error {
+	if len(args) != 2 {
+		return fmt.Errorf("%w: lineup rerun <task> <stage>, for example ci_debug", errUsage)
+	}
+	return c.Do(scheduler.Request{Op: "rerun", Task: args[0], Stage: args[1]}, nil)
+}
+
+func simple(op string) func(scheduler.Client, []string, io.Writer) error {
+	return func(c scheduler.Client, args []string, out io.Writer) error {
+		if len(args) != 1 {
+			return fmt.Errorf("%w: lineup %s <task>", errUsage, op)
+		}
+		return c.Do(scheduler.Request{Op: op, Task: args[0]}, nil)
+	}
+}
+
+func stateDir() string {
+	if d := os.Getenv("LINEUP_STATE_DIR"); d != "" {
+		return d
+	}
+	if d := os.Getenv("XDG_STATE_HOME"); d != "" {
+		return d + "/lineup"
+	}
+	home, _ := os.UserHomeDir()
+	return home + "/.local/state/lineup"
+}
+
+func socketPath() string { return stateDir() + "/lineup.sock" }

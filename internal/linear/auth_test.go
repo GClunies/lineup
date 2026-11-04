@@ -1,0 +1,457 @@
+package linear
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+func TestConcurrentRefreshesTakeTurns(t *testing.T) {
+	fakeStore(t, &tokens{AccessToken: "old", RefreshToken: "r0", ExpiresAt: time.Now()})
+	var refreshes atomic.Int32
+	fakeTokenServer(t, func(form url.Values) (int, any) {
+		n := refreshes.Add(1)
+		time.Sleep(50 * time.Millisecond) // a slow Linear widens the race
+		return 200, map[string]any{"access_token": fmt.Sprint("a", n), "refresh_token": fmt.Sprint("r", n), "expires_in": 86400}
+	})
+	var wg sync.WaitGroup
+	got := make([]string, 8)
+	for i := range got {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			got[i], _ = accessToken(context.Background(), "a", false)
+		}(i)
+	}
+	wg.Wait()
+	if n := refreshes.Load(); n != 1 {
+		t.Fatalf("%d refreshes for one expired token; each consumes a refresh token", n)
+	}
+	for _, g := range got {
+		if g != "a1" {
+			t.Fatalf("callers got %v, want all a1", got)
+		}
+	}
+}
+
+// fakeRevoke serves the revoke endpoint with the given status (0 = refuse to connect).
+func fakeRevoke(t *testing.T, status int) *[]url.Values {
+	t.Helper()
+	var seen []url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		seen = append(seen, r.PostForm)
+		w.WriteHeader(status)
+	}))
+	old := revokeURL
+	revokeURL = srv.URL
+	if status == 0 {
+		srv.Close()
+	}
+	t.Cleanup(func() { revokeURL = old; srv.Close() })
+	return &seen
+}
+
+func signedIn(t *testing.T) **tokens {
+	return fakeStore(t, &tokens{AccessToken: "a", RefreshToken: "r", ExpiresAt: time.Now().Add(time.Hour)})
+}
+
+func TestLogoutRevokesThenForgets(t *testing.T) {
+	stored := signedIn(t)
+	seen := fakeRevoke(t, 200)
+	if _, err := Logout(context.Background(), "", false); err != nil {
+		t.Fatal(err)
+	}
+	if *stored != nil || len(*seen) != 1 || (*seen)[0].Get("token") != "r" {
+		t.Fatalf("stored %v, revoke calls %v", *stored, *seen)
+	}
+}
+
+func TestLogoutKeepsTokensWhenRevokeFails(t *testing.T) {
+	// 400 "unable to revoke" and 401 "unable to authenticate" don't mean the
+	// grant is gone either (round 2).
+	for name, status := range map[string]int{"Linear down": 503, "unreachable": 0, "unable to revoke": 400, "unable to authenticate": 401} {
+		t.Run(name, func(t *testing.T) {
+			stored := signedIn(t)
+			fakeRevoke(t, status)
+			_, err := Logout(context.Background(), "", false)
+			if err == nil || !strings.Contains(err.Error(), "still signed in") {
+				t.Fatalf("err %v", err)
+			}
+			if *stored == nil {
+				t.Fatal("tokens forgotten although access wasn't revoked")
+			}
+		})
+	}
+}
+
+func TestLogoutLocalForgetsWithoutRevoking(t *testing.T) {
+	stored := signedIn(t)
+	seen := fakeRevoke(t, 200)
+	if _, err := Logout(context.Background(), "", true); err != nil || *stored != nil || len(*seen) != 0 {
+		t.Fatalf("err %v stored %v calls %d", err, *stored, len(*seen))
+	}
+}
+
+// invalid_grant doesn't prove the grant is gone (the token may belong to
+// another client_id), so it isn't a revoke: keep the tokens, point to --local.
+func TestLogoutKeepsTokensOnInvalidGrant(t *testing.T) {
+	stored := fakeStore(t, &tokens{AccessToken: "a", RefreshToken: "r", ExpiresAt: time.Now()})
+	fakeTokenServer(t, func(url.Values) (int, any) { return 400, map[string]any{"error": "invalid_grant"} })
+	seen := fakeRevoke(t, 200)
+	_, err := Logout(context.Background(), "", false)
+	if err == nil || !strings.Contains(err.Error(), "--local") || *stored == nil || len(*seen) != 0 {
+		t.Fatalf("err %v stored %v revoke calls %d", err, *stored, len(*seen))
+	}
+}
+
+func TestCancelledCommandChangesNoTokens(t *testing.T) {
+	stored := signedIn(t)
+	fakeRevoke(t, 200)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := Logout(ctx, "", true); err == nil {
+		t.Fatal("a cancelled sign-out went ahead")
+	}
+	if *stored == nil {
+		t.Fatal("tokens deleted by a cancelled command")
+	}
+}
+
+// Round 2: a refresh in flight must not write tokens back after sign-out.
+func TestLogoutDuringARefreshStaysSignedOut(t *testing.T) {
+	stored := fakeStore(t, &tokens{AccessToken: "old", RefreshToken: "r0", ExpiresAt: time.Now()})
+	inFlight := make(chan struct{})
+	fakeTokenServer(t, func(url.Values) (int, any) {
+		close(inFlight)
+		time.Sleep(150 * time.Millisecond) // the refresh is slow
+		return 200, map[string]any{"access_token": "new", "refresh_token": "r1", "expires_in": 86400}
+	})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = accessToken(context.Background(), "a", false)
+	}()
+	<-inFlight
+	if _, err := Logout(context.Background(), "", true); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	if *stored != nil {
+		t.Fatalf("signed back in by a refresh that finished after sign-out: %+v", *stored)
+	}
+}
+
+func TestTokenLockFailsClosed(t *testing.T) {
+	fakeStore(t, &tokens{AccessToken: "old", RefreshToken: "r", ExpiresAt: time.Now()})
+	// A state "directory" that is a file: the lock can't be created.
+	f := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(f, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	useStateDir(t, f)
+	fakeTokenServer(t, func(url.Values) (int, any) { t.Error("refreshed without the lock"); return 500, nil })
+	if _, err := accessToken(context.Background(), "a", false); err == nil || !strings.Contains(err.Error(), "token lock") {
+		t.Fatalf("want a lock error, got %v", err)
+	}
+}
+
+func TestTokenLockGivesUpInsteadOfWaitingForever(t *testing.T) {
+	fakeStore(t, &tokens{AccessToken: "old", RefreshToken: "r", ExpiresAt: time.Now()})
+	old := lockWait
+	lockWait = 200 * time.Millisecond
+	t.Cleanup(func() { lockWait = old })
+	unlock, err := lockTokens(context.Background()) // a stuck process holds it
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	start := time.Now()
+	if _, err := accessToken(context.Background(), "a", false); err == nil || !strings.Contains(err.Error(), "busy") {
+		t.Fatalf("want a busy error, got %v", err)
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Fatalf("waited %v", d)
+	}
+}
+
+func TestLogoutWhenNotSignedIn(t *testing.T) {
+	fakeStore(t, nil)
+	if _, err := Logout(context.Background(), "", false); !errors.Is(err, ErrNotSignedIn) {
+		t.Fatalf("%v", err)
+	}
+}
+
+// fakeStore swaps the keychain for memory for one test: one item, whatever
+// the account. Linear's answer to which workspace a token is for is Acme.
+func fakeStore(t *testing.T, initial *tokens) **tokens {
+	t.Helper()
+	useStateDir(t, t.TempDir()) // for the refresh lock
+	var mu sync.Mutex
+	cur := initial
+	oldR, oldW, oldD, oldWho := readStore, writeStore, removeStore, whoami
+	whoami = func(context.Context, string) (Workspace, error) { return acme, nil }
+	readStore = func(string) (*tokens, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if cur == nil {
+			return nil, ErrSignedOut
+		}
+		c := *cur
+		return &c, nil
+	}
+	writeStore = func(_ string, nt *tokens) error { mu.Lock(); defer mu.Unlock(); c := *nt; cur = &c; return nil }
+	removeStore = func(string) error { mu.Lock(); defer mu.Unlock(); cur = nil; return nil }
+	t.Cleanup(func() { readStore, writeStore, removeStore, whoami = oldR, oldW, oldD, oldWho })
+	withIndex(t, workspaceIndex{Workspaces: []Workspace{acme}})
+	return &cur
+}
+
+func fakeTokenServer(t *testing.T, handle func(form url.Values) (int, any)) *[]url.Values {
+	t.Helper()
+	var seen []url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
+			t.Errorf("token request: %s %s", r.Method, r.Header.Get("Content-Type"))
+		}
+		_ = r.ParseForm()
+		seen = append(seen, r.PostForm)
+		status, body := handle(r.PostForm)
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(body)
+	}))
+	old := tokenURL
+	tokenURL = srv.URL
+	t.Cleanup(func() { tokenURL = old; srv.Close() })
+	return &seen
+}
+
+func fakeBrowser(t *testing.T, visit func(authURL *url.URL)) {
+	t.Helper()
+	old, oldNo := browse, noBrowser
+	noBrowser = func() bool { return false }
+	browse = func(u string) error {
+		parsed, err := url.Parse(u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		go visit(parsed)
+		return nil
+	}
+	t.Cleanup(func() { browse, noBrowser = old, oldNo })
+}
+
+func callback(t *testing.T, q url.Values) int {
+	t.Helper()
+	res, err := http.Get(redirectURI + "?" + q.Encode())
+	if err != nil {
+		t.Errorf("callback: %v", err)
+		return 0
+	}
+	res.Body.Close()
+	return res.StatusCode
+}
+
+func TestLoginExchangesCodeWithPKCE(t *testing.T) {
+	stored := fakeStore(t, nil)
+	var challenge string
+	seen := fakeTokenServer(t, func(form url.Values) (int, any) {
+		sum := sha256.Sum256([]byte(form.Get("code_verifier")))
+		if got := base64.RawURLEncoding.EncodeToString(sum[:]); got != challenge {
+			t.Errorf("verifier doesn't match the challenge sent to /authorize")
+		}
+		return 200, map[string]any{"access_token": "at-1", "refresh_token": "rt-1", "expires_in": 86399}
+	})
+	fakeBrowser(t, func(u *url.URL) {
+		q := u.Query()
+		for k, want := range map[string]string{
+			"client_id": defaultClientID, "redirect_uri": redirectURI, "response_type": "code",
+			"scope": "read,write", "code_challenge_method": "S256", "prompt": "consent",
+		} {
+			if q.Get(k) != want {
+				t.Errorf("authorize %s = %q, want %q", k, q.Get(k), want)
+			}
+		}
+		challenge = q.Get("code_challenge")
+		callback(t, url.Values{"code": {"the-code"}, "state": {q.Get("state")}})
+	})
+
+	if _, err := Login(context.Background(), UI{}, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	form := (*seen)[0]
+	if form.Get("grant_type") != "authorization_code" || form.Get("code") != "the-code" ||
+		form.Get("redirect_uri") != redirectURI || form.Get("client_id") != defaultClientID {
+		t.Errorf("token exchange form = %v", form)
+	}
+	if form.Get("client_secret") != "" {
+		t.Error("a public PKCE client must not send a secret")
+	}
+	got := *stored
+	if got == nil || got.AccessToken != "at-1" || got.RefreshToken != "rt-1" || got.ClientID != defaultClientID {
+		t.Fatalf("stored %+v", got)
+	}
+	if d := time.Until(got.ExpiresAt); d < 23*time.Hour || d > 25*time.Hour {
+		t.Errorf("expiry %v from now, want ~24h", d)
+	}
+}
+
+func TestLoginIgnoresForeignStateThenCompletes(t *testing.T) {
+	fakeStore(t, nil)
+	fakeTokenServer(t, func(url.Values) (int, any) {
+		return 200, map[string]any{"access_token": "at", "refresh_token": "rt", "expires_in": 60}
+	})
+	fakeBrowser(t, func(u *url.URL) {
+		if code := callback(t, url.Values{"code": {"evil"}, "state": {"not-ours"}}); code != http.StatusBadRequest {
+			t.Errorf("foreign state answered %d, want 400", code)
+		}
+		callback(t, url.Values{"code": {"good"}, "state": {u.Query().Get("state")}})
+	})
+	if _, err := Login(context.Background(), UI{}, "", ""); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoginReportsDenial(t *testing.T) {
+	stored := fakeStore(t, nil)
+	fakeTokenServer(t, func(url.Values) (int, any) {
+		t.Error("no token exchange after a denial")
+		return 500, nil
+	})
+	fakeBrowser(t, func(u *url.URL) {
+		callback(t, url.Values{"error": {"access_denied"}, "state": {u.Query().Get("state")}})
+	})
+	_, err := Login(context.Background(), UI{}, "", "")
+	if err == nil || *stored != nil {
+		t.Fatalf("err=%v stored=%v", err, *stored)
+	}
+}
+
+func TestLoginCancel(t *testing.T) {
+	fakeStore(t, nil)
+	fakeBrowser(t, func(*url.URL) {})
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+	if _, err := Login(ctx, UI{}, "", ""); err == nil {
+		t.Fatal("want an error after cancel")
+	}
+	// The port must be free again for the next attempt.
+	fakeTokenServer(t, func(url.Values) (int, any) {
+		return 200, map[string]any{"access_token": "at", "refresh_token": "rt"}
+	})
+	fakeBrowser(t, func(u *url.URL) { callback(t, url.Values{"code": {"c"}, "state": {u.Query().Get("state")}}) })
+	if _, err := Login(context.Background(), UI{}, "", ""); err != nil {
+		t.Fatalf("second sign-in after cancel: %v", err)
+	}
+}
+
+// remoteLogin signs in as over SSH: no browser, and the link handed over.
+func TestAccessTokenFreshIsNotRefreshed(t *testing.T) {
+	fakeStore(t, &tokens{AccessToken: "fresh", RefreshToken: "rt", ExpiresAt: time.Now().Add(time.Hour)})
+	fakeTokenServer(t, func(url.Values) (int, any) { t.Error("refreshed a fresh token"); return 500, nil })
+	if got, err := accessToken(context.Background(), "a", false); err != nil || got != "fresh" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestAccessTokenRefreshesNearExpiryAndRotates(t *testing.T) {
+	stored := fakeStore(t, &tokens{AccessToken: "old", RefreshToken: "rt-old", ExpiresAt: time.Now().Add(time.Minute)})
+	seen := fakeTokenServer(t, func(url.Values) (int, any) {
+		return 200, map[string]any{"access_token": "new", "refresh_token": "rt-new", "expires_in": 86399}
+	})
+	got, err := accessToken(context.Background(), "a", false)
+	if err != nil || got != "new" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	form := (*seen)[0]
+	if form.Get("grant_type") != "refresh_token" || form.Get("refresh_token") != "rt-old" || form.Get("client_id") != defaultClientID {
+		t.Errorf("refresh form = %v", form)
+	}
+	if (*stored).RefreshToken != "rt-new" {
+		t.Errorf("rotated refresh token not stored: %+v", *stored)
+	}
+}
+
+func TestRefreshKeepsOldRefreshTokenWhenNoneReturned(t *testing.T) {
+	stored := fakeStore(t, &tokens{AccessToken: "old", RefreshToken: "rt-keep", ExpiresAt: time.Now()})
+	fakeTokenServer(t, func(url.Values) (int, any) { return 200, map[string]any{"access_token": "new"} })
+	if _, err := accessToken(context.Background(), "a", false); err != nil {
+		t.Fatal(err)
+	}
+	if (*stored).RefreshToken != "rt-keep" {
+		t.Errorf("refresh token lost: %+v", *stored)
+	}
+}
+
+func TestRevokedRefreshTokenMeansSignedOut(t *testing.T) {
+	fakeStore(t, &tokens{AccessToken: "old", RefreshToken: "rt", ExpiresAt: time.Now()})
+	fakeTokenServer(t, func(url.Values) (int, any) { return 400, map[string]any{"error": "invalid_grant"} })
+	if _, err := accessToken(context.Background(), "a", false); !errors.Is(err, ErrSignedOut) {
+		t.Fatalf("got %v, want ErrSignedOut", err)
+	}
+}
+
+func TestNoStoredTokensMeansSignedOut(t *testing.T) {
+	fakeStore(t, nil)
+	if _, err := accessToken(context.Background(), "a", false); !errors.Is(err, ErrSignedOut) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestTokensKeepTheAppThatIssuedThem(t *testing.T) {
+	stored := fakeStore(t, nil)
+	var authorizeID string
+	seen := fakeTokenServer(t, func(url.Values) (int, any) {
+		return 200, map[string]any{"access_token": "at", "refresh_token": "rt", "expires_in": 60}
+	})
+	fakeBrowser(t, func(u *url.URL) {
+		authorizeID = u.Query().Get("client_id")
+		callback(t, url.Values{"code": {"c"}, "state": {u.Query().Get("state")}})
+	})
+	if _, err := Login(context.Background(), UI{}, "", "work-app"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := accessToken(context.Background(), "a", true); err != nil {
+		t.Fatal(err)
+	}
+	got := []string{authorizeID}
+	for _, f := range *seen {
+		got = append(got, f.Get("grant_type")+"="+f.Get("client_id"))
+	}
+	want := []string{"work-app", "authorization_code=work-app", "refresh_token=work-app"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("client ids = %v, want %v", got, want)
+	}
+	if (*stored).ClientID != "work-app" {
+		t.Fatalf("refreshed tokens lost their app: %+v", *stored)
+	}
+}
+
+func TestLoginRefusesAnotherWorkspace(t *testing.T) {
+	stored := fakeStore(t, nil) // whoami answers acme
+	fakeTokenServer(t, func(url.Values) (int, any) {
+		return 200, map[string]any{"access_token": "at", "refresh_token": "rt", "expires_in": 60}
+	})
+	fakeBrowser(t, func(u *url.URL) { callback(t, url.Values{"code": {"c"}, "state": {u.Query().Get("state")}}) })
+	_, err := Login(context.Background(), UI{}, "globex", "")
+	if err == nil || !strings.Contains(err.Error(), "not globex") || *stored != nil {
+		t.Fatalf("err=%v stored=%+v", err, *stored)
+	}
+	if _, err := Login(context.Background(), UI{}, strings.ToUpper(acme.URLKey), ""); err != nil {
+		t.Fatalf("the named workspace: %v", err)
+	}
+}

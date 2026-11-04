@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'">
+<title>lineup design</title>
+<!-- draw-style -->
+<style>
+  .term-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 22px; padding-top: 22px; align-items: start; }
+  .term { overflow-x: auto; min-width: 0; border-radius: 6px; }
+  .term pre { white-space: pre; text-indent: 0; margin: 0; border: 0; padding: 12px 14px; font-size: 14px; line-height: 1.45; color: #ece9df; background: #19212b; }
+  .term pre.orch { background: #0f3b40; color: #e3f1ef; border-top: 3px solid #5fb3ad; }
+  .term .hd { color: #9fc3e0; }
+  .term .ny { color: #f3a3b5; font-weight: 600; }
+  .term .wk { color: #8fd3cc; }
+  .term .wa { color: #c9b8ea; }
+  .term .dim { color: #9aa3ad; }
+  .term .sel { background: #28618b; color: #fff; }
+  .term .lab { color: #5fb3ad; font-weight: 600; }
+  .notes { display: grid; gap: 14px; font-size: var(--text-small); color: var(--gray); }
+  .notes p { display: flex; gap: 10px; align-items: baseline; }
+  .stage .annotation code { font-size: 14px; }
+  @media (max-width: 900px) { .term-wrap { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<main>
+<article data-src="docs/spec/mvp.md">
+  <header>
+    <p class="eyebrow">lineup · design mockups</p>
+    <h1>One board for every agent Task</h1>
+    <p class="summary">A deterministic Scheduler moves each Task through its Stages on Signals from Rex and GitHub. Workers run in background tabs. The Board shows you only what needs you.</p>
+  </header>
+
+  <section id="hub" aria-labelledby="hub-heading" data-src="Hub tab mockup">
+    <h2 id="hub-heading">The Hub: the Board above, the Orchestrator below</h2>
+    <figure>
+      <div class="plate">
+        <div class="figure-head">
+          <span class="figure-label">Hub tab in Rex</span>
+          <span class="figure-kind">illustrative Tasks</span>
+        </div>
+        <div class="term-wrap">
+          <div class="term" role="region" tabindex="0" aria-label="Mockup of the Hub tab: the Board above and the Orchestrator bar below">
+<pre><span class="hd"> lineup  WIP 4/5 <span class="lab">①</span>  ⚑ 2 need you  ◐ 2 working  ◷ 1 waiting  ○ 1 queued</span>
+<span class="dim"> ──────────────────────────────────────────────────────────────────────────</span>
+<span class="ny"> ⚑ NEEDS YOU (2)</span> <span class="lab">②</span>
+<span class="sel"> ▸ ENG-590 Plan review  data  Add billing model   plan ready to read        12m </span>
+   ENG-588 Working <span class="ny">⚑</span>    data  Backfill events    <span class="ny">permission: Bash(make deploy)</span> <span class="lab">③</span> 3m
+<span class="wk"> ◐ WORKING (2)</span>
+   WEB-12  Responding   web   Fix map tooltip    round 1/3 · #812           5m
+   ENG-592 CI debug     data  Fix flaky test     attempt 2/3 · #4650        1m
+<span class="wa"> ◷ WAITING (1)</span>
+   ENG-571 In review    data  Rate limit login   #4636 · 2 reviewers        1d
+<span class="dim"> ○ QUEUED (1)</span>
+   ENG-601              data  Drop old API keys
+<span class="dim"> ✓ DONE (1)</span>
+<span class="dim">   ENG-560 merged       data  Rename configs     #4601                   today</span>
+<span class="dim"> ──────────────────────────────────────────────────────────────────────────</span>
+<span class="dim"> enter jump  p peek  a approve  r return  m merge  x close  z orch  ? keys</span></pre>
+<pre class="orch"><span class="lab"> ◆ ORCHESTRATOR ④</span>  claude-opus-5-5 · acts only through lineup
+ ❯ what needs me?
+ ● Two Tasks need you. ENG-590 has a plan ready.
+   ENG-588 asks to run `make deploy`.
+ ❯ tell ENG-592 to quarantine the flaky test
+ ● Sent to the ENG-592 Worker (lineup steer ENG-592).
+ ❯ <span class="dim">▌</span></pre>
+          </div>
+          <div class="notes">
+            <p><span class="callout">1</span><span>The header counts started Tasks against the WIP cap: 4 of 5.</span></p>
+            <p><span class="callout">2</span><span>Needs you is always first. It holds Plan review, Ready to land, and every Task with the ⚑ flag.</span></p>
+            <p><span class="callout">3</span><span>A flag shows its reason, here the exact command from the Worker's permission prompt.</span></p>
+            <p><span class="callout">4</span><span>The Orchestrator bar has its own background color and label, so you always know who you talk to.</span></p>
+          </div>
+        </div>
+      </div>
+      <figcaption>Workers never take the focus. You see a Task only as a row that changes group.</figcaption>
+    </figure>
+  </section>
+
+  <section id="lifecycle" aria-labelledby="lifecycle-heading" data-src="docs/spec/mvp.md Lifecycle">
+    <h2 id="lifecycle-heading">The lifecycle: ten Stages, moved by Signals</h2>
+    <figure class="plate">
+      <div class="figure-head">
+        <span class="figure-label">Stages and Signals</span>
+        <span class="figure-kind">teal agent · ochre you · violet CI or reviewers · thick line happy path</span>
+      </div>
+<pre class="mermaid" data-diagram="lifecycle">flowchart TB
+accTitle: Task lifecycle
+accDescr: A Task goes from Queued to Planning, Plan review, Working, CI running, In review, Ready to land, and Done. CI failures loop through CI debug. Review comments and conflicts loop through Responding.
+Q["Queued · you"]
+P["Planning · agent"]
+V["Plan review · you"]
+W["Working · agent"]
+C["CI running · CI"]
+D["CI debug · agent"]
+I["In review · reviewers"]
+R["Responding · agent"]
+L["Ready to land · you"]
+X["Done"]
+Q ==>|"start"| P
+P ==>|"plan written"| V
+V ==>|"a approve"| W
+V -.->|"r return"| P
+W ==>|"pr-open"| C
+C -.->|"ci-failed"| D
+D -.->|"pushed"| C
+C ==>|"ci-passed"| I
+I ==>|"review-approved"| L
+I -.->|"comments or conflict"| R
+R -.->|"pushed"| C
+L ==>|"m merge"| X
+class P,W,D,R teal
+class Q,V,L ochre
+class C,I violet
+class X green
+</pre>
+    </figure>
+    <p>The Needs you flag can sit on any Stage. If CI passes and the PR needs no reviewer, the Task skips In review. Loop budgets stop endless loops: 3 CI debug attempts, 3 Responding rounds per review, 2 Worker restarts.</p>
+  </section>
+
+  <section id="start" aria-labelledby="start-heading" data-src="docs/spec/mvp.md Start a Task">
+    <h2 id="start-heading">Start a Task, all in the background</h2>
+    <div class="plate">
+      <div class="figure-head">
+        <span class="figure-label">From s on an Issue to a running Worker</span>
+        <span class="figure-kind">you stay on the Hub</span>
+      </div>
+      <div class="sequence">
+        <div class="stage">
+          <p class="stage-label"><span class="callout">1</span>Check the cap</p>
+          <p class="annotation">If the cap is full, the Board asks: once over, or raise the cap.</p>
+        </div>
+        <div class="stage">
+          <p class="stage-label"><span class="callout">2</span>Claim the Issue</p>
+          <p class="annotation">Assign it to you and set the team's start status, for example In Progress for ENG.</p>
+        </div>
+        <div class="stage">
+          <p class="stage-label"><span class="callout">3</span>Open a tab</p>
+          <p class="annotation"><code>rex window new --focus=false</code> in the Repo's session.</p>
+        </div>
+        <div class="stage">
+          <p class="stage-label"><span class="callout">4</span>Set up the worktree</p>
+          <p class="annotation"><code>wt switch --create</code> runs your copy steps and hooks.</p>
+        </div>
+        <div class="stage">
+          <p class="stage-label"><span class="callout">5</span>Trust and start</p>
+          <p class="annotation">Pre-trust the folder, then start Claude with the Stage contract.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="screens" aria-labelledby="screens-heading" data-src="Plan review and WIP cap mockups">
+    <h2 id="screens-heading">The two moments that ask for you</h2>
+    <figure class="plate">
+      <div class="views">
+        <div>
+          <p class="view-label" data-tone="fix">Plan review · detail pane</p>
+          <div class="term" role="region" tabindex="0" aria-label="Mockup of the Plan review detail pane">
+<pre><span class="hd"> ENG-590 · Plan review · data          lines 1–9 of 42</span>
+<span class="dim"> ──────────────────────────────────────────────────────</span>
+ <span class="lab">Plan: Add billing model</span>
+ <span class="lab">Steps</span>
+ 1. Add a billing table and its migration
+ 2. Test one invoice per user per month
+ 3. Point the invoice page at the new table
+ <span class="lab">Risks</span>
+ The first backfill reads about 40M rows
+ <span class="dim">↓ 33 more lines of .lineup/plan.md</span>
+<span class="dim"> ──────────────────────────────────────────────────────</span>
+<span class="dim"> a approve  r comment  enter talk to planner  f full</span></pre>
+          </div>
+        </div>
+        <div>
+          <p class="view-label" data-tone="problem">WIP cap full · confirm</p>
+          <div class="term" role="region" tabindex="0" aria-label="Mockup of the WIP cap dialog">
+<pre> ┌ <span class="ny">WIP cap reached: 5 of 5</span> ──────────────────┐
+ │ You have five started Tasks.              │
+ │ Start ENG-601 anyway?                      │
+ │                                           │
+ │  o  once (header shows +1 over)           │
+ │  r  raise the cap to 6                    │
+ │  esc  keep ENG-601 queued                  │
+ └───────────────────────────────────────────┘</pre>
+          </div>
+        </div>
+      </div>
+      <figcaption>The pane renders the whole plan, not a summary. To discuss it, press enter: the Planning Worker is still alive in its tab. A start past the cap always needs your yes.</figcaption>
+    </figure>
+  </section>
+
+  <section id="tracker" aria-labelledby="tracker-heading" data-src="Tracker browser mockup">
+    <h2 id="tracker-heading">The tracker browser: Linear's own hierarchy</h2>
+    <figure class="plate">
+      <div class="figure-head">
+        <span class="figure-label">Screen 2 · Issues</span>
+        <span class="figure-kind">workspace › team › Project › Issues</span>
+      </div>
+      <div class="term-wrap">
+        <div class="term" role="region" tabindex="0" aria-label="Mockup of the tracker browser">
+<pre><span class="hd"> Issues   ‹ acme ›  globex   My Issues           tab workspace   / search</span>
+<span class="dim"> ─────────────────────────────────────────────────────────────────────────────────</span>
+ acme › ENG › Search <span class="lab">①</span>
+<span class="dim"> lvl</span> <span class="lab">②</span>
+<span class="sel">  0 ▸ ◐ ENG-588  Backfill events         In Progress     ● Task: Working   </span>
+  0   ◐ ENG-590  Add billing model        In Progress     <span class="lab">● Task: Plan review</span>
+  0   ○ ENG-601  Drop old API keys       Todo            <span class="lab">● Task: Queued</span>
+  1   ○ ENG-603  Retry failed charges     Todo            <span class="ny">blocked by ENG-590</span> <span class="lab">③</span>
+  1   ○ ENG-605  Document billing API     Backlog         <span class="ny">blocked by ENG-590</span>
+  2   ○ ENG-610  Retire old billing page  Backlog         <span class="ny">blocked by ENG-605</span>
+<span class="dim"> ─────────────────────────────────────────────────────────────────────────────────</span>
+<span class="dim"> s start as Task   c status   A assign me   n new   o open   1 Board</span></pre>
+        </div>
+        <div class="notes">
+          <p><span class="callout">1</span><span>No Area level. The top is a switch between Linear workspaces.</span></p>
+          <p><span class="callout">2</span><span>Every list sorts by dependency level first, then by natural ID order: ENG-9 before ENG-10.</span></p>
+          <p><span class="callout">3</span><span>A blocked Issue names its open blockers.</span></p>
+          <p><span class="callout">4</span><span>s starts the Issue as a Task. An Issue with a Task shows its Stage.</span></p>
+        </div>
+      </div>
+    </figure>
+  </section>
+
+  <section id="rex" aria-labelledby="rex-heading" data-src="docs/spec/mvp.md Rex layout">
+    <h2 id="rex-heading">How it sits on Rex</h2>
+    <figure class="plate">
+      <div class="figure-head">
+        <span class="figure-label">Sessions, tabs, and the Scheduler</span>
+        <span class="figure-kind">one Rex session per Repo</span>
+      </div>
+<pre class="mermaid" data-diagram="rex">flowchart TB
+accTitle: lineup on Rex
+accDescr: The Board and the Orchestrator call the Scheduler. The Scheduler keeps state in state.db, reads Rex events and GitHub, and opens one background tab per Task in the session of its Repo. Each tab runs a Worker in a worktree.
+B["BOARD · lineup board"]
+O["ORCHESTRATOR · claude"]
+S["SCHEDULER · lineup serve"]
+DB@{ icon: "draw:drawer", label: "state.db" }
+GH["GitHub · poll 30 s"]
+T1["data session · tab ENG-590"]
+T2["web session · tab WEB-12"]
+WT@{ icon: "draw:folder", label: "worktree data.eng-590" }
+B -->|"reads via socket"| S
+O -->|"lineup commands"| S
+S -->|"records"| DB
+GH -->|"PR Signals"| S
+S -->|"opens · focus=false"| T1
+S -->|"opens · focus=false"| T2
+T1 -->|"runs Worker in"| WT
+T1 -.->|"program status"| S
+class S changed
+class B,O ochre
+class T1,T2 teal
+</pre>
+    </figure>
+    <p>Rex stores no metadata on its objects, so state.db keeps each Task's session, tab, and block IDs. When Rex starts again, the Scheduler compares the two and restarts lost Workers.</p>
+  </section>
+
+  <footer class="sources">The Tasks, titles, and PR numbers are illustrative. The full rules are in docs/spec/mvp.md, GLOSSARY.md, and docs/adr in the lineup repo. The diagrams are not to scale.</footer>
+</article>
+</main>
+<!-- draw-runtime -->
+<!-- feedback-widget -->
+</body>
+</html>
