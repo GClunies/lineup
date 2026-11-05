@@ -125,6 +125,10 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 		return s.add(ctx, req)
 	case "review":
 		return s.review(ctx, req.URL)
+	case "reviews":
+		return s.reviews(ctx)
+	case "reviews-pause", "reviews-resume":
+		return nil, s.pauseReviews(req.Op == "reviews-pause")
 	case "cap":
 		if req.N < 1 {
 			return nil, errors.New("the cap must be at least 1")

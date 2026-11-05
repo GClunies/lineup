@@ -85,6 +85,9 @@ func (m Model) header() string {
 	}
 	s += fmt.Sprintf("   ●%d need you   ◐%d working   ◷%d waiting   %d queued",
 		count["Needs you"], count["Working"], count["Waiting"], count["Queued"])
+	if m.board.ReviewsPaused {
+		s += "   " + bad.Render("reviews paused")
+	}
 	if !m.online {
 		s += "   " + bad.Render("scheduler offline, showing cache: run lineup restart")
 	}

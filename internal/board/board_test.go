@@ -312,6 +312,18 @@ func TestOverCapHeaderAndOffline(t *testing.T) {
 	}
 }
 
+func TestTheHeaderShowsThatReviewsArePaused(t *testing.T) {
+	for _, paused := range []bool{false, true} {
+		v := fixture()
+		v.ReviewsPaused = paused
+		m := newModel(&fakeClient{}, v)
+		m.width = 200
+		if got := strings.Contains(ansi.Strip(m.View()), "reviews paused"); got != paused {
+			t.Errorf("paused %v: the header shows reviews paused: %v", paused, got)
+		}
+	}
+}
+
 func TestAgeAndRows(t *testing.T) {
 	m := newModel(&fakeClient{}, fixture())
 	out := m.View()

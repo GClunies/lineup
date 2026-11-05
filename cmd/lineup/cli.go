@@ -22,6 +22,7 @@ var clientCommands = map[string]func(c scheduler.Client, args []string, out io.W
 	"add":     cmdAdd,
 	"start":   cmdStart,
 	"review":  cmdReview,
+	"reviews": cmdReviews,
 	"ls":      cmdLs,
 	"watch":   cmdWatch,
 	"show":    cmdShow,
@@ -129,6 +130,74 @@ func cmdReview(c scheduler.Client, args []string, out io.Writer) error {
 	fmt.Fprintf(out, "%s is already open (%s): %s\n", res.ID, res.Stage, res.Title)
 	if err := c.Do(scheduler.Request{Op: "focus", Task: res.ID}, nil); err != nil {
 		fmt.Fprintf(out, "Not focused: %v\n", err)
+	}
+	return nil
+}
+
+// cmdReviews lists each review queue with its started reviews and the PRs
+// that wait, or pauses or resumes every queue fill.
+func cmdReviews(c scheduler.Client, args []string, out io.Writer) error {
+	var asJSON bool
+	fs, err := parse("reviews", "[--json] | pause | resume", args, func(fs *flag.FlagSet) { fs.BoolVar(&asJSON, "json", false, "print JSON") })
+	if err != nil {
+		return err
+	}
+	switch {
+	case fs.NArg() == 0:
+	case fs.NArg() == 1 && !asJSON && (fs.Arg(0) == "pause" || fs.Arg(0) == "resume"):
+		if err := c.Do(scheduler.Request{Op: "reviews-" + fs.Arg(0)}, nil); err != nil {
+			return err
+		}
+		if fs.Arg(0) == "pause" {
+			fmt.Fprintln(out, "Review queues paused. Started reviews go on, and no fill starts another.")
+		} else {
+			fmt.Fprintln(out, "Review queues resumed.")
+		}
+		return nil
+	default:
+		fs.Usage()
+		return errUsage
+	}
+	var v scheduler.ReviewsView
+	if err := c.Do(scheduler.Request{Op: "reviews"}, &v); err != nil {
+		return err
+	}
+	if asJSON {
+		return json.NewEncoder(out).Encode(v)
+	}
+	if len(v.Queues) == 0 {
+		fmt.Fprintln(out, "No review queues. Add a [[review.queues]] entry to the config.")
+		return nil
+	}
+	if v.Paused {
+		fmt.Fprintln(out, "Reviews paused: no fill starts a review until lineup reviews resume.")
+	}
+	for _, q := range v.Queues {
+		fmt.Fprintf(out, "Q: %s  %d/%d started\n", q.Name, len(q.Started), q.Slots)
+		tw := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
+		for _, t := range q.Started {
+			fmt.Fprintf(tw, "  %s\t%s\t%s\n", t.ID, t.Stage, t.Title)
+		}
+		for i, c := range q.Ranked {
+			why := ""
+			switch {
+			case c.Rereview:
+				why = "re-review"
+			case c.ByName:
+				why = "by name"
+			}
+			_, name, _ := strings.Cut(c.PR.Repo, "/")
+			fmt.Fprintf(tw, "  %d\t%s\t%s#%d %s\t%s\n", i+1, why, name, c.PR.Number, c.PR.Title, c.PR.Author)
+		}
+		if len(q.Ranked) == 0 {
+			fmt.Fprintln(tw, "  no PR waits")
+		}
+		if err := tw.Flush(); err != nil {
+			return err
+		}
+	}
+	for _, s := range v.Skipped {
+		fmt.Fprintln(out, "Skipped: "+s)
 	}
 	return nil
 }

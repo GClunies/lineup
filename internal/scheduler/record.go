@@ -111,10 +111,12 @@ type TaskView struct {
 }
 
 type BoardView struct {
-	Cap     int        `json:"cap"`
-	Started int        `json:"started"`
-	OverCap int        `json:"over_cap"`
-	Tasks   []TaskView `json:"tasks"`
+	Cap     int `json:"cap"`
+	Started int `json:"started"`
+	OverCap int `json:"over_cap"`
+	// ReviewsPaused is true while `lineup reviews pause` holds every queue fill.
+	ReviewsPaused bool       `json:"reviews_paused,omitempty"`
+	Tasks         []TaskView `json:"tasks"`
 }
 
 func (r *Record) view() TaskView {

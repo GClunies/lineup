@@ -5,9 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -193,5 +196,91 @@ func TestLineupShowOfAReviewPrintsNoBranch(t *testing.T) {
 	}
 	if want := "R-1  data#4955 Pull the base images\nReviewing in data\n"; out.String() != want {
 		t.Fatalf("out = %q, want %q", out.String(), want)
+	}
+}
+
+func reviewsReply(t *testing.T, v scheduler.ReviewsView) scheduler.Response {
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scheduler.Response{OK: true, Data: data}
+}
+
+func TestLineupReviewsListsEachQueue(t *testing.T) {
+	view := scheduler.ReviewsView{
+		Paused: true,
+		Queues: []scheduler.QueueView{{
+			Name: "platform", Slots: 3,
+			Started: []scheduler.TaskView{{ID: "R-12", Stage: "Review ready", Title: "data#4955 Pull the base images"}},
+			Ranked: []github.Candidate{
+				{PR: github.PullRequest{Repo: "umbrella/data", Number: 4960, Title: "Write the usage logs", Author: "hopper"}, Rereview: true},
+				{PR: github.PullRequest{Repo: "umbrella/data", Number: 4919, Title: "Move the CSV readers", Author: "noether"}},
+			},
+		}},
+		Skipped: []string{"no Repo mapping for umbrella/infra: no [[repos]] checkout has it as its origin"},
+	}
+	c, got := fakeScheduler(t, map[string]scheduler.Response{"reviews": reviewsReply(t, view)})
+	var out bytes.Buffer
+	if err := cmdReviews(c, nil, &out); err != nil {
+		t.Fatal(err)
+	}
+	if reqs := got(); len(reqs) != 1 || reqs[0].Op != "reviews" {
+		t.Fatalf("requests = %+v", reqs)
+	}
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	want := [][]string{
+		{"Reviews paused"},
+		{"Q: platform", "1/3 started"},
+		{"R-12", "Review ready", "data#4955 Pull the base images"},
+		{"1", "re-review", "data#4960 Write the usage logs", "hopper"},
+		{"2", "data#4919 Move the CSV readers", "noether"},
+		{"Skipped", "umbrella/infra"},
+	}
+	if len(lines) != len(want) {
+		t.Fatalf("out =\n%s", out.String())
+	}
+	for i, w := range want {
+		for _, s := range w {
+			if !strings.Contains(lines[i], s) {
+				t.Errorf("line %d %q lacks %q", i+1, lines[i], s)
+			}
+		}
+	}
+	if strings.Contains(lines[4], "re-review") {
+		t.Errorf("line 5 %q calls a first review a re-review", lines[4])
+	}
+
+	out.Reset()
+	if err := cmdReviews(c, []string{"--json"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	var back scheduler.ReviewsView
+	if err := json.Unmarshal(out.Bytes(), &back); err != nil || !reflect.DeepEqual(back, view) {
+		t.Fatalf("--json = %s, %v", out.String(), err)
+	}
+}
+
+func TestLineupReviewsPauseAndResume(t *testing.T) {
+	c, got := fakeScheduler(t, map[string]scheduler.Response{"reviews-pause": {OK: true}, "reviews-resume": {OK: true}})
+	var out bytes.Buffer
+	for _, a := range []string{"pause", "resume"} {
+		if err := cmdReviews(c, []string{a}, &out); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if reqs := got(); len(reqs) != 2 || reqs[0].Op != "reviews-pause" || reqs[1].Op != "reviews-resume" {
+		t.Fatalf("requests = %+v", reqs)
+	}
+	if !strings.HasPrefix(out.String(), "Review queues paused.") || !strings.Contains(out.String(), "\nReview queues resumed.\n") {
+		t.Fatalf("out = %q", out.String())
+	}
+	for _, args := range [][]string{{"stop"}, {"--json", "pause"}, {"pause", "now"}} {
+		if err := cmdReviews(c, args, io.Discard); !errors.Is(err, errUsage) {
+			t.Errorf("lineup reviews %v: %v, want the usage", args, err)
+		}
+	}
+	if n := len(got()); n != 2 {
+		t.Fatalf("a usage error sent a request: %d requests", n)
 	}
 }

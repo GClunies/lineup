@@ -259,6 +259,10 @@ func TestAFillSkipsAPRWithNoCheckout(t *testing.T) {
 	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Reviewing"}) {
 		t.Fatalf("reviews %v, want #7: acme/other has no checkout", got)
 	}
+	v := h.do(Request{Op: "reviews"}).(ReviewsView)
+	if len(v.Skipped) != 1 || !strings.Contains(v.Skipped[0], "acme/other") {
+		t.Fatalf("skipped %q, want acme/other named", v.Skipped)
+	}
 }
 
 func TestAFillReadsTeamMembersOnceAnHour(t *testing.T) {
@@ -283,5 +287,59 @@ func TestAFillReadsTeamMembersOnceAnHour(t *testing.T) {
 		if !strings.Contains(ss[0].Query, "author:ada") {
 			t.Fatalf("query %q lacks the team's member", ss[0].Query)
 		}
+	}
+}
+
+func TestAPauseHoldsEveryFillAcrossARestart(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "state.db")
+	opts := func(d *Deps) { d.Queues, d.PollInterval = []Queue{authorQueue("q", 1, "hopper")}, time.Hour }
+	found := map[string][]github.PullRequest{"q": {queuePR("acme/data", 7, 30), queuePR("acme/data", 8, 20)}}
+	h := newHarness(t, db, nil, opts)
+	h.gh.found = found
+	ctx := context.Background()
+
+	h.s.fill(ctx)
+	v := h.do(Request{Op: "reviews"}).(ReviewsView)
+	if q := v.Queues[0]; v.Paused || len(q.Started) != 1 || q.Started[0].ID != "R-1" || len(q.Ranked) != 1 || q.Ranked[0].PR.Number != 8 {
+		t.Fatalf("reviews = %+v, want R-1 started and #8 waiting", v)
+	}
+
+	h.do(Request{Op: "reviews-pause"})
+	if !h.do(Request{Op: "ls"}).(BoardView).ReviewsPaused {
+		t.Fatal("the Board does not show the pause")
+	}
+	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Reviewing"}) {
+		t.Fatalf("after the pause: %v, want R-1 still reviewing", got)
+	}
+	h.waitTab("claude reviewing")
+	h.do(Request{Op: "close", Task: "R-1"})
+	h.waitStage("R-1", lifecycle.Done)
+	eventually(t, "R-1's cleanup", func() bool { return len(h.reviewsRemoved()) == 1 })
+	searched := len(h.gh.searchCalls())
+	h.s.fill(ctx)
+	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Done"}) || len(h.gh.searchCalls()) != searched {
+		t.Fatalf("a paused fill gave %v and searched %d times, want nothing", got, len(h.gh.searchCalls())-searched)
+	}
+	if v := h.do(Request{Op: "reviews"}).(ReviewsView); !v.Paused || len(v.Queues[0].Ranked) != 1 || v.Queues[0].Ranked[0].PR.Number != 8 {
+		t.Fatalf("paused reviews = %+v, want #8 waiting", v)
+	}
+
+	h.cancel()
+	h2 := newHarness(t, db, nil, opts)
+	h2.gh.found = found
+	if !h2.do(Request{Op: "ls"}).(BoardView).ReviewsPaused {
+		t.Fatal("the pause did not hold across a restart")
+	}
+	h2.s.fill(ctx)
+	if got := h2.reviews(); !slices.Equal(got, []string{"R-1 #7 Done"}) {
+		t.Fatalf("a fill after the restart gave %v", got)
+	}
+	h2.do(Request{Op: "reviews-resume"})
+	h2.s.fill(ctx)
+	if got := h2.reviews(); !slices.Equal(got, []string{"R-1 #7 Done", "R-2 #8 Reviewing"}) {
+		t.Fatalf("after the resume: %v, want R-2 for #8", got)
+	}
+	if h2.do(Request{Op: "ls"}).(BoardView).ReviewsPaused {
+		t.Fatal("the Board still shows the pause")
 	}
 }

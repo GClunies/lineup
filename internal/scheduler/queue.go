@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +14,9 @@ import (
 // membersEvery is how long the Scheduler keeps the members of a team.
 const membersEvery = time.Hour
 
+// pausedKey is the setting that holds `lineup reviews pause` across restarts.
+const pausedKey = "reviews_paused"
+
 // fill starts the review Tasks that the queues want. Only one fill runs at a
 // time: a fill that is due while another runs is skipped. The candidate
 // check, the count, the add, and the start happen in one loop call, so a
@@ -22,6 +26,11 @@ func (s *Scheduler) fill(ctx context.Context) {
 		return
 	}
 	defer s.filling.Store(false)
+	var paused bool
+	s.call(func() { paused = s.paused })
+	if paused {
+		return
+	}
 	rows, err := s.readQueues(ctx)
 	if err != nil {
 		s.d.Log.Error("review queues", "err", err)
@@ -109,9 +118,66 @@ func (s *Scheduler) teamMembers(ctx context.Context) (map[string][]string, error
 	return members, nil
 }
 
-// fillInput is the state that planFill reads. Only the loop calls it.
+// fillInput is the state that planFill reads. A pause that lands while a
+// fill searches holds that fill too. Only the loop calls it.
 func (s *Scheduler) fillInput(rows queueRows) fillInput {
-	return fillInput{Queues: s.d.Queues, Records: s.list(), Found: rows.Found, Repos: rows.Repos}
+	return fillInput{Paused: s.paused, Queues: s.d.Queues, Records: s.list(), Found: rows.Found, Repos: rows.Repos}
+}
+
+// pauseReviews stops or restarts every queue fill. A pause stops no review
+// that started.
+func (s *Scheduler) pauseReviews(paused bool) error {
+	var err error
+	s.call(func() {
+		if err = s.d.Store.SetSetting(pausedKey, strconv.FormatBool(paused)); err == nil {
+			s.paused = paused
+			s.publish()
+		}
+	})
+	return err
+}
+
+// ReviewsView is the review queues as `lineup reviews` shows them. Skipped
+// says why the PRs of some repositories never start.
+type ReviewsView struct {
+	Paused  bool        `json:"paused"`
+	Queues  []QueueView `json:"queues"`
+	Skipped []string    `json:"skipped,omitempty"`
+}
+
+// QueueView is one queue: its started review Tasks, and the PRs that wait,
+// in the order that fills start them.
+type QueueView struct {
+	Name    string             `json:"name"`
+	Slots   int                `json:"slots"`
+	Started []TaskView         `json:"started"`
+	Ranked  []github.Candidate `json:"ranked"`
+}
+
+// reviews searches every queue now and ranks its PRs against the Tasks on
+// the Board, also while the queues are paused.
+func (s *Scheduler) reviews(ctx context.Context) (ReviewsView, error) {
+	rows, err := s.readQueues(ctx)
+	if err != nil {
+		return ReviewsView{}, err
+	}
+	v := ReviewsView{Queues: []QueueView{}, Skipped: rows.Skipped}
+	s.call(func() {
+		in := s.fillInput(rows)
+		ranked := planFill(in).Ranked
+		v.Paused = in.Paused
+		for _, q := range s.d.Queues {
+			qv := QueueView{Name: q.Name, Slots: q.Slots, Started: []TaskView{}, Ranked: []github.Candidate{}}
+			qv.Ranked = append(qv.Ranked, ranked[q.Name]...)
+			for _, r := range in.Records {
+				if r.Review != nil && r.Queue == q.Name && r.Stage.Started() {
+					qv.Started = append(qv.Started, r.view())
+				}
+			}
+			v.Queues = append(v.Queues, qv)
+		}
+	})
+	return v, nil
 }
 
 // applyFill starts and adds what the plan names. Only the loop calls it.

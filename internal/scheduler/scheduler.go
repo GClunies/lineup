@@ -75,6 +75,8 @@ type Scheduler struct {
 	repoLocks map[string]*sync.Mutex
 
 	filling atomic.Bool
+	// paused is `lineup reviews pause`: no fill starts a review.
+	paused bool
 	// members holds the logins of the queues' author teams, read at membersAt.
 	members   map[string][]string
 	membersAt time.Time
@@ -106,6 +108,11 @@ func New(d Deps) (*Scheduler, error) {
 	} else if v != "" {
 		s.board.Cap, _ = strconv.Atoi(v)
 	}
+	paused, err := d.Store.Setting(pausedKey)
+	if err != nil {
+		return nil, err
+	}
+	s.paused, _ = strconv.ParseBool(paused)
 	raw, err := d.Store.Tasks()
 	if err != nil {
 		return nil, err
@@ -723,7 +730,7 @@ func cmpString(a, b string) int {
 const doneShownFor = 7 * 24 * time.Hour
 
 func (s *Scheduler) view() BoardView {
-	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap()}
+	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap(), ReviewsPaused: s.paused}
 	for _, r := range s.list() {
 		if r.Stage == lifecycle.Done && (r.Archived || s.now().Sub(r.StageSince) > doneShownFor) {
 			continue
