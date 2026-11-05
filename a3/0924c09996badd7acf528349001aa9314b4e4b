@@ -1,0 +1,27 @@
+cmd/lineup/hub.go
+  s_dd78b7e64377d3::t_b000acea19496c 107-108,124,317-322,335-337,403-405,407-408,410-413,415,420,422
+cmd/lineup/hub_test.go
+  s_dd78b7e64377d3::t_02ca9d05facbc6 12-14,42-44,112-130
+cmd/lineup/main.go
+  s_dd78b7e64377d3::t_245dde52eb6f87 20-22
+cmd/lineup/wire.go
+  s_dd78b7e64377d3::t_9a13deb6281b3f 591-615
+cmd/lineup/wire_test.go
+  s_dd78b7e64377d3::t_53021ec9842873 212-255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a30924c09996badd7acf528349001aa9314b4e4b",
+  "prompts": {},
+  "sessions": {
+    "s_dd78b7e64377d3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d25f4ca3-9848-4af1-944a-f0c2fd9c2ca1",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
