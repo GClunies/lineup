@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -369,5 +370,81 @@ match = "`+root+`/code/acme/app"
 	}
 	if got := load(t, "wip_cap = 3\n").Checkouts(); len(got) != 0 {
 		t.Fatalf("no [[repos]] gave %q", got)
+	}
+}
+
+func TestReviewViewsAndQueues(t *testing.T) {
+	g := load(t, `
+[[review.views]]
+name = "My teammates"
+repos = ["umbrella/data"]
+author_teams = ["umbrella/platform"]
+
+[[review.views]]
+name = "Data team"
+requested_teams = ["umbrella/data"]
+labels = ["needs-review", "breaking change"]
+
+[[review.queues]]
+name = "platform"
+repos = ["umbrella/data"]
+authors = ["hopper", "noether"]
+
+[[review.queues]]
+name = "one at a time"
+authors = ["octo"]
+slots = 1
+`)
+	wantViews := []ReviewView{
+		{Name: "My teammates", PRFilter: PRFilter{Repos: []string{"umbrella/data"}, AuthorTeams: []string{"umbrella/platform"}}},
+		{Name: "Data team", PRFilter: PRFilter{RequestedTeams: []string{"umbrella/data"}, Labels: []string{"needs-review", "breaking change"}}},
+	}
+	if got := g.ReviewViews(); !reflect.DeepEqual(got, wantViews) {
+		t.Errorf("ReviewViews = %+v\nwant %+v", got, wantViews)
+	}
+	wantQueues := []ReviewQueue{
+		{Name: "platform", PRFilter: PRFilter{Repos: []string{"umbrella/data"}, Authors: []string{"hopper", "noether"}}, Slots: 3},
+		{Name: "one at a time", PRFilter: PRFilter{Authors: []string{"octo"}}, Slots: 1},
+	}
+	if got := g.ReviewQueues(); !reflect.DeepEqual(got, wantQueues) {
+		t.Errorf("ReviewQueues = %+v\nwant %+v", got, wantQueues)
+	}
+	if got := load(t, "wip_cap = 3\n"); len(got.ReviewViews())+len(got.ReviewQueues()) != 0 {
+		t.Errorf("no review config gave %+v %+v", got.ReviewViews(), got.ReviewQueues())
+	}
+}
+
+func TestBadReviewConfigFailsAtLoad(t *testing.T) {
+	for name, c := range map[string]struct{ text, want string }{
+		"unknown key":       {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\nauthor = [\"x\"]\n", "unknown keys"},
+		"unknown section":   {"[review.bogus]\nx = 1\n", "unknown keys"},
+		"no filter":         {"[[review.views]]\nname = \"a\"\n", "review.views[0]: needs at least one"},
+		"empty filter":      {"[[review.views]]\nname = \"a\"\nrepos = []\n", "review.views[0]: needs at least one"},
+		"no name":           {"[[review.views]]\nrepos = [\"o/r\"]\n", "review.views[0]: name is required"},
+		"team form":         {"[[review.views]]\nname = \"a\"\nauthor_teams = [\"platform\"]\n", `review.views[0]: author_teams[0] "platform" must be org/slug`},
+		"requested form":    {"[[review.views]]\nname = \"a\"\nrequested_teams = [\"umbrella/data/x\"]\n", "requested_teams[0]"},
+		"repo form":         {"[[review.views]]\nname = \"a\"\nrepos = [\"umbrella\"]\n", `repos[0] "umbrella" must be owner/name`},
+		"repo space":        {"[[review.views]]\nname = \"a\"\nrepos = [\"umbrella/da ta\"]\n", "repos[0]"},
+		"author space":      {"[[review.views]]\nname = \"a\"\nauthors = [\"a b\"]\n", "authors[0]"},
+		"label quote":       {"[[review.views]]\nname = \"a\"\nlabels = [\"a\\\"b\"]\n", "labels[0]"},
+		"duplicate view":    {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\n[[review.views]]\nname = \"a\"\nrepos = [\"o/s\"]\n", `review.views[1]: name "a" is used twice`},
+		"view and queue":    {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\n[[review.queues]]\nname = \"a\"\nrepos = [\"o/s\"]\n", `review.queues[0]: name "a" is used twice`},
+		"built-in name":     {"[[review.views]]\nname = \"My PRs\"\nrepos = [\"o/r\"]\n", "is used twice"},
+		"slots zero":        {"[[review.queues]]\nname = \"q\"\nrepos = [\"o/r\"]\nslots = 0\n", "review.queues[0]: slots must be at least 1"},
+		"queue no filter":   {"[[review.queues]]\nname = \"q\"\nslots = 2\n", "review.queues[0]: needs at least one"},
+		"queue unknown key": {"[[review.queues]]\nname = \"q\"\nrepos = [\"o/r\"]\nslot = 2\n", "unknown keys"},
+	} {
+		_, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), c.text))
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: err = %v, want %q", name, err, c.want)
+		}
+	}
+}
+
+func TestReviewInTheRepoFileIsAnError(t *testing.T) {
+	repo := t.TempDir()
+	write(t, filepath.Join(repo, ".lineup.toml"), "[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\n")
+	if _, err := load(t, "").Resolve(repo, nil); err == nil || !strings.Contains(err.Error(), "unknown keys") {
+		t.Errorf("err = %v", err)
 	}
 }

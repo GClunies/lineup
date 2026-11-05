@@ -98,7 +98,43 @@ type globalFile struct {
 	} `toml:"github"`
 	LocalTracker   bool   `toml:"local_tracker"`
 	LocalIssuesDir string `toml:"local_issues_dir"`
+	Review         struct {
+		Views  []ReviewView `toml:"views"`
+		Queues []queueFile  `toml:"queues"`
+	} `toml:"review"`
 }
+
+// PRFilter picks pull requests. The items of one list combine with OR, and
+// two lists combine with AND. Authors and AuthorTeams are one list.
+type PRFilter struct {
+	Repos          []string `toml:"repos"`
+	Authors        []string `toml:"authors"`
+	AuthorTeams    []string `toml:"author_teams"`
+	RequestedTeams []string `toml:"requested_teams"`
+	Labels         []string `toml:"labels"`
+}
+
+// ReviewView is a tab of the review tab.
+type ReviewView struct {
+	Name string `toml:"name"`
+	PRFilter
+}
+
+// ReviewQueue is a view whose PRs lineup reviews without being asked. Slots
+// is how many of its review Tasks can be started at one time.
+type ReviewQueue struct {
+	Name string
+	PRFilter
+	Slots int
+}
+
+type queueFile struct {
+	Name string `toml:"name"`
+	PRFilter
+	Slots *int `toml:"slots"`
+}
+
+const defaultSlots = 3
 
 type Global struct {
 	file     globalFile
@@ -129,6 +165,22 @@ func (g *Global) LinearClientID(workspace string) string {
 
 // GitHubLabels maps a lifecycle event to the label it sets on a GitHub Issue.
 func (g *Global) GitHubLabels() map[string]string { return g.file.GitHub.Labels }
+
+// ReviewViews are the [[review.views]] entries, in config order.
+func (g *Global) ReviewViews() []ReviewView { return g.file.Review.Views }
+
+// ReviewQueues are the [[review.queues]] entries, in config order.
+func (g *Global) ReviewQueues() []ReviewQueue {
+	var out []ReviewQueue
+	for _, q := range g.file.Review.Queues {
+		slots := defaultSlots
+		if q.Slots != nil {
+			slots = *q.Slots
+		}
+		out = append(out, ReviewQueue{Name: q.Name, PRFilter: q.PRFilter, Slots: slots})
+	}
+	return out
+}
 
 // LocalIssuesDir is the Local Tracker's folder.
 func (g *Global) LocalIssuesDir() string {
@@ -201,7 +253,82 @@ func Load(globalPath string) (*Global, error) {
 			return nil, fmt.Errorf("%s: github.labels: unknown event %q", globalPath, ev)
 		}
 	}
+	if err := validateReview(g.file.Review.Views, g.file.Review.Queues); err != nil {
+		return nil, fmt.Errorf("%s: %w", globalPath, err)
+	}
 	return g, nil
+}
+
+// reservedViews are the built-in tabs of the review tab.
+var reservedViews = []string{"My PRs", "Requested"}
+
+func validateReview(views []ReviewView, queues []queueFile) error {
+	names := map[string]bool{}
+	check := func(where, name string, f PRFilter) error {
+		name = strings.TrimSpace(name)
+		switch {
+		case name == "":
+			return fmt.Errorf("%s: name is required", where)
+		case names[name] || slices.Contains(reservedViews, name):
+			return fmt.Errorf("%s: name %q is used twice", where, name)
+		}
+		names[name] = true
+		return f.validate(where)
+	}
+	for i, v := range views {
+		if err := check(fmt.Sprintf("review.views[%d]", i), v.Name, v.PRFilter); err != nil {
+			return err
+		}
+	}
+	for i, q := range queues {
+		where := fmt.Sprintf("review.queues[%d]", i)
+		if err := check(where, q.Name, q.PRFilter); err != nil {
+			return err
+		}
+		if q.Slots != nil && *q.Slots < 1 {
+			return fmt.Errorf("%s: slots must be at least 1", where)
+		}
+	}
+	return nil
+}
+
+func (f PRFilter) validate(where string) error {
+	lists := []struct {
+		key   string
+		items []string
+		want  string
+		good  func(string) bool
+	}{
+		{"repos", f.Repos, "owner/name", isPair},
+		{"authors", f.Authors, "a login", isWord},
+		{"author_teams", f.AuthorTeams, "org/slug", isPair},
+		{"requested_teams", f.RequestedTeams, "org/slug", isPair},
+		// A label travels in double quotes, so it can hold spaces but no quote.
+		{"labels", f.Labels, "a label with no double quote", func(s string) bool {
+			return strings.TrimSpace(s) != "" && !strings.Contains(s, `"`)
+		}},
+	}
+	empty := true
+	for _, l := range lists {
+		for j, it := range l.items {
+			empty = false
+			if !l.good(it) {
+				return fmt.Errorf("%s: %s[%d] %q must be %s", where, l.key, j, it, l.want)
+			}
+		}
+	}
+	if empty {
+		return fmt.Errorf("%s: needs at least one of repos, authors, author_teams, requested_teams, labels", where)
+	}
+	return nil
+}
+
+func isWord(s string) bool { return s != "" && !strings.ContainsAny(s, " \t\"") }
+
+// isPair is an "owner/name" or "org/slug" form.
+func isPair(s string) bool {
+	a, b, ok := strings.Cut(s, "/")
+	return ok && isWord(a) && isWord(b) && !strings.Contains(b, "/")
 }
 
 func decodeStrict(text string, v any) error {
