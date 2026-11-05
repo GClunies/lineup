@@ -1,0 +1,41 @@
+internal/config/config.go
+  s_e10312e952f90e::t_14e3e25f4d1dde 345
+internal/config/config_test.go
+  s_e10312e952f90e::t_afa61b1dff407c 61,66,122-129,375-388
+internal/lifecycle/board.go
+  s_e10312e952f90e::t_0fad798ddab5cd 10,36-40,62-65,69-71,73,80-88,90,93,95-103,106,127-132,153,191-193,202-204,224-225,271-280,285-291,317,321-323
+internal/lifecycle/property_test.go
+  s_e10312e952f90e::t_d8f4034ca6dbe8 13,19,39-43,46-48,52,58-63,69-84,93,107,129-192
+internal/lifecycle/review_test.go
+  s_e10312e952f90e::t_8f6217d7020f33 1-164
+internal/lifecycle/signal.go
+  s_e10312e952f90e::t_c9aff9bc0e53b3 55-64,84-85,106-107
+internal/lifecycle/stage.go
+  s_e10312e952f90e::t_4b551cb9254ab8 18-56,84-88,90-108,120-121,124-126,178-181
+internal/lifecycle/testdata/rapid/TestEachKindStaysInItsOwnStages/TestEachKindStaysInItsOwnStages-20261105115313-50178.fail
+  s_e10312e952f90e::t_d8a6689f049724 1-94
+internal/lifecycle/testdata/rapid/TestReviewStartNeverPassesItsQueueSlots/TestReviewStartNeverPassesItsQueueSlots-20261105115250-49917.fail
+  s_e10312e952f90e::t_e46fd49641a383 1-105
+internal/lifecycle/testdata/rapid/TestReviewTasksGetNoEffectThatWritesOutside/TestReviewTasksGetNoEffectThatWritesOutside-20261105115312-50162.fail
+  s_e10312e952f90e::t_c1d4034d1f176d 1-130
+internal/lifecycle/testdata/rapid/TestReviewTasksNeverChangeTheWIPCount/TestReviewTasksNeverChangeTheWIPCount-20261105115314-50195.fail
+  s_e10312e952f90e::t_2a4bddd1e9b4f8 1-60
+internal/lifecycle/testdata/rapid/TestWIPCapNeverPassedWithoutOverride/TestWIPCapNeverPassedWithoutOverride-20261105115314-50195.fail
+  s_e10312e952f90e::t_3418042f86b62b 1-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "49e32b1d23fd5db4d44c32b0b541509e264952b3",
+  "prompts": {},
+  "sessions": {
+    "s_e10312e952f90e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_e10312e952f90e",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
