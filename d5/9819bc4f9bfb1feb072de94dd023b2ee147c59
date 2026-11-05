@@ -1,0 +1,14 @@
+internal/scheduler/review_test.go
+  h_54e5c83907823d 381
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d59819bc4f9bfb1feb072de94dd023b2ee147c59",
+  "prompts": {},
+  "humans": {
+    "h_54e5c83907823d": {
+      "author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
