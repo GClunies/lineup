@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // prRepo makes a GitHub stand-in: a bare origin with a develop branch and the
@@ -50,6 +51,39 @@ func TestAddReviewChecksOutTheHeadDetachedAndRepeats(t *testing.T) {
 	}
 	if err := exec.Command("git", "-C", path, "symbolic-ref", "-q", "HEAD").Run(); err == nil {
 		t.Fatal("the review worktree is on a branch, want detached")
+	}
+}
+
+// Another fetch in the main checkout, for example the user's editor, can hold
+// the lock on origin/develop for a moment. AddReview waits it out.
+func TestAddReviewRetriesARefLockThatAnotherFetchHolds(t *testing.T) {
+	origin, main, head := prRepo(t)
+	other := filepath.Join(filepath.Dir(origin), "other")
+	sh(t, filepath.Dir(origin), "git", "clone", "-q", origin, other)
+	commit(t, other, "a new develop commit")
+	sh(t, other, "git", "push", "-q", "origin", "HEAD:develop")
+
+	lock := filepath.Join(main, ".git", "refs", "remotes", "origin", "develop.lock")
+	if err := os.MkdirAll(filepath.Dir(lock), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.AfterFunc(1500*time.Millisecond, func() { os.Remove(lock) })
+	if err := AddReview(context.Background(), main, ReviewPath(main, 7), 7, "develop", head); err != nil {
+		t.Fatalf("AddReview gave up on a ref lock: %v", err)
+	}
+}
+
+func TestAddReviewFailsAtOnceOnAnotherFetchError(t *testing.T) {
+	_, main, head := prRepo(t)
+	start := time.Now()
+	if err := AddReview(context.Background(), main, ReviewPath(main, 8), 8, "develop", head); err == nil {
+		t.Fatal("AddReview of a PR with no head ref succeeded")
+	}
+	if d := time.Since(start); d > 400*time.Millisecond {
+		t.Fatalf("AddReview retried an error that is not a ref lock, for %v", d)
 	}
 }
 

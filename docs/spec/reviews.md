@@ -241,7 +241,7 @@ If no `[[repos]]` checkout has the PR's repository as its `origin`, the add fail
 2. If the review worktree is missing, `git worktree add --detach <review worktree> <head>`.
 3. Trust the main checkout for Claude, as a build Task trusts its worktree.
 
-The lock keeps two starts from fetching into one checkout at once. A failed step gives the flag `setup failed`.
+The lock keeps two starts from fetching into one checkout at once. A fetch from outside lineup, for example the user's editor, can still hold a ref lock in that checkout. If git reports `cannot lock ref`, lineup tries the fetch again after 0.5 s, 1 s, and 2 s. A failed step gives the flag `setup failed`.
 
 **Cleanup.** At Done, after the tab closes, lineup fetches and then removes the review worktree if it holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
 

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // A review Task reads the PR's code in a detached worktree beside the Repo's
@@ -25,7 +26,7 @@ func ReviewPath(main string, number int) string {
 // AddReview fetches the PR's head and its base branch into the main checkout,
 // then adds the review worktree, detached at head, if it is missing.
 func AddReview(ctx context.Context, main, path string, number int, base, head string) error {
-	if _, err := git(ctx, main, "fetch", "origin", pullRef(number), base); err != nil {
+	if err := fetch(ctx, main, pullRef(number), base); err != nil {
 		return err
 	}
 	switch _, err := os.Stat(path); {
@@ -47,7 +48,7 @@ func RemoveReview(ctx context.Context, main, path string, number int) (kept bool
 	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 		return false, nil
 	}
-	if _, err := git(ctx, main, "fetch", "origin", pullRef(number)); err != nil {
+	if err := fetch(ctx, main, pullRef(number)); err != nil {
 		return true, err
 	}
 	prHead, err := git(ctx, main, "rev-parse", "FETCH_HEAD")
@@ -66,6 +67,27 @@ func RemoveReview(ctx context.Context, main, path string, number int) (kept bool
 		return true, err
 	}
 	return false, nil
+}
+
+// lockWaits are the pauses before each new try of a fetch that found a ref
+// locked. The per-Repo lock in the Scheduler covers only lineup's fetches. The
+// user's editor or shell can fetch in the same checkout at the same moment.
+var lockWaits = []time.Duration{500 * time.Millisecond, time.Second, 2 * time.Second}
+
+// fetch fetches the refs from origin into the main checkout. It tries again
+// when another fetch holds a ref lock.
+func fetch(ctx context.Context, main string, refs ...string) error {
+	for i := 0; ; i++ {
+		_, err := git(ctx, main, append([]string{"fetch", "origin"}, refs...)...)
+		if err == nil || i == len(lockWaits) || !strings.Contains(err.Error(), "cannot lock ref") {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(lockWaits[i]):
+		}
+	}
 }
 
 func pullRef(number int) string { return "pull/" + strconv.Itoa(number) + "/head" }
