@@ -1,0 +1,19 @@
+internal/scheduler/review.go
+  s_7b4f18741271f6::t_892b29f6e40170 14,116,126-129,131,136-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a6bf97dafea8006c2134378d23d108f88bf81aa8",
+  "prompts": {},
+  "sessions": {
+    "s_7b4f18741271f6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a70862cf91f8773bb",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
