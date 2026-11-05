@@ -15,8 +15,8 @@ func TestQuery(t *testing.T) {
 	const oldest = "is:pr is:open archived:false sort:created-asc"
 	members := map[string][]string{
 		"umbrella/platform": {"kernighan", "hopper"},
-		"umbrella/data-eng":      {"hopper", "knuth"},
-		"umbrella/empty":         {},
+		"umbrella/data-eng": {"hopper", "knuth"},
+		"umbrella/empty":    {},
 	}
 	for name, c := range map[string]struct {
 		f    Filter
