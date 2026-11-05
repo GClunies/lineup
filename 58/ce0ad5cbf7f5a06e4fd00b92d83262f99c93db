@@ -1,0 +1,25 @@
+internal/scheduler/fill.go
+  s_ef04b6a036d849::t_7fc7885339a279 1-56,59-76,78-103,106-108,110-114
+  s_ef04b6a036d849::t_9694eaf5c202b9 104-105,109
+  s_ef04b6a036d849::t_48ed04ff7e626b 57-58
+  s_ef04b6a036d849::t_5f9a4b855ad9ac 77
+internal/scheduler/fill_test.go
+  s_ef04b6a036d849::t_e68a70ac371ccc 63-65
+  s_ef04b6a036d849::t_6ce5bf1a298b39 1-62,66-138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "58ce0ad5cbf7f5a06e4fd00b92d83262f99c93db",
+  "prompts": {},
+  "sessions": {
+    "s_ef04b6a036d849": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "68abf2af-1a04-469b-9f71-c457ce738562",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
