@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/store"
 )
@@ -112,11 +113,7 @@ func (s *Scheduler) review(ctx context.Context, url string) (ReviewResult, error
 	case pr.State != "OPEN":
 		return ReviewResult{}, fmt.Errorf("%s#%d is %s", pr.Repo, pr.Number, strings.ToLower(pr.State))
 	}
-	repo, ok := s.d.Config.RepoForGitHub(pr.Repo)
-	if !ok {
-		return ReviewResult{}, fmt.Errorf("%w for %s: no [[repos]] checkout has it as its origin", ErrNoRepo, pr.Repo)
-	}
-	policy, err := s.d.Config.Policy(repo, nil)
+	repo, policy, err := s.reviewRepo(pr.Repo)
 	if err != nil {
 		return ReviewResult{}, err
 	}
@@ -126,25 +123,66 @@ func (s *Scheduler) review(ctx context.Context, url string) (ReviewResult, error
 		if res, found, err = s.startOpenReview(key); found || err != nil {
 			return err
 		}
-		_, name, _ := strings.Cut(pr.Repo, "/")
-		r := &Record{
-			Title: fmt.Sprintf("%s#%d %s", name, pr.Number, pr.Title), Repo: repo, RepoSlug: pr.Repo, Session: reviewSession,
-			Review:    &ReviewPR{Repo: pr.Repo, Number: pr.Number, URL: pr.URL, Head: pr.Head, Base: pr.Base},
-			CreatedAt: s.now(), StageSince: s.now(),
-		}
-		r.ID = s.nextID("R")
-		r.RepoLabel = sessionLabel(r.Repo, s.repos())
-		r.Task = *s.board.AddReview(r.ID, "", policy)
-		s.board.Tasks[r.ID] = &r.Task
-		s.recs[r.ID] = r
-		s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: "add", To: lifecycle.Queued.String(), Detail: pr.URL})
-		if err := s.apply(r, lifecycle.Start{}, ""); err != nil {
-			return err
-		}
+		r, err := s.addReview(reviewAdd{
+			PR:    ReviewPR{Repo: pr.Repo, Number: pr.Number, URL: pr.URL, Head: pr.Head, Base: pr.Base},
+			Title: pr.Title, Repo: repo, Policy: policy,
+		})
 		res = ReviewResult{TaskView: r.view()}
-		return nil
+		return err
 	})
 	return res, err
+}
+
+// reviewRepo finds the Repo whose main checkout reviews the PRs of the GitHub
+// repository owner/name, and that Repo's policy. It reads files, so only
+// lanes and API handlers call it, never the loop.
+func (s *Scheduler) reviewRepo(slug string) (string, lifecycle.Policy, error) {
+	repo, ok := s.d.Config.RepoForGitHub(slug)
+	if !ok {
+		return "", lifecycle.Policy{}, fmt.Errorf("%w for %s: no [[repos]] checkout has it as its origin", ErrNoRepo, slug)
+	}
+	policy, err := s.d.Config.Policy(repo, nil)
+	return repo, policy, err
+}
+
+// reviewAdd is a review Task to put on the Board. Queue is "" for a review
+// that the user asked for.
+type reviewAdd struct {
+	PR     ReviewPR
+	Title  string // the PR's title
+	Repo   string
+	Policy lifecycle.Policy
+	Queue  string
+}
+
+// addReview puts a review Task on the Board and starts it. Only the loop
+// calls it.
+func (s *Scheduler) addReview(a reviewAdd) (*Record, error) {
+	_, name, _ := strings.Cut(a.PR.Repo, "/")
+	r := &Record{
+		Title: fmt.Sprintf("%s#%d %s", name, a.PR.Number, a.Title), Repo: a.Repo, RepoSlug: a.PR.Repo, Session: reviewSession,
+		Review: &a.PR, CreatedAt: s.now(), StageSince: s.now(),
+	}
+	r.ID = s.nextID("R")
+	r.RepoLabel = sessionLabel(r.Repo, s.repos())
+	r.Task = *s.board.AddReview(r.ID, a.Queue, a.Policy)
+	s.board.Tasks[r.ID] = &r.Task
+	s.recs[r.ID] = r
+	detail := a.PR.URL
+	if a.Queue != "" {
+		detail = "queue " + a.Queue + ": " + detail
+	}
+	s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: "add", To: lifecycle.Queued.String(), Detail: detail})
+	return r, s.apply(r, lifecycle.Start{}, "")
+}
+
+// reviewTask is the Record as the queue rules see it. ok is false for a
+// build Task.
+func (r *Record) reviewTask() (t github.ReviewTask, ok bool) {
+	if r.Review == nil {
+		return t, false
+	}
+	return github.ReviewTask{URL: r.Review.URL, Head: r.Review.Head, Done: r.Stage == lifecycle.Done}, true
 }
 
 // startOpenReview finds the open review Task of the PR and starts it if it is
