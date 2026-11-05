@@ -1,0 +1,47 @@
+internal/lifecycle/property_test.go
+  s_e10312e952f90e::t_d8f4034ca6dbe8 13,19,39-43,46-48,52,58-63,69-84,93,107,129-192
+internal/lifecycle/stage.go
+  s_e10312e952f90e::t_4b551cb9254ab8 18-56,84-88,90-108,120-121,124-126,178-181
+internal/lifecycle/board.go
+  s_e10312e952f90e::t_0fad798ddab5cd 10,36-40,62-65,69-71,73,80-88,90,93,95-103,106,127-132,153,191-193,202-204,224-225,271-280,285-291,317,321-323
+internal/config/config.go
+  s_e10312e952f90e::t_14e3e25f4d1dde 472
+internal/lifecycle/review_test.go
+  s_e10312e952f90e::t_8f6217d7020f33 1-164
+internal/lifecycle/signal.go
+  s_e10312e952f90e::t_c9aff9bc0e53b3 55-64,84-85,106-107
+internal/config/config_test.go
+  s_e10312e952f90e::t_afa61b1dff407c 62,67,123-130,376,453-465
+internal/github/reviewpoll.go
+  s_dbfb947161f840::t_8693d14474485b 1-160
+internal/github/reviewpoll_test.go
+  s_dbfb947161f840::t_2b5ff98c2b78f5 1-105
+internal/github/testdata/review_poll.json
+  s_dbfb947161f840::t_5739378bafeb82 1-87
+internal/github/testdata/review_poll_pending.json
+  s_dbfb947161f840::t_a7718302f415f3 1-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "861febab3199e4d2314d9239c3d39880221fcbfc",
+  "prompts": {},
+  "sessions": {
+    "s_dbfb947161f840": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56a91e0e-7d53-4d56-a0c2-c5987f867dd5",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_e10312e952f90e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_e10312e952f90e",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
