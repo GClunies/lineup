@@ -206,8 +206,11 @@ func (m Model) reviewFooter() string {
 	}
 	hs := []hint{{"tab", "next view"}}
 	if pr, ok := m.rv.current(); ok {
-		if t, joined := m.joinPR()[pr.URL]; joined && t.Live {
+		switch t, joined := m.joinPR()[pr.URL]; {
+		case joined && t.Live:
 			hs = append(hs, hint{"enter", "go to the Worker"})
+		case joined && reopens(t):
+			hs = append(hs, hint{"enter", "reopen the Worker"})
 		}
 		hs = append(hs, hint{"o", "open the PR"}, hint{"r", "review now"})
 	}
@@ -227,10 +230,12 @@ const reviewHelp = `
    < >      move this view's tab left or right; lineup keeps the order
    j k      move the selection
    /        fuzzy search in this list
-   enter    go to the Worker's tab of the Task in the TASK column, or
-            open the PR when no Worker runs for it
+   enter    go to the Worker's tab of the Task in the TASK column,
+            reopen its Worker in Review ready, or open the PR when no
+            Worker runs for it
    o        open the PR in the browser
-   r        start a review Task for this PR now, outside every queue's slots
+   r        start a review Task for this PR now, outside every queue's
+            slots, or reopen its closed Worker in Review ready
    R        refresh now; lineup also refreshes every 2 minutes
    z        zoom the Reviewer below to full height, and back
    ?        this help      q  quit

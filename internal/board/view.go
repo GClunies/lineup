@@ -156,8 +156,11 @@ func (m Model) boardHints() []hint {
 	if t.Group == lifecycle.GroupQueued.String() {
 		hs = append(hs, hint{"s", "start"})
 	}
-	if t.Live {
+	switch {
+	case t.Live:
 		hs = append(hs, hint{"enter", "go to the Worker"}, hint{"p", "preview"})
+	case reopens(t):
+		hs = append(hs, hint{"enter", "reopen the Worker"})
 	}
 	switch {
 	case t.PRURL != "":
@@ -278,7 +281,8 @@ const boardHelp = `
  lineup board keys
 
    j k      move the selection
-   enter    focus the Task's tab in Rex
+   enter    focus the Task's tab in Rex, or reopen the closed Worker
+            of a review Task in Review ready
    p        live preview of the Worker's screen
    f        detail pane at full screen, and back
    m        merge the PR            (Ready to land)

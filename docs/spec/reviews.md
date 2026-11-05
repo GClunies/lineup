@@ -118,9 +118,9 @@ On a narrow screen the columns drop from the right, with their headings, so that
 | `<` `>` | Move this view's tab left or right, and save the rank |
 | `j` `k` | Move the selection |
 | `/` | Fuzzy search the rows |
-| `enter` | Focus the Worker's tab of the joined Task. If no Worker runs for the row, open the PR in the browser. |
+| `enter` | Focus the Worker's tab of the joined Task. If the joined Task is in Review ready and its Worker closed, reopen the Worker, as `r` does. If no Worker runs for the row, open the PR in the browser. |
 | `o` | Open the PR in the browser |
-| `r` | Start a review Task for this PR now, outside every queue's slots. If the PR has an open review Task, start or run it again if it is Queued or stopped for good, else focus its tab |
+| `r` | Start a review Task for this PR now, outside every queue's slots. If the PR has an open review Task, start it if it is Queued, reopen its Worker if the Worker closed in Review ready, or run it again if it stopped for good. Else focus its tab. |
 | `R` | Refresh the view now |
 | `z` | Zoom the Reviewer pane to full height, and back |
 | `?` | Show all keys |
@@ -183,7 +183,7 @@ The Scheduler reads the queues and their slots when it starts. After a change to
 
 A review Task is a Task with Kind `review`. Its ID has the form `R-<n>`, from the same counter as the ad hoc IDs. It keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `r` or `lineup review` has no queue.
 
-`lineup review` and `r` read the URL as `owner/repo#number`. If a review Task for that PR is open, they add nothing. They start that Task if it is Queued. They run it again if it stopped for good, for example after a failed setup. If it runs, they focus its tab. They refuse a PR from a fork, and a PR that is closed or merged.
+`lineup review` and `r` read the URL as `owner/repo#number`. If a review Task for that PR is open, they add nothing. They start that Task if it is Queued. They reopen its Worker if the Worker closed in Review ready. They run it again if it stopped for good, for example after a failed setup. If it runs, they focus its tab. They refuse a PR from a fork, and a PR that is closed or merged.
 
 ### Stages
 
@@ -207,12 +207,14 @@ A review Task never enters a Stage of a build Task, and a build Task never enter
 | Reviewing or Review ready | `pr-merged` | Done, marked merged |
 | Reviewing or Review ready | `pr-closed`: closed without a merge | Done, marked closed |
 | Reviewing | the Worker's tab closes or the Worker is lost | Reviewing, with a fresh Worker from the restart budget, as for a build Task |
-| Review ready | the Worker's tab closes, the Worker exits, or recovery finds no tab | Done, marked closed |
+| Review ready | the Worker's tab closes, the Worker exits, or recovery finds no tab | Review ready, with no Worker. The Task keeps its slot and still needs the user. |
+| Review ready | `reopen`: `lineup review`, `r`, or `enter` on a Task with no live Worker | Review ready, with a Worker that resumes the review's conversation |
 | Any Stage | `task-closed` (user key `x`, confirmed) | Done, marked closed |
 
 - `pr-reviewed`, `pr-merged`, and `pr-closed` are levels, not edges. Each full poll computes them from the PR's current state, so a Signal that waits is not lost.
 - The Scheduler applies them only while the Worker does not work. The Record keeps the Worker's last program status. The Worker does not work when that status is `done` or `idle`, when the Worker exited, or when the Task has no tab. `blocked` counts as working, because `pr-review` can ask for a permission in its Step 10. `pr-review` posts the review in its Step 9, and a Done in between would close the tab before that step ends.
 - Review ready is a Stage, not a flag. Recovery restarts a lost Worker only in an agent Stage, so a finished review never runs again after a restart.
+- `reopen` fits only Review ready. It clears the Task's flag and opens a new tab, and it takes no new slot.
 - `rerun` takes only the Stages of the Task's Kind, so a review Task never enters Working, CI running, or any other build Stage.
 - When a PR that the user reviewed requests the user again, its review Task is already Done. The queue then starts a new review Task. `pr-review` reads its review record and reviews only what changed.
 
@@ -232,6 +234,8 @@ If the PR's head moves after Review ready, the row shows the note `head moved`. 
 | Review worktree | `<main checkout's parent>/<repo>.review-pr-<number>`, detached at the PR's head. lineup makes it and removes it. |
 | Prompt | `/pr-review <PR URL>`, the review worktree, then the review contract |
 | Harness, model, effort | `[stage.reviewing]`, else `[stage.default]`. The Worker gets `--add-dir <review worktree>`, so it reads the PR's code with no permission prompt. |
+| Conversation | Each Reviewing Worker starts a Claude conversation with `--session-id <uuid>`, and the Task's Record keeps the ID. A restart or a rerun starts a new conversation, because it reviews afresh. |
+| Reopened Worker | `claude --resume <uuid>` with no prompt, the Reviewing model and effort, and `--add-dir <review worktree>`. Setup runs again first. If the Task has no conversation ID, for example a Task from before conversation IDs, the reopen runs the review again in Reviewing. |
 
 If no `[[repos]]` checkout has the PR's repository as its `origin`, the add fails and names the repository.
 
@@ -286,7 +290,7 @@ The skills live in the dotfiles repository, `~/.agents/skills`.
 
 | Command | Effect |
 |---|---|
-| `lineup review <PR URL>` | Adds and starts a review Task with no queue |
+| `lineup review <PR URL>` | Adds and starts a review Task with no queue, or reopens the closed Worker of an open review Task |
 | `lineup reviews` | Lists each queue with its slots, started reviews, and ranked PRs |
 | `lineup reviews pause` / `resume` | Stops or restarts every queue fill |
 
@@ -327,11 +331,11 @@ The Reviewer's settings deny `lineup add`, `lineup start`, `lineup merge`, and e
 5. **Fill.** Two fills in the same state start the same Tasks once. A paused queue starts nothing.
 6. **Review poll.** Against recorded responses, `pr-reviewed`, `pr-merged`, and `pr-closed` fire as the table says, wait while the Worker works, and fire on the next poll after the Worker stops. A pending review does not fire `pr-reviewed`.
 7. **Setup and cleanup.** Two review starts in one Repo fetch one after the other. Cleanup removes a clean review worktree and keeps one with an unpushed commit. A review Task never calls `wt remove`.
-8. **Lost tabs.** A closed tab in Review ready ends the Task. A closed tab in Reviewing starts a fresh Worker. Recovery with no tab in Review ready ends the Task.
+8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then reopens the Worker in the same conversation. A closed tab in Reviewing starts a fresh Worker. Recovery with no tab in Review ready leaves the Task as it is.
 9. **Config.** Load and validation: an unknown key, an empty filter list, a bad team or repository form, a duplicate name, and `slots` below 1 each fail at load.
 10. **Board.** A render test of the review view with a joined build Task and a joined review Task. `enter` on a joined row sends `focus` for that Task. Typing `q` in the search does not quit.
 11. **Speed.** The review view's first paint from the cache meets the Board's 100 ms budget.
 12. **Live.**
     - The review tab lists the user's open PRs, and a PR of a running Task shows that Task's Stage.
     - A queue on one repository starts `/pr-review` on a real PR. The Task reaches Review ready with a findings file, and nothing is written to GitHub.
-    - Closing that Task's tab ends the review. Its Rex session goes away with its last Task.
+    - Closing that Task's tab keeps the review in Review ready. `enter` on its row reopens the Worker in the same conversation.

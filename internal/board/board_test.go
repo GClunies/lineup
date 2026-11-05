@@ -597,3 +597,39 @@ func TestTheBoardToastsEachNewAlertOnce(t *testing.T) {
 		t.Fatalf("toasts %q, want %q", toasts, want)
 	}
 }
+
+func TestEnterReopensAClosedReviewWorker(t *testing.T) {
+	const url = "https://github.com/umbrella/data/pull/4955"
+	v := fixture()
+	ready := tv("R-12", lifecycle.ReviewReady, "data", "data#4955 Pull the base images", "", time.Hour)
+	ready.Group, ready.PRURL, ready.ReviewHead, ready.Live = "Needs you", url, "h1", false
+	v.Tasks = append(v.Tasks, ready)
+	f := &fakeClient{review: scheduler.ReviewResult{TaskView: ready, Action: scheduler.ReviewReopened}}
+	m := newModel(f, v)
+	m.sel = "R-12"
+	if !strings.Contains(m.View(), "reopen the Worker") {
+		t.Fatalf("the hints do not offer the reopen:\n%s", m.View())
+	}
+	m, cmd := press(m, "enter")
+	m = drain(m, cmd)
+	if len(f.calls) != 1 || f.calls[0].Op != "review" || f.calls[0].URL != url {
+		t.Fatalf("enter sent %+v, want review %s alone", f.calls, url)
+	}
+	if l := line(m.View(), "review R-12"); !strings.Contains(l, "reopened") {
+		t.Fatalf("status line = %q", l)
+	}
+
+	ready.Live = true
+	v.Tasks[len(v.Tasks)-1] = ready
+	f = &fakeClient{}
+	m = newModel(f, v)
+	m.sel = "R-12"
+	if strings.Contains(m.View(), "reopen the Worker") {
+		t.Fatal("the hints offer a reopen of a live Worker")
+	}
+	_, cmd = press(m, "enter")
+	cmd()
+	if got := f.ops(); !slices.Equal(got, []string{"focus"}) {
+		t.Fatalf("enter on a live Worker: ops = %v, want focus", got)
+	}
+}

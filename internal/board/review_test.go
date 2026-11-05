@@ -514,3 +514,30 @@ func TestTheQueueTabListsThePRsThatWaitFirstToStartFirst(t *testing.T) {
 		}
 	}
 }
+
+// A review Task whose Worker closed in Review ready waits for the user's
+// decisions, so enter reopens its Worker.
+func TestReviewEnterReopensAClosedReviewWorker(t *testing.T) {
+	e := newRvEnv(t)
+	b := reviewBoard()
+	ready := tv("R-12", lifecycle.ReviewReady, "data", "data#4955 Pull the base images", "", time.Hour)
+	ready.Group, ready.PRURL, ready.ReviewHead, ready.Live = "Needs you", urlBase, "h1", false
+	b.Tasks[1] = ready
+	e.m.board, e.m.tasks = b, b.Tasks
+	e.open()
+	e.press("tab")
+	if !strings.Contains(e.m.View(), "reopen the Worker") {
+		t.Fatalf("the footer does not offer the reopen:\n%s", e.m.View())
+	}
+	e.sched.review = scheduler.ReviewResult{TaskView: ready, Action: scheduler.ReviewReopened}
+	e.press("enter")
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "review" || c[0].URL != urlBase {
+		t.Fatalf("enter sent %+v, want review %s alone", c, urlBase)
+	}
+	if len(e.opened) != 0 {
+		t.Fatalf("enter opened %v", e.opened)
+	}
+	if l := line(e.m.View(), "review R-12"); !strings.Contains(l, "reopened") {
+		t.Fatalf("status line = %q", l)
+	}
+}

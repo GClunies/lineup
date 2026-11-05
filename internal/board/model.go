@@ -313,6 +313,9 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.vp.GotoTop()
 		return m, m.loadDetail()
 	case "enter":
+		if ok && reopens(t) {
+			return m, m.reviewPR(t.PRURL, t.ID)
+		}
 		if ok {
 			return m, m.op("focus", scheduler.Request{Op: "focus", Task: t.ID})
 		}

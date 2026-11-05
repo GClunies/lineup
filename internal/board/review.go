@@ -405,8 +405,12 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(rows) == 0 {
 			return m, nil
 		}
-		if t, ok := m.joinPR()[rows[i].URL]; ok && t.Live {
+		t, ok := m.joinPR()[rows[i].URL]
+		switch {
+		case ok && t.Live:
 			return m, m.op("focus", scheduler.Request{Op: "focus", Task: t.ID})
+		case ok && reopens(t):
+			return m, m.reviewPR(rows[i].URL, prRef(rows[i]))
 		}
 		return m, m.openURL(rows[i].URL)
 	case "o":
@@ -415,26 +419,27 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "r":
 		if len(rows) > 0 {
-			return m, m.reviewPR(rows[i])
+			return m, m.reviewPR(rows[i].URL, prRef(rows[i]))
 		}
 	}
 	return m, nil
 }
 
-// reviewPR starts a review Task for the PR now, outside every queue's slots.
-// If the PR has an open review Task, it starts that Task if it is Queued, runs
-// it again if it stopped for good, and otherwise focuses its tab.
-func (m Model) reviewPR(pr github.PullRequest) tea.Cmd {
-	c, ref := m.client, prRef(pr)
+// reviewPR starts a review Task for the PR at url now, outside every queue's
+// slots. If the PR has an open review Task, it starts that Task if it is
+// Queued, reopens its closed Worker, runs it again if it stopped for good, and
+// otherwise focuses its tab. ref names the PR in an error.
+func (m Model) reviewPR(url, ref string) tea.Cmd {
+	c := m.client
 	return func() tea.Msg {
 		var res scheduler.ReviewResult
-		if err := c.Do(scheduler.Request{Op: "review", URL: pr.URL}, &res); err != nil {
+		if err := c.Do(scheduler.Request{Op: "review", URL: url}, &res); err != nil {
 			return opMsg{label: "review", task: ref, err: err}
 		}
 		switch res.Action {
 		case scheduler.ReviewAdded:
 			return opMsg{label: "review", task: res.ID, note: res.Stage}
-		case scheduler.ReviewStarted, scheduler.ReviewRestarted:
+		case scheduler.ReviewStarted, scheduler.ReviewRestarted, scheduler.ReviewReopened:
 			return opMsg{label: "review", task: res.ID, note: string(res.Action)}
 		}
 		note := "already open"
@@ -443,6 +448,13 @@ func (m Model) reviewPR(pr github.PullRequest) tea.Cmd {
 		}
 		return opMsg{label: "review", task: res.ID, note: note}
 	}
+}
+
+// reopens reports whether the review op reopens the Task's Worker, because
+// the Worker closed in a Stage that resumes it.
+func reopens(t scheduler.TaskView) bool {
+	st, err := lifecycle.ParseStage(t.StageKey)
+	return err == nil && st.Resumable() && !t.Live
 }
 
 // reviewTasks are the review Tasks on the Board, as the queue rules see them.

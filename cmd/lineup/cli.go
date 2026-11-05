@@ -128,7 +128,7 @@ func cmdReview(c scheduler.Client, args []string, out io.Writer) error {
 	case scheduler.ReviewAdded:
 		fmt.Fprintf(out, "%s reviewing in %s: %s\n", res.ID, res.Repo, res.Title)
 		return nil
-	case scheduler.ReviewStarted, scheduler.ReviewRestarted:
+	case scheduler.ReviewStarted, scheduler.ReviewRestarted, scheduler.ReviewReopened:
 		fmt.Fprintf(out, "%s %s: %s\n", res.ID, res.Action, res.Title)
 		return nil
 	}

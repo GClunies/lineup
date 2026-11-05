@@ -218,6 +218,21 @@ func TestLineupReviewOfAStoppedReviewRestartsItWithoutFocus(t *testing.T) {
 	}
 }
 
+// A reopened Worker opens a new tab later, so the CLI reports it and focuses nothing.
+func TestLineupReviewOfAClosedWorkerReopensItWithoutFocus(t *testing.T) {
+	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, scheduler.ReviewReopened), "focus": {OK: true}})
+	var out bytes.Buffer
+	if err := cmdReview(c, []string{"umbrella/data#4955"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if reqs := got(); len(reqs) != 1 || reqs[0].Op != "review" {
+		t.Fatalf("requests = %+v, want review alone", reqs)
+	}
+	if want := "R-1 reopened: data#4955 Pull the base images\n"; out.String() != want {
+		t.Fatalf("out = %q, want %q", out.String(), want)
+	}
+}
+
 // A review Task has no branch, so lineup show prints no empty branch.
 func TestLineupShowOfAReviewPrintsNoBranch(t *testing.T) {
 	data, err := json.Marshal(scheduler.TaskDetail{TaskView: scheduler.TaskView{ID: "R-1", Repo: "data", Stage: "Reviewing", Title: "data#4955 Pull the base images"}})
