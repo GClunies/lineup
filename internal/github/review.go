@@ -34,8 +34,9 @@ type Filter struct {
 }
 
 // Query builds the search for f, given the members of each team in
-// AuthorTeams. ok is false when f names authors but every team is empty, so
-// the search could match nobody's PRs and must not run.
+// AuthorTeams. ok is false when the author list is empty because each of its
+// teams is empty. With no author: qualifier the search would match every
+// author, so it must not run.
 func (f Filter) Query(members map[string][]string) (q string, ok bool) {
 	parts := []string{f.Base}
 	for _, r := range f.Repos {
