@@ -3,6 +3,7 @@ package board
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -122,7 +123,7 @@ func newRvEnv(t *testing.T) *rvEnv {
 		Reviews: Reviews{
 			Views: []ReviewView{
 				{Key: "view:My teammates", Name: "My teammates", Filter: github.Filter{Base: github.ViewPRs, Repos: []string{"umbrella/data"}, AuthorTeams: []string{"umbrella/platform"}}},
-				{Key: "queue:platform", Name: "Q: platform", Filter: github.Filter{Base: github.QueuePRs, Authors: []string{"hopper"}}},
+				{Key: "queue:platform", Name: "Q: platform", Filter: github.Filter{Base: github.QueuePRs, Authors: []string{"hopper"}}, Queue: true},
 			},
 			API:        e.api,
 			ReadCache:  func(k string) ([]github.PullRequest, bool) { prs, ok := e.cache[k]; return prs, ok },
@@ -380,5 +381,79 @@ func TestReviewNarrowRowKeepsTheTitle(t *testing.T) {
 	}
 	if strings.Contains(logsRow, "2d") || strings.Contains(logsRow, "ENG-614") {
 		t.Fatalf("the fields at the right did not drop first: %q", logsRow)
+	}
+}
+
+func TestReviewRStartsAReviewOfTheSelectedPR(t *testing.T) {
+	e := newRvEnv(t)
+	e.open()
+	e.press("shift+tab") // the empty Q: tab
+	e.press("r")
+	if len(e.sched.calls) != 0 {
+		t.Fatalf("r with no row sent %+v", e.sched.calls)
+	}
+
+	e.press("tab", "tab")
+	e.sched.review = scheduler.ReviewResult{TaskView: scheduler.TaskView{ID: "R-3", Stage: "Reviewing"}}
+	e.press("r")
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "review" || c[0].URL != urlBase {
+		t.Fatalf("r sent %+v, want review %s", c, urlBase)
+	}
+	if l := line(e.m.View(), "review R-3"); !strings.Contains(l, "Reviewing") {
+		t.Fatalf("status line = %q", l)
+	}
+
+	e.sched.review.Existing = true
+	e.press("r")
+	if c := e.sched.calls[1:]; len(c) != 2 || c[0].Op != "review" || c[1].Op != "focus" || c[1].Task != "R-3" {
+		t.Fatalf("r on a PR with an open review sent %+v, want review then focus R-3", c)
+	}
+	if l := line(e.m.View(), "review R-3"); !strings.Contains(l, "already open") {
+		t.Fatalf("status line = %q", l)
+	}
+
+	e.sched.errs["review"] = errors.New("umbrella/data#4955 comes from a fork")
+	e.press("r")
+	if l := line(e.m.View(), "review data#4955"); !strings.Contains(l, "comes from a fork") {
+		t.Fatalf("status line = %q, want the refusal", l)
+	}
+}
+
+func TestTheQueueTabListsThePRsThatWaitFirstToStartFirst(t *testing.T) {
+	e := newRvEnv(t)
+	pr := func(n int, age time.Duration) github.PullRequest {
+		return github.PullRequest{Repo: "umbrella/data", Number: n, Title: fmt.Sprintf("Change %d", n), Author: "hopper",
+			URL: fmt.Sprintf("https://github.com/umbrella/data/pull/%d", n), Head: fmt.Sprintf("h%d", n), CreatedAt: epoch.Add(-age)}
+	}
+	oldest, byName, approved, reviewing, reviewed := pr(5001, 72*time.Hour), pr(5002, time.Hour), pr(5003, 90*time.Hour), pr(5004, 80*time.Hour), pr(5005, 85*time.Hour)
+	pushed := pr(5006, 2*time.Hour)
+	byName.Viewer = github.ViewerState{Requested: true, ByName: true}
+	approved.LatestReviews = []github.Review{{Author: "knuth", State: "APPROVED"}}
+	e.api.lists["queue:platform"] = []github.PullRequest{oldest, byName, approved, reviewing, reviewed, pushed}
+
+	b := reviewBoard()
+	open := tv("R-7", lifecycle.Reviewing, "data", "data#5004 Change 5004", "", time.Hour)
+	open.PRURL, open.ReviewHead = reviewing.URL, reviewing.Head
+	done := tv("R-6", lifecycle.Done, "data", "data#5005 Change 5005", "", time.Hour)
+	done.PRURL, done.ReviewHead = reviewed.URL, reviewed.Head
+	older := tv("R-5", lifecycle.Done, "data", "data#5006 Change 5006", "", time.Hour)
+	older.PRURL, older.ReviewHead = pushed.URL, "h5006-before-the-push"
+	b.Tasks = append(b.Tasks, open, done, older)
+	e.m.setBoard(b)
+	e.open()
+	e.press("shift+tab")
+
+	v := ansi.Strip(e.m.View())
+	if l := line(v, "Q: platform  "); !strings.HasSuffix(strings.TrimSpace(l), "3") {
+		t.Fatalf("queue head = %q, want 3 PRs", l)
+	}
+	first, second, third := strings.Index(v, "data#5002"), strings.Index(v, "data#5001"), strings.Index(v, "data#5006")
+	if first < 0 || second < 0 || third < 0 || first > second || second > third {
+		t.Fatalf("want #5002, which requests the user by name, then the older #5001, then #5006, pushed since its review:\n%s", v)
+	}
+	for _, n := range []string{"data#5003", "data#5004", "data#5005"} {
+		if strings.Contains(v, n) {
+			t.Errorf("the queue tab lists %s:\n%s", n, v)
+		}
 	}
 }

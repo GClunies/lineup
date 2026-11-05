@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gclunies/lineup/internal/github"
+	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
@@ -29,10 +30,12 @@ type ReviewAPI interface {
 }
 
 // ReviewView is one tab of the review tab. Key names its cache file and its
-// place in the saved rank.
+// place in the saved rank. A Queue tab lists only the PRs that the queue
+// reviews, in the order that its fills start them.
 type ReviewView struct {
 	Key, Name string
 	Filter    github.Filter
+	Queue     bool
 }
 
 // Reviews holds the review tab's outside world. Tests replace it.
@@ -69,6 +72,8 @@ type review struct {
 	members   map[string][]string
 	membersAt time.Time
 	viewer    string // the user's login, read once
+	// reviews are the review Tasks on the Board, which keep PRs out of a queue.
+	reviews []github.ReviewTask
 
 	sel       string // the selected PR's URL
 	filter    textinput.Model
@@ -123,9 +128,23 @@ type (
 
 func (r *review) curTab() ReviewView { return r.tabs[r.tab] }
 
+// list is the tab's PRs, and false before the first list arrives.
+func (r *review) list(tb ReviewView) ([]github.PullRequest, bool) {
+	prs, ok := r.lists[tb.Key]
+	if !tb.Queue || !ok {
+		return prs, ok
+	}
+	cands := github.Candidates(prs, r.reviews)
+	out := make([]github.PullRequest, len(cands))
+	for i, c := range cands {
+		out[i] = c.PR
+	}
+	return out, true
+}
+
 // rows are the open tab's PRs that match the search, best match first.
 func (r *review) rows() []github.PullRequest {
-	prs := r.lists[r.curTab().Key]
+	prs, _ := r.list(r.curTab())
 	labels := make([]string, len(prs))
 	for i, pr := range prs {
 		labels[i] = prRef(pr) + " " + pr.Title + " " + pr.Author
@@ -390,8 +409,43 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(rows) > 0 {
 			return m, m.openURL(rows[i].URL)
 		}
+	case "r":
+		if len(rows) > 0 {
+			return m, m.reviewPR(rows[i])
+		}
 	}
 	return m, nil
+}
+
+// reviewPR starts a review Task for the PR now, outside every queue's slots.
+// If the PR has an open review Task, it focuses that Task's tab instead.
+func (m Model) reviewPR(pr github.PullRequest) tea.Cmd {
+	c, ref := m.client, prRef(pr)
+	return func() tea.Msg {
+		var res scheduler.ReviewResult
+		if err := c.Do(scheduler.Request{Op: "review", URL: pr.URL}, &res); err != nil {
+			return opMsg{label: "review", task: ref, err: err}
+		}
+		if !res.Existing {
+			return opMsg{label: "review", task: res.ID, note: res.Stage}
+		}
+		note := "already open"
+		if err := c.Do(scheduler.Request{Op: "focus", Task: res.ID}, nil); err != nil {
+			note += ", not focused: " + err.Error()
+		}
+		return opMsg{label: "review", task: res.ID, note: note}
+	}
+}
+
+// reviewTasks are the review Tasks on the Board, as the queue rules see them.
+func reviewTasks(tasks []scheduler.TaskView) []github.ReviewTask {
+	var out []github.ReviewTask
+	for _, t := range tasks {
+		if t.ReviewHead != "" {
+			out = append(out, github.ReviewTask{URL: t.PRURL, Head: t.ReviewHead, Done: t.Group == lifecycle.GroupDone.String()})
+		}
+	}
+	return out
 }
 
 func (m Model) openURL(u string) tea.Cmd {

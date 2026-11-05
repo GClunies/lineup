@@ -229,7 +229,7 @@ labels = ["needs-review"]
 	}
 	want := []board.ReviewView{
 		{Key: "view:My teammates", Name: "My teammates", Filter: github.Filter{Base: github.ViewPRs, Repos: []string{"umbrella/data"}, AuthorTeams: []string{"umbrella/platform"}}},
-		{Key: "queue:platform", Name: "Q: platform", Filter: github.Filter{Base: github.QueuePRs, Authors: []string{"hopper"}, Labels: []string{"needs-review"}}},
+		{Key: "queue:platform", Name: "Q: platform", Filter: github.Filter{Base: github.QueuePRs, Authors: []string{"hopper"}, Labels: []string{"needs-review"}}, Queue: true},
 	}
 	if got := reviewViews(cfg); !reflect.DeepEqual(got, want) {
 		t.Errorf("reviewViews =\n%+v\nwant\n%+v", got, want)

@@ -146,6 +146,7 @@ func New(v scheduler.BoardView, opts Options) Model {
 
 func (m *Model) setBoard(v scheduler.BoardView) {
 	m.board = v
+	m.rv.reviews = reviewTasks(v.Tasks)
 	m.tasks = m.tasks[:0]
 	for _, g := range groupOrder {
 		for _, t := range v.Tasks {

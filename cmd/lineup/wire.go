@@ -644,7 +644,7 @@ func reviewViews(g *config.Global) []board.ReviewView {
 		out = append(out, board.ReviewView{Key: "view:" + v.Name, Name: v.Name, Filter: prFilter(github.ViewPRs, v.PRFilter)})
 	}
 	for _, q := range reviewQueues(g) {
-		out = append(out, board.ReviewView{Key: "queue:" + q.Name, Name: "Q: " + q.Name, Filter: q.Filter})
+		out = append(out, board.ReviewView{Key: "queue:" + q.Name, Name: "Q: " + q.Name, Filter: q.Filter, Queue: true})
 	}
 	return out
 }

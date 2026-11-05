@@ -104,6 +104,7 @@ type TaskView struct {
 	Skill      string    `json:"skill,omitempty"`
 	PRNumber   int       `json:"pr_number,omitempty"`
 	PRURL      string    `json:"pr_url,omitempty"`
+	ReviewHead string    `json:"review_head,omitempty"` // the head that a review Task was added at
 	IssueURL   string    `json:"issue_url,omitempty"`
 	Worktree   string    `json:"worktree,omitempty"`
 	Since      time.Time `json:"since"`
@@ -137,7 +138,7 @@ func (r *Record) view() TaskView {
 		v.PRNumber, v.PRURL = r.PR.Number, r.PR.URL
 	}
 	if r.Review != nil {
-		v.PRNumber, v.PRURL = r.Review.Number, r.Review.URL
+		v.PRNumber, v.PRURL, v.ReviewHead = r.Review.Number, r.Review.URL, r.Review.Head
 	}
 	b := r.Policy.Budgets
 	switch r.Stage {

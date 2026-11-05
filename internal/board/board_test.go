@@ -28,6 +28,7 @@ type fakeClient struct {
 	calls   []scheduler.Request
 	errs    map[string]error
 	capture string
+	review  scheduler.ReviewResult // the answer to each review op
 }
 
 func (f *fakeClient) Do(req scheduler.Request, out any) error {
@@ -43,6 +44,8 @@ func (f *fakeClient) Do(req scheduler.Request, out any) error {
 		*(out.(*string)) = f.capture
 	case "show":
 		*(out.(*scheduler.TaskDetail)) = scheduler.TaskDetail{TaskView: scheduler.TaskView{ID: req.Task, Stage: "Working"}, Branch: "b"}
+	case "review":
+		*(out.(*scheduler.ReviewResult)) = f.review
 	}
 	return nil
 }

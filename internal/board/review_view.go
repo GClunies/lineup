@@ -17,7 +17,7 @@ func (m Model) reviewBody() string {
 		names[i] = tb.Name
 	}
 	tb := r.curTab()
-	prs, loaded := r.lists[tb.Key]
+	prs, loaded := r.list(tb)
 	head := " " + headRow.Render(tb.Name)
 	if loaded {
 		head += dim.Render(fmt.Sprintf("  %d", len(prs)))
@@ -172,7 +172,7 @@ func (m Model) reviewFooter() string {
 		} else {
 			hs = append(hs, hint{"enter", "open the PR"})
 		}
-		hs = append(hs, hint{"o", "open the PR"})
+		hs = append(hs, hint{"o", "open the PR"}, hint{"r", "review now"})
 	}
 	hs = append(hs, hint{"/", "search"}, hint{"R", "refresh"}, hint{"< >", "move the tab"}, hint{"j/k", "move"}, hint{"q", "quit"}, hint{"?", "all keys"})
 	return hintBar(m.width, hs)
@@ -183,7 +183,8 @@ const reviewHelp = `
 
    The tabs are My PRs, Requested, then each [[review.views]] and
    [[review.queues]] entry of the config. A row shows the Task that has
-   its PR, if one is on the Board.
+   its PR, if one is on the Board. A Q: tab lists the PRs that wait for
+   the queue, first to start first.
 
    tab      next view       shift+tab  previous view
    < >      move this view's tab left or right; lineup keeps the order
@@ -191,6 +192,7 @@ const reviewHelp = `
    /        fuzzy search in this list
    enter    go to the Task's tab, or open the PR when no Task has it
    o        open the PR in the browser
+   r        start a review Task for this PR now, outside every queue's slots
    R        refresh now; lineup also refreshes every 2 minutes
    ?        this help      q  quit
 
