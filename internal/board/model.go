@@ -28,6 +28,9 @@ type Options struct {
 	Zoom func()
 	// Linear opens on the Linear browser instead of the Board.
 	Linear bool
+	// Review opens on the review tab's PR views instead of the Board.
+	Review  bool
+	Reviews Reviews
 	// Notify shows one alert line as a desktop toast. The Hub sets it for the
 	// Board in the orchestrate tab only, so each alert toasts once.
 	Notify func(text string)
@@ -46,6 +49,7 @@ type viewID int
 const (
 	viewBoard viewID = iota
 	viewTracker
+	viewReview
 )
 
 type mode int
@@ -112,6 +116,7 @@ type Model struct {
 	vp         viewport.Model
 
 	tr *tracker
+	rv *review
 
 	alerted map[string]string // Task ID to the Attention that last toasted
 }
@@ -126,8 +131,12 @@ func New(v scheduler.BoardView, opts Options) Model {
 	}
 	m := Model{opts: opts, client: opts.Client, width: 100, height: 30, vp: viewport.New(100, 28)}
 	m.tr = newTracker(opts.Tracker)
-	if opts.Linear {
+	m.rv = newReview(opts.Reviews)
+	switch {
+	case opts.Linear:
 		m.view = viewTracker
+	case opts.Review:
+		m.view = viewReview
 	}
 	m.setBoard(v)
 	m.alerted = map[string]string{}
@@ -167,8 +176,11 @@ func (m Model) current() (scheduler.TaskView, bool) {
 }
 
 func (m Model) Init() tea.Cmd {
-	if m.opts.Linear {
+	switch {
+	case m.opts.Linear:
 		return m.loadWorkspaces()
+	case m.opts.Review:
+		return m.loadReviews()
 	}
 	return nil
 }
@@ -207,6 +219,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m2, cmd, ok := m.tracker(msg); ok {
 			return m2, cmd
 		}
+		if m2, cmd, ok := m.reviewMsg(msg); ok {
+			return m2, cmd
+		}
 	}
 	return m, nil
 }
@@ -236,6 +251,9 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.view == viewTracker && m.tr.capturing() {
 		return m.trackerKey(msg)
 	}
+	if m.view == viewReview && m.rv.filtering {
+		return m.reviewKey(msg)
+	}
 	// A status message stays until the next key, then the key hints come back.
 	m.status = ""
 	if k == "ctrl+c" || k == "q" {
@@ -246,8 +264,11 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeHelp
 		return m, nil
 	}
-	if m.view == viewTracker {
+	switch m.view {
+	case viewTracker:
 		return m.trackerKey(msg)
+	case viewReview:
+		return m.reviewKey(msg)
 	}
 	if m.detail {
 		switch k {

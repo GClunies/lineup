@@ -28,8 +28,11 @@ var groupMark = map[string]string{"Needs you": "●", "Working": "◐", "Waiting
 
 func (m Model) View() string {
 	if m.mode == modeHelp {
-		if m.view == viewTracker {
+		switch m.view {
+		case viewTracker:
 			return trackerHelp
+		case viewReview:
+			return reviewHelp
 		}
 		return boardHelp
 	}
@@ -37,6 +40,8 @@ func (m Model) View() string {
 	switch {
 	case m.view == viewTracker:
 		body = m.trackerBody()
+	case m.view == viewReview:
+		body = m.reviewBody()
 	case m.detail:
 		body = m.vp.View()
 	case m.preview:
@@ -90,6 +95,9 @@ func (m Model) footer() string {
 	var s string
 	if m.view == viewTracker && m.mode == modeNormal {
 		return ansi.Truncate(m.trackerFooter(), m.width, "…")
+	}
+	if m.view == viewReview && m.mode == modeNormal {
+		return ansi.Truncate(m.reviewFooter(), m.width, "…")
 	}
 	switch m.mode {
 	case modeConfirm:
@@ -244,9 +252,14 @@ func (m Model) age(t scheduler.TaskView) string {
 	}
 	now := m.opts.Now()
 	d := now.Sub(t.Since)
-	switch {
-	case t.Group == "Done" && t.Since.Local().YearDay() == now.Local().YearDay() && d < 24*time.Hour:
+	if t.Group == "Done" && t.Since.Local().YearDay() == now.Local().YearDay() && d < 24*time.Hour {
 		return "today"
+	}
+	return ago(d)
+}
+
+func ago(d time.Duration) string {
+	switch {
 	case d < time.Minute:
 		return "now"
 	case d < time.Hour:
