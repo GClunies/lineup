@@ -1,0 +1,19 @@
+internal/github/review.go
+  s_6601cc503e2aac::t_8205217822cb98 37-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a58dfbe431ac43efdc08dcb989ab7f56a1f29d12",
+  "prompts": {},
+  "sessions": {
+    "s_6601cc503e2aac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_6601cc503e2aac",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
