@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -17,26 +16,6 @@ type PRRef struct {
 }
 
 func (r PRRef) String() string { return r.Repo + "#" + strconv.Itoa(r.Number) }
-
-var (
-	prURL = regexp.MustCompile(`^(?:https?://)?github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/([1-9][0-9]*)(?:[/?#].*)?$`)
-	prID  = regexp.MustCompile(`^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#([1-9][0-9]*)$`)
-)
-
-// ParsePRRef reads a PR URL, such as https://github.com/owner/repo/pull/12/files,
-// or the short form owner/repo#12.
-func ParsePRRef(s string) (PRRef, error) {
-	s = strings.TrimSpace(s)
-	m := prURL.FindStringSubmatch(s)
-	if m == nil {
-		m = prID.FindStringSubmatch(s)
-	}
-	if m == nil {
-		return PRRef{}, fmt.Errorf("%q is not a GitHub PR URL such as https://github.com/owner/repo/pull/12", s)
-	}
-	n, _ := strconv.Atoi(m[2])
-	return PRRef{Repo: m[1], Number: n}, nil
-}
 
 // ReviewedPR is what a review Task reads of the PR that it reviews.
 type ReviewedPR struct {

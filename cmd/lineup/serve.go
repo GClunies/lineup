@@ -26,6 +26,15 @@ import (
 	"github.com/gclunies/lineup/internal/worktree"
 )
 
+// xdgStateHome is the XDG state folder: XDG_STATE_HOME, else ~/.local/state.
+func xdgStateHome() string {
+	if d := os.Getenv("XDG_STATE_HOME"); d != "" {
+		return d
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local", "state")
+}
+
 func configPath() string {
 	if p := os.Getenv("LINEUP_CONFIG"); p != "" {
 		return p
@@ -119,6 +128,7 @@ func serve() error {
 		DefaultCap:   defaults.WIPCap,
 		PollInterval: defaults.PollInterval,
 		AdHocSession: adHoc,
+		StateHome:    xdgStateHome(),
 		BoardCache:   filepath.Join(stateDir(), "board.json"),
 		Log:          log,
 	})

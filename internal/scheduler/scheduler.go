@@ -11,6 +11,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -29,6 +30,10 @@ type Deps struct {
 	PollInterval time.Duration
 	// AdHocSession is the Rex session for Tasks with no Issue.
 	AdHocSession string
+	// StateHome is the XDG state folder. A review Worker gets it as
+	// XDG_STATE_HOME, so the Scheduler finds pr-review's record where the
+	// Worker writes it.
+	StateHome string
 	// BoardCache is where the Scheduler writes the latest BoardView, so the
 	// Board paints from disk before it connects.
 	BoardCache string
@@ -62,6 +67,9 @@ type Scheduler struct {
 	// program can exit before NewWindow returns its block ID.
 	orphans map[string][]orphan
 	ctx     context.Context
+
+	locksMu   sync.Mutex
+	repoLocks map[string]*sync.Mutex
 }
 
 type orphan struct {
@@ -80,6 +88,7 @@ func New(d Deps) (*Scheduler, error) {
 		d: d, inbox: make(chan func()), board: lifecycle.NewBoard(d.DefaultCap),
 		recs: map[string]*Record{}, lanes: map[string]chan func(context.Context){},
 		watchers: map[chan BoardView]struct{}{}, orphans: map[string][]orphan{},
+		repoLocks: map[string]*sync.Mutex{},
 	}
 	if v, err := d.Store.Setting("wip_cap"); err != nil {
 		return nil, err
@@ -317,7 +326,7 @@ func (s *Scheduler) attach(id string, w Window, job Job) {
 			return
 		}
 		r.SessionID, r.WindowID, r.BlockID, r.Job = w.SessionID, w.WindowID, w.BlockID, job
-		r.Status = ""
+		r.Status, r.WorkerState = "", ""
 		s.save(r)
 		for _, o := range s.orphans[w.BlockID] {
 			s.onRex(o.ev)
@@ -363,20 +372,41 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 	if !ok || r.Stage != stage {
 		return
 	}
-	if r.Job == JobSetup || r.Worktree == "" {
+	switch {
+	case r.Review != nil:
+		if !s.setupReview(ctx, r) {
+			return
+		}
+		if r, ok = s.snapshot(id); !ok || r.Stage != stage {
+			return
+		}
+	case r.Job == JobSetup || r.Worktree == "":
 		s.update(id, func(r *Record) { r.Pending = &stage })
 		if r.Job != JobSetup {
 			s.setup(ctx, r)
 		}
 		return
 	}
-	argv, env, err := s.d.Harness.Command(ctx, WorkerSpec{
+	spec := WorkerSpec{
 		Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
 		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
-	})
+	}
+	folder := r.Worktree
+	if r.Review != nil {
+		// The PR's code never becomes the Worker's folder: its .claude
+		// settings and hooks would run.
+		spec.PRURL, folder = r.Review.URL, r.Repo
+	}
+	argv, env, err := s.d.Harness.Command(ctx, spec)
 	if err != nil {
 		s.fail(id, "worker command", err)
 		return
+	}
+	if r.Review != nil {
+		if env == nil {
+			env = map[string]string{}
+		}
+		env["XDG_STATE_HOME"] = s.d.StateHome
 	}
 	s.detach(ctx, r)
 	session, err := s.d.Rex.EnsureSession(ctx, r.Session)
@@ -384,7 +414,7 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 		s.fail(id, "rex session", err)
 		return
 	}
-	w, err := s.d.Rex.NewWindow(ctx, session, r.tabLabel(), r.Worktree, env, argv)
+	w, err := s.d.Rex.NewWindow(ctx, session, r.tabLabel(), folder, env, argv)
 	if err != nil {
 		s.fail(id, "rex tab", err)
 		return
@@ -406,9 +436,12 @@ func (s *Scheduler) detach(ctx context.Context, r Record) {
 
 func (s *Scheduler) cleanup(ctx context.Context, r Record) {
 	s.detach(ctx, r)
+	switch {
+	case r.Review != nil:
+		s.removeReviewWorktree(ctx, r)
 	// A Task gets a SessionID when setup opens its tab. Setup can fail after
 	// worktrunk made the worktree but before the Record holds its path.
-	if r.Worktree != "" || r.SessionID != "" {
+	case r.Worktree != "" || r.SessionID != "":
 		if err := s.d.Worktrees.Remove(ctx, r.Repo, r.Branch); err != nil {
 			s.d.Log.Error("remove worktree", "task", r.ID, "err", err)
 		}
@@ -446,7 +479,7 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		if r.Job != JobWorker {
 			return
 		}
-		r.Status = ev.Status.Msg
+		r.Status, r.WorkerState = ev.Status.Msg, ev.Status.State
 		if ev.Status.State == "done" {
 			s.checkContract(r)
 			s.save(r)
@@ -465,7 +498,7 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		case job == JobSetup:
 			id := r.ID
 			s.enqueue(id, func(ctx context.Context) { s.finishSetup(ctx, id) })
-		case job == JobWorker && ev.ExitCode != 0:
+		case job == JobWorker && (ev.ExitCode != 0 || r.Stage.EndsWithWorker()):
 			s.apply(r, lifecycle.WorkerExited{Code: ev.ExitCode}, "")
 		case job == JobWorker:
 			s.checkContract(r)
@@ -475,10 +508,10 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		job := r.Job
 		r.WindowID, r.BlockID, r.Job = "", "", JobNone
 		s.save(r)
-		switch job {
-		case JobSetup:
+		switch {
+		case job == JobSetup:
 			s.apply(r, lifecycle.SetupFailed{Detail: "setup tab closed"}, "")
-		case JobWorker:
+		case job == JobWorker, job == JobExited && r.Stage.EndsWithWorker():
 			s.apply(r, lifecycle.WorkerLost{}, "")
 		}
 	}
@@ -497,13 +530,16 @@ func (s *Scheduler) keepOrphan(ev RexEvent) {
 // checkContract runs when a Worker reports done. It observes the Stage
 // contract's output and applies done with the result.
 func (s *Scheduler) checkContract(r *Record) {
-	id, stage, block := r.ID, r.Stage, r.BlockID
+	id, stage, block, review, since := r.ID, r.Stage, r.BlockID, r.Review, r.StageSince
 	if !stage.Agent() {
 		return
 	}
 	s.enqueue(id, func(ctx context.Context) {
 		met := false
+		var reviewed string
 		switch stage {
+		case lifecycle.Reviewing:
+			reviewed, met = s.findings(*review, since)
 		case lifecycle.Working:
 			s.poll(ctx, []string{id})
 			r, _ := s.snapshot(id)
@@ -516,23 +552,33 @@ func (s *Scheduler) checkContract(r *Record) {
 		s.call(func() {
 			r, ok := s.recs[id]
 			if ok && r.Stage == stage && (r.BlockID == block || r.BlockID == "") {
+				if met && reviewed != "" {
+					r.ReviewedHead = reviewed
+				}
 				s.apply(r, lifecycle.WorkerDone{ContractMet: met}, "")
 			}
 		})
 	})
 }
 
-// poll reads GitHub for the given Tasks, or for every started Task when ids is nil.
+// poll reads GitHub for the given Tasks, or for every started Task when ids
+// is nil. A build Task's PR comes by its branch, and a review Task's PR by its
+// number, so the branch Signals never reach a PR that lineup reviews.
 func (s *Scheduler) poll(ctx context.Context, ids []string) {
 	keys := map[PRKey]string{}
+	reviews := map[ReviewKey]string{}
 	s.call(func() {
 		for _, r := range s.list() {
-			if r.RepoSlug == "" || !r.Stage.Started() || (ids != nil && !slices.Contains(ids, r.ID)) {
-				continue
+			switch {
+			case !r.Stage.Started() || (ids != nil && !slices.Contains(ids, r.ID)):
+			case r.Review != nil:
+				reviews[r.Review.key()] = r.ID
+			case r.RepoSlug != "":
+				keys[PRKey{r.RepoSlug, r.Branch}] = r.ID
 			}
-			keys[PRKey{r.RepoSlug, r.Branch}] = r.ID
 		}
 	})
+	s.pollReviews(ctx, reviews)
 	if len(keys) == 0 {
 		return
 	}
@@ -610,12 +656,15 @@ func (s *Scheduler) recover(ctx context.Context) {
 			continue
 		}
 		switch {
+		case r.Review != nil && r.Worktree == "" && r.Stage.Agent():
+			id, stage := r.ID, r.Stage
+			s.enqueue(id, func(ctx context.Context) { s.startWorker(ctx, id, stage) })
 		case job == JobSetup || r.Worktree == "" && r.Stage.Agent():
 			stage := r.Stage
 			r.Pending = &stage
 			rec := *r
 			s.enqueue(r.ID, func(ctx context.Context) { s.setup(ctx, rec) })
-		case r.Stage.Agent():
+		case r.Stage.Agent() || r.Stage.EndsWithWorker():
 			s.d.Log.Info("recover worker", "task", r.ID, "stage", r.Stage.String())
 			s.apply(r, lifecycle.WorkerLost{}, "recovered at start")
 		}

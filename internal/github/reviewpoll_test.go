@@ -10,25 +10,6 @@ import (
 	"time"
 )
 
-func TestParsePRRef(t *testing.T) {
-	want := PRRef{"umbrella/data", 4955}
-	for _, s := range []string{
-		"https://github.com/umbrella/data/pull/4955",
-		"https://github.com/umbrella/data/pull/4955/files",
-		"github.com/umbrella/data/pull/4955#discussion_r1",
-		" umbrella/data#4955 ",
-	} {
-		if got, err := ParsePRRef(s); err != nil || got != want {
-			t.Errorf("ParsePRRef(%q) = %v, %v", s, got, err)
-		}
-	}
-	for _, s := range []string{"https://github.com/umbrella/data/issues/4955", "data#4955", "umbrella/data#0", "https://gitlab.com/a/b/pull/1"} {
-		if _, err := ParsePRRef(s); err == nil {
-			t.Errorf("ParsePRRef(%q) took a URL that names no PR", s)
-		}
-	}
-}
-
 func reviewed(t *testing.T, fixture string, refs ...PRRef) (map[PRRef]*ReviewedPR, []string) {
 	t.Helper()
 	bin, log := fakeGH(t, filepath.Join("testdata", fixture+".json"), "")

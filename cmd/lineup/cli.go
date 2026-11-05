@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -215,11 +216,7 @@ func stateDir() string {
 	if d := os.Getenv("LINEUP_STATE_DIR"); d != "" {
 		return d
 	}
-	if d := os.Getenv("XDG_STATE_HOME"); d != "" {
-		return d + "/lineup"
-	}
-	home, _ := os.UserHomeDir()
-	return home + "/.local/state/lineup"
+	return filepath.Join(xdgStateHome(), "lineup")
 }
 
 func socketPath() string { return stateDir() + "/lineup.sock" }

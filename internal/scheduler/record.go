@@ -29,12 +29,18 @@ type Record struct {
 	Repo     string `json:"repo"`
 	RepoSlug string `json:"repo_slug"`
 	// Session is the Rex session: the Repo's label, or the ad hoc session.
-	Session   string            `json:"session"`
-	RepoLabel string            `json:"repo_label,omitempty"`
+	Session   string `json:"session"`
+	RepoLabel string `json:"repo_label,omitempty"`
+	// Branch is "" for a review Task: lineup makes no branch for it.
 	Branch    string            `json:"branch"`
 	Issue     *Issue            `json:"issue,omitempty"`
 	Overrides map[string]string `json:"overrides,omitempty"`
-	Worktree  string            `json:"worktree,omitempty"`
+	// Worktree is the Task's worktree. A build Task's Worker works in it. A
+	// review Task's Worker reads the PR's code in it and works in the Repo.
+	Worktree string `json:"worktree,omitempty"`
+	// Review is the PR that a review Task reviews, fixed when it is added.
+	// Only a review Task has one.
+	Review *ReviewPR `json:"review,omitempty"`
 
 	SessionID   string          `json:"session_id,omitempty"`
 	WindowID    string          `json:"window_id,omitempty"`
@@ -44,8 +50,18 @@ type Record struct {
 	// Pending is the Worker to start once setup finishes.
 	Pending *lifecycle.Stage `json:"pending,omitempty"`
 	Status  string           `json:"status,omitempty"`
+	// WorkerState is the Worker's last program status: working, blocked,
+	// done, idle, or error. It is "" before the Worker's first status.
+	WorkerState string `json:"worker_state,omitempty"`
 
 	PR *PRSnapshot `json:"pr,omitempty"`
+	// LatestHead is a review Task's PR head at the latest poll, and
+	// ReviewedHead is the head that its findings file names.
+	LatestHead   string `json:"latest_head,omitempty"`
+	ReviewedHead string `json:"reviewed_head,omitempty"`
+	// WorktreeKept is true when cleanup kept a review worktree that holds
+	// work that is on no remote.
+	WorktreeKept bool `json:"worktree_kept,omitempty"`
 	// Archived hides a Done Task from the Board. Its history stays.
 	Archived bool `json:"archived,omitempty"`
 
@@ -118,6 +134,9 @@ func (r *Record) view() TaskView {
 	if r.PR != nil {
 		v.PRNumber, v.PRURL = r.PR.Number, r.PR.URL
 	}
+	if r.Review != nil {
+		v.PRNumber, v.PRURL = r.Review.Number, r.Review.URL
+	}
 	b := r.Policy.Budgets
 	switch r.Stage {
 	case lifecycle.CIDebug:
@@ -128,6 +147,13 @@ func (r *Record) view() TaskView {
 		if v.PRNumber != 0 {
 			v.Note = fmt.Sprintf("#%d", v.PRNumber)
 		}
+	case lifecycle.ReviewReady:
+		if r.ReviewedHead != "" && r.LatestHead != "" && r.LatestHead != r.ReviewedHead {
+			v.Note = "head moved"
+		}
+	}
+	if r.WorktreeKept {
+		v.Note = "worktree kept: " + r.Worktree
 	}
 	if r.Flag != "" {
 		v.Note = string(r.Flag)

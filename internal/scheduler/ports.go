@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
 )
@@ -39,8 +40,31 @@ type PRSnapshot struct {
 	Raw    json.RawMessage `json:"raw"`
 }
 
+// ReviewKey names the PR that a review Task reviews: owner/name and its number.
+type ReviewKey struct {
+	Repo   string
+	Number int
+}
+
+// ReviewSnapshot is the state of a reviewed PR that one poll read.
+type ReviewSnapshot struct {
+	Repo   string // owner/name as GitHub spells it
+	Number int
+	URL    string
+	Title  string
+	State  string // OPEN, MERGED, or CLOSED
+	Fork   bool
+	Head   string
+	Base   string
+	// ReviewedAt is when the user last submitted a review, or zero. A pending
+	// review is not submitted.
+	ReviewedAt time.Time
+}
+
 type GitHub interface {
 	RepoSlug(ctx context.Context, repoPath string) (string, error)
+	// ReviewPRs reads each PR by number. A PR that GitHub does not return is absent.
+	ReviewPRs(ctx context.Context, keys []ReviewKey) (map[ReviewKey]ReviewSnapshot, error)
 	// Poll returns the newest PR for each key. A key with no PR is absent.
 	Poll(ctx context.Context, keys []PRKey) (map[PRKey]PRSnapshot, error)
 	// Signals compares two snapshots of one PR. prev is nil before the first.
@@ -54,6 +78,14 @@ type Worktrees interface {
 	CreateArgv(repo, branch string) []string
 	Path(ctx context.Context, repo, branch string) (string, error)
 	Remove(ctx context.Context, repo, branch string) error
+	// AddReview fetches the PR into the Repo's main checkout, then adds the
+	// review worktree, detached at the PR's head, if it is missing. It
+	// returns the worktree's path.
+	AddReview(ctx context.Context, repo string, pr ReviewPR) (string, error)
+	// RemoveReview fetches, then removes the review worktree unless it holds
+	// an uncommitted change or a commit that is on no remote. kept reports
+	// that the worktree stays.
+	RemoveReview(ctx context.Context, repo, path string, pr ReviewPR) (kept bool, err error)
 }
 
 // WorkerSpec is what a Harness needs to start a Worker.
@@ -133,4 +165,7 @@ type Config interface {
 	RepoForIssue(is Issue) (repo string, ok bool)
 	// ResolveRepo turns a name such as "data" or a path into a Repo's main checkout.
 	ResolveRepo(name string) (string, error)
+	// RepoForGitHub picks the [[repos]] checkout whose origin is the GitHub
+	// repository owner/name. ok is false when none is.
+	RepoForGitHub(slug string) (repo string, ok bool)
 }

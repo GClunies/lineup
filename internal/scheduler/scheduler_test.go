@@ -19,6 +19,7 @@ type tab struct {
 	Window
 	label  string
 	cwd    string
+	env    map[string]string
 	argv   []string
 	closed bool
 }
@@ -38,11 +39,11 @@ func (f *fakeRex) EnsureSession(_ context.Context, label string) (string, error)
 	return "session:" + label, nil
 }
 
-func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, _ map[string]string, argv []string) (Window, error) {
+func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, env map[string]string, argv []string) (Window, error) {
 	f.mu.Lock()
 	f.n++
 	w := Window{session, fmt.Sprintf("window:%d", f.n), fmt.Sprintf("block:%d", f.n)}
-	f.tabs = append(f.tabs, &tab{Window: w, label: label, cwd: cwd, argv: argv})
+	f.tabs = append(f.tabs, &tab{Window: w, label: label, cwd: cwd, env: env, argv: argv})
 	f.mu.Unlock()
 	if f.exitFast != "" && argv[0] == f.exitFast {
 		f.events <- RexEvent{Kind: EvExited, BlockID: w.BlockID}
@@ -108,6 +109,9 @@ type fakeGitHub struct {
 	prs     map[PRKey]PRSnapshot
 	merged  []int
 	readied []int
+	// polled is every key that a branch poll asked for.
+	polled  []PRKey
+	reviews map[ReviewKey]ReviewSnapshot
 }
 
 var signalsByName = map[string]lifecycle.Signal{
@@ -128,9 +132,29 @@ func (g *fakeGitHub) RepoSlug(context.Context, string) (string, error) { return 
 func (g *fakeGitHub) Poll(_ context.Context, keys []PRKey) (map[PRKey]PRSnapshot, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.polled = append(g.polled, keys...)
 	out := map[PRKey]PRSnapshot{}
 	for _, k := range keys {
 		if pr, ok := g.prs[k]; ok {
+			out[k] = pr
+		}
+	}
+	return out, nil
+}
+
+// setReview sets the PR that the review poll returns. GitHub names ignore case.
+func (g *fakeGitHub) setReview(pr ReviewSnapshot) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.reviews[ReviewKey{strings.ToLower(pr.Repo), pr.Number}] = pr
+}
+
+func (g *fakeGitHub) ReviewPRs(_ context.Context, keys []ReviewKey) (map[ReviewKey]ReviewSnapshot, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := map[ReviewKey]ReviewSnapshot{}
+	for _, k := range keys {
+		if pr, ok := g.reviews[ReviewKey{strings.ToLower(k.Repo), k.Number}]; ok {
 			out[k] = pr
 		}
 	}
@@ -169,6 +193,34 @@ type fakeWorktrees struct {
 	mu      sync.Mutex
 	root    string
 	removed []string
+	// added and reviewsRemoved log the review worktree calls. inFlight and
+	// mostInFlight count the AddReview calls that run at one time.
+	added          []int
+	reviewsRemoved []string
+	inFlight       int
+	mostInFlight   int
+	// keep makes RemoveReview keep the worktree, as for an unpushed commit.
+	keep bool
+}
+
+func (w *fakeWorktrees) AddReview(_ context.Context, repo string, pr ReviewPR) (string, error) {
+	w.mu.Lock()
+	w.inFlight++
+	w.mostInFlight = max(w.mostInFlight, w.inFlight)
+	w.mu.Unlock()
+	time.Sleep(30 * time.Millisecond)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.inFlight--
+	w.added = append(w.added, pr.Number)
+	return fmt.Sprintf("%s.review-pr-%d", repo, pr.Number), nil
+}
+
+func (w *fakeWorktrees) RemoveReview(_ context.Context, _, path string, _ ReviewPR) (bool, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.reviewsRemoved = append(w.reviewsRemoved, path)
+	return w.keep, nil
 }
 
 func (w *fakeWorktrees) CreateArgv(_, branch string) []string { return []string{"wt", branch} }
@@ -182,10 +234,24 @@ func (w *fakeWorktrees) Remove(_ context.Context, _, branch string) error {
 	return nil
 }
 
-type fakeHarness struct{}
+type fakeHarness struct {
+	mu sync.Mutex
+	// trusted lists each folder that Prepare trusted.
+	trusted []string
+	specs   []WorkerSpec
+}
 
-func (fakeHarness) Prepare(context.Context, string, string) error { return nil }
-func (fakeHarness) Command(_ context.Context, w WorkerSpec) ([]string, map[string]string, error) {
+func (h *fakeHarness) Prepare(_ context.Context, _, worktree string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.trusted = append(h.trusted, worktree)
+	return nil
+}
+
+func (h *fakeHarness) Command(_ context.Context, w WorkerSpec) ([]string, map[string]string, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.specs = append(h.specs, w)
 	return []string{"claude", w.Stage.Key()}, nil, nil
 }
 
@@ -216,17 +282,26 @@ var testPolicy = lifecycle.Policy{Budgets: lifecycle.Budgets{CIDebug: 3, Respond
 func (fakeConfig) Policy(string, map[string]string) (lifecycle.Policy, error) { return testPolicy, nil }
 func (fakeConfig) RepoForIssue(Issue) (string, bool)                          { return "/repos/acme/data", true }
 func (fakeConfig) ResolveRepo(name string) (string, error)                    { return "/repos/acme/" + name, nil }
+func (fakeConfig) RepoForGitHub(slug string) (string, bool) {
+	if strings.EqualFold(slug, "acme/data") {
+		return "/repos/acme/data", true
+	}
+	return "", false
+}
 
 type harness struct {
-	t      *testing.T
-	s      *Scheduler
-	rex    *fakeRex
-	gh     *fakeGitHub
-	wt     *fakeWorktrees
-	tr     *fakeTracker
-	st     *store.Store
-	cancel context.CancelFunc
-	done   chan error
+	t   *testing.T
+	s   *Scheduler
+	rex *fakeRex
+	gh  *fakeGitHub
+	wt  *fakeWorktrees
+	hn  *fakeHarness
+	tr  *fakeTracker
+	// stateHome is the XDG state folder of review Workers.
+	stateHome string
+	st        *store.Store
+	cancel    context.CancelFunc
+	done      chan error
 }
 
 func newHarness(t *testing.T, dbPath string, seed func(*store.Store)) *harness {
@@ -240,11 +315,12 @@ func newHarness(t *testing.T, dbPath string, seed func(*store.Store)) *harness {
 	}
 	h := &harness{
 		t: t, rex: &fakeRex{events: make(chan RexEvent, 16)},
-		gh: &fakeGitHub{prs: map[PRKey]PRSnapshot{}}, wt: &fakeWorktrees{root: t.TempDir()}, tr: &fakeTracker{}, st: st,
+		gh: &fakeGitHub{prs: map[PRKey]PRSnapshot{}, reviews: map[ReviewKey]ReviewSnapshot{}}, wt: &fakeWorktrees{root: t.TempDir()},
+		hn: &fakeHarness{}, tr: &fakeTracker{}, st: st, stateHome: t.TempDir(),
 	}
 	h.s, err = New(Deps{
-		Rex: h.rex, GitHub: h.gh, Worktrees: h.wt, Harness: fakeHarness{}, Tracker: h.tr, Config: fakeConfig{},
-		Store: st, DefaultCap: 5, PollInterval: 20 * time.Millisecond, AdHocSession: "ad hoc",
+		Rex: h.rex, GitHub: h.gh, Worktrees: h.wt, Harness: h.hn, Tracker: h.tr, Config: fakeConfig{},
+		Store: st, DefaultCap: 5, PollInterval: 20 * time.Millisecond, AdHocSession: "ad hoc", StateHome: h.stateHome,
 	})
 	if err != nil {
 		t.Fatal(err)
