@@ -174,7 +174,11 @@ func cmdShow(c scheduler.Client, args []string, out io.Writer) error {
 	if asJSON {
 		return json.NewEncoder(out).Encode(d)
 	}
-	fmt.Fprintf(out, "%s  %s\n%s in %s (%s)\n", d.ID, d.Title, d.Stage, d.Repo, d.Branch)
+	fmt.Fprintf(out, "%s  %s\n%s in %s", d.ID, d.Title, d.Stage, d.Repo)
+	if d.Branch != "" { // a review Task has no branch
+		fmt.Fprintf(out, " (%s)", d.Branch)
+	}
+	fmt.Fprintln(out)
 	if d.Note != "" {
 		fmt.Fprintln(out, d.Note)
 	}

@@ -179,3 +179,19 @@ func TestLineupReviewOfAnOpenReviewFocusesIt(t *testing.T) {
 		t.Fatalf("out = %q", out.String())
 	}
 }
+
+// A review Task has no branch, so lineup show prints no empty branch.
+func TestLineupShowOfAReviewPrintsNoBranch(t *testing.T) {
+	data, err := json.Marshal(scheduler.TaskDetail{TaskView: scheduler.TaskView{ID: "R-1", Repo: "data", Stage: "Reviewing", Title: "data#4955 Pull the base images"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, _ := fakeScheduler(t, map[string]scheduler.Response{"show": {OK: true, Data: data}})
+	var out bytes.Buffer
+	if err := cmdShow(c, []string{"R-1"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if want := "R-1  data#4955 Pull the base images\nReviewing in data\n"; out.String() != want {
+		t.Fatalf("out = %q, want %q", out.String(), want)
+	}
+}
