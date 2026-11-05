@@ -1,6 +1,6 @@
 # Reviews: the review tab and review queues
 
-Status: proposed. This spec adds the `review` Hub tab, PR views, and review queues. The decision behind it is in `docs/adr/0012-a-review-is-a-task-kind.md`.
+Status: built. This spec adds the `review` Hub tab, PR views, and review queues. The decision behind it is in `docs/adr/0012-a-review-is-a-task-kind.md`.
 
 ## Goal
 
@@ -169,13 +169,17 @@ Each fill is idempotent. The candidate check, the count, the add, and the start 
 
 If a queue leaves the config, its started review Tasks go on, and no fill starts another one for it. If `slots` drops, no review stops. Fills start nothing new until the count is below `slots`.
 
-`lineup reviews pause` stops every fill, and `lineup reviews resume` starts them again. A pause stops no review that already started. The header shows `reviews paused` while the pause holds.
+`lineup reviews pause` stops every fill, and `lineup reviews resume` starts them again. A pause stops no review that already started. The pause holds across a restart of the Scheduler. The header shows `reviews paused` while the pause holds.
+
+When a review Task of a queue ends, its slot is free, and the next fill starts the next ranked PR. To stop the queue, pause it.
+
+The Scheduler reads the queues and their slots when it starts. After a change to `[[review.queues]]`, run `lineup restart`.
 
 ## Review Tasks
 
 A review Task is a Task with Kind `review`. Its ID has the form `R-<n>`, from the same counter as the ad hoc IDs. It keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `r` or `lineup review` has no queue.
 
-`lineup review` and `r` read the URL as `owner/repo#number`. If a review Task for that PR is open, they focus its tab and add nothing. They refuse a PR from a fork.
+`lineup review` and `r` read the URL as `owner/repo#number`. If a review Task for that PR is open, they focus its tab and add nothing. They refuse a PR from a fork, and a PR that is closed or merged.
 
 ### Stages
 
@@ -210,7 +214,7 @@ A review Task never enters a Stage of a build Task, and a build Task never enter
 
 ### The review poll
 
-A review Task polls its PR by number, never by branch, in the same GraphQL call as the Task PRs. The poll reads `state`, `headRefOid`, and the user's reviews with their state and time. The branch poll skips review Tasks, and a review snapshot never goes through the build Signals or their replay. So lineup never marks ready, merges, or debugs CI on a PR that it reviews.
+A review Task polls its PR by number, never by branch, in one GraphQL call for every review Task. The poll reads `state`, `headRefOid`, and the user's reviews with their state and time. The branch poll skips review Tasks, and a review snapshot never goes through the build Signals or their replay. So lineup never marks ready, merges, or debugs CI on a PR that it reviews.
 
 If the PR's head moves after Review ready, the row shows the note `head moved`. The Task stays in Review ready.
 
