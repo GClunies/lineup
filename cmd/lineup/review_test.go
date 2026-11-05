@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -99,5 +104,78 @@ func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 	prompt := argv[len(argv)-1]
 	if !strings.HasPrefix(prompt, "/pr-review https://github.com/umbrella/data/pull/4955\n") || !strings.Contains(prompt, "Stop at Step 5") {
 		t.Fatalf("prompt = %s", prompt)
+	}
+}
+
+// fakeScheduler answers each request with the reply for its op. The returned
+// function lists the requests so far.
+func fakeScheduler(t *testing.T, replies map[string]scheduler.Response) (scheduler.Client, func() []scheduler.Request) {
+	t.Helper()
+	dir, _ := os.MkdirTemp("", "lu")
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "s.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	var mu sync.Mutex
+	var got []scheduler.Request
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			var req scheduler.Request
+			if json.NewDecoder(bufio.NewReader(conn)).Decode(&req) == nil {
+				mu.Lock()
+				got = append(got, req)
+				mu.Unlock()
+				json.NewEncoder(conn).Encode(replies[req.Op])
+			}
+			conn.Close()
+		}
+	}()
+	return scheduler.Client{Path: sock}, func() []scheduler.Request {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(got)
+	}
+}
+
+func reviewReply(t *testing.T, existing bool) scheduler.Response {
+	data, err := json.Marshal(scheduler.ReviewResult{TaskView: scheduler.TaskView{ID: "R-1", Repo: "data", Stage: "Reviewing", Title: "data#4955 Pull the base images"}, Existing: existing})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scheduler.Response{OK: true, Data: data}
+}
+
+func TestLineupReviewStartsANewReview(t *testing.T) {
+	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, false)})
+	var out bytes.Buffer
+	if err := cmdReview(c, []string{"https://github.com/umbrella/data/pull/4955"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if reqs := got(); len(reqs) != 1 || reqs[0].Op != "review" || reqs[0].URL != "https://github.com/umbrella/data/pull/4955" {
+		t.Fatalf("requests = %+v", reqs)
+	}
+	if out.String() != "R-1 reviewing in data: data#4955 Pull the base images\n" {
+		t.Fatalf("out = %q", out.String())
+	}
+}
+
+func TestLineupReviewOfAnOpenReviewFocusesIt(t *testing.T) {
+	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, true), "focus": {OK: true}})
+	var out bytes.Buffer
+	if err := cmdReview(c, []string{"umbrella/data#4955"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if reqs := got(); len(reqs) != 2 || reqs[1].Op != "focus" || reqs[1].Task != "R-1" {
+		t.Fatalf("requests = %+v, want review then focus R-1", reqs)
+	}
+	if !strings.HasPrefix(out.String(), "R-1 is already open (Reviewing)") {
+		t.Fatalf("out = %q", out.String())
 	}
 }

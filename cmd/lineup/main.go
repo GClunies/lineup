@@ -30,6 +30,7 @@ const usage = `usage: lineup [command]
   lineup add <ISSUE>           put an Issue on the Board: ENG-614, owner/repo#12, or local-7
   lineup add --repo <repo> "<text>"
   lineup start [--over-cap] <task>
+  lineup review <PR URL>       review someone else's PR; it stops before any write to GitHub
   lineup ls [--json]           list the Tasks
   lineup show [--json] <task>
   lineup watch                 print a line each time a Task needs you or ends

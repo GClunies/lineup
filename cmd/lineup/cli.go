@@ -21,6 +21,7 @@ import (
 var clientCommands = map[string]func(c scheduler.Client, args []string, out io.Writer) error{
 	"add":     cmdAdd,
 	"start":   cmdStart,
+	"review":  cmdReview,
 	"ls":      cmdLs,
 	"watch":   cmdWatch,
 	"show":    cmdShow,
@@ -108,6 +109,27 @@ func cmdStart(c scheduler.Client, args []string, out io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(out, "%s started\n", fs.Arg(0))
+	return nil
+}
+
+// cmdReview adds and starts a review Task for the PR. If the PR has an open
+// review Task, it focuses that Task's tab and adds nothing.
+func cmdReview(c scheduler.Client, args []string, out io.Writer) error {
+	if len(args) != 1 {
+		return fmt.Errorf("%w: lineup review <PR URL>", errUsage)
+	}
+	var res scheduler.ReviewResult
+	if err := c.Do(scheduler.Request{Op: "review", URL: args[0]}, &res); err != nil {
+		return err
+	}
+	if !res.Existing {
+		fmt.Fprintf(out, "%s reviewing in %s: %s\n", res.ID, res.Repo, res.Title)
+		return nil
+	}
+	fmt.Fprintf(out, "%s is already open (%s): %s\n", res.ID, res.Stage, res.Title)
+	if err := c.Do(scheduler.Request{Op: "focus", Task: res.ID}, nil); err != nil {
+		fmt.Fprintf(out, "Not focused: %v\n", err)
+	}
 	return nil
 }
 
