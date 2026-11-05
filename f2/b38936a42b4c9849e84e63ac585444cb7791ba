@@ -1,0 +1,21 @@
+docs/adr/0012-a-review-is-a-task-kind.md
+  s_dd78b7e64377d3::t_0ee980a8c1da6f 1-15
+docs/spec/reviews.md
+  s_dd78b7e64377d3::t_26354bf753f9e9 1-298
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f2b38936a42b4c9849e84e63ac585444cb7791ba",
+  "prompts": {},
+  "sessions": {
+    "s_dd78b7e64377d3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d25f4ca3-9848-4af1-944a-f0c2fd9c2ca1",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
