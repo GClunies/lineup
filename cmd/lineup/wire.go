@@ -588,3 +588,28 @@ func boardSources(cfg *config.Global, stateDir string) func(linearOn bool) []boa
 		return out
 	}
 }
+
+// reviewStores keeps the review tab's cache and tab rank in the state
+// folder. The rank has its own file, apart from the Linear browser's.
+func reviewStores(stateDir string) board.Reviews {
+	cache := github.PRCache{Dir: filepath.Join(stateDir, "cache", "github")}
+	order := config.NewViewOrder(filepath.Join(stateDir, "review_views.json"))
+	return board.Reviews{ReadCache: cache.Read, WriteCache: cache.Write, Order: order.Get, SaveOrder: order.Set}
+}
+
+// reviewViews are the review tabs of the config, after My PRs and Requested.
+func reviewViews(g *config.Global) []board.ReviewView {
+	var out []board.ReviewView
+	for _, v := range g.ReviewViews() {
+		out = append(out, board.ReviewView{Key: "view:" + v.Name, Name: v.Name, Filter: prFilter(github.ViewPRs, v.PRFilter)})
+	}
+	for _, q := range g.ReviewQueues() {
+		out = append(out, board.ReviewView{Key: "queue:" + q.Name, Name: "Q: " + q.Name, Filter: prFilter(github.QueuePRs, q.PRFilter)})
+	}
+	return out
+}
+
+func prFilter(base string, f config.PRFilter) github.Filter {
+	return github.Filter{Base: base, Repos: f.Repos, Authors: f.Authors, AuthorTeams: f.AuthorTeams,
+		RequestedTeams: f.RequestedTeams, Labels: f.Labels}
+}

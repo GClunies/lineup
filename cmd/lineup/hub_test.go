@@ -9,6 +9,9 @@ import (
 
 func TestAgentTabSettings(t *testing.T) {
 	for _, tab := range agentTabs {
+		if tab.agent == "" {
+			continue
+		}
 		var v struct {
 			Permissions struct {
 				Allow []string `json:"allow"`
@@ -36,6 +39,9 @@ func TestAgentTabsAreDistinct(t *testing.T) {
 	seen := map[string]bool{}
 	for _, tab := range agentTabs {
 		for _, k := range []string{tab.window, tab.view, tab.agent} {
+			if k == "" {
+				continue
+			}
 			if seen[k] {
 				t.Errorf("label %q is used twice", k)
 			}
@@ -101,5 +107,24 @@ func TestThePlannerLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 	}
 	if got := trackersLine(trackersOn{linear: true, local: true}); !strings.HasPrefix(got, "Trackers on now: Linear, Local.") {
 		t.Errorf("trackersLine = %q", got)
+	}
+}
+
+func TestTheReviewTabRunsTheReviewBoardAlone(t *testing.T) {
+	i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == "review" })
+	if i < 0 {
+		t.Fatal("the Hub has no review tab")
+	}
+	tab := agentTabs[i]
+	if tab.view != "REVIEWS" || !slices.Equal(tab.boardArgs, []string{"board", "--review"}) || tab.agent != "" {
+		t.Errorf("review tab = %+v", tab)
+	}
+}
+
+func TestRunBoardRefusesAnUnknownFlag(t *testing.T) {
+	for _, args := range [][]string{{"--bogus"}, {"--linear", "--review"}} {
+		if err := runBoard(args); err == nil || !strings.Contains(err.Error(), "--review") {
+			t.Errorf("runBoard(%q) = %v", args, err)
+		}
 	}
 }

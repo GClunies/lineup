@@ -104,7 +104,8 @@ const plannerSettings = `{
 }
 `
 
-// agentTab is one Hub tab: a Board view on top and a Claude agent below.
+// agentTab is one Hub tab: a Board view on top and a Claude agent below. A
+// tab with no agent holds the Board view alone, at full height.
 type agentTab struct {
 	window, view, agent string // Rex window label, top block label, agent block label
 	boardArgs           []string
@@ -120,6 +121,7 @@ type agentTab struct {
 var agentTabs = []agentTab{
 	{"orchestrate", "BOARD", "ORCHESTRATOR", []string{"board"}, orchestratorRole, orchestratorSettings, "#1b2733", watchPrompt, nil},
 	{"plan", "LINEAR", "PLANNER", []string{"board", "--linear"}, plannerRole, plannerSettings, "#2a2233", "", composePlanner},
+	{"review", "REVIEWS", "", []string{"board", "--review"}, nil, "", "", "", nil},
 }
 
 func rexRun(args ...string) ([]byte, error) {
@@ -312,9 +314,12 @@ func openHub() error {
 }
 
 func openAgentTab(t agentTab, self, claudeBin string, focus bool) error {
-	dir, err := prepareAgent(t)
-	if err != nil {
-		return err
+	var dir string
+	if t.agent != "" {
+		var err error
+		if dir, err = prepareAgent(t); err != nil {
+			return err
+		}
 	}
 	out, err := rexRun(append([]string{"window", "new", "-s", hubSession, t.window, "--focus=" + strconv.FormatBool(focus), "--json", "--", self}, t.boardArgs...)...)
 	if err != nil {
@@ -326,6 +331,9 @@ func openAgentTab(t agentTab, self, claudeBin string, focus bool) error {
 	}
 	if _, err := rexRun("block", "rename", "-s", hubSession, top, t.view); err != nil {
 		return err
+	}
+	if t.agent == "" {
+		return nil
 	}
 	args := append([]string{"split", "-s", hubSession, "-b", top, "--split", "below",
 		"--ratio", fmt.Sprint(agentRows), "--focus=false", "--json", "-c", dir, "--"},
@@ -392,24 +400,26 @@ func firstBlock(out []byte) (string, error) {
 }
 
 func runBoard(args []string) error {
-	tracker := len(args) == 1 && args[0] == "--linear"
-	if len(args) > 0 && !tracker {
-		return fmt.Errorf("usage: lineup board [--linear]")
+	var flag string
+	if len(args) > 0 {
+		flag = args[0]
 	}
-	target := "ORCHESTRATOR"
-	if tracker {
-		target = "PLANNER"
+	if len(args) > 1 || (flag != "" && flag != "--linear" && flag != "--review") {
+		return fmt.Errorf("usage: lineup board [--linear | --review]")
 	}
-	opts := board.Options{
-		Linear: tracker,
-		Zoom:   func() { rexRun("zoom", "-s", hubSession, target) },
+	opts := board.Options{Linear: flag == "--linear", Review: flag == "--review"}
+	// The review tab has no agent pane to zoom.
+	if target := map[string]string{"": "ORCHESTRATOR", "--linear": "PLANNER"}[flag]; target != "" {
+		opts.Zoom = func() { rexRun("zoom", "-s", hubSession, target) }
 	}
+	opts.Reviews = reviewStores(stateDir())
 	if g, err := config.Load(configPath()); err == nil { // a bad file only means defaults here
 		opts.StartSkills = g.StartSkills()
 		opts.Tracker.Repos = g.Checkouts
 		opts.Tracker.Sources = boardSources(g, stateDir())
+		opts.Reviews.Views = reviewViews(g)
 	}
-	if !tracker {
+	if flag == "" {
 		opts.Notify = func(text string) { board.Toast(os.Stdout, text) }
 	}
 	return board.Run(socketPath(), filepath.Join(stateDir(), "board.json"), opts)
