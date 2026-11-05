@@ -1,0 +1,19 @@
+docs/spec/reviews.md
+  s_dd78b7e64377d3::t_aaa9be333be3d3 58,60,149-150,162,164-166,168-170,176-178,198,200-202,205-206,208,213-215,223-226,230-239,242,244,253-254,267,291-295,307-308,314-320
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fc85a2078faa803dd671bbf8d8f5b47826e5b60d",
+  "prompts": {},
+  "sessions": {
+    "s_dd78b7e64377d3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d25f4ca3-9848-4af1-944a-f0c2fd9c2ca1",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
