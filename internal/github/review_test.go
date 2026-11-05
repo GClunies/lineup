@@ -12,6 +12,7 @@ import (
 
 func TestQuery(t *testing.T) {
 	const open = "is:pr is:open archived:false sort:created-desc"
+	const oldest = "is:pr is:open archived:false sort:created-asc"
 	members := map[string][]string{
 		"umbrella/platform": {"kernighan", "hopper"},
 		"umbrella/data-eng":      {"hopper", "knuth"},
@@ -36,7 +37,7 @@ func TestQuery(t *testing.T) {
 		"two filters": {Filter{Base: ViewPRs, Repos: []string{"umbrella/data"}, Labels: []string{"needs-review"}},
 			open + " repo:umbrella/data label:needs-review"},
 		"queue": {Filter{Base: QueuePRs, Repos: []string{"umbrella/data"}, Authors: []string{"hopper"}},
-			open + " draft:false -author:@me repo:umbrella/data author:hopper"},
+			oldest + " draft:false -author:@me repo:umbrella/data author:hopper"},
 		"empty team with authors": {Filter{Base: ViewPRs, Authors: []string{"octo"}, AuthorTeams: []string{"umbrella/empty"}},
 			open + " author:octo"},
 	} {
@@ -52,7 +53,7 @@ func TestQuery(t *testing.T) {
 
 func TestSearchPRsSplitsEachView(t *testing.T) {
 	bin, log := fakeGH(t, filepath.Join("testdata", "search_three_views.json"), "")
-	got, err := (&Client{Bin: bin}).SearchPRs(context.Background(), []Search{
+	got, err := (&Client{Bin: bin}).SearchPRs(context.Background(), "octocat", []Search{
 		{"mine", "My PRs", "q-mine"}, {"requested", "Requested", "q-req"}, {"view:team", "My teammates", "q-team"},
 	})
 	if err != nil {
@@ -115,14 +116,14 @@ func TestSearchErrorNamesTheView(t *testing.T) {
 	os.WriteFile(reply, []byte(`{"errors":[{"type":"EXCESSIVE_PAGINATION","path":["s1"],"message":"too many records"}]}`), 0o644)
 	bin, _ := fakeGH(t, reply, "")
 	searches := []Search{{"mine", "My PRs", "a"}, {"view:team", "My teammates", "b"}}
-	_, err := (&Client{Bin: bin}).SearchPRs(context.Background(), searches)
+	_, err := (&Client{Bin: bin}).SearchPRs(context.Background(), "octocat", searches)
 	if err == nil || !strings.Contains(err.Error(), "My teammates") || strings.Contains(err.Error(), "My PRs") {
 		t.Errorf("a GraphQL error on s1: err = %v", err)
 	}
 
 	broken := filepath.Join(t.TempDir(), "gh")
 	os.WriteFile(broken, []byte("#!/bin/sh\necho 'HTTP 502' >&2\nexit 1\n"), 0o755)
-	_, err = (&Client{Bin: broken}).SearchPRs(context.Background(), searches)
+	_, err = (&Client{Bin: broken}).SearchPRs(context.Background(), "octocat", searches)
 	if err == nil || !strings.Contains(err.Error(), "My PRs, My teammates") || !strings.Contains(err.Error(), "HTTP 502") {
 		t.Errorf("a failed call: err = %v", err)
 	}

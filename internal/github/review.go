@@ -13,12 +13,15 @@ import (
 // The qualifiers that each kind of PR search starts with. In search(type:
 // ISSUE), a repeated repo:, author:, or team-review-requested: qualifier is
 // OR, a repeated label: is AND, and boolean OR returns nothing.
+// A view lists the newest PRs first. A queue lists the oldest first, so that
+// its oldest PRs are inside the first 100.
 const (
-	openPRs      = "is:pr is:open archived:false sort:created-desc"
-	MyPRs        = openPRs + " author:@me"
-	RequestedPRs = openPRs + " review-requested:@me draft:false"
-	ViewPRs      = openPRs
-	QueuePRs     = openPRs + " draft:false -author:@me"
+	openPRs      = "is:pr is:open archived:false"
+	newestFirst  = openPRs + " sort:created-desc"
+	MyPRs        = newestFirst + " author:@me"
+	RequestedPRs = newestFirst + " review-requested:@me draft:false"
+	ViewPRs      = newestFirst
+	QueuePRs     = openPRs + " sort:created-asc draft:false -author:@me"
 )
 
 // Filter picks open PRs. Base is one of the searches above. The items of one
@@ -77,13 +80,17 @@ type Search struct{ Key, Name, Query string }
 
 // PullRequest is one row of a PR view.
 type PullRequest struct {
-	Repo           string // owner/name
-	Number         int
-	Title          string
-	URL            string
-	Author         string
-	Draft          bool
-	Fork           bool
+	Repo   string // owner/name
+	Number int
+	Title  string
+	URL    string
+	Author string
+	// Bot is true when a GitHub App opened the PR.
+	Bot   bool
+	Draft bool
+	Fork  bool
+	// Head is the head commit, and Base is the base branch.
+	Head, Base     string
 	CreatedAt      time.Time
 	Checks         CheckState
 	ReviewDecision string // APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, or ""
@@ -91,36 +98,56 @@ type PullRequest struct {
 	RequestedUsers []string
 	RequestedTeams []string // org/slug
 	LatestReviews  []Review
+	Viewer         ViewerState
 }
 
+// ViewerState is the user's relation to a PR, as GitHub reports it to the
+// user who runs the search.
+type ViewerState struct {
+	Author bool
+	// Requested is true when the PR requests the user's review, by name or
+	// through a team. GitHub drops the request when the user submits a review.
+	Requested bool
+	ByName    bool
+	// Reviewed is true when the user submitted a review. A pending review is
+	// not submitted.
+	Reviewed bool
+}
+
+// The states filter leaves out a pending review, so viewerReviews counts only
+// the reviews that the user submitted.
 const searchFields = `
 fragment R on PullRequest {
-  number title url isDraft createdAt isCrossRepository reviewDecision
-  author { login }
+  number title url isDraft createdAt isCrossRepository reviewDecision headRefOid baseRefName viewerDidAuthor
+  author { __typename login }
   repository { nameWithOwner }
   labels(first: 20) { nodes { name } }
-  reviewRequests(first: 20) { nodes { requestedReviewer { ... on Team { combinedSlug } ... on User { login } } } }
+  reviewRequests(first: 20) { nodes { requestedReviewer { ... on Team { combinedSlug } ... on User { login isViewer } } } }
+  viewerLatestReviewRequest { id }
+  viewerReviews: reviews(author: $viewer, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) { totalCount }
   latestReviews(first: 20) { nodes { author { login } state submittedAt } }
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
 }`
 
 func searchQuery(n int) string {
 	var decl, body strings.Builder
+	decl.WriteString("$viewer: String!")
 	for i := range n {
-		fmt.Fprintf(&decl, "$q%d: String!, ", i)
+		fmt.Fprintf(&decl, ", $q%d: String!", i)
 		fmt.Fprintf(&body, "s%[1]d: search(type: ISSUE, query: $q%[1]d, first: 100) { nodes { ...R } }\n", i)
 	}
-	return "query(" + strings.TrimSuffix(decl.String(), ", ") + ") {\n" + body.String() + "}\n" + searchFields
+	return "query(" + decl.String() + ") {\n" + body.String() + "}\n" + searchFields
 }
 
 // SearchPRs runs every search in one GraphQL call and returns each Key's PRs.
-// A search that matches nothing maps to an empty list.
-func (c *Client) SearchPRs(ctx context.Context, searches []Search) (map[string][]PullRequest, error) {
+// viewer is the user's login. A search that matches nothing maps to an empty
+// list.
+func (c *Client) SearchPRs(ctx context.Context, viewer string, searches []Search) (map[string][]PullRequest, error) {
 	out := map[string][]PullRequest{}
 	if len(searches) == 0 {
 		return out, nil
 	}
-	args := []string{"api", "graphql", "-f", "query=" + searchQuery(len(searches))}
+	args := []string{"api", "graphql", "-f", "query=" + searchQuery(len(searches)), "-f", "viewer=" + viewer}
 	for i, s := range searches {
 		args = append(args, "-f", fmt.Sprintf("q%d=%s", i, s.Query))
 	}
@@ -181,8 +208,14 @@ type gqlSearchPR struct {
 	CreatedAt         time.Time `json:"createdAt"`
 	IsCrossRepository bool      `json:"isCrossRepository"`
 	ReviewDecision    string    `json:"reviewDecision"`
-	Author            *gqlLogin `json:"author"`
-	Repository        struct {
+	HeadRefOid        string    `json:"headRefOid"`
+	BaseRefName       string    `json:"baseRefName"`
+	ViewerDidAuthor   bool      `json:"viewerDidAuthor"`
+	Author            *struct {
+		Typename string `json:"__typename"`
+		Login    string `json:"login"`
+	} `json:"author"`
+	Repository struct {
 		NameWithOwner string `json:"nameWithOwner"`
 	} `json:"repository"`
 	Labels struct {
@@ -195,9 +228,14 @@ type gqlSearchPR struct {
 			RequestedReviewer *struct {
 				CombinedSlug string `json:"combinedSlug"`
 				Login        string `json:"login"`
+				IsViewer     bool   `json:"isViewer"`
 			} `json:"requestedReviewer"`
 		} `json:"nodes"`
 	} `json:"reviewRequests"`
+	ViewerLatestReviewRequest *struct{} `json:"viewerLatestReviewRequest"`
+	ViewerReviews             struct {
+		TotalCount int `json:"totalCount"`
+	} `json:"viewerReviews"`
 	LatestReviews struct {
 		Nodes []struct {
 			Author      *gqlLogin `json:"author"`
@@ -217,11 +255,12 @@ type gqlSearchPR struct {
 func (g gqlSearchPR) toPullRequest() PullRequest {
 	pr := PullRequest{
 		Repo: g.Repository.NameWithOwner, Number: g.Number, Title: g.Title, URL: g.URL,
-		Draft: g.IsDraft, Fork: g.IsCrossRepository, CreatedAt: g.CreatedAt,
+		Draft: g.IsDraft, Fork: g.IsCrossRepository, Head: g.HeadRefOid, Base: g.BaseRefName, CreatedAt: g.CreatedAt,
 		ReviewDecision: g.ReviewDecision, Checks: ChecksNone,
+		Viewer: ViewerState{Author: g.ViewerDidAuthor, Requested: g.ViewerLatestReviewRequest != nil, Reviewed: g.ViewerReviews.TotalCount > 0},
 	}
 	if g.Author != nil {
-		pr.Author = g.Author.Login
+		pr.Author, pr.Bot = g.Author.Login, g.Author.Typename == "Bot"
 	}
 	for _, l := range g.Labels.Nodes {
 		pr.Labels = append(pr.Labels, l.Name)
@@ -233,6 +272,7 @@ func (g gqlSearchPR) toPullRequest() PullRequest {
 			pr.RequestedTeams = append(pr.RequestedTeams, r.CombinedSlug)
 		case r.Login != "":
 			pr.RequestedUsers = append(pr.RequestedUsers, r.Login)
+			pr.Viewer.ByName = pr.Viewer.ByName || r.IsViewer
 		}
 	}
 	for _, r := range g.LatestReviews.Nodes {

@@ -23,12 +23,23 @@ type fakeReviewAPI struct {
 	members     map[string][]string
 	searches    [][]github.Search
 	memberCalls int
+	viewerCalls int
 	err         error
 }
 
-func (f *fakeReviewAPI) SearchPRs(_ context.Context, ss []github.Search) (map[string][]github.PullRequest, error) {
+func (f *fakeReviewAPI) Viewer(context.Context) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.viewerCalls++
+	return "octocat", nil
+}
+
+func (f *fakeReviewAPI) SearchPRs(_ context.Context, viewer string, ss []github.Search) (map[string][]github.PullRequest, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if viewer != "octocat" {
+		return nil, errors.New("searched as " + viewer)
+	}
 	f.searches = append(f.searches, ss)
 	if f.err != nil {
 		return nil, f.err
@@ -307,8 +318,8 @@ func TestReviewSearchesEveryViewInOneCall(t *testing.T) {
 		t.Errorf("cache writes = %v", e.wrote)
 	}
 	e.press("R")
-	if len(e.api.searches) != 2 || e.api.memberCalls != 1 {
-		t.Errorf("R: %d searches, %d member reads; want 2 and 1, as members last an hour", len(e.api.searches), e.api.memberCalls)
+	if len(e.api.searches) != 2 || e.api.memberCalls != 1 || e.api.viewerCalls != 1 {
+		t.Errorf("R: %d searches, %d member reads, %d login reads; want 2, 1, and 1", len(e.api.searches), e.api.memberCalls, e.api.viewerCalls)
 	}
 }
 

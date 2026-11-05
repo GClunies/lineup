@@ -23,7 +23,8 @@ const (
 
 // ReviewAPI is the part of github.Client that the review tab uses.
 type ReviewAPI interface {
-	SearchPRs(ctx context.Context, searches []github.Search) (map[string][]github.PullRequest, error)
+	Viewer(ctx context.Context) (string, error)
+	SearchPRs(ctx context.Context, viewer string, searches []github.Search) (map[string][]github.PullRequest, error)
 	TeamMembers(ctx context.Context, teams []string) (map[string][]string, error)
 }
 
@@ -67,6 +68,7 @@ type review struct {
 
 	members   map[string][]string
 	membersAt time.Time
+	viewer    string // the user's login, read once
 
 	sel       string // the selected PR's URL
 	filter    textinput.Model
@@ -108,6 +110,7 @@ type (
 		lists     map[string][]github.PullRequest
 		members   map[string][]string
 		membersAt time.Time
+		viewer    string
 		err       error
 	}
 	rvRankMsg struct {
@@ -190,10 +193,16 @@ func (m Model) refreshReviews() tea.Cmd {
 	r.gen++
 	r.loading = true
 	gen, tabs, api, write := r.gen, slices.Clone(r.tabs), r.deps.API, r.deps.WriteCache
-	members, at, now := r.members, r.membersAt, m.opts.Now()
+	members, at, now, viewer := r.members, r.membersAt, m.opts.Now(), r.viewer
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		if viewer == "" {
+			var err error
+			if viewer, err = api.Viewer(ctx); err != nil {
+				return rvLiveMsg{gen: gen, err: err}
+			}
+		}
 		var teams []string
 		for _, tb := range tabs {
 			for _, t := range tb.Filter.AuthorTeams {
@@ -219,7 +228,7 @@ func (m Model) refreshReviews() tea.Cmd {
 			}
 			searches = append(searches, github.Search{Key: tb.Key, Name: tb.Name, Query: q})
 		}
-		found, err := api.SearchPRs(ctx, searches)
+		found, err := api.SearchPRs(ctx, viewer, searches)
 		if err != nil {
 			return rvLiveMsg{gen: gen, err: err}
 		}
@@ -227,7 +236,7 @@ func (m Model) refreshReviews() tea.Cmd {
 		for k, prs := range lists {
 			write(k, prs)
 		}
-		return rvLiveMsg{gen: gen, lists: lists, members: members, membersAt: at}
+		return rvLiveMsg{gen: gen, lists: lists, members: members, membersAt: at, viewer: viewer}
 	}
 }
 
@@ -287,7 +296,7 @@ func (m Model) reviewMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 			return m, nil, true
 		}
 		r.err = ""
-		r.members, r.membersAt = msg.members, msg.membersAt
+		r.members, r.membersAt, r.viewer = msg.members, msg.membersAt, msg.viewer
 		for k, prs := range msg.lists {
 			r.lists[k], r.fresh[k] = prs, true
 		}
