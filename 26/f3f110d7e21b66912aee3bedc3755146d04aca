@@ -1,0 +1,21 @@
+internal/worktree/review.go
+  s_dd78b7e64377d3::t_0cb9c83c61723f 1-81
+internal/worktree/review_test.go
+  s_dd78b7e64377d3::t_a90c76c1b77c9a 1-117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "26f3f110d7e21b66912aee3bedc3755146d04aca",
+  "prompts": {},
+  "sessions": {
+    "s_dd78b7e64377d3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d25f4ca3-9848-4af1-944a-f0c2fd9c2ca1",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
