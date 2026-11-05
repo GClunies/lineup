@@ -1,0 +1,524 @@
+{
+  "data": {
+    "s0": {
+      "nodes": [
+        {
+          "number": 4945,
+          "title": "OPS-2566: Write the usage logs to the raw schema again",
+          "url": "https://github.com/umbrella/data/pull/4945",
+          "isDraft": false,
+          "createdAt": "2026-11-04T22:06:53Z",
+          "isCrossRepository": false,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "author": {
+            "login": "octocat"
+          },
+          "repository": {
+            "nameWithOwner": "umbrella/data"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "login": "umbrella-ci-bot"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "combinedSlug": "umbrella/data"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "combinedSlug": "umbrella/search"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "login": "dijkstra"
+                }
+              }
+            ]
+          },
+          "latestReviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "greptile-apps"
+                },
+                "state": "COMMENTED",
+                "submittedAt": "2026-11-04T22:09:52Z"
+              }
+            ]
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "SUCCESS"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "number": 4919,
+          "title": "CORE-34: Move the CSV coverage and lookup readers to the new marts",
+          "url": "https://github.com/umbrella/data/pull/4919",
+          "isDraft": false,
+          "createdAt": "2026-11-04T06:05:10Z",
+          "isCrossRepository": false,
+          "reviewDecision": "CHANGES_REQUESTED",
+          "author": {
+            "login": "octocat"
+          },
+          "repository": {
+            "nameWithOwner": "umbrella/data"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "login": "umbrella-ci-bot"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "combinedSlug": "umbrella/search"
+                }
+              }
+            ]
+          },
+          "latestReviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "greptile-apps"
+                },
+                "state": "COMMENTED",
+                "submittedAt": "2026-11-05T19:28:08Z"
+              },
+              {
+                "author": {
+                  "login": "thompson"
+                },
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-11-04T20:08:17Z"
+              }
+            ]
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "PENDING"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "number": 6,
+          "title": "Close the open to-dos in the reading list",
+          "url": "https://github.com/octocat/hello-world/pull/6",
+          "isDraft": false,
+          "createdAt": "2026-11-02T16:27:31Z",
+          "isCrossRepository": false,
+          "reviewDecision": null,
+          "author": {
+            "login": "octocat"
+          },
+          "repository": {
+            "nameWithOwner": "octocat/hello-world"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": []
+          },
+          "latestReviews": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": null
+                }
+              }
+            ]
+          }
+        },
+        {
+          "number": 4744,
+          "title": "CORE-603: Set the target data model architecture",
+          "url": "https://github.com/umbrella/data/pull/4744",
+          "isDraft": true,
+          "createdAt": "2026-10-25T06:50:38Z",
+          "isCrossRepository": false,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "author": {
+            "login": "octocat"
+          },
+          "repository": {
+            "nameWithOwner": "umbrella/data"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "combinedSlug": "umbrella/data"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "combinedSlug": "umbrella/search"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "login": "umbrella-ci-bot"
+                }
+              }
+            ]
+          },
+          "latestReviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "nx-cloud"
+                },
+                "state": "COMMENTED",
+                "submittedAt": "2026-11-04T16:39:40Z"
+              },
+              {
+                "author": {
+                  "login": "greptile-apps"
+                },
+                "state": "COMMENTED",
+                "submittedAt": "2026-11-04T16:40:50Z"
+              }
+            ]
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "FAILURE"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "number": 94,
+          "title": "Add a coverage audit and findings checklist",
+          "url": "https://github.com/globex/toolkit/pull/94",
+          "isDraft": false,
+          "createdAt": "2026-10-17T06:02:04Z",
+          "isCrossRepository": true,
+          "reviewDecision": null,
+          "author": {
+            "login": "octocat"
+          },
+          "repository": {
+            "nameWithOwner": "globex/toolkit"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": []
+          },
+          "latestReviews": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "SUCCESS"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "s1": {
+      "nodes": [
+        {
+          "number": 4955,
+          "title": "OPS-448: Pull the base images and test containers through the cache",
+          "url": "https://github.com/umbrella/data/pull/4955",
+          "isDraft": false,
+          "createdAt": "2026-11-05T18:46:40Z",
+          "isCrossRepository": false,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "author": {
+            "login": "goldberg"
+          },
+          "repository": {
+            "nameWithOwner": "umbrella/data"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "login": "octocat"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "login": "umbrella-ci-bot"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "combinedSlug": "umbrella/data"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "combinedSlug": "umbrella/search"
+                }
+              }
+            ]
+          },
+          "latestReviews": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "SUCCESS"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "number": 4901,
+          "title": "chore(deps): bump the uv-security group across 1 directory with 2 updates",
+          "url": "https://github.com/umbrella/data/pull/4901",
+          "isDraft": false,
+          "createdAt": "2026-11-03T19:54:46Z",
+          "isCrossRepository": false,
+          "reviewDecision": "APPROVED",
+          "author": {
+            "login": "dependabot"
+          },
+          "repository": {
+            "nameWithOwner": "umbrella/data"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "name": "dependencies"
+              },
+              {
+                "name": "python"
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "combinedSlug": "umbrella/data"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "combinedSlug": "umbrella/search"
+                }
+              }
+            ]
+          },
+          "latestReviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "umbrella-merge-bot"
+                },
+                "state": "APPROVED",
+                "submittedAt": "2026-11-03T19:55:02Z"
+              },
+              {
+                "author": {
+                  "login": "umbrella-ci-bot"
+                },
+                "state": "APPROVED",
+                "submittedAt": "2026-11-03T19:55:03Z"
+              }
+            ]
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "FAILURE"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "s2": {
+      "nodes": [
+        {
+          "number": 4954,
+          "title": "CORE-625: Use the vendor style on built records",
+          "url": "https://github.com/umbrella/data/pull/4954",
+          "isDraft": false,
+          "createdAt": "2026-11-05T00:54:40Z",
+          "isCrossRepository": false,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "author": {
+            "login": "noether"
+          },
+          "repository": {
+            "nameWithOwner": "umbrella/data"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "login": "umbrella-ci-bot"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "combinedSlug": "umbrella/data"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "combinedSlug": "umbrella/search"
+                }
+              }
+            ]
+          },
+          "latestReviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "greptile-apps"
+                },
+                "state": "COMMENTED",
+                "submittedAt": "2026-11-05T00:57:54Z"
+              }
+            ]
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "SUCCESS"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "number": 4873,
+          "title": "fix(loader): Reject a city match in another state",
+          "url": "https://github.com/umbrella/data/pull/4873",
+          "isDraft": false,
+          "createdAt": "2026-11-02T20:42:47Z",
+          "isCrossRepository": false,
+          "reviewDecision": "APPROVED",
+          "author": {
+            "login": "hopper"
+          },
+          "repository": {
+            "nameWithOwner": "umbrella/data"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "login": "umbrella-svc"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "combinedSlug": "umbrella/search"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "login": "umbrella-ci-bot"
+                }
+              }
+            ]
+          },
+          "latestReviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "nx-cloud"
+                },
+                "state": "COMMENTED",
+                "submittedAt": "2026-11-03T21:16:27Z"
+              },
+              {
+                "author": {
+                  "login": "octocat"
+                },
+                "state": "APPROVED",
+                "submittedAt": "2026-11-05T17:55:46Z"
+              }
+            ]
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "SUCCESS"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

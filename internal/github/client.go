@@ -141,6 +141,22 @@ type gqlLogin struct {
 	Login string `json:"login"`
 }
 
+type gqlRollup struct {
+	State string `json:"state"`
+}
+
+func (r *gqlRollup) checks() CheckState {
+	switch {
+	case r == nil:
+		return ChecksNone
+	case r.State == "SUCCESS":
+		return ChecksPassed
+	case r.State == "FAILURE", r.State == "ERROR":
+		return ChecksFailed
+	}
+	return ChecksPending
+}
+
 type gqlPR struct {
 	Number           int    `json:"number"`
 	URL              string `json:"url"`
@@ -166,9 +182,7 @@ type gqlPR struct {
 				Author *struct {
 					User *gqlLogin `json:"user"`
 				} `json:"author"`
-				StatusCheckRollup *struct {
-					State string `json:"state"`
-				} `json:"statusCheckRollup"`
+				StatusCheckRollup *gqlRollup `json:"statusCheckRollup"`
 			} `json:"commit"`
 		} `json:"nodes"`
 	} `json:"commits"`
@@ -229,16 +243,7 @@ func (g gqlPR) toPR() *PR {
 	}
 	// The checks of the PR are the checks of its head commit, the newest node.
 	if n := len(g.Commits.Nodes); n > 0 {
-		if rollup := g.Commits.Nodes[n-1].Commit.StatusCheckRollup; rollup != nil {
-			switch rollup.State {
-			case "SUCCESS":
-				pr.Checks = ChecksPassed
-			case "FAILURE", "ERROR":
-				pr.Checks = ChecksFailed
-			default:
-				pr.Checks = ChecksPending
-			}
-		}
+		pr.Checks = g.Commits.Nodes[n-1].Commit.StatusCheckRollup.checks()
 	}
 	// GitHub creates a push's checks a few seconds after the push. In a repo
 	// whose base branch has checks, none yet means they are on their way.
