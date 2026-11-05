@@ -260,3 +260,39 @@ func TestPromptForAGitHubIssueAsksForTheFixesLine(t *testing.T) {
 		t.Errorf("a Linear Issue lost its label:\n%s", p)
 	}
 }
+
+func TestReviewPromptRunsPRReviewAndStopsBeforeGitHub(t *testing.T) {
+	review := TaskInfo{PRURL: "https://github.com/umbrella/data/pull/4955", ReviewWorktree: "/repos/umbrella/data.review-pr-4955", Repo: "/repos/umbrella/data"}
+	p := Prompt(lifecycle.Reviewing, review, "kit:tdd", "")
+	if !strings.HasPrefix(p, "/pr-review https://github.com/umbrella/data/pull/4955\n") {
+		t.Errorf("the prompt must start with /pr-review and the URL:\n%s", p)
+	}
+	for _, want := range []string{
+		"Review worktree: /repos/umbrella/data.review-pr-4955\n",
+		"Use the review worktree /repos/umbrella/data.review-pr-4955 as the worktree of `pr-review` Step 1.",
+		"Stop at Step 5 and wait for the user's decisions. Write nothing to GitHub before the user decides.",
+		"Leave the findings file of `pr-review` behind, also when there are no findings.",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("missing %q in\n%s", want, p)
+		}
+	}
+	for _, not := range []string{"kit:tdd", noPRContract, "draft PR", "Branch:"} {
+		if strings.Contains(p, not) {
+			t.Errorf("review prompt has %q:\n%s", not, p)
+		}
+	}
+	review.PR = true
+	if Prompt(lifecycle.Reviewing, review, "", "") != Prompt(lifecycle.Reviewing, TaskInfo{PRURL: review.PRURL, ReviewWorktree: review.ReviewWorktree, Repo: review.Repo}, "", "") {
+		t.Error("the pr override changed a review prompt")
+	}
+}
+
+// claude's --add-dir takes many values, so a separate value would swallow the prompt.
+func TestCommandAddsEachDirInOneArgument(t *testing.T) {
+	argv, _ := Command("/bin/claude", "", config.StageConfig{Model: "m"}, "the prompt", "/repos/data.review-pr-7")
+	want := []string{"/bin/claude", "--model", "m", "--add-dir=/repos/data.review-pr-7", "the prompt"}
+	if !reflect.DeepEqual(argv, want) {
+		t.Errorf("argv = %q, want %q", argv, want)
+	}
+}
