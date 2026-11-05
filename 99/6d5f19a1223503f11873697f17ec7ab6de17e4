@@ -1,0 +1,21 @@
+internal/harness/claude/claude.go
+  s_dd78b7e64377d3::t_092a9e23a554d0 150-152,160-163,190-191,202-208,210,219-221,262-272
+internal/harness/claude/claude_test.go
+  s_dd78b7e64377d3::t_c8e1b99f460aa8 263-298
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "996d5f19a1223503f11873697f17ec7ab6de17e4",
+  "prompts": {},
+  "sessions": {
+    "s_dd78b7e64377d3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d25f4ca3-9848-4af1-944a-f0c2fd9c2ca1",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
