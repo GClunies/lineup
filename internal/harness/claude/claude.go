@@ -145,11 +145,13 @@ func lock(dir string) (func(), error) {
 	}
 }
 
-// Command builds the argv and environment for an interactive Worker whose
-// first message is the prompt. Rex starts it through a login shell that runs
-// no direnv, so the command sets CLAUDE_CONFIG_DIR itself. addDirs are
+// Command builds the argv and environment for an interactive Worker. A
+// Worker with a prompt starts a new conversation, with the prompt as its first
+// message and conversation as its ID when that is not "". A Worker with no
+// prompt resumes the conversation. Rex starts it through a login shell that
+// runs no direnv, so the command sets CLAUDE_CONFIG_DIR itself. addDirs are
 // folders outside the Worker's own that it reads with no permission prompt.
-func Command(bin, configDir string, st config.StageConfig, prompt string, addDirs ...string) ([]string, map[string]string) {
+func Command(bin, configDir string, st config.StageConfig, conversation, prompt string, addDirs ...string) ([]string, map[string]string) {
 	argv := []string{bin}
 	if st.Model != "" {
 		argv = append(argv, "--model", st.Model)
@@ -157,11 +159,19 @@ func Command(bin, configDir string, st config.StageConfig, prompt string, addDir
 	if st.Effort != "" {
 		argv = append(argv, "--effort", st.Effort)
 	}
+	switch {
+	case prompt == "":
+		argv = append(argv, "--resume", conversation)
+	case conversation != "":
+		argv = append(argv, "--session-id", conversation)
+	}
 	for _, d := range addDirs {
 		// --add-dir takes many values, so a separate value would also take the prompt.
 		argv = append(argv, "--add-dir="+d)
 	}
-	argv = append(argv, prompt)
+	if prompt != "" {
+		argv = append(argv, prompt)
+	}
 	env := map[string]string{}
 	if configDir != "" {
 		env["CLAUDE_CONFIG_DIR"] = configDir

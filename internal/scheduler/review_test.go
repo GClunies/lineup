@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -429,16 +430,85 @@ func TestALostTabInReviewReadyKeepsTheReview(t *testing.T) {
 	}
 }
 
+func (h *harness) lastSpec() WorkerSpec {
+	h.hn.mu.Lock()
+	defer h.hn.mu.Unlock()
+	return h.hn.specs[len(h.hn.specs)-1]
+}
+
+// readyReview drives a review of #7 to Review ready, then closes its tab as
+// the user does. It returns the Reviewing Worker's spec.
+func (h *harness) readyReview() WorkerSpec {
+	h.t.Helper()
+	h.gh.setReview(openPR(7, "h1"))
+	h.writeFindings(7, "h1")
+	h.review(prURL7)
+	worker := h.waitTab("claude reviewing")
+	spec := h.lastSpec()
+	h.status(worker.BlockID, "done")
+	h.waitStage("R-1", lifecycle.ReviewReady)
+	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	eventually(h.t, "the Worker gone", func() bool { return !h.task("R-1").Live })
+	return spec
+}
+
+func TestReviewOfAClosedReviewReadyWorkerResumesItsConversation(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	reviewing := h.readyReview()
+	if u, err := uuid.Parse(reviewing.Conversation); err != nil || u.String() != reviewing.Conversation {
+		t.Fatalf("the Reviewing Worker's conversation %q is not a UUID: %v", reviewing.Conversation, err)
+	}
+
+	res := h.review(prURL7)
+	if res.ID != "R-1" || res.Action != ReviewReopened {
+		t.Fatalf("review of the closed Worker = %+v, want R-1 reopened", res)
+	}
+	worker := h.waitTab("claude review_ready")
+	if worker.cwd != "/repos/acme/data" || worker.env["XDG_STATE_HOME"] != h.stateHome {
+		t.Fatalf("reopened tab = %+v, want the main checkout and the review state folder", worker)
+	}
+	spec := h.lastSpec()
+	if spec.Stage != lifecycle.ReviewReady || spec.Conversation != reviewing.Conversation || spec.Worktree != "/repos/acme/data.review-pr-7" || spec.PRURL != prURL7 {
+		t.Fatalf("reopened spec = %+v, want Review ready in conversation %s", spec, reviewing.Conversation)
+	}
+	eventually(t, "the reopened Worker live", func() bool { return h.task("R-1").Live })
+	if v := h.task("R-1"); v.Stage != "Review ready" || v.Flag != "" {
+		t.Fatalf("reopened task = %+v", v)
+	}
+	if res := h.review(prURL7); res.Action != ReviewOpen {
+		t.Fatalf("review of the reopened Worker = %+v, want open", res)
+	}
+}
+
+// A Task from before conversation IDs has none to resume, so a reopen
+// reviews the PR again.
+func TestReviewOfAReviewReadyTaskWithNoConversationReviewsAgain(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReview(lifecycle.ReviewReady))
+	res := h.review(prURL7)
+	if res.ID != "R-3" || res.Action != ReviewRestarted || res.Stage != "Reviewing" {
+		t.Fatalf("review = %+v, want R-3 restarted in Reviewing", res)
+	}
+	h.waitTab("claude reviewing")
+	if spec := h.lastSpec(); spec.Stage != lifecycle.Reviewing || spec.Conversation == "" {
+		t.Fatalf("spec = %+v, want a fresh review in a new conversation", spec)
+	}
+}
+
 func TestALostTabWhileReviewingStartsAFreshWorker(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
 	first := h.waitTab("claude reviewing")
+	firstSpec := h.lastSpec()
 	h.rex.CloseWindow(context.Background(), first.SessionID, first.WindowID)
 	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: first.BlockID}
 	second := h.waitTab("claude reviewing")
 	if second.BlockID == first.BlockID {
 		t.Fatal("no fresh Worker")
+	}
+	if spec := h.lastSpec(); spec.Conversation == "" || spec.Conversation == firstSpec.Conversation {
+		t.Fatalf("restarted conversation %q, want a new one after %q", spec.Conversation, firstSpec.Conversation)
 	}
 	var left int
 	h.s.call(func() { left = h.s.recs["R-1"].Left.Restarts })

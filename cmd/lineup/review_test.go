@@ -94,19 +94,40 @@ func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 	os.WriteFile(claudeBin, []byte("#!/bin/sh\n"), 0o755)
 	cfg := loadConfig(t, "[harness.claude]\npath = \""+claudeBin+"\"\n[stage.reviewing]\neffort = \"max\"\n")
 	p := harnessPort{cfg: cfg}
-	argv, _, err := p.Command(context.Background(), scheduler.WorkerSpec{
+	spec := scheduler.WorkerSpec{
 		Stage: lifecycle.Reviewing, Repo: t.TempDir(), Worktree: "/repos/umbrella/data.review-pr-4955",
 		PRURL: "https://github.com/umbrella/data/pull/4955", Overrides: map[string]string{"pr": "true"},
-	})
+		Conversation: "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20",
+	}
+	argv, _, err := p.Command(context.Background(), spec)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Contains(argv, "--add-dir=/repos/umbrella/data.review-pr-4955") || !slices.Contains(argv, "max") {
 		t.Fatalf("argv = %q", argv)
 	}
+	if i := slices.Index(argv, "--session-id"); i < 0 || argv[i+1] != spec.Conversation {
+		t.Fatalf("argv = %q, want --session-id %s", argv, spec.Conversation)
+	}
 	prompt := argv[len(argv)-1]
 	if !strings.HasPrefix(prompt, "/pr-review https://github.com/umbrella/data/pull/4955\n") || !strings.Contains(prompt, "Stop at Step 5") {
 		t.Fatalf("prompt = %s", prompt)
+	}
+
+	// A reopened Worker resumes the conversation with the Reviewing settings and no prompt.
+	model := argv[slices.Index(argv, "--model")+1]
+	spec.Stage = lifecycle.ReviewReady
+	argv, _, err = p.Command(context.Background(), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{claudeBin, "--model", model, "--effort", "max", "--resume", spec.Conversation, "--add-dir=/repos/umbrella/data.review-pr-4955"}
+	if !slices.Equal(argv, want) {
+		t.Fatalf("reopen argv = %q, want %q", argv, want)
+	}
+	spec.Conversation = ""
+	if _, _, err := p.Command(context.Background(), spec); err == nil {
+		t.Fatal("a reopen with no conversation got a command")
 	}
 }
 

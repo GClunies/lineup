@@ -256,7 +256,12 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 	if err != nil {
 		return nil, nil, err
 	}
-	st := res.Stages[w.Stage]
+	stage := w.Stage
+	if stage == lifecycle.ReviewReady {
+		// The Worker resumes the Reviewing conversation, so it keeps its settings.
+		stage = lifecycle.Reviewing
+	}
+	st := res.Stages[stage]
 	if st.Harness != "claude" {
 		return nil, nil, fmt.Errorf("harness %q is not in the MVP: only claude", st.Harness)
 	}
@@ -266,7 +271,7 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 	}
 	info := claude.TaskInfo{Ask: w.Text, PRURL: w.PRURL, Branch: w.Branch, Repo: w.Repo, PR: res.PR}
 	var addDirs []string
-	if w.Stage == lifecycle.Reviewing {
+	if lifecycle.KindReview.Has(w.Stage) {
 		info.ReviewWorktree, addDirs = w.Worktree, []string{w.Worktree}
 	}
 	if w.Issue != nil {
@@ -283,7 +288,11 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 	if st.Command != "" {
 		extra = "Run " + st.Command + " first."
 	}
-	argv, env := claude.Command(res.Harnesses[st.Harness], dir, st, claude.Prompt(w.Stage, info, st.Skill, extra), addDirs...)
+	prompt := claude.Prompt(w.Stage, info, st.Skill, extra)
+	if prompt == "" && w.Conversation == "" {
+		return nil, nil, fmt.Errorf("%s has no prompt and no conversation to resume", w.Stage)
+	}
+	argv, env := claude.Command(res.Harnesses[st.Harness], dir, st, w.Conversation, prompt, addDirs...)
 	return argv, env, nil
 }
 

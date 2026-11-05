@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"uuid"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/store"
@@ -405,9 +406,15 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 		}
 		return
 	}
+	if r.Review != nil && stage == lifecycle.Reviewing {
+		// A restart or a rerun reviews afresh, so it never resumes the last review.
+		r.Conversation = uuid.NewV4().String()
+		s.update(id, func(rec *Record) { rec.Conversation = r.Conversation })
+	}
 	spec := WorkerSpec{
 		Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
 		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
+		Conversation: r.Conversation,
 	}
 	folder := r.Worktree
 	if r.Review != nil {

@@ -176,12 +176,12 @@ func TestConfigDir(t *testing.T) {
 
 func TestCommand(t *testing.T) {
 	st := config.StageConfig{Harness: "claude", Model: "claude-opus-5-5", Effort: "high"}
-	argv, env := Command("/bin/claude", "/profiles/work", st, "do it")
+	argv, env := Command("/bin/claude", "/profiles/work", st, "", "do it")
 	want := []string{"/bin/claude", "--model", "claude-opus-5-5", "--effort", "high", "do it"}
 	if !reflect.DeepEqual(argv, want) || !reflect.DeepEqual(env, map[string]string{"CLAUDE_CONFIG_DIR": "/profiles/work"}) {
 		t.Errorf("%v %v", argv, env)
 	}
-	if _, env := Command("/bin/claude", "", st, "x"); len(env) != 0 {
+	if _, env := Command("/bin/claude", "", st, "", "x"); len(env) != 0 {
 		t.Errorf("default profile must set no env: %v", env)
 	}
 }
@@ -290,9 +290,26 @@ func TestReviewPromptRunsPRReviewAndStopsBeforeGitHub(t *testing.T) {
 
 // claude's --add-dir takes many values, so a separate value would swallow the prompt.
 func TestCommandAddsEachDirInOneArgument(t *testing.T) {
-	argv, _ := Command("/bin/claude", "", config.StageConfig{Model: "m"}, "the prompt", "/repos/data.review-pr-7")
+	argv, _ := Command("/bin/claude", "", config.StageConfig{Model: "m"}, "", "the prompt", "/repos/data.review-pr-7")
 	want := []string{"/bin/claude", "--model", "m", "--add-dir=/repos/data.review-pr-7", "the prompt"}
 	if !reflect.DeepEqual(argv, want) {
 		t.Errorf("argv = %q, want %q", argv, want)
+	}
+}
+
+// A review Worker starts its conversation under a known ID, so that a reopen
+// resumes it with no prompt.
+func TestCommandStartsAndResumesAConversation(t *testing.T) {
+	const id = "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20"
+	st := config.StageConfig{Model: "m", Effort: "max"}
+	start, _ := Command("/bin/claude", "", st, id, "/pr-review x", "/repos/data.review-pr-7")
+	want := []string{"/bin/claude", "--model", "m", "--effort", "max", "--session-id", id, "--add-dir=/repos/data.review-pr-7", "/pr-review x"}
+	if !reflect.DeepEqual(start, want) {
+		t.Errorf("start argv = %q, want %q", start, want)
+	}
+	resume, _ := Command("/bin/claude", "", st, id, "", "/repos/data.review-pr-7")
+	want = []string{"/bin/claude", "--model", "m", "--effort", "max", "--resume", id, "--add-dir=/repos/data.review-pr-7"}
+	if !reflect.DeepEqual(resume, want) {
+		t.Errorf("resume argv = %q, want %q", resume, want)
 	}
 }

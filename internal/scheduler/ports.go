@@ -104,6 +104,9 @@ type WorkerSpec struct {
 	Text      string
 	PRURL     string
 	Overrides map[string]string
+	// Conversation is the ID of a review Worker's Claude conversation. A
+	// Reviewing Worker starts it, and a Review ready Worker resumes it.
+	Conversation string
 }
 
 type Harness interface {

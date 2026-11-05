@@ -41,6 +41,9 @@ type Record struct {
 	// Review is the PR that a review Task reviews, fixed when it is added.
 	// Only a review Task has one.
 	Review *ReviewPR `json:"review,omitempty"`
+	// Conversation is the ID of the review Worker's Claude conversation. Each
+	// Reviewing Worker starts a new one, and a reopen resumes it.
+	Conversation string `json:"conversation,omitempty"`
 
 	SessionID   string          `json:"session_id,omitempty"`
 	WindowID    string          `json:"window_id,omitempty"`
