@@ -59,12 +59,12 @@ func TestMissingFileMeansDefaults(t *testing.T) {
 		t.Errorf("budgets = %+v", r.Budgets)
 	}
 	want := StageConfig{Harness: "claude", Model: "claude-opus-5-5", Effort: "high"}
-	for _, st := range []lifecycle.Stage{lifecycle.Working, lifecycle.CIDebug, lifecycle.Responding} {
+	for _, st := range []lifecycle.Stage{lifecycle.Working, lifecycle.CIDebug, lifecycle.Responding, lifecycle.Reviewing} {
 		if r.Stages[st] != want {
 			t.Errorf("%s = %+v", st, r.Stages[st])
 		}
 	}
-	if len(r.Stages) != 3 || r.Harnesses["claude"] != bin {
+	if len(r.Stages) != 4 || r.Harnesses["claude"] != bin {
 		t.Errorf("stages %d harnesses %v", len(r.Stages), r.Harnesses)
 	}
 }
@@ -120,13 +120,14 @@ func TestLinearClientID(t *testing.T) {
 
 func TestInvalidValuesFailAtLoad(t *testing.T) {
 	for name, text := range map[string]string{
-		"cap":      "wip_cap = 0\n",
-		"interval": "poll_interval = \"soon\"\n",
-		"budget":   "[budgets]\nrestarts = -1\n",
-		"stage":    "[stage.queued]\nmodel = \"x\"\n",
-		"harness":  "[harness.claude]\npath = \"claude\"\n",
-		"event":    "[linear.w.status.ENG]\nbogus = \"x\"\n",
-		"match":    "[[repos]]\nmatch = \"[\"\n",
+		"cap":        "wip_cap = 0\n",
+		"interval":   "poll_interval = \"soon\"\n",
+		"budget":     "[budgets]\nrestarts = -1\n",
+		"stage":      "[stage.queued]\nmodel = \"x\"\n",
+		"user stage": "[stage.review_ready]\nmodel = \"x\"\n",
+		"harness":    "[harness.claude]\npath = \"claude\"\n",
+		"event":      "[linear.w.status.ENG]\nbogus = \"x\"\n",
+		"match":      "[[repos]]\nmatch = \"[\"\n",
 	} {
 		if _, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), text)); err == nil {
 			t.Errorf("%s: no error", name)
@@ -446,5 +447,19 @@ func TestReviewInTheRepoFileIsAnError(t *testing.T) {
 	write(t, filepath.Join(repo, ".lineup.toml"), "[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\n")
 	if _, err := load(t, "").Resolve(repo, nil); err == nil || !strings.Contains(err.Error(), "unknown keys") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+func TestTheReviewingStageHasItsOwnSection(t *testing.T) {
+	g := load(t, "[stage.default]\nmodel = \"m\"\n[stage.reviewing]\neffort = \"max\"\n")
+	r, err := g.Resolve(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Stages[lifecycle.Reviewing]; got.Model != "m" || got.Effort != "max" {
+		t.Errorf("reviewing = %+v, want the default model and its own effort", got)
+	}
+	if got := r.Stages[lifecycle.Working]; got.Effort != "high" {
+		t.Errorf("[stage.reviewing] reached working: %+v", got)
 	}
 }

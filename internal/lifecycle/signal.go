@@ -52,6 +52,16 @@ type ReviewAdditionalAuthors struct{}
 type PRConflict struct{}
 type PRMerged struct{}
 
+// Review signals. Each is a level, not an edge: the Scheduler computes it from
+// the reviewed PR's current state on each full poll.
+
+// PRReviewed means the user submitted a review after the Task was added. A
+// pending review is not submitted.
+type PRReviewed struct{}
+
+// PRClosed means the PR closed without a merge.
+type PRClosed struct{}
+
 func (Start) Name() string                   { return "start" }
 func (PRMerge) Name() string                 { return "pr-merge" }
 func (TaskClosed) Name() string              { return "task-closed" }
@@ -71,6 +81,8 @@ func (ReviewChangesRequested) Name() string  { return "review-changes-requested"
 func (ReviewAdditionalAuthors) Name() string { return "review-additional-authors" }
 func (PRConflict) Name() string              { return "pr-conflict" }
 func (PRMerged) Name() string                { return "pr-merged" }
+func (PRReviewed) Name() string              { return "pr-reviewed" }
+func (PRClosed) Name() string                { return "pr-closed" }
 
 func (Start) signal()                   {}
 func (PRMerge) signal()                 {}
@@ -91,6 +103,8 @@ func (ReviewChangesRequested) signal()  {}
 func (ReviewAdditionalAuthors) signal() {}
 func (PRConflict) signal()              {}
 func (PRMerged) signal()                {}
+func (PRReviewed) signal()              {}
+func (PRClosed) signal()                {}
 
 // Effect is work the Scheduler must do after a transition, in order.
 type Effect interface{ effect() }

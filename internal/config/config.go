@@ -469,7 +469,7 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 		}
 	}
 	res.Stages = map[lifecycle.Stage]StageConfig{}
-	for st := lifecycle.Queued; st <= lifecycle.Done; st++ {
+	for _, st := range lifecycle.Stages() {
 		if !st.Agent() {
 			continue
 		}
