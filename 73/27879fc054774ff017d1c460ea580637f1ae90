@@ -1,0 +1,25 @@
+cmd/lineup/cli.go
+  s_dd78b7e64377d3::t_4053356fd1f6a5 24,115-135
+cmd/lineup/main.go
+  s_dd78b7e64377d3::t_f60240da37aa0e 31
+cmd/lineup/orchestrator/CLAUDE.md
+  s_dd78b7e64377d3::t_3f69981e5f5b88 14-15,26-28,37
+cmd/lineup/review_test.go
+  s_dd78b7e64377d3::t_a2725de81e74ad 4-5,7-8,13,109-181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7327879fc054774ff017d1c460ea580637f1ae90",
+  "prompts": {},
+  "sessions": {
+    "s_dd78b7e64377d3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d25f4ca3-9848-4af1-944a-f0c2fd9c2ca1",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
