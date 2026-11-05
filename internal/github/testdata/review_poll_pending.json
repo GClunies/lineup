@@ -1,0 +1,26 @@
+{
+  "data": {
+    "r0": {
+      "pullRequest": {
+        "number": 4916,
+        "url": "https://github.com/umbrella/data/pull/4916",
+        "title": "CORE-34: Replace the legacy sale flag with a category column",
+        "state": "OPEN",
+        "isCrossRepository": false,
+        "headRefOid": "77ca03ed2a555181b6861959fcbca729eaffd6f3",
+        "baseRefName": "develop",
+        "repository": {
+          "nameWithOwner": "umbrella/data"
+        },
+        "reviews": {
+          "nodes": [
+            {
+              "state": "PENDING",
+              "submittedAt": null
+            }
+          ]
+        }
+      }
+    }
+  }
+}
