@@ -422,7 +422,8 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // reviewPR starts a review Task for the PR now, outside every queue's slots.
-// If the PR has an open review Task, it focuses that Task's tab instead.
+// If the PR has an open review Task, it starts that Task if it is Queued, runs
+// it again if it stopped for good, and otherwise focuses its tab.
 func (m Model) reviewPR(pr github.PullRequest) tea.Cmd {
 	c, ref := m.client, prRef(pr)
 	return func() tea.Msg {
@@ -430,8 +431,11 @@ func (m Model) reviewPR(pr github.PullRequest) tea.Cmd {
 		if err := c.Do(scheduler.Request{Op: "review", URL: pr.URL}, &res); err != nil {
 			return opMsg{label: "review", task: ref, err: err}
 		}
-		if !res.Existing {
+		switch res.Action {
+		case scheduler.ReviewAdded:
 			return opMsg{label: "review", task: res.ID, note: res.Stage}
+		case scheduler.ReviewStarted, scheduler.ReviewRestarted:
+			return opMsg{label: "review", task: res.ID, note: string(res.Action)}
 		}
 		note := "already open"
 		if err := c.Do(scheduler.Request{Op: "focus", Task: res.ID}, nil); err != nil {

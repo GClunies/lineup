@@ -120,7 +120,7 @@ On a narrow screen the columns drop from the right, with their headings, so that
 | `/` | Fuzzy search the rows |
 | `enter` | Focus the Worker's tab of the joined Task. If no Worker runs for the row, open the PR in the browser. |
 | `o` | Open the PR in the browser |
-| `r` | Start a review Task for this PR now, outside every queue's slots |
+| `r` | Start a review Task for this PR now, outside every queue's slots. If the PR has an open review Task, start or run it again if it is Queued or stopped for good, else focus its tab |
 | `R` | Refresh the view now |
 | `z` | Zoom the Reviewer pane to full height, and back |
 | `?` | Show all keys |
@@ -183,7 +183,7 @@ The Scheduler reads the queues and their slots when it starts. After a change to
 
 A review Task is a Task with Kind `review`. Its ID has the form `R-<n>`, from the same counter as the ad hoc IDs. It keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `r` or `lineup review` has no queue.
 
-`lineup review` and `r` read the URL as `owner/repo#number`. If a review Task for that PR is open, they focus its tab and add nothing. They refuse a PR from a fork, and a PR that is closed or merged.
+`lineup review` and `r` read the URL as `owner/repo#number`. If a review Task for that PR is open, they add nothing. They start that Task if it is Queued. They run it again if it stopped for good, for example after a failed setup. If it runs, they focus its tab. They refuse a PR from a fork, and a PR that is closed or merged.
 
 ### Stages
 

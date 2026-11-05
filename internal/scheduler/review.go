@@ -92,15 +92,12 @@ const (
 // ReviewResult is a review Task that `lineup review` added or found.
 type ReviewResult struct {
 	TaskView
-	// Existing is true when the PR already had an open review Task, so
-	// nothing was added.
-	Existing bool         `json:"existing"`
-	Action   ReviewAction `json:"action"`
+	Action ReviewAction `json:"action"`
 }
 
 // review adds and starts a review Task with no queue for the PR at url. If an
-// open review Task has the PR, it starts that Task if it is Queued and adds
-// nothing.
+// open review Task has the PR, it adds nothing. It starts that Task if it is
+// Queued and runs it again if it stopped for good.
 func (s *Scheduler) review(ctx context.Context, url string) (ReviewResult, error) {
 	key, err := ParseReviewKey(url)
 	if err != nil {
@@ -138,7 +135,7 @@ func (s *Scheduler) review(ctx context.Context, url string) (ReviewResult, error
 			PR:    ReviewPR{Repo: pr.Repo, Number: pr.Number, URL: pr.URL, Head: pr.Head, Base: pr.Base},
 			Title: pr.Title, Repo: repo, Policy: policy,
 		})
-		res = ReviewResult{TaskView: r.view()}
+		res = ReviewResult{TaskView: r.view(), Action: ReviewAdded}
 		return err
 	})
 	return res, err
@@ -196,18 +193,23 @@ func (r *Record) reviewTask() (t github.ReviewTask, ok bool) {
 	return github.ReviewTask{URL: r.Review.URL, Head: r.Review.Head, Done: r.Stage == lifecycle.Done}, true
 }
 
-// startOpenReview finds the open review Task of the PR and starts it if it is
-// Queued. Only the loop calls it.
+// startOpenReview finds the open review Task of the PR. It starts the Task if
+// it is Queued and runs it again if no Worker will, because its flag never
+// clears by itself. Only the loop calls it.
 func (s *Scheduler) startOpenReview(key ReviewKey) (ReviewResult, bool, error) {
 	for _, r := range s.list() {
 		if r.Review == nil || r.Stage == lifecycle.Done || !r.Review.is(key) {
 			continue
 		}
 		var err error
-		if r.Stage == lifecycle.Queued {
-			err = s.apply(r, lifecycle.Start{}, "")
+		action := ReviewOpen
+		switch {
+		case r.Stage == lifecycle.Queued:
+			action, err = ReviewStarted, s.apply(r, lifecycle.Start{}, "")
+		case r.Flag != "" && !r.Flag.Transient():
+			action, err = ReviewRestarted, s.apply(r, lifecycle.Rerun{Stage: lifecycle.Reviewing}, "")
 		}
-		return ReviewResult{TaskView: r.view(), Existing: true}, true, err
+		return ReviewResult{TaskView: r.view(), Action: action}, true, err
 	}
 	return ReviewResult{}, false, nil
 }

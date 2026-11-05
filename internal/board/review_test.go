@@ -442,7 +442,7 @@ func TestReviewRStartsAReviewOfTheSelectedPR(t *testing.T) {
 	}
 
 	e.press("tab", "tab")
-	e.sched.review = scheduler.ReviewResult{TaskView: scheduler.TaskView{ID: "R-3", Stage: "Reviewing"}}
+	e.sched.review = scheduler.ReviewResult{TaskView: scheduler.TaskView{ID: "R-3", Stage: "Reviewing"}, Action: scheduler.ReviewAdded}
 	e.press("r")
 	if c := e.sched.calls; len(c) != 1 || c[0].Op != "review" || c[0].URL != urlBase {
 		t.Fatalf("r sent %+v, want review %s", c, urlBase)
@@ -451,7 +451,6 @@ func TestReviewRStartsAReviewOfTheSelectedPR(t *testing.T) {
 		t.Fatalf("status line = %q", l)
 	}
 
-	e.sched.review.Existing = true
 	e.sched.review.Action = scheduler.ReviewOpen
 	e.press("r")
 	if c := e.sched.calls[1:]; len(c) != 2 || c[0].Op != "review" || c[1].Op != "focus" || c[1].Task != "R-3" {

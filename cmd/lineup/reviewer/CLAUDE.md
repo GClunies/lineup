@@ -18,7 +18,7 @@ You are the Reviewer in lineup. The user talks to you in the bottom bar of the `
 | Close | "drop R-3" | `lineup close R-3` |
 | Archive | "clear R-3 off the Board" | `lineup archive R-3`, only for a Done Task |
 
-`lineup review` makes a review Task, `R-<n>`. Its Worker runs `pr-review` and stops before any write to GitHub. When its findings are ready, the Task alerts with `Review ready`. The user decides each finding in the Worker's tab. If the PR already has an open review Task, `lineup review` focuses its tab and adds nothing.
+`lineup review` makes a review Task, `R-<n>`. Its Worker runs `pr-review` and stops before any write to GitHub. When its findings are ready, the Task alerts with `Review ready`. The user decides each finding in the Worker's tab. If the PR already has an open review Task, `lineup review` adds nothing. It starts the Task if it is Queued, runs it again if it stopped for good, and otherwise focuses its tab.
 
 A review queue starts review Tasks without being asked, up to its slots. `lineup reviews --json` lists each queue with its started review Tasks in `started` and the PRs that wait in `ranked`, first to start first. A pause stops no review that started.
 

@@ -114,7 +114,8 @@ func cmdStart(c scheduler.Client, args []string, out io.Writer) error {
 }
 
 // cmdReview adds and starts a review Task for the PR. If the PR has an open
-// review Task, it focuses that Task's tab and adds nothing.
+// review Task, it adds nothing. It starts that Task if it is Queued, runs it
+// again if it stopped for good, and otherwise focuses its tab.
 func cmdReview(c scheduler.Client, args []string, out io.Writer) error {
 	if len(args) != 1 {
 		return fmt.Errorf("%w: lineup review <PR URL>", errUsage)
@@ -123,8 +124,12 @@ func cmdReview(c scheduler.Client, args []string, out io.Writer) error {
 	if err := c.Do(scheduler.Request{Op: "review", URL: args[0]}, &res); err != nil {
 		return err
 	}
-	if !res.Existing {
+	switch res.Action {
+	case scheduler.ReviewAdded:
 		fmt.Fprintf(out, "%s reviewing in %s: %s\n", res.ID, res.Repo, res.Title)
+		return nil
+	case scheduler.ReviewStarted, scheduler.ReviewRestarted:
+		fmt.Fprintf(out, "%s %s: %s\n", res.ID, res.Action, res.Title)
 		return nil
 	}
 	fmt.Fprintf(out, "%s is already open (%s): %s\n", res.ID, res.Stage, res.Title)

@@ -147,8 +147,8 @@ func fakeScheduler(t *testing.T, replies map[string]scheduler.Response) (schedul
 	}
 }
 
-func reviewReply(t *testing.T, existing bool, action scheduler.ReviewAction) scheduler.Response {
-	data, err := json.Marshal(scheduler.ReviewResult{TaskView: scheduler.TaskView{ID: "R-1", Repo: "data", Stage: "Reviewing", Title: "data#4955 Pull the base images"}, Existing: existing, Action: action})
+func reviewReply(t *testing.T, action scheduler.ReviewAction) scheduler.Response {
+	data, err := json.Marshal(scheduler.ReviewResult{TaskView: scheduler.TaskView{ID: "R-1", Repo: "data", Stage: "Reviewing", Title: "data#4955 Pull the base images"}, Action: action})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func reviewReply(t *testing.T, existing bool, action scheduler.ReviewAction) sch
 }
 
 func TestLineupReviewStartsANewReview(t *testing.T) {
-	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, false, scheduler.ReviewAdded)})
+	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, scheduler.ReviewAdded)})
 	var out bytes.Buffer
 	if err := cmdReview(c, []string{"https://github.com/umbrella/data/pull/4955"}, &out); err != nil {
 		t.Fatal(err)
@@ -170,7 +170,7 @@ func TestLineupReviewStartsANewReview(t *testing.T) {
 }
 
 func TestLineupReviewOfAnOpenReviewFocusesIt(t *testing.T) {
-	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, true, scheduler.ReviewOpen), "focus": {OK: true}})
+	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, scheduler.ReviewOpen), "focus": {OK: true}})
 	var out bytes.Buffer
 	if err := cmdReview(c, []string{"umbrella/data#4955"}, &out); err != nil {
 		t.Fatal(err)
@@ -184,7 +184,7 @@ func TestLineupReviewOfAnOpenReviewFocusesIt(t *testing.T) {
 }
 
 func TestLineupReviewOfAStoppedReviewRestartsItWithoutFocus(t *testing.T) {
-	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, true, scheduler.ReviewRestarted), "focus": {OK: true}})
+	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, scheduler.ReviewRestarted), "focus": {OK: true}})
 	var out bytes.Buffer
 	if err := cmdReview(c, []string{"umbrella/data#4955"}, &out); err != nil {
 		t.Fatal(err)

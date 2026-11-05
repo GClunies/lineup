@@ -105,7 +105,7 @@ func TestReviewFromStartToReviewedAndCleanedUp(t *testing.T) {
 	h.gh.setReview(openPR(7, "h1"))
 
 	res := h.review(prURL7)
-	if res.ID != "R-1" || res.Existing || res.Stage != "Reviewing" || res.Title != "data#7 Fix the tooltip" || res.PRURL != prURL7 || res.ReviewHead != "h1" {
+	if res.ID != "R-1" || res.Action != ReviewAdded || res.Stage != "Reviewing" || res.Title != "data#7 Fix the tooltip" || res.PRURL != prURL7 || res.ReviewHead != "h1" {
 		t.Fatalf("review = %+v", res)
 	}
 	worker := h.waitTab("claude reviewing")
@@ -223,7 +223,7 @@ func TestReviewTwiceOnOnePRMakesOneTask(t *testing.T) {
 	h.waitTab("claude reviewing")
 	for _, again := range []string{prURL7 + "/files", "Acme/Data#7"} {
 		res := h.review(again)
-		if !res.Existing || res.ID != first.ID {
+		if res.Action != ReviewOpen || res.ID != first.ID {
 			t.Fatalf("%s: %+v, want the open %s", again, res, first.ID)
 		}
 	}
@@ -302,7 +302,7 @@ func TestADoneReviewDoesNotBlockANewOne(t *testing.T) {
 	h.review(prURL7)
 	h.do(Request{Op: "close", Task: "R-1"})
 	h.waitStage("R-1", lifecycle.Done)
-	if res := h.review(prURL7); res.Existing || res.ID != "R-2" {
+	if res := h.review(prURL7); res.Action != ReviewAdded || res.ID != "R-2" {
 		t.Fatalf("review after close = %+v, want a new R-2", res)
 	}
 }
