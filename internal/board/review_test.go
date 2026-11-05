@@ -64,7 +64,7 @@ func (f *fakeReviewAPI) TeamMembers(_ context.Context, teams []string) (map[stri
 }
 
 const (
-	urlLogs   = "https://github.com/umbrella/data/pull/4945"
+	urlLogs  = "https://github.com/umbrella/data/pull/4945"
 	urlCSV   = "https://github.com/umbrella/data/pull/4919"
 	urlDraft = "https://github.com/umbrella/backend/pull/25144"
 	urlBase  = "https://github.com/umbrella/data/pull/4955"
@@ -85,8 +85,8 @@ func reviewFixture() map[string][]github.PullRequest {
 			{Repo: "umbrella/data", Number: 4955, Title: "Pull the base images through the cache", URL: urlBase, Author: "goldberg",
 				CreatedAt: epoch.Add(-time.Hour), Checks: github.ChecksPassed, ReviewDecision: "CHANGES_REQUESTED"},
 		},
-		"view:My teammates":   {},
-		"queue:platform": {},
+		"view:My teammates": {},
+		"queue:platform":    {},
 	}
 }
 
@@ -178,8 +178,20 @@ func TestReviewRowsShowTheJoinedTask(t *testing.T) {
 			t.Errorf("joined row lacks %q: %q", want, logsRow)
 		}
 	}
-	if strings.Contains(logsRow, "octocat") {
-		t.Errorf("My PRs shows the author: %q", logsRow)
+	if !strings.Contains(logsRow, "octocat") {
+		t.Errorf("My PRs hides the author: %q", logsRow)
+	}
+	head := line(v, "TITLE")
+	for _, want := range []string{"PR", "TITLE", "AUTHOR", "CI", "REVIEW", "TASK", "AGE"} {
+		if !strings.Contains(head, want) {
+			t.Errorf("header row lacks %q: %q", want, head)
+		}
+	}
+	// Each heading starts at the column of its cells.
+	for _, c := range []struct{ head, cell string }{{"AUTHOR", "octocat"}, {"CI", "◷ CI"}, {"REVIEW", "✓ 1"}, {"TASK", "ENG-614"}, {"AGE", "2d"}} {
+		if hi, ci := strings.Index(head, c.head), strings.Index(logsRow, c.cell); ansi.StringWidth(head[:hi]) != ansi.StringWidth(logsRow[:ci]) {
+			t.Errorf("%s heading at cell %d, %q at cell %d", c.head, ansi.StringWidth(head[:hi]), c.cell, ansi.StringWidth(logsRow[:ci]))
+		}
 	}
 	if csvRow := line(v, "data#4919"); !strings.Contains(csvRow, "✗ CI") || strings.Contains(csvRow, "ENG-") {
 		t.Errorf("unjoined row = %q", csvRow)
@@ -214,6 +226,35 @@ func TestReviewEnterFocusesTheJoinedTaskOrOpensThePR(t *testing.T) {
 	e.press("k", "o")
 	if !slices.Equal(e.opened, []string{urlCSV, urlLogs}) || len(e.sched.calls) != 1 {
 		t.Fatalf("o on a joined row: opened %v, calls %+v", e.opened, e.sched.calls)
+	}
+}
+
+func TestReviewEnterOpensThePRWhenTheTaskHasNoWorker(t *testing.T) {
+	e := newRvEnv(t)
+	b := reviewBoard()
+	b.Tasks[0].Live = false
+	e.m.board, e.m.tasks = b, b.Tasks
+	e.open()
+	if strings.Contains(e.m.View(), "go to the Worker") {
+		t.Error("the footer offers a Worker that does not run")
+	}
+	e.press("enter")
+	if !slices.Equal(e.opened, []string{urlLogs}) || len(e.sched.calls) != 0 {
+		t.Fatalf("enter on a row with no Worker: opened %v, calls %+v", e.opened, e.sched.calls)
+	}
+}
+
+func TestReviewZZoomsTheReviewer(t *testing.T) {
+	e := newRvEnv(t)
+	zoomed := 0
+	e.m.opts.Zoom = func() { zoomed++ }
+	e.open()
+	if !strings.Contains(e.m.View(), "go to the Worker") {
+		t.Error("the footer does not offer the joined Task's Worker")
+	}
+	e.press("z")
+	if zoomed != 1 {
+		t.Fatalf("z zoomed %d times", zoomed)
 	}
 }
 
@@ -371,16 +412,23 @@ func TestReviewRankMovesAndSaves(t *testing.T) {
 	}
 }
 
-func TestReviewNarrowRowKeepsTheTitle(t *testing.T) {
+func TestReviewNarrowRowKeepsTheTitleAndTheTask(t *testing.T) {
 	e := newRvEnv(t)
 	e.open()
-	e.m.width = 50
-	logsRow := line(e.m.View(), "data#4945")
+	e.m.width = 70
+	v := e.m.View()
+	logsRow := line(v, "data#4945")
 	if !strings.Contains(logsRow, "Write the usage logs aga") {
 		t.Fatalf("the title lost its 24 cells: %q", logsRow)
 	}
-	if strings.Contains(logsRow, "2d") || strings.Contains(logsRow, "ENG-614") {
-		t.Fatalf("the fields at the right did not drop first: %q", logsRow)
+	if !strings.Contains(logsRow, "ENG-614") {
+		t.Fatalf("the TASK column dropped before the others: %q", logsRow)
+	}
+	if strings.Contains(logsRow, "octocat") || strings.Contains(logsRow, "2d") {
+		t.Fatalf("AUTHOR and AGE did not drop first: %q", logsRow)
+	}
+	if head := line(v, "TITLE"); strings.Contains(head, "AUTHOR") || strings.Contains(head, "AGE") || !strings.Contains(head, "TASK") {
+		t.Fatalf("the header row does not match the cells: %q", head)
 	}
 }
 

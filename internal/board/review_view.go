@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/scheduler"
@@ -36,63 +37,85 @@ func (m Model) reviewBody() string {
 	case len(rows) == 0:
 		lines = append(lines, dim.Render(" no PRs"))
 	default:
-		lines = append(lines, m.prRows(rows, tb.Key != keyMine)...)
+		lines = append(lines, m.prRows(rows)...)
 	}
 	return strings.Join(lines, "\n")
 }
 
-// prRows lays out the rows in columns. On a narrow screen the fields drop
-// from the right, so that the title keeps minTitle cells.
-func (m Model) prRows(rows []github.PullRequest, withAuthor bool) []string {
+// prColumns are the columns at the right of the title, in display order.
+var prColumns = []string{"AUTHOR", "CI", "REVIEW", "TASK", "AGE"}
+
+// prDropOrder is the order in which a narrow screen drops the columns. TASK
+// goes last, because it leads to the Worker.
+var prDropOrder = []int{0, 4, 2, 1, 3} // AUTHOR, AGE, REVIEW, CI, TASK
+
+// colGap is the space before each column after the first.
+const colGap = "   "
+
+// prRows lays out the rows in columns under a header row. On a narrow screen
+// the columns drop in prDropOrder, so that the title keeps minTitle cells.
+func (m Model) prRows(rows []github.PullRequest) []string {
 	join := m.joinPR()
-	type cells struct {
-		ref, author, task, age string
-		status                 []seg
+	all := make([][][]seg, len(rows)) // for each row, a cell for each of prColumns
+	refW, titleW := len("PR"), len("TITLE")
+	widths := make([]int, len(prColumns))
+	for i, c := range prColumns {
+		widths[i] = len(c)
 	}
-	all := make([]cells, len(rows))
-	refW := 0
-	widths := make([]int, 4) // author, status, task, age
 	for i, pr := range rows {
-		c := cells{ref: prRef(pr), status: prStatus(pr), age: ago(m.opts.Now().Sub(pr.CreatedAt))}
-		if withAuthor {
-			c.author = pr.Author
-		}
+		task := ""
 		if t, ok := join[pr.URL]; ok {
-			c.task = taskText(t)
+			task = taskText(t)
 		}
-		all[i] = c
-		refW = max(refW, lipgloss.Width(c.ref))
-		for j, w := range []int{min(lipgloss.Width(c.author), 18), segsWidth(c.status), min(lipgloss.Width(c.task), 32), lipgloss.Width(c.age)} {
-			widths[j] = max(widths[j], w)
+		all[i] = [][]seg{
+			{{pr.Author, dim}},
+			prCI(pr),
+			prReview(pr),
+			{{task, good}},
+			{{ago(m.opts.Now().Sub(pr.CreatedAt)), dim}},
+		}
+		refW = max(refW, lipgloss.Width(prRef(pr)))
+		titleW = max(titleW, lipgloss.Width(pr.Title))
+		for j, cell := range all[i] {
+			widths[j] = max(widths[j], segsWidth(cell))
 		}
 	}
-	// marker 3, then two cells of gap before each column after the ref
-	used := func(n int) int {
-		u := 3 + refW + 2
-		for _, w := range widths[:n] {
-			if w > 0 {
-				u += w + 2
+	widths[0], widths[3] = min(widths[0], 18), min(widths[3], 32)
+	// marker 3, then the ref, then a gap before the title and each shown column
+	shown := []bool{true, true, true, true, true}
+	used := func() int {
+		u := 3 + refW + len(colGap)
+		for j, w := range widths {
+			if shown[j] {
+				u += len(colGap) + w
 			}
 		}
 		return u
 	}
-	keep := len(widths)
-	for keep > 0 && m.width-used(keep) < minTitle {
-		keep--
+	for _, j := range prDropOrder {
+		if m.width-used() >= minTitle {
+			break
+		}
+		shown[j] = false
 	}
-	titleW := max(m.width-used(keep), 1)
+	titleW = max(min(titleW, m.width-used()), 1)
 
+	headCells := []string{pad("PR", refW), colGap + pad("TITLE", titleW)}
+	for j, c := range prColumns {
+		if shown[j] {
+			headCells = append(headCells, colGap+pad(c, widths[j]))
+		}
+	}
+	out := []string{ansi.Truncate(colHead.Render("   "+strings.Join(headCells, "")), m.width, "…")}
 	sel := m.rv.selected(rows)
-	var out []string
 	for i, pr := range rows {
-		c := all[i]
-		ss := []seg{{pad(c.ref, refW), plain}, {"  " + pad(pr.Title, titleW), plain}}
-		cols := [][]seg{{{pad(c.author, widths[0]), dim}}, padSegs(c.status, widths[1]), {{pad(c.task, widths[2]), good}}, {{pad(c.age, widths[3]), dim}}}
-		for j := range keep {
-			if widths[j] > 0 {
-				ss = append(ss, seg{"  ", plain})
-				ss = append(ss, cols[j]...)
+		ss := []seg{{pad(prRef(pr), refW), plain}, {colGap + pad(pr.Title, titleW), plain}}
+		for j := range prColumns {
+			if !shown[j] {
+				continue
 			}
+			ss = append(ss, seg{colGap, plain})
+			ss = append(ss, padSegs(truncSegs(all[i][j], widths[j]), widths[j])...)
 		}
 		out = append(out, m.richRow(i == sel, pr.Draft, ss))
 	}
@@ -104,19 +127,25 @@ func prRef(pr github.PullRequest) string {
 	return pr.Repo[strings.LastIndex(pr.Repo, "/")+1:] + fmt.Sprintf("#%d", pr.Number)
 }
 
-// prStatus is the CI state and the review decision, or draft.
-func prStatus(pr github.PullRequest) []seg {
-	if pr.Draft {
+// prCI is the CI state, or draft.
+func prCI(pr github.PullRequest) []seg {
+	switch {
+	case pr.Draft:
 		return []seg{{"draft", dim}}
+	case pr.Checks == github.ChecksPassed:
+		return []seg{{"✓ CI", good}}
+	case pr.Checks == github.ChecksFailed:
+		return []seg{{"✗ CI", bad}}
+	case pr.Checks == github.ChecksPending:
+		return []seg{{"◷ CI", yellow}}
 	}
-	var ss []seg
-	switch pr.Checks {
-	case github.ChecksPassed:
-		ss = append(ss, seg{"✓ CI", good})
-	case github.ChecksFailed:
-		ss = append(ss, seg{"✗ CI", bad})
-	case github.ChecksPending:
-		ss = append(ss, seg{"◷ CI", yellow})
+	return nil
+}
+
+// prReview is the review decision: changes requested, or the approvals.
+func prReview(pr github.PullRequest) []seg {
+	if pr.Draft {
+		return nil
 	}
 	approvals := 0
 	for _, rv := range pr.LatestReviews {
@@ -124,19 +153,29 @@ func prStatus(pr github.PullRequest) []seg {
 			approvals++
 		}
 	}
-	var decision seg
 	switch {
 	case pr.ReviewDecision == "CHANGES_REQUESTED":
-		decision = seg{"✗ changes", bad}
+		return []seg{{"✗ changes", bad}}
 	case approvals > 0:
-		decision = seg{fmt.Sprintf("✓ %d", approvals), good}
-	default:
-		return ss
+		return []seg{{fmt.Sprintf("✓ %d", approvals), good}}
 	}
-	if len(ss) > 0 {
-		ss = append(ss, seg{"  ", plain})
+	return nil
+}
+
+// truncSegs cuts the segments to w cells.
+func truncSegs(ss []seg, w int) []seg {
+	var out []seg
+	for _, s := range ss {
+		if w <= 0 {
+			break
+		}
+		if lipgloss.Width(s.text) > w {
+			s.text = ansi.Truncate(s.text, w, "…")
+		}
+		w -= lipgloss.Width(s.text)
+		out = append(out, s)
 	}
-	return append(ss, decision)
+	return out
 }
 
 func padSegs(ss []seg, w int) []seg {
@@ -167,14 +206,12 @@ func (m Model) reviewFooter() string {
 	}
 	hs := []hint{{"tab", "next view"}}
 	if pr, ok := m.rv.current(); ok {
-		if _, joined := m.joinPR()[pr.URL]; joined {
-			hs = append(hs, hint{"enter", "go to the Task"})
-		} else {
-			hs = append(hs, hint{"enter", "open the PR"})
+		if t, joined := m.joinPR()[pr.URL]; joined && t.Live {
+			hs = append(hs, hint{"enter", "go to the Worker"})
 		}
 		hs = append(hs, hint{"o", "open the PR"}, hint{"r", "review now"})
 	}
-	hs = append(hs, hint{"/", "search"}, hint{"R", "refresh"}, hint{"< >", "move the tab"}, hint{"j/k", "move"}, hint{"q", "quit"}, hint{"?", "all keys"})
+	hs = append(hs, hint{"/", "search"}, hint{"z", "agent"}, hint{"R", "refresh"}, hint{"< >", "move the tab"}, hint{"j/k", "move"}, hint{"q", "quit"}, hint{"?", "all keys"})
 	return hintBar(m.width, hs)
 }
 
@@ -183,17 +220,19 @@ const reviewHelp = `
 
    The tabs are My PRs, Requested, then each [[review.views]] and
    [[review.queues]] entry of the config. A row shows the Task that has
-   its PR, if one is on the Board. A Q: tab lists the PRs that wait for
+   its PR, if one is on the Board, in the TASK column. A Q: tab lists the PRs that wait for
    the queue, first to start first.
 
    tab      next view       shift+tab  previous view
    < >      move this view's tab left or right; lineup keeps the order
    j k      move the selection
    /        fuzzy search in this list
-   enter    go to the Task's tab, or open the PR when no Task has it
+   enter    go to the Worker's tab of the Task in the TASK column, or
+            open the PR when no Worker runs for it
    o        open the PR in the browser
    r        start a review Task for this PR now, outside every queue's slots
    R        refresh now; lineup also refreshes every 2 minutes
+   z        zoom the Reviewer below to full height, and back
    ?        this help      q  quit
 
  press any key to go back

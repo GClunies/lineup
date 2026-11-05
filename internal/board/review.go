@@ -397,11 +397,15 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		r.filter.SetValue("")
 	case "R":
 		return m, m.refreshReviews()
+	case "z":
+		if m.opts.Zoom != nil {
+			m.opts.Zoom()
+		}
 	case "enter":
 		if len(rows) == 0 {
 			return m, nil
 		}
-		if t, ok := m.joinPR()[rows[i].URL]; ok {
+		if t, ok := m.joinPR()[rows[i].URL]; ok && t.Live {
 			return m, m.op("focus", scheduler.Request{Op: "focus", Task: t.ID})
 		}
 		return m, m.openURL(rows[i].URL)

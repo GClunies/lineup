@@ -22,6 +22,7 @@ var (
 	bad     = lipgloss.NewStyle().Foreground(pink)
 	selRow  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e3f1ef"))
 	headRow = lipgloss.NewStyle().Foreground(teal).Bold(true)
+	colHead = lipgloss.NewStyle().Foreground(gray).Bold(true)
 )
 
 var groupMark = map[string]string{"Needs you": "●", "Working": "◐", "Waiting": "◷"}
