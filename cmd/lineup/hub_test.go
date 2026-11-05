@@ -9,9 +9,6 @@ import (
 
 func TestAgentTabSettings(t *testing.T) {
 	for _, tab := range agentTabs {
-		if tab.agent == "" {
-			continue
-		}
 		var v struct {
 			Permissions struct {
 				Allow []string `json:"allow"`
@@ -39,9 +36,6 @@ func TestAgentTabsAreDistinct(t *testing.T) {
 	seen := map[string]bool{}
 	for _, tab := range agentTabs {
 		for _, k := range []string{tab.window, tab.view, tab.agent} {
-			if k == "" {
-				continue
-			}
 			if seen[k] {
 				t.Errorf("label %q is used twice", k)
 			}
@@ -110,14 +104,36 @@ func TestThePlannerLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 	}
 }
 
-func TestTheReviewTabRunsTheReviewBoardAlone(t *testing.T) {
+func TestTheReviewTabHasTheReviewer(t *testing.T) {
 	i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == "review" })
 	if i < 0 {
 		t.Fatal("the Hub has no review tab")
 	}
 	tab := agentTabs[i]
-	if tab.view != "REVIEWS" || !slices.Equal(tab.boardArgs, []string{"board", "--review"}) || tab.agent != "" {
-		t.Errorf("review tab = %+v", tab)
+	if tab.view != "REVIEWS" || !slices.Equal(tab.boardArgs, []string{"board", "--review"}) || tab.agent != "REVIEWER" {
+		t.Errorf("review tab = %s %s %s %v", tab.window, tab.view, tab.agent, tab.boardArgs)
+	}
+	if !strings.Contains(string(tab.role), "# Reviewer") {
+		t.Error("the review tab has no Reviewer role")
+	}
+	var v struct {
+		Permissions struct {
+			Allow []string `json:"allow"`
+			Deny  []string `json:"deny"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(tab.settings), &v); err != nil {
+		t.Fatalf("reviewer settings are not valid JSON: %v", err)
+	}
+	for _, cmd := range []string{"Bash(lineup review:*)", "Bash(lineup reviews:*)", "Bash(lineup steer:*)"} {
+		if !slices.Contains(v.Permissions.Allow, cmd) {
+			t.Errorf("reviewer settings do not allow %s", cmd)
+		}
+	}
+	for _, cmd := range []string{"Bash(lineup start:*)", "Bash(lineup merge:*)", "Bash(gh pr review:*)", "Bash(gh pr comment:*)", "Bash(gh api:*)"} {
+		if !slices.Contains(v.Permissions.Deny, cmd) || slices.Contains(v.Permissions.Allow, cmd) {
+			t.Errorf("reviewer settings do not deny %s", cmd)
+		}
 	}
 }
 

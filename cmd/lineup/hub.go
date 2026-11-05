@@ -25,6 +25,9 @@ var orchestratorRole []byte
 //go:embed planner/CLAUDE.md
 var plannerRole []byte
 
+//go:embed reviewer/CLAUDE.md
+var reviewerRole []byte
+
 //go:embed planner/linear.md
 var plannerLinear []byte
 
@@ -104,8 +107,41 @@ const plannerSettings = `{
 }
 `
 
-// agentTab is one Hub tab: a Board view on top and a Claude agent below. A
-// tab with no agent holds the Board view alone, at full height.
+// reviewerSettings gives the Reviewer its status line, lets it run the review
+// commands, and keeps it from starting build Tasks or writing to GitHub.
+const reviewerSettings = `{
+  "statusLine": {"type": "command", "command": "echo Reviewer"},
+  "permissions": {
+    "allow": [
+      "Bash(lineup review:*)",
+      "Bash(lineup reviews:*)",
+      "Bash(lineup ls:*)",
+      "Bash(lineup show:*)",
+      "Bash(lineup steer:*)",
+      "Bash(lineup rerun:*)",
+      "Bash(lineup close:*)",
+      "Bash(lineup archive:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh search prs:*)"
+    ],
+    "deny": [
+      "Bash(lineup add:*)",
+      "Bash(lineup start:*)",
+      "Bash(lineup merge:*)",
+      "Bash(lineup watch:*)",
+      "Bash(gh pr review:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr close:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh api:*)"
+    ]
+  }
+}
+`
+
+// agentTab is one Hub tab: a Board view on top and a Claude agent below.
 type agentTab struct {
 	window, view, agent string // Rex window label, top block label, agent block label
 	boardArgs           []string
@@ -121,7 +157,7 @@ type agentTab struct {
 var agentTabs = []agentTab{
 	{"orchestrate", "BOARD", "ORCHESTRATOR", []string{"board"}, orchestratorRole, orchestratorSettings, "#1b2733", watchPrompt, nil},
 	{"plan", "LINEAR", "PLANNER", []string{"board", "--linear"}, plannerRole, plannerSettings, "#2a2233", "", composePlanner},
-	{"review", "REVIEWS", "", []string{"board", "--review"}, nil, "", "", "", nil},
+	{"review", "REVIEWS", "REVIEWER", []string{"board", "--review"}, reviewerRole, reviewerSettings, "#1f2b24", "", nil},
 }
 
 func rexRun(args ...string) ([]byte, error) {
@@ -314,12 +350,9 @@ func openHub() error {
 }
 
 func openAgentTab(t agentTab, self, claudeBin string, focus bool) error {
-	var dir string
-	if t.agent != "" {
-		var err error
-		if dir, err = prepareAgent(t); err != nil {
-			return err
-		}
+	dir, err := prepareAgent(t)
+	if err != nil {
+		return err
 	}
 	out, err := rexRun(append([]string{"window", "new", "-s", hubSession, t.window, "--focus=" + strconv.FormatBool(focus), "--json", "--", self}, t.boardArgs...)...)
 	if err != nil {
@@ -331,9 +364,6 @@ func openAgentTab(t agentTab, self, claudeBin string, focus bool) error {
 	}
 	if _, err := rexRun("block", "rename", "-s", hubSession, top, t.view); err != nil {
 		return err
-	}
-	if t.agent == "" {
-		return nil
 	}
 	args := append([]string{"split", "-s", hubSession, "-b", top, "--split", "below",
 		"--ratio", fmt.Sprint(agentRows), "--focus=false", "--json", "-c", dir, "--"},
@@ -407,10 +437,11 @@ func runBoard(args []string) error {
 	if len(args) > 1 || (flag != "" && flag != "--linear" && flag != "--review") {
 		return fmt.Errorf("usage: lineup board [--linear | --review]")
 	}
-	opts := board.Options{Linear: flag == "--linear", Review: flag == "--review"}
-	// The review tab has no agent pane to zoom.
-	if target := map[string]string{"": "ORCHESTRATOR", "--linear": "PLANNER"}[flag]; target != "" {
-		opts.Zoom = func() { rexRun("zoom", "-s", hubSession, target) }
+	target := map[string]string{"": "ORCHESTRATOR", "--linear": "PLANNER", "--review": "REVIEWER"}[flag]
+	opts := board.Options{
+		Linear: flag == "--linear",
+		Review: flag == "--review",
+		Zoom:   func() { rexRun("zoom", "-s", hubSession, target) },
 	}
 	opts.Reviews = reviewStores(stateDir())
 	if g, err := config.Load(configPath()); err == nil { // a bad file only means defaults here

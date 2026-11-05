@@ -94,16 +94,19 @@ The user ranks the tabs with `<` and `>`. lineup keeps the rank in `review_views
  ▸ data#4955   Pull the base images through …   goldberg        R-12 Review ready   1h
 ```
 
-A row shows these fields, in this order:
+A header row names the columns. A row shows these columns, in this order, with 3 cells between them:
 
-1. The short repository name and the number.
-2. The title.
-3. The author, except in `My PRs`.
-4. The CI state and the review decision, or `draft`.
-5. The joined Task, if one exists.
-6. The age of the PR.
+| Column | Shows |
+|---|---|
+| `PR` | The short repository name and the number |
+| `TITLE` | The title |
+| `AUTHOR` | The author, in every view |
+| `CI` | The CI state, or `draft` |
+| `REVIEW` | `✗ changes` when changes are requested, or the count of approvals |
+| `TASK` | The joined Task, if one exists |
+| `AGE` | The age of the PR |
 
-On a narrow screen the fields drop from the right, so that the title keeps at least 24 cells.
+On a narrow screen the columns drop from the right, with their headings, so that the title keeps at least 24 cells.
 
 **The Task join.** A row joins the Task whose `pr_url` is the row's PR URL. A Task that builds a PR gets its URL from the Scheduler's poll. A review Task gets the URL from the moment it is added. A joined row shows the Task ID and its Stage, or its Needs you reason. A Done Task that left the Board does not join.
 
@@ -115,10 +118,11 @@ On a narrow screen the fields drop from the right, so that the title keeps at le
 | `<` `>` | Move this view's tab left or right, and save the rank |
 | `j` `k` | Move the selection |
 | `/` | Fuzzy search the rows |
-| `enter` | Focus the joined Task's tab. With no joined Task, open the PR in the browser. |
+| `enter` | Focus the Worker's tab of the joined Task. If no Worker runs for the row, open the PR in the browser. |
 | `o` | Open the PR in the browser |
 | `r` | Start a review Task for this PR now, outside every queue's slots |
 | `R` | Refresh the view now |
+| `z` | Zoom the Reviewer pane to full height, and back |
 | `?` | Show all keys |
 
 ### Refresh and cache
@@ -300,8 +304,14 @@ The Orchestrator maps "review <url>" and `/pr-review <url>` to `lineup review <u
 | `internal/board` | The review view: a PR list model, its cache, its keys, and the Task join |
 | `cmd/lineup` | The `review` Hub tab, `lineup board --review`, `lineup review`, `lineup reviews` |
 | Orchestrator instructions | The review rows |
+| Reviewer instructions | `cmd/lineup/reviewer/CLAUDE.md` |
 
-The `review` Hub tab holds one pane, `REVIEWS`, which runs `lineup board --review` at full height. It has no agent pane. The reviews run in their own tabs, and the Orchestrator in the `orchestrate` tab takes every request.
+The `review` Hub tab has two panes, as the `orchestrate` and `plan` tabs do:
+
+- `REVIEWS` on top runs `lineup board --review`.
+- `REVIEWER` below runs Claude with the Reviewer role. It adds, steers, reruns, and closes review Tasks, and it pauses and resumes the queues, all through the `lineup` CLI.
+
+The Reviewer's settings deny `lineup add`, `lineup start`, `lineup merge`, and every GitHub write. The reviews run in their own tabs. The Orchestrator keeps its review rows, so that either agent takes a review request.
 
 ## Success criteria and tests
 
