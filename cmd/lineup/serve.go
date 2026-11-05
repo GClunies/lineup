@@ -128,6 +128,7 @@ func serve() error {
 		DefaultCap:   defaults.WIPCap,
 		PollInterval: defaults.PollInterval,
 		AdHocSession: adHoc,
+		Queues:       reviewQueues(cfg),
 		StateHome:    xdgStateHome(),
 		BoardCache:   filepath.Join(stateDir(), "board.json"),
 		Log:          log,

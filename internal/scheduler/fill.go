@@ -1,11 +1,137 @@
 package scheduler
 
 import (
+	"context"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 )
+
+// membersEvery is how long the Scheduler keeps the members of a team.
+const membersEvery = time.Hour
+
+// fill starts the review Tasks that the queues want. Only one fill runs at a
+// time: a fill that is due while another runs is skipped. The candidate
+// check, the count, the add, and the start happen in one loop call, so a
+// second fill in the same state starts nothing.
+func (s *Scheduler) fill(ctx context.Context) {
+	if len(s.d.Queues) == 0 || !s.filling.CompareAndSwap(false, true) {
+		return
+	}
+	defer s.filling.Store(false)
+	rows, err := s.readQueues(ctx)
+	if err != nil {
+		s.d.Log.Error("review queues", "err", err)
+		return
+	}
+	if len(rows.Skipped) > 0 {
+		s.d.Log.Warn("review queues skip PRs", "why", strings.Join(rows.Skipped, "; "))
+	}
+	s.call(func() { s.applyFill(planFill(s.fillInput(rows))) })
+}
+
+// queueRows is what a fill reads outside the loop: each queue's search rows,
+// the Repo of each GitHub repository that has a candidate, and why the other
+// repositories have none.
+type queueRows struct {
+	Found   map[string][]github.PullRequest
+	Repos   map[string]queueRepo
+	Skipped []string
+}
+
+// readQueues searches every queue in one GraphQL call, then finds the Repo of
+// each repository that has a candidate. It reads GitHub and files, so only
+// lanes and API handlers call it, never the loop.
+func (s *Scheduler) readQueues(ctx context.Context) (queueRows, error) {
+	members, err := s.teamMembers(ctx)
+	if err != nil {
+		return queueRows{}, err
+	}
+	var searches []github.Search
+	for _, q := range s.d.Queues {
+		// With every author team empty, the search would match every author.
+		if query, ok := q.Filter.Query(members); ok {
+			searches = append(searches, github.Search{Key: q.Name, Name: "Q: " + q.Name, Query: query})
+		}
+	}
+	found, err := s.d.GitHub.SearchPRs(ctx, searches)
+	if err != nil {
+		return queueRows{}, err
+	}
+	rows := queueRows{Found: found, Repos: map[string]queueRepo{}}
+	tried := map[string]bool{}
+	for _, q := range s.d.Queues {
+		for _, c := range github.Candidates(found[q.Name], nil) {
+			slug := strings.ToLower(c.PR.Repo)
+			if tried[slug] {
+				continue
+			}
+			tried[slug] = true
+			repo, policy, err := s.reviewRepo(c.PR.Repo)
+			if err != nil {
+				rows.Skipped = append(rows.Skipped, err.Error())
+				continue
+			}
+			rows.Repos[slug] = queueRepo{Repo: repo, Policy: policy}
+		}
+	}
+	return rows, nil
+}
+
+// teamMembers reads the members of the queues' author teams once an hour.
+func (s *Scheduler) teamMembers(ctx context.Context) (map[string][]string, error) {
+	var teams []string
+	for _, q := range s.d.Queues {
+		for _, t := range q.Filter.AuthorTeams {
+			if !slices.Contains(teams, t) {
+				teams = append(teams, t)
+			}
+		}
+	}
+	if len(teams) == 0 {
+		return nil, nil
+	}
+	var members map[string][]string
+	var at time.Time
+	s.call(func() { members, at = s.members, s.membersAt })
+	if s.now().Sub(at) < membersEvery {
+		return members, nil
+	}
+	members, err := s.d.GitHub.TeamMembers(ctx, teams)
+	if err != nil {
+		return nil, err
+	}
+	at = s.now()
+	s.call(func() { s.members, s.membersAt = members, at })
+	return members, nil
+}
+
+// fillInput is the state that planFill reads. Only the loop calls it.
+func (s *Scheduler) fillInput(rows queueRows) fillInput {
+	return fillInput{Queues: s.d.Queues, Records: s.list(), Found: rows.Found, Repos: rows.Repos}
+}
+
+// applyFill starts and adds what the plan names. Only the loop calls it.
+func (s *Scheduler) applyFill(p fillPlan) {
+	for _, id := range p.Start {
+		if err := s.apply(s.recs[id], lifecycle.Start{}, ""); err != nil {
+			s.d.Log.Error("review queue start", "task", id, "err", err)
+		}
+	}
+	for _, a := range p.Add {
+		pr := a.PR
+		_, err := s.addReview(reviewAdd{
+			PR:    ReviewPR{Repo: pr.Repo, Number: pr.Number, URL: pr.URL, Head: pr.Head, Base: pr.Base},
+			Title: pr.Title, Repo: a.Repo.Repo, Policy: a.Repo.Policy, Queue: a.Queue,
+		})
+		if err != nil {
+			s.d.Log.Error("review queue add", "queue", a.Queue, "pr", pr.URL, "err", err)
+		}
+	}
+}
 
 // Queue is a [[review.queues]] entry: the filter of its search, and how many
 // of its review Tasks can be started at one time.

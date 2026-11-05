@@ -1,8 +1,12 @@
 package scheduler
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -134,5 +138,150 @@ func TestPlanFillRanksEachQueueAlsoWhilePaused(t *testing.T) {
 	}
 	if !slices.Equal(got, []int{3}) {
 		t.Fatalf("ranked %v, want only #3: #1 has an open review, and #9 has no checkout", got)
+	}
+}
+
+// queueHarness runs a Scheduler with the queues and no poll tick, so that a
+// test runs each fill itself.
+func queueHarness(t *testing.T, queues ...Queue) *harness {
+	return newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) {
+		d.Queues, d.PollInterval = queues, time.Hour
+	})
+}
+
+func authorQueue(name string, slots int, author string) Queue {
+	return Queue{Name: name, Slots: slots, Filter: github.Filter{Base: github.QueuePRs, Repos: []string{"acme/data"}, Authors: []string{author}}}
+}
+
+// reviews lists the review Tasks on the Board as "<id> #<number> <stage>".
+func (h *harness) reviews() []string {
+	h.t.Helper()
+	var out []string
+	for _, v := range h.do(Request{Op: "ls"}).(BoardView).Tasks {
+		if strings.HasPrefix(v.ID, "R-") {
+			out = append(out, fmt.Sprintf("%s #%d %s", v.ID, v.PRNumber, v.Stage))
+		}
+	}
+	return out
+}
+
+func TestRepeatedFillsInOneStateAddEachReviewOnce(t *testing.T) {
+	h := queueHarness(t, authorQueue("q1", 1, "hopper"), authorQueue("q2", 1, "ada"))
+	p7, p8 := queuePR("acme/data", 7, 30), queuePR("acme/data", 8, 20)
+	h.gh.found = map[string][]github.PullRequest{"q1": {p7, p8}, "q2": {p8, p7}}
+	// One Repo takes one start in each fill, so q2 waits for the second fill.
+	want := [][]string{
+		{"R-1 #7 Reviewing"},
+		{"R-1 #7 Reviewing", "R-2 #8 Reviewing"},
+		{"R-1 #7 Reviewing", "R-2 #8 Reviewing"},
+		{"R-1 #7 Reviewing", "R-2 #8 Reviewing"},
+	}
+	for i, w := range want {
+		h.s.fill(context.Background())
+		if got := h.reviews(); !slices.Equal(got, w) {
+			t.Fatalf("after fill %d: %v, want %v", i+1, got, w)
+		}
+	}
+	for i, ss := range h.gh.searchCalls() {
+		if len(ss) != 2 || ss[0].Key != "q1" || ss[1].Key != "q2" || !strings.Contains(ss[0].Query, "author:hopper") {
+			t.Fatalf("search %d = %+v, want both queues in one call", i+1, ss)
+		}
+	}
+}
+
+func TestTheTickFillsAQueueOnce(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) {
+		d.Queues = []Queue{authorQueue("q", 1, "hopper")}
+	})
+	h.gh.mu.Lock()
+	h.gh.found = map[string][]github.PullRequest{"q": {queuePR("acme/data", 7, 30), queuePR("acme/data", 8, 20)}}
+	h.gh.mu.Unlock()
+	eventually(t, "the tick's fill", func() bool { return len(h.reviews()) == 1 })
+	after := len(h.gh.searchCalls())
+	eventually(t, "five more fills", func() bool { return len(h.gh.searchCalls()) >= after+5 })
+	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Reviewing"}) {
+		t.Fatalf("reviews %v, want one review of #7", got)
+	}
+	eventually(t, "the review worktree", func() bool { h.wt.mu.Lock(); defer h.wt.mu.Unlock(); return len(h.wt.added) == 1 })
+	h.wt.mu.Lock()
+	defer h.wt.mu.Unlock()
+	if !slices.Equal(h.wt.added, []int{7}) {
+		t.Fatalf("review worktrees for %v, want #7 once", h.wt.added)
+	}
+}
+
+func TestAFillThatIsDueWhileAnotherRunsIsSkipped(t *testing.T) {
+	h := queueHarness(t, authorQueue("q", 3, "hopper"))
+	hold := make(chan struct{})
+	h.gh.found, h.gh.hold = map[string][]github.PullRequest{"q": {queuePR("acme/data", 7, 30)}}, hold
+	first := make(chan struct{})
+	go func() { h.s.fill(context.Background()); close(first) }()
+	eventually(t, "the first fill's search", func() bool { return len(h.gh.searchCalls()) == 1 })
+
+	second := make(chan struct{})
+	go func() { h.s.fill(context.Background()); close(second) }()
+	select {
+	case <-second:
+	case <-time.After(time.Second):
+		t.Fatal("the second fill waited for the first")
+	}
+	if n := len(h.gh.searchCalls()); n != 1 {
+		t.Fatalf("%d searches, want the second fill skipped", n)
+	}
+	close(hold)
+	<-first
+	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Reviewing"}) {
+		t.Fatalf("reviews %v, want the first fill's review", got)
+	}
+	h.s.fill(context.Background())
+	if n := len(h.gh.searchCalls()); n != 2 {
+		t.Fatalf("%d searches, want a fill after the first one ends to run", n)
+	}
+}
+
+func TestOnlyAFullPollFills(t *testing.T) {
+	h := queueHarness(t, authorQueue("q", 1, "hopper"))
+	h.gh.found = map[string][]github.PullRequest{"q": {queuePR("acme/data", 7, 30)}}
+	h.s.poll(context.Background(), []string{"R-9"})
+	if n, got := len(h.gh.searchCalls()), h.reviews(); n != 0 || len(got) != 0 {
+		t.Fatalf("a poll for one Task searched %d times and added %v", n, got)
+	}
+	h.s.poll(context.Background(), nil)
+	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Reviewing"}) {
+		t.Fatalf("a full poll added %v, want R-1", got)
+	}
+}
+
+func TestAFillSkipsAPRWithNoCheckout(t *testing.T) {
+	h := queueHarness(t, authorQueue("q", 1, "hopper"))
+	h.gh.found = map[string][]github.PullRequest{"q": {queuePR("acme/other", 9, 99), queuePR("acme/data", 7, 30)}}
+	h.s.fill(context.Background())
+	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Reviewing"}) {
+		t.Fatalf("reviews %v, want #7: acme/other has no checkout", got)
+	}
+}
+
+func TestAFillReadsTeamMembersOnceAnHour(t *testing.T) {
+	var mu sync.Mutex
+	now := time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC)
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) {
+		d.Queues, d.PollInterval = []Queue{{Name: "q", Slots: 1, Filter: github.Filter{Base: github.QueuePRs, AuthorTeams: []string{"acme/eng"}}}}, time.Hour
+		d.Now = func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
+	})
+	h.gh.members = map[string][]string{"acme/eng": {"ada"}}
+	for range 3 {
+		h.s.fill(context.Background())
+	}
+	mu.Lock()
+	now = now.Add(time.Hour)
+	mu.Unlock()
+	h.s.fill(context.Background())
+	if h.gh.memberCalls != 2 {
+		t.Fatalf("%d team reads in 4 fills over an hour, want 2", h.gh.memberCalls)
+	}
+	for _, ss := range h.gh.searchCalls() {
+		if !strings.Contains(ss[0].Query, "author:ada") {
+			t.Fatalf("query %q lacks the team's member", ss[0].Query)
+		}
 	}
 }

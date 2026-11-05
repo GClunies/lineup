@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/store"
 )
@@ -112,6 +113,47 @@ type fakeGitHub struct {
 	// polled is every key that a branch poll asked for.
 	polled  []PRKey
 	reviews map[ReviewKey]ReviewSnapshot
+	// found is each queue search's rows, by queue name. searches logs each
+	// SearchPRs call, and a search waits for hold while hold is set.
+	found       map[string][]github.PullRequest
+	searches    [][]github.Search
+	hold        chan struct{}
+	members     map[string][]string
+	memberCalls int
+}
+
+func (g *fakeGitHub) SearchPRs(_ context.Context, ss []github.Search) (map[string][]github.PullRequest, error) {
+	g.mu.Lock()
+	g.searches = append(g.searches, ss)
+	hold := g.hold
+	g.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := map[string][]github.PullRequest{}
+	for _, s := range ss {
+		out[s.Key] = slices.Clone(g.found[s.Key])
+	}
+	return out, nil
+}
+
+func (g *fakeGitHub) TeamMembers(_ context.Context, teams []string) (map[string][]string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.memberCalls++
+	out := map[string][]string{}
+	for _, t := range teams {
+		out[t] = g.members[t]
+	}
+	return out, nil
+}
+
+func (g *fakeGitHub) searchCalls() [][]github.Search {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return slices.Clone(g.searches)
 }
 
 var signalsByName = map[string]lifecycle.Signal{
@@ -304,7 +346,7 @@ type harness struct {
 	done      chan error
 }
 
-func newHarness(t *testing.T, dbPath string, seed func(*store.Store)) *harness {
+func newHarness(t *testing.T, dbPath string, seed func(*store.Store), opts ...func(*Deps)) *harness {
 	t.Helper()
 	st, err := store.Open(dbPath)
 	if err != nil {
@@ -318,10 +360,14 @@ func newHarness(t *testing.T, dbPath string, seed func(*store.Store)) *harness {
 		gh: &fakeGitHub{prs: map[PRKey]PRSnapshot{}, reviews: map[ReviewKey]ReviewSnapshot{}}, wt: &fakeWorktrees{root: t.TempDir()},
 		hn: &fakeHarness{}, tr: &fakeTracker{}, st: st, stateHome: t.TempDir(),
 	}
-	h.s, err = New(Deps{
+	d := Deps{
 		Rex: h.rex, GitHub: h.gh, Worktrees: h.wt, Harness: h.hn, Tracker: h.tr, Config: fakeConfig{},
 		Store: st, DefaultCap: 5, PollInterval: 20 * time.Millisecond, AdHocSession: "ad hoc", StateHome: h.stateHome,
-	})
+	}
+	for _, o := range opts {
+		o(&d)
+	}
+	h.s, err = New(d)
 	if err != nil {
 		t.Fatal(err)
 	}

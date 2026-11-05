@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -30,6 +31,8 @@ type Deps struct {
 	PollInterval time.Duration
 	// AdHocSession is the Rex session for Tasks with no Issue.
 	AdHocSession string
+	// Queues are the review queues that each full poll fills.
+	Queues []Queue
 	// StateHome is the XDG state folder. A review Worker gets it as
 	// XDG_STATE_HOME, so the Scheduler finds pr-review's record where the
 	// Worker writes it.
@@ -70,6 +73,11 @@ type Scheduler struct {
 
 	locksMu   sync.Mutex
 	repoLocks map[string]*sync.Mutex
+
+	filling atomic.Bool
+	// members holds the logins of the queues' author teams, read at membersAt.
+	members   map[string][]string
+	membersAt time.Time
 }
 
 type orphan struct {
@@ -89,6 +97,9 @@ func New(d Deps) (*Scheduler, error) {
 		recs: map[string]*Record{}, lanes: map[string]chan func(context.Context){},
 		watchers: map[chan BoardView]struct{}{}, orphans: map[string][]orphan{},
 		repoLocks: map[string]*sync.Mutex{},
+	}
+	for _, q := range d.Queues {
+		s.board.Slots[q.Name] = q.Slots
 	}
 	if v, err := d.Store.Setting("wip_cap"); err != nil {
 		return nil, err
@@ -562,9 +573,18 @@ func (s *Scheduler) checkContract(r *Record) {
 }
 
 // poll reads GitHub for the given Tasks, or for every started Task when ids
-// is nil. A build Task's PR comes by its branch, and a review Task's PR by its
-// number, so the branch Signals never reach a PR that lineup reviews.
+// is nil. A full poll then fills the review queues.
 func (s *Scheduler) poll(ctx context.Context, ids []string) {
+	s.pollTasks(ctx, ids)
+	if ids == nil {
+		s.fill(ctx)
+	}
+}
+
+// pollTasks reads the PRs of the Tasks. A build Task's PR comes by its
+// branch, and a review Task's PR by its number, so the branch Signals never
+// reach a PR that lineup reviews.
+func (s *Scheduler) pollTasks(ctx context.Context, ids []string) {
 	keys := map[PRKey]string{}
 	reviews := map[ReviewKey]string{}
 	s.call(func() {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 )
 
@@ -71,6 +72,11 @@ type GitHub interface {
 	Signals(prev, cur *PRSnapshot) []lifecycle.Signal
 	MarkReady(ctx context.Context, repo string, number int) error
 	Merge(ctx context.Context, repo string, number int) error
+	// SearchPRs runs every search in one call, as the user, and returns each
+	// Key's PRs.
+	SearchPRs(ctx context.Context, searches []github.Search) (map[string][]github.PullRequest, error)
+	// TeamMembers reads the logins of each team, org/slug.
+	TeamMembers(ctx context.Context, teams []string) (map[string][]string, error)
 }
 
 type Worktrees interface {

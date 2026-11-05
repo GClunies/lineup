@@ -234,6 +234,10 @@ labels = ["needs-review"]
 	if got := reviewViews(cfg); !reflect.DeepEqual(got, want) {
 		t.Errorf("reviewViews =\n%+v\nwant\n%+v", got, want)
 	}
+	queues := []scheduler.Queue{{Name: "platform", Filter: want[1].Filter, Slots: 3}}
+	if got := reviewQueues(cfg); !reflect.DeepEqual(got, queues) {
+		t.Errorf("reviewQueues = %+v, want %+v with the default 3 slots", got, queues)
+	}
 }
 
 func TestTheReviewRankHasItsOwnFile(t *testing.T) {

@@ -203,6 +203,14 @@ func (p *githubPort) Merge(ctx context.Context, repo string, n int) error {
 	return p.c.Merge(ctx, repo, n)
 }
 
+func (p *githubPort) SearchPRs(ctx context.Context, searches []github.Search) (map[string][]github.PullRequest, error) {
+	return p.c.SearchPRs(ctx, p.viewer, searches)
+}
+
+func (p *githubPort) TeamMembers(ctx context.Context, teams []string) (map[string][]string, error) {
+	return p.c.TeamMembers(ctx, teams)
+}
+
 type worktreePort struct{ bin string }
 
 func (p worktreePort) CreateArgv(repo, branch string) []string {
@@ -635,8 +643,17 @@ func reviewViews(g *config.Global) []board.ReviewView {
 	for _, v := range g.ReviewViews() {
 		out = append(out, board.ReviewView{Key: "view:" + v.Name, Name: v.Name, Filter: prFilter(github.ViewPRs, v.PRFilter)})
 	}
+	for _, q := range reviewQueues(g) {
+		out = append(out, board.ReviewView{Key: "queue:" + q.Name, Name: "Q: " + q.Name, Filter: q.Filter})
+	}
+	return out
+}
+
+// reviewQueues are the config's queues, as the Scheduler fills them.
+func reviewQueues(g *config.Global) []scheduler.Queue {
+	var out []scheduler.Queue
 	for _, q := range g.ReviewQueues() {
-		out = append(out, board.ReviewView{Key: "queue:" + q.Name, Name: "Q: " + q.Name, Filter: prFilter(github.QueuePRs, q.PRFilter)})
+		out = append(out, scheduler.Queue{Name: q.Name, Filter: prFilter(github.QueuePRs, q.PRFilter), Slots: q.Slots})
 	}
 	return out
 }
