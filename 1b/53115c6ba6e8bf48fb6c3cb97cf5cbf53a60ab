@@ -1,0 +1,25 @@
+internal/github/reviewpoll.go
+  s_dbfb947161f840::t_8693d14474485b 1-160
+internal/github/reviewpoll_test.go
+  s_dbfb947161f840::t_2b5ff98c2b78f5 1-105
+internal/github/testdata/review_poll.json
+  s_dbfb947161f840::t_5739378bafeb82 1-87
+internal/github/testdata/review_poll_pending.json
+  s_dbfb947161f840::t_a7718302f415f3 1-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1b53115c6ba6e8bf48fb6c3cb97cf5cbf53a60ab",
+  "prompts": {},
+  "sessions": {
+    "s_dbfb947161f840": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56a91e0e-7d53-4d56-a0c2-c5987f867dd5",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
