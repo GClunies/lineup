@@ -237,6 +237,65 @@ func TestReviewTwiceOnOnePRMakesOneTask(t *testing.T) {
 	}
 }
 
+func TestReviewOfAStoppedReviewRunsItAgain(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.wt.addErr = errors.New("fetch: no network")
+	h.review(prURL7)
+	eventually(t, "setup failed", func() bool { return h.task("R-1").Flag == "setup failed" })
+	if n := len(h.rex.open("claude reviewing")); n != 0 {
+		t.Fatalf("a Worker runs after the setup failed: %d tabs", n)
+	}
+
+	res := h.review(prURL7)
+	if res.ID != "R-1" || res.Action != ReviewRestarted {
+		t.Fatalf("review of the stopped Task = %+v, want R-1 restarted", res)
+	}
+	h.waitTab("claude reviewing")
+	eventually(t, "the flag to clear", func() bool { return h.task("R-1").Flag == "" })
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"R-1"}) {
+		t.Fatalf("board = %v", ids)
+	}
+}
+
+func TestReviewOfAQueuedReviewStartsIt(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.s.call(func() {
+		r := &Record{
+			Title: "data#7 Fix the tooltip", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: reviewSession,
+			Review: &ReviewPR{Repo: "acme/data", Number: 7, URL: prURL7, Head: "h1", Base: "main"}, CreatedAt: h.s.now(), StageSince: h.s.now(),
+		}
+		r.ID = h.s.nextID("R")
+		r.Task = *h.s.board.AddReview(r.ID, "", lifecycle.Policy{})
+		h.s.board.Tasks[r.ID] = &r.Task
+		h.s.recs[r.ID] = r
+	})
+	if v := h.task("R-1"); v.Stage != "Queued" {
+		t.Fatalf("Task = %+v, want Queued", v)
+	}
+
+	res := h.review(prURL7)
+	if res.ID != "R-1" || res.Action != ReviewStarted {
+		t.Fatalf("review of the Queued Task = %+v, want R-1 started", res)
+	}
+	h.waitTab("claude reviewing")
+}
+
+func TestReviewOfARunningReviewChangesNothing(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	h.waitTab("claude reviewing")
+	if res := h.review(prURL7); res.Action != ReviewOpen {
+		t.Fatalf("review of the running Task = %+v, want open", res)
+	}
+	h.still("R-1", lifecycle.Reviewing)
+	if n := len(h.rex.open("claude reviewing")); n != 1 {
+		t.Fatalf("%d Worker tabs, want 1", n)
+	}
+}
+
 func TestADoneReviewDoesNotBlockANewOne(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))

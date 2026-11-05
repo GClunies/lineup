@@ -452,11 +452,21 @@ func TestReviewRStartsAReviewOfTheSelectedPR(t *testing.T) {
 	}
 
 	e.sched.review.Existing = true
+	e.sched.review.Action = scheduler.ReviewOpen
 	e.press("r")
 	if c := e.sched.calls[1:]; len(c) != 2 || c[0].Op != "review" || c[1].Op != "focus" || c[1].Task != "R-3" {
 		t.Fatalf("r on a PR with an open review sent %+v, want review then focus R-3", c)
 	}
 	if l := line(e.m.View(), "review R-3"); !strings.Contains(l, "already open") {
+		t.Fatalf("status line = %q", l)
+	}
+
+	e.sched.review.Action = scheduler.ReviewRestarted
+	e.press("r")
+	if c := e.sched.calls[3:]; len(c) != 1 || c[0].Op != "review" {
+		t.Fatalf("r on a PR whose review had stopped sent %+v, want review alone", c)
+	}
+	if l := line(e.m.View(), "review R-3"); !strings.Contains(l, "restarted") {
 		t.Fatalf("status line = %q", l)
 	}
 

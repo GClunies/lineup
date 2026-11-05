@@ -147,8 +147,8 @@ func fakeScheduler(t *testing.T, replies map[string]scheduler.Response) (schedul
 	}
 }
 
-func reviewReply(t *testing.T, existing bool) scheduler.Response {
-	data, err := json.Marshal(scheduler.ReviewResult{TaskView: scheduler.TaskView{ID: "R-1", Repo: "data", Stage: "Reviewing", Title: "data#4955 Pull the base images"}, Existing: existing})
+func reviewReply(t *testing.T, existing bool, action scheduler.ReviewAction) scheduler.Response {
+	data, err := json.Marshal(scheduler.ReviewResult{TaskView: scheduler.TaskView{ID: "R-1", Repo: "data", Stage: "Reviewing", Title: "data#4955 Pull the base images"}, Existing: existing, Action: action})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func reviewReply(t *testing.T, existing bool) scheduler.Response {
 }
 
 func TestLineupReviewStartsANewReview(t *testing.T) {
-	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, false)})
+	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, false, scheduler.ReviewAdded)})
 	var out bytes.Buffer
 	if err := cmdReview(c, []string{"https://github.com/umbrella/data/pull/4955"}, &out); err != nil {
 		t.Fatal(err)
@@ -170,7 +170,7 @@ func TestLineupReviewStartsANewReview(t *testing.T) {
 }
 
 func TestLineupReviewOfAnOpenReviewFocusesIt(t *testing.T) {
-	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, true), "focus": {OK: true}})
+	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, true, scheduler.ReviewOpen), "focus": {OK: true}})
 	var out bytes.Buffer
 	if err := cmdReview(c, []string{"umbrella/data#4955"}, &out); err != nil {
 		t.Fatal(err)
@@ -180,6 +180,20 @@ func TestLineupReviewOfAnOpenReviewFocusesIt(t *testing.T) {
 	}
 	if !strings.HasPrefix(out.String(), "R-1 is already open (Reviewing)") {
 		t.Fatalf("out = %q", out.String())
+	}
+}
+
+func TestLineupReviewOfAStoppedReviewRestartsItWithoutFocus(t *testing.T) {
+	c, got := fakeScheduler(t, map[string]scheduler.Response{"review": reviewReply(t, true, scheduler.ReviewRestarted), "focus": {OK: true}})
+	var out bytes.Buffer
+	if err := cmdReview(c, []string{"umbrella/data#4955"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if reqs := got(); len(reqs) != 1 || reqs[0].Op != "review" {
+		t.Fatalf("requests = %+v, want review alone", reqs)
+	}
+	if want := "R-1 restarted: data#4955 Pull the base images\n"; out.String() != want {
+		t.Fatalf("out = %q, want %q", out.String(), want)
 	}
 }
 

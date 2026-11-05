@@ -79,12 +79,23 @@ func (r *Record) workerWorking() bool {
 	return r.Job == JobWorker && r.WorkerState != "done" && r.WorkerState != "idle"
 }
 
+// ReviewAction says what the review op did.
+type ReviewAction string
+
+const (
+	ReviewAdded     ReviewAction = "added"     // a new review Task, started
+	ReviewStarted   ReviewAction = "started"   // the open Task was Queued, now started
+	ReviewRestarted ReviewAction = "restarted" // the open Task had stopped, now running again
+	ReviewOpen      ReviewAction = "open"      // the open Task runs, nothing changed
+)
+
 // ReviewResult is a review Task that `lineup review` added or found.
 type ReviewResult struct {
 	TaskView
 	// Existing is true when the PR already had an open review Task, so
 	// nothing was added.
-	Existing bool `json:"existing"`
+	Existing bool         `json:"existing"`
+	Action   ReviewAction `json:"action"`
 }
 
 // review adds and starts a review Task with no queue for the PR at url. If an

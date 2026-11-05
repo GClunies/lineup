@@ -243,6 +243,8 @@ type fakeWorktrees struct {
 	mostInFlight   int
 	// keep makes RemoveReview keep the worktree, as for an unpushed commit.
 	keep bool
+	// addErr fails the next AddReview call.
+	addErr error
 }
 
 func (w *fakeWorktrees) AddReview(_ context.Context, repo string, pr ReviewPR) (string, error) {
@@ -254,6 +256,10 @@ func (w *fakeWorktrees) AddReview(_ context.Context, repo string, pr ReviewPR) (
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.inFlight--
+	if err := w.addErr; err != nil {
+		w.addErr = nil
+		return "", err
+	}
 	w.added = append(w.added, pr.Number)
 	return fmt.Sprintf("%s.review-pr-%d", repo, pr.Number), nil
 }
