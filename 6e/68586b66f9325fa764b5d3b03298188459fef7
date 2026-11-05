@@ -1,0 +1,46 @@
+internal/scheduler/api.go
+  s_ef04b6a036d849::t_963250a08835f1 128-131
+internal/scheduler/scheduler.go
+  s_ef04b6a036d849::t_4fa2a123cd26c7 78-79
+  s_ef04b6a036d849::t_05caa1c331fe0f 111-112,115
+  s_ef04b6a036d849::t_27d0556c0d9bb5 733
+  s_ef04b6a036d849::t_b27a89ad8b8bf8 113-114
+cmd/lineup/cli.go
+  s_ef04b6a036d849::t_747b5b4f743a00 25
+  s_ef04b6a036d849::t_fbffac5863b70f 137-204
+cmd/lineup/orchestrator/CLAUDE.md
+  s_ef04b6a036d849::t_63c6c09bcd976d 16-18
+  s_ef04b6a036d849::t_476155eeed70d4 33-34
+internal/scheduler/record.go
+  s_ef04b6a036d849::t_70a276874e70f7 114-119
+internal/board/view.go
+  s_ef04b6a036d849::t_3e62661bf733f0 88-90
+internal/scheduler/queue.go
+  s_ef04b6a036d849::t_907b572540172a 17-33,37
+  s_ef04b6a036d849::t_51b4d66133ecc0 34-35,38,41,43,52,59,61,67-68,70,72,80,86,88-89,91,100-102,105,111,113,115,119,121-181,188-189,198-200,208,215,229,238,244,256-257,263-265,268,280-281,285,290-291,295,299,303-304,306
+  s_ef04b6a036d849::t_0a31e37e704f1d 6
+cmd/lineup/main.go
+  s_ef04b6a036d849::t_78eccb586b50a9 34-36
+cmd/lineup/review_test.go
+  s_ef04b6a036d849::t_e9ecfea27b1d77 8-9,13,201-286
+internal/board/board_test.go
+  s_ef04b6a036d849::t_ae9e2e494c1635 315-326
+internal/scheduler/queue_test.go
+  s_ef04b6a036d849::t_5feaf68fc6f9f7 262-265,292-344
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6e68586b66f9325fa764b5d3b03298188459fef7",
+  "prompts": {},
+  "sessions": {
+    "s_ef04b6a036d849": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "68abf2af-1a04-469b-9f71-c457ce738562",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
