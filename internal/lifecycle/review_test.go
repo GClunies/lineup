@@ -35,9 +35,10 @@ func TestReviewTransitions(t *testing.T) {
 		{"closed while reviewing", Reviewing, PRClosed{}, Done, "", closed, OutcomeClosed},
 		{"closed when ready", ReviewReady, PRClosed{}, Done, "", closed, OutcomeClosed},
 		{"tab lost while reviewing", Reviewing, WorkerLost{}, Reviewing, "", []Effect{StartWorker{Reviewing}}, ""},
-		{"tab lost when ready", ReviewReady, WorkerLost{}, Done, "", closed, OutcomeClosed},
-		{"worker exits when ready", ReviewReady, WorkerExited{Code: 0}, Done, "", closed, OutcomeClosed},
-		{"worker fails when ready", ReviewReady, WorkerExited{Code: 1}, Done, "", closed, OutcomeClosed},
+		{"tab lost when ready", ReviewReady, WorkerLost{}, ReviewReady, "", nil, ""},
+		{"worker exits when ready", ReviewReady, WorkerExited{Code: 0}, ReviewReady, "", nil, ""},
+		{"worker fails when ready", ReviewReady, WorkerExited{Code: 1}, ReviewReady, "", nil, ""},
+		{"reopen when ready", ReviewReady, Reopen{}, ReviewReady, "", []Effect{StartWorker{ReviewReady}}, ""},
 		{"user closes while queued", Queued, TaskClosed{}, Done, "", closed, OutcomeClosed},
 		{"user closes while reviewing", Reviewing, TaskClosed{}, Done, "", closed, OutcomeClosed},
 		{"user closes when ready", ReviewReady, TaskClosed{}, Done, "", closed, OutcomeClosed},
@@ -83,6 +84,55 @@ func TestAReviewStartsOnlyWithAFreeSlot(t *testing.T) {
 	b.Apply("R-1", PRReviewed{})
 	if _, err := b.Apply("R-2", Start{}); err != nil || second.Stage != Reviewing {
 		t.Fatalf("start after a slot freed: stage %s err %v", second.Stage, err)
+	}
+}
+
+// The user can reopen a closed Review ready Worker, so the Task keeps its
+// slot while it has no Worker.
+func TestAReviewReadyTaskKeepsItsSlotWithoutItsWorker(t *testing.T) {
+	b := NewBoard(5)
+	b.Slots["platform"] = 1
+	ready := b.AddReview("R-1", "platform", policy)
+	next := b.AddReview("R-2", "platform", policy)
+	b.Apply("R-1", Start{})
+	b.Apply("R-1", WorkerDone{ContractMet: true})
+	for _, s := range []Signal{WorkerLost{}, WorkerExited{Code: 0}, WorkerExited{Code: 130}} {
+		if effects, err := b.Apply("R-1", s); err != nil || effects != nil {
+			t.Fatalf("%s: effects %v err %v", s.Name(), effects, err)
+		}
+		if ready.Stage != ReviewReady || ready.Group() != GroupNeedsYou || b.QueueStarted("platform") != 1 {
+			t.Fatalf("%s: stage %s group %s, %d started", s.Name(), ready.Stage, ready.Group(), b.QueueStarted("platform"))
+		}
+	}
+	if _, err := b.Apply("R-2", Start{}); !errors.Is(err, ErrSlotsFull) || next.Stage != Queued {
+		t.Fatalf("start with the slot held: stage %s err %v, want ErrSlotsFull", next.Stage, err)
+	}
+}
+
+func TestReopenFitsOnlyAResumableStage(t *testing.T) {
+	for _, stage := range Stages() {
+		for _, kind := range []Kind{KindBuild, KindReview} {
+			if !kind.Has(stage) || stage.Resumable() {
+				continue
+			}
+			b := NewBoard(5)
+			task := b.Add("T", policy)
+			task.Kind, task.Stage = kind, stage
+			effects, err := b.Apply("T", Reopen{})
+			var na *NotAllowedError
+			if !errors.As(err, &na) || effects != nil || task.Stage != stage {
+				t.Errorf("reopen of a %s Task in %s: stage %s effects %v err %v", kind, stage, task.Stage, effects, err)
+			}
+		}
+	}
+}
+
+// A reopen that follows a failed setup must not keep the old flag on the new Worker.
+func TestReopenClearsTheFlag(t *testing.T) {
+	b, task := reviewIn(ReviewReady, "")
+	task.flag(ReasonSetupFailed, "fetch: no network")
+	if effects, err := b.Apply("R", Reopen{}); err != nil || !reflect.DeepEqual(effects, []Effect{StartWorker{ReviewReady}}) || task.Flag != "" {
+		t.Fatalf("reopen: effects %v err %v flag %q", effects, err, task.Flag)
 	}
 }
 

@@ -516,7 +516,7 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		case job == JobSetup:
 			id := r.ID
 			s.enqueue(id, func(ctx context.Context) { s.finishSetup(ctx, id) })
-		case job == JobWorker && (ev.ExitCode != 0 || r.Stage.EndsWithWorker()):
+		case job == JobWorker && ev.ExitCode != 0:
 			s.apply(r, lifecycle.WorkerExited{Code: ev.ExitCode}, "")
 		case job == JobWorker:
 			s.checkContract(r)
@@ -529,7 +529,7 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		switch {
 		case job == JobSetup:
 			s.apply(r, lifecycle.SetupFailed{Detail: "setup tab closed"}, "")
-		case job == JobWorker, job == JobExited && r.Stage.EndsWithWorker():
+		case job == JobWorker:
 			s.apply(r, lifecycle.WorkerLost{}, "")
 		}
 	}
@@ -691,7 +691,7 @@ func (s *Scheduler) recover(ctx context.Context) {
 			r.Pending = &stage
 			rec := *r
 			s.enqueue(r.ID, func(ctx context.Context) { s.setup(ctx, rec) })
-		case r.Stage.Agent() || r.Stage.EndsWithWorker():
+		case r.Stage.Agent():
 			s.d.Log.Info("recover worker", "task", r.ID, "stage", r.Stage.String())
 			s.apply(r, lifecycle.WorkerLost{}, "recovered at start")
 		}

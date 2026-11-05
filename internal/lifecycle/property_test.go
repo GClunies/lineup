@@ -10,7 +10,7 @@ import (
 
 var anySignal = rapid.SampledFrom([]Signal{
 	Start{}, Start{OverCap: true}, PRMerge{}, TaskClosed{},
-	Rerun{Working}, Rerun{CIDebug}, Rerun{Responding}, Rerun{Reviewing},
+	Rerun{Working}, Rerun{CIDebug}, Rerun{Responding}, Rerun{Reviewing}, Reopen{},
 	WorkerDone{ContractMet: true}, WorkerDone{ContractMet: false},
 	WorkerStatus{State: "working"}, WorkerStatus{State: "blocked", Kind: "permission"}, WorkerStatus{State: "error"},
 	WorkerExited{Code: 0}, WorkerExited{Code: 1}, WorkerLost{}, SetupFailed{},
@@ -186,6 +186,25 @@ func TestReviewTasksGetNoEffectThatWritesOutside(t *testing.T) {
 				case MarkReady, Merge, TrackerStatus:
 					t.Fatalf("review Task %s got %#v from %s", task.ID, e, s.Name())
 				}
+			}
+		}
+	})
+}
+
+// A Review ready Task, and so its slot, stays until the PR or the user ends
+// the review. No Worker signal moves it.
+func TestAReviewReadyTaskLeavesOnlyByThePROrTheUser(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b, task := reviewIn(ReviewReady, rapid.SampledFrom(queues).Draw(t, "queue"))
+		for task.Stage == ReviewReady {
+			s, _, _ := step(t, b, task)
+			if task.Stage == ReviewReady {
+				continue
+			}
+			switch s.(type) {
+			case PRReviewed, PRMerged, PRClosed, TaskClosed, Rerun:
+			default:
+				t.Fatalf("%s left Review ready for %s", s.Name(), task.Stage)
 			}
 		}
 	})

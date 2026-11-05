@@ -1,0 +1,9 @@
+# 2026/11/05 15:51:40.598910 [TestAReviewReadyTaskLeavesOnlyByThePROrTheUser] [rapid] draw queue: ""
+# 2026/11/05 15:51:40.598946 [TestAReviewReadyTaskLeavesOnlyByThePROrTheUser] [rapid] draw signal: lifecycle.WorkerLost{}
+# 2026/11/05 15:51:40.599003 [TestAReviewReadyTaskLeavesOnlyByThePROrTheUser] worker-lost left Review ready for Done
+# 
+v0.4.8#3910765728933116623
+0x0
+0x0
+0xc05c654ab866b
+0x10

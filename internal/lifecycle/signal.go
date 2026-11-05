@@ -16,6 +16,9 @@ type TaskClosed struct{}
 // Rerun is the Orchestrator's override that starts a fresh Worker for Stage.
 type Rerun struct{ Stage Stage }
 
+// Reopen starts the Task's Worker again in its Stage, in the same conversation.
+type Reopen struct{}
+
 // Worker signals.
 
 // WorkerDone means the Worker reported done. The Scheduler checks the Stage
@@ -66,6 +69,7 @@ func (Start) Name() string                   { return "start" }
 func (PRMerge) Name() string                 { return "pr-merge" }
 func (TaskClosed) Name() string              { return "task-closed" }
 func (Rerun) Name() string                   { return "rerun" }
+func (Reopen) Name() string                  { return "reopen" }
 func (WorkerDone) Name() string              { return "done" }
 func (WorkerStatus) Name() string            { return "status" }
 func (WorkerExited) Name() string            { return "exited" }
@@ -88,6 +92,7 @@ func (Start) signal()                   {}
 func (PRMerge) signal()                 {}
 func (TaskClosed) signal()              {}
 func (Rerun) signal()                   {}
+func (Reopen) signal()                  {}
 func (WorkerDone) signal()              {}
 func (WorkerStatus) signal()            {}
 func (WorkerExited) signal()            {}

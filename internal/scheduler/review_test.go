@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/store"
 )
@@ -397,22 +398,34 @@ func TestTheBranchPollSkipsReviewTasks(t *testing.T) {
 	}
 }
 
-func TestALostTabInReviewReadyEndsTheReview(t *testing.T) {
+// The user can reopen the Worker, so a review that lost its tab in Review
+// ready waits for the user and keeps its queue's slot.
+func TestALostTabInReviewReadyKeepsTheReview(t *testing.T) {
 	for _, ev := range []RexEvent{{Kind: EvClosed}, {Kind: EvExited, ExitCode: 0}, {Kind: EvExited, ExitCode: 130}} {
-		h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
-		h.gh.setReview(openPR(7, "h1"))
-		h.writeFindings(7, "h1")
-		h.review(prURL7)
+		h := queueHarness(t, authorQueue("q", 1, "hopper"))
+		h.gh.found = map[string][]github.PullRequest{"q": {queuePR("acme/data", 7, 30), queuePR("acme/data", 8, 20)}}
+		h.writeFindings(7, "h7")
+		h.s.fill(context.Background())
 		worker := h.waitTab("claude reviewing")
 		h.status(worker.BlockID, "done")
 		h.waitStage("R-1", lifecycle.ReviewReady)
 		ev.BlockID = worker.BlockID
-		h.rex.events <- ev
-		h.waitStage("R-1", lifecycle.Done)
-		if v := h.task("R-1"); v.Outcome != "closed" {
-			t.Fatalf("event %+v: outcome %q, want closed", ev, v.Outcome)
+		if ev.Kind == EvClosed {
+			h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
 		}
-		eventually(t, "cleanup", func() bool { return len(h.reviewsRemoved()) == 1 })
+		h.rex.events <- ev
+		eventually(t, "the Worker gone", func() bool { return !h.task("R-1").Live })
+		h.s.fill(context.Background())
+		h.still("R-1", lifecycle.ReviewReady)
+		if v := h.task("R-1"); v.Group != "Needs you" || v.Flag != "" {
+			t.Fatalf("event %+v: task = %+v, want Needs you with no flag", ev, v)
+		}
+		if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Review ready"}) {
+			t.Fatalf("event %+v: reviews %v, want the slot held by R-1", ev, got)
+		}
+		if n := len(h.reviewsRemoved()); n != 0 {
+			t.Fatalf("event %+v: removed %d review worktrees", ev, n)
+		}
 	}
 }
 
@@ -447,16 +460,20 @@ func seedReview(stage lifecycle.Stage) func(*store.Store) {
 	}
 }
 
-func TestRecoveryWithNoTabInReviewReadyEndsTheReview(t *testing.T) {
+func TestRecoveryWithNoTabInReviewReadyKeepsTheReview(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReview(lifecycle.ReviewReady))
-	h.waitStage("R-3", lifecycle.Done)
-	if v := h.task("R-3"); v.Outcome != "closed" {
-		t.Fatalf("recovered review = %+v", v)
+	h.still("R-3", lifecycle.ReviewReady)
+	if v := h.task("R-3"); v.Live || v.Flag != "" || v.Group != "Needs you" {
+		t.Fatalf("recovered review = %+v, want it waiting with no Worker", v)
 	}
-	if len(h.rex.open("claude reviewing")) != 0 {
-		t.Fatal("recovery ran a finished review again")
+	h.rex.mu.Lock()
+	defer h.rex.mu.Unlock()
+	if len(h.rex.tabs) != 0 {
+		t.Fatalf("recovery opened %d tabs for a finished review", len(h.rex.tabs))
 	}
-	eventually(t, "cleanup", func() bool { return len(h.reviewsRemoved()) == 1 })
+	if n := len(h.reviewsRemoved()); n != 0 {
+		t.Fatalf("recovery removed %d review worktrees", n)
+	}
 }
 
 func TestRecoveryWithNoTabWhileReviewingStartsAFreshWorker(t *testing.T) {

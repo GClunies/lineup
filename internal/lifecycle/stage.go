@@ -82,10 +82,10 @@ var stages = [...]struct {
 	owner Owner
 	group Group
 	kinds kindSet
-	// endsWithWorker marks a Stage that ends when its Worker ends. Review
-	// ready keeps the review's Worker for the user's decisions, so without
-	// the Worker nothing is left to wait for.
-	endsWithWorker bool
+	// resumesWorker marks a Stage whose Worker the user can reopen by
+	// resuming its conversation. Review ready waits for the user's decisions
+	// in that conversation, so a closed tab loses nothing.
+	resumesWorker bool
 }{
 	Queued:      {"Queued", "queued", OwnerUser, GroupQueued, build | review, false},
 	Working:     {"Working", "working", OwnerAgent, GroupWorking, build, false},
@@ -121,8 +121,9 @@ func (s Stage) Agent() bool { return stages[s].owner == OwnerAgent }
 // the WIP cap for a build Task, and toward its queue's slots for a review Task.
 func (s Stage) Started() bool { return s != Queued && s != Done }
 
-// EndsWithWorker reports whether the Task ends when the Stage's Worker ends.
-func (s Stage) EndsWithWorker() bool { return stages[s].endsWithWorker }
+// Resumable reports whether the user can reopen the Stage's Worker by
+// resuming its conversation.
+func (s Stage) Resumable() bool { return stages[s].resumesWorker }
 
 // MarshalText saves the Stage by its key, so that the store does not depend on
 // the order of the constants.

@@ -155,6 +155,13 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 		}
 		return t.startAgent(s.Stage), nil
 
+	case Reopen:
+		if !t.Stage.Resumable() {
+			return nil, notAllowed
+		}
+		t.flag("", "")
+		return []Effect{StartWorker{t.Stage}}, nil
+
 	case PRMerged:
 		if t.Stage == Done || t.Stage == Queued {
 			return nil, nil
@@ -188,9 +195,6 @@ func (t *Task) observe(s Signal) []Effect {
 		}
 
 	case WorkerExited:
-		if t.Stage.EndsWithWorker() {
-			return t.finish(OutcomeClosed)
-		}
 		if s.Code != 0 && t.Stage.Agent() {
 			t.flag(ReasonError, fmt.Sprintf("exit code %d", s.Code))
 		}
@@ -199,9 +203,6 @@ func (t *Task) observe(s Signal) []Effect {
 		t.flag(ReasonSetupFailed, s.Detail)
 
 	case WorkerLost:
-		if t.Stage.EndsWithWorker() {
-			return t.finish(OutcomeClosed)
-		}
 		if !t.Stage.Agent() {
 			return nil
 		}
