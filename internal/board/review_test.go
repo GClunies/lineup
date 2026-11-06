@@ -490,11 +490,11 @@ func TestTheQueueTabListsThePRsThatWaitFirstToStartFirst(t *testing.T) {
 
 	b := reviewBoard()
 	open := tv("R-7", lifecycle.Reviewing, "data", "data#5004 Change 5004", "", time.Hour)
-	open.PRURL, open.ReviewHead = reviewing.URL, reviewing.Head
+	open.Kind, open.PRURL, open.ReviewHead = lifecycle.KindReview, reviewing.URL, reviewing.Head
 	done := tv("R-6", lifecycle.Done, "data", "data#5005 Change 5005", "", time.Hour)
-	done.PRURL, done.ReviewHead = reviewed.URL, reviewed.Head
+	done.Kind, done.PRURL, done.ReviewHead = lifecycle.KindReview, reviewed.URL, reviewed.Head
 	older := tv("R-5", lifecycle.Done, "data", "data#5006 Change 5006", "", time.Hour)
-	older.PRURL, older.ReviewHead = pushed.URL, "h5006-before-the-push"
+	older.Kind, older.PRURL, older.ReviewHead = lifecycle.KindReview, pushed.URL, "h5006-before-the-push"
 	b.Tasks = append(b.Tasks, open, done, older)
 	e.m.setBoard(b)
 	e.open()

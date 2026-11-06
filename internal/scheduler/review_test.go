@@ -109,7 +109,7 @@ func TestReviewFromStartToReviewedAndCleanedUp(t *testing.T) {
 	h.gh.setReview(openPR(7, "h1"))
 
 	res := h.review(prURL7)
-	if res.ID != "R-1" || res.Action != ReviewAdded || res.Stage != "Reviewing" || res.Title != "data#7 Fix the tooltip" || res.PRURL != prURL7 || res.ReviewHead != "h1" {
+	if res.ID != "R-1" || res.Kind != lifecycle.KindReview || res.Action != ReviewAdded || res.Stage != "Reviewing" || res.Title != "data#7 Fix the tooltip" || res.PRURL != prURL7 || res.ReviewHead != "h1" {
 		t.Fatalf("review = %+v", res)
 	}
 	worker := h.waitTab("claude reviewing")

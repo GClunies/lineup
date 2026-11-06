@@ -96,25 +96,26 @@ func sessionLabel(repo string, others []string) string {
 
 // TaskView is a Task as the Board and the CLI show it.
 type TaskView struct {
-	ID         string    `json:"id"`
-	Title      string    `json:"title"`
-	Repo       string    `json:"repo"`
-	Stage      string    `json:"stage"`
-	StageKey   string    `json:"stage_key"`
-	Group      string    `json:"group"`
-	Flag       string    `json:"flag,omitempty"`
-	FlagDetail string    `json:"flag_detail,omitempty"`
-	Outcome    string    `json:"outcome,omitempty"`
-	Note       string    `json:"note,omitempty"`
-	OverCap    bool      `json:"over_cap,omitempty"`
-	Skill      string    `json:"skill,omitempty"`
-	PRNumber   int       `json:"pr_number,omitempty"`
-	PRURL      string    `json:"pr_url,omitempty"`
-	ReviewHead string    `json:"review_head,omitempty"` // the head that a review Task was added at
-	IssueURL   string    `json:"issue_url,omitempty"`
-	Worktree   string    `json:"worktree,omitempty"`
-	Since      time.Time `json:"since"`
-	Live       bool      `json:"live"`
+	ID         string         `json:"id"`
+	Kind       lifecycle.Kind `json:"kind"`
+	Title      string         `json:"title"`
+	Repo       string         `json:"repo"`
+	Stage      string         `json:"stage"`
+	StageKey   string         `json:"stage_key"`
+	Group      string         `json:"group"`
+	Flag       string         `json:"flag,omitempty"`
+	FlagDetail string         `json:"flag_detail,omitempty"`
+	Outcome    string         `json:"outcome,omitempty"`
+	Note       string         `json:"note,omitempty"`
+	OverCap    bool           `json:"over_cap,omitempty"`
+	Skill      string         `json:"skill,omitempty"`
+	PRNumber   int            `json:"pr_number,omitempty"`
+	PRURL      string         `json:"pr_url,omitempty"`
+	ReviewHead string         `json:"review_head,omitempty"` // the head that a review Task was added at
+	IssueURL   string         `json:"issue_url,omitempty"`
+	Worktree   string         `json:"worktree,omitempty"`
+	Since      time.Time      `json:"since"`
+	Live       bool           `json:"live"`
 }
 
 type BoardView struct {
@@ -126,9 +127,21 @@ type BoardView struct {
 	Tasks         []TaskView `json:"tasks"`
 }
 
+// OfKind is the view with only the Tasks of Kind k. Each Hub tab shows one Kind.
+func (v BoardView) OfKind(k lifecycle.Kind) BoardView {
+	out := v
+	out.Tasks = nil
+	for _, t := range v.Tasks {
+		if t.Kind == k {
+			out.Tasks = append(out.Tasks, t)
+		}
+	}
+	return out
+}
+
 func (r *Record) view() TaskView {
 	v := TaskView{
-		ID: r.ID, Title: r.Title, Repo: r.RepoLabel,
+		ID: r.ID, Kind: r.Kind, Title: r.Title, Repo: r.RepoLabel,
 		Stage: r.Stage.String(), StageKey: r.Stage.Key(), Group: r.Group().String(),
 		Flag: string(r.Flag), FlagDetail: r.FlagDetail, Outcome: string(r.Outcome),
 		OverCap: r.OverCap, Worktree: r.Worktree, Since: r.StageSince,
