@@ -393,7 +393,7 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		r.tab = j
 		return m, m.saveReviewRank()
 	case "R":
-		return m, m.refreshReviews()
+		return m, tea.Batch(m.refreshReviews(), m.pollQuietly())
 	}
 	if r.curTab().Tasks {
 		return m.boardKey(msg)
@@ -440,6 +440,18 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// pollQuietly asks the Scheduler to poll now. Only an error reaches the
+// status line, so that it never hides an error of the PR search.
+func (m Model) pollQuietly() tea.Cmd {
+	c := m.client
+	return func() tea.Msg {
+		if err := c.Do(scheduler.Request{Op: "poll"}, nil); err != nil {
+			return opMsg{label: "refresh", err: err}
+		}
+		return nil
+	}
 }
 
 // reviewPR starts a review Task for the PR at url now, outside every queue's

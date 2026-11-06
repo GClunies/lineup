@@ -223,7 +223,7 @@ func (m Model) reviewFooter() string {
 		}
 		hs = append(hs, hint{"o", "open the PR"}, hint{"r", "review now"})
 	}
-	hs = append(hs, hint{"/", "search"}, hint{"z", "agent"}, hint{"R", "refresh"}, hint{"< >", "move the tab"}, hint{"j/k", "move"}, hint{"q", "quit"}, hint{"?", "all keys"})
+	hs = append(hs, hint{"/", "search"}, hint{"z", "agent"}, hint{"R", "refresh now"}, hint{"< >", "move the tab"}, hint{"j/k", "move"}, hint{"q", "quit"}, hint{"?", "all keys"})
 	return hintBar(m.width, hs)
 }
 
@@ -246,7 +246,8 @@ const reviewHelp = `
    o        open the PR in the browser
    r        start a review Task for this PR now, outside every queue's
             slots, or reopen its closed Worker in Review ready
-   R        refresh now; lineup also refreshes every 2 minutes
+   R        refresh now: search GitHub again and poll every started
+            Task; lineup also refreshes every 2 minutes
    z        zoom the Reviewer below to full height, and back
    ?        this help      q  quit
 
@@ -269,7 +270,8 @@ const reviewTasksHelp = `
    x        close the Task, or archive a Done Task, after y/n
    s        start a Queued Task
    o        open the PR
-   R        refresh now; lineup also refreshes every 2 minutes
+   R        refresh now: search GitHub again and poll every started
+            Task; lineup also refreshes every 2 minutes
    z        zoom the Reviewer below to full height, and back
    ?        this help      q  quit
 

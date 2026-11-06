@@ -1110,6 +1110,8 @@ func (m Model) trackerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.moveTab(-1)
 	case ">":
 		return m.moveTab(1)
+	case "R":
+		return m, m.reload()
 	case "/":
 		if t.lvl != lvlDetail {
 			t.filtering = true
@@ -1159,6 +1161,30 @@ func (m Model) trackerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.enter()
 	}
 	return m, nil
+}
+
+// reload reads what is on screen again.
+func (m Model) reload() tea.Cmd {
+	t := m.tr
+	switch {
+	case t.curSource() != nil && t.lvl == lvlDetail:
+		return m.loadItemBody(t.itemDetail)
+	case t.curSource() != nil:
+		return m.loadItems()
+	}
+	switch t.lvl {
+	case lvlDetail:
+		return m.loadIssueDetail(t.detail)
+	case lvlIssues:
+		return m.loadIssues(false)
+	case lvlProjects:
+		delete(t.projects, t.projKey)
+		return m.loadProjects()
+	case lvlTeams:
+		delete(t.teams, t.curWS().ID)
+		return m.loadTeams()
+	}
+	return m.loadWorkspaces()
 }
 
 func repoLabels(repos []string) []string {

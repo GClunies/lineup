@@ -306,6 +306,8 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.opts.Zoom != nil {
 			m.opts.Zoom()
 		}
+	case "R":
+		return m, m.op("refresh", scheduler.Request{Op: "poll"})
 	case "p":
 		m.preview = !m.preview
 		m.previewGen++
@@ -378,9 +380,13 @@ func (m Model) capKey(k string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) afterOp(msg opMsg) (tea.Model, tea.Cmd) {
+	what := msg.label
+	if msg.task != "" {
+		what += " " + msg.task
+	}
 	switch {
 	case msg.err == nil:
-		ok := msg.label + " " + msg.task + " ok"
+		ok := what + " ok"
 		if msg.note != "" {
 			ok += " · " + msg.note
 		}
@@ -388,7 +394,7 @@ func (m Model) afterOp(msg opMsg) (tea.Model, tea.Cmd) {
 	case msg.label == "start" && msg.err.Error() == capFull:
 		m.mode, m.pendingTask = modeCap, msg.task
 	default:
-		m.setStatus(msg.label+" "+msg.task+": "+msg.err.Error(), true)
+		m.setStatus(what+": "+msg.err.Error(), true)
 	}
 	return m, nil
 }

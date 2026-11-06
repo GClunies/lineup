@@ -375,6 +375,10 @@ func TestReviewSearchesEveryViewInOneCall(t *testing.T) {
 	if len(e.api.searches) != 2 || e.api.memberCalls != 1 || e.api.viewerCalls != 1 {
 		t.Errorf("R: %d searches, %d member reads, %d login reads; want 2, 1, and 1", len(e.api.searches), e.api.memberCalls, e.api.viewerCalls)
 	}
+	e.press("tab", "R")
+	if len(e.api.searches) != 3 || !slices.Equal(e.sched.ops(), []string{"poll", "poll"}) {
+		t.Errorf("R on the Reviews tab and My PRs: %d searches, Scheduler ops %v; want 3 and two polls", len(e.api.searches), e.sched.ops())
+	}
 }
 
 func TestReviewTickRefreshes(t *testing.T) {

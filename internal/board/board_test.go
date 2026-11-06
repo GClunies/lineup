@@ -429,6 +429,18 @@ func TestEventsDetailForOtherTasks(t *testing.T) {
 	}
 }
 
+func TestRPollsNow(t *testing.T) {
+	f := &fakeClient{}
+	m, cmd := press(newModel(f, fixture()), "R")
+	m = run(m, cmd)
+	if got := f.ops(); !slices.Equal(got, []string{"poll"}) {
+		t.Fatalf("R sent %v, want poll", got)
+	}
+	if l := footerAt(m, 100); !strings.Contains(l, "refresh ok") {
+		t.Fatalf("status line = %q", l)
+	}
+}
+
 func TestZoomHook(t *testing.T) {
 	n := 0
 	m := newModel(&fakeClient{}, fixture())

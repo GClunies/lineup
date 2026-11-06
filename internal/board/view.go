@@ -144,7 +144,7 @@ func hintBar(width int, hints []hint) string {
 
 // boardHints lists the keys for the selected Task, most useful first.
 func (m Model) boardHints() []hint {
-	tail := []hint{{"z", "agent"}, {"q", "quit"}, {"?", "all keys"}}
+	tail := []hint{{"z", "agent"}, {"R", "refresh now"}, {"q", "quit"}, {"?", "all keys"}}
 	if m.view == viewReview {
 		tail = append([]hint{{"tab", "next view"}, {"< >", "move the tab"}}, tail...)
 	}
@@ -306,6 +306,7 @@ const boardHelp = `
    x        close the Task, or archive a Done Task, after y/n
    s        start a Queued Task
    o        open the PR or the Issue
+   R        refresh now: poll GitHub for every started Task
    z        zoom the agent pane
    ?        this help      q  quit
 
@@ -331,6 +332,7 @@ const trackerHelp = `
    A        assign the Issue to you
    n        add an Issue to this Project or team view
    o        open the Issue in the browser
+   R        refresh what is on screen now
    ?        this help      q  quit
 
  press any key to go back
