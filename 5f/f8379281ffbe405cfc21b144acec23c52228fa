@@ -1,0 +1,25 @@
+docs/spec/mvp.md
+  s_ef04b6a036d849::t_573688aa8d4c46 148
+internal/scheduler/review_test.go
+  s_ef04b6a036d849::t_71ace8534bb75d 200-221
+internal/scheduler/scheduler.go
+  s_ef04b6a036d849::t_4cb3dc4bd941df 456-466,496
+internal/scheduler/scheduler_test.go
+  s_ef04b6a036d849::t_b156a283ce239f 115,118,120-121,125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5ff8379281ffbe405cfc21b144acec23c52228fa",
+  "prompts": {},
+  "sessions": {
+    "s_ef04b6a036d849": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "68abf2af-1a04-469b-9f71-c457ce738562",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
