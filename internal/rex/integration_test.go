@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -133,6 +134,59 @@ func TestNewWindowEnvCwdAndClose(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("session missing from Sessions")
+	}
+}
+
+func TestSplitRunsBesideItsAnchor(t *testing.T) {
+	c, sess := newTestSession(t)
+	ctx := context.Background()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch, _ := subscribe(t, c)
+	w, err := c.NewWindow(ctx, sess, "anchor", "", nil, []string{"sleep", "30"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	split, err := c.Split(ctx, sess, w.BlockID, dir, []string{"sh", "-c", `test "$(pwd -P)" = "$1"`, "sh", dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := waitFor(t, ch, 15*time.Second, func(e Event) bool { return e.Kind == ChildExited && e.BlockID == split })
+	if ev.ExitCode != 0 {
+		t.Fatalf("exit code %d, want 0 from the split's folder", ev.ExitCode)
+	}
+	waitFor(t, ch, 15*time.Second, func(e Event) bool { return e.Kind == BlockClosed && e.BlockID == split })
+	view, err := c.View(ctx, sess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Windows) != 1 || len(view.Windows[0].BlockIDs) != 1 || view.Windows[0].BlockIDs[0] != w.BlockID {
+		t.Fatalf("view %+v, want the window with its anchor block %s only", view, w.BlockID)
+	}
+}
+
+// A split keeps its window open after the anchor block closes.
+func TestAWindowOutlivesItsAnchorWhileASplitRuns(t *testing.T) {
+	c, sess := newTestSession(t)
+	ctx := context.Background()
+	ch, _ := subscribe(t, c)
+	w, err := c.NewWindow(ctx, sess, "anchor", "", nil, []string{"sleep", "2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	split, err := c.Split(ctx, sess, w.BlockID, "", []string{"sleep", "30"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, ch, 15*time.Second, func(e Event) bool { return e.Kind == BlockClosed && e.BlockID == w.BlockID })
+	view, err := c.View(ctx, sess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Windows) != 1 || !slices.Equal(view.Windows[0].BlockIDs, []string{split}) {
+		t.Fatalf("view %+v, want the window with the split %s only", view, split)
 	}
 }
 

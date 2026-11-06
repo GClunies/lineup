@@ -25,10 +25,20 @@ type tab struct {
 	closed bool
 }
 
+// split is a block that Split opened beside the anchor block of a tab.
+type split struct {
+	BlockID, anchor, cwd, window string
+	argv                         []string
+	closed                       bool
+}
+
 type fakeRex struct {
-	mu        sync.Mutex
-	n         int
-	tabs      []*tab
+	mu     sync.Mutex
+	n      int
+	tabs   []*tab
+	splits []*split
+	// splitErr fails every Split call.
+	splitErr  error
 	destroyed []string
 	events    chan RexEvent
 	// exitFast makes a tab whose argv starts with this word exit with 0
@@ -52,6 +62,22 @@ func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, env m
 	return w, nil
 }
 
+func (f *fakeRex) Split(_ context.Context, _, block, cwd string, argv []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.splitErr != nil {
+		return f.splitErr
+	}
+	for _, t := range f.tabs {
+		if t.BlockID == block {
+			f.n++
+			f.splits = append(f.splits, &split{BlockID: fmt.Sprintf("split:%d", f.n), anchor: block, cwd: cwd, window: t.WindowID, argv: argv})
+			return nil
+		}
+	}
+	return fmt.Errorf("block %s not found", block)
+}
+
 func (f *fakeRex) CloseWindow(_ context.Context, _, window string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -60,7 +86,23 @@ func (f *fakeRex) CloseWindow(_ context.Context, _, window string) error {
 			t.closed = true
 		}
 	}
+	for _, s := range f.splits {
+		if s.window == window {
+			s.closed = true
+		}
+	}
 	return nil
+}
+
+// allSplits returns every split that Split opened, closed or not.
+func (f *fakeRex) allSplits() []split {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []split
+	for _, s := range f.splits {
+		out = append(out, *s)
+	}
+	return out
 }
 
 func (f *fakeRex) DestroySession(_ context.Context, session string) error {
@@ -77,6 +119,11 @@ func (f *fakeRex) Blocks(_ context.Context, _ string) (map[string]bool, error) {
 	for _, t := range f.tabs {
 		if !t.closed {
 			live[t.BlockID] = true
+		}
+	}
+	for _, s := range f.splits {
+		if !s.closed {
+			live[s.BlockID] = true
 		}
 	}
 	return live, nil

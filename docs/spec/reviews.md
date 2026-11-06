@@ -236,6 +236,7 @@ If the PR's head moves after Review ready, the row shows the note `head moved`. 
 | Harness, model, effort | `[stage.reviewing]`, else `[stage.default]`. The Worker gets `--add-dir <review worktree>`, so it reads the PR's code with no permission prompt. |
 | Conversation | Each Reviewing Worker starts a Claude conversation with `--session-id <uuid>`, and the Task's Record keeps the ID. A restart or a rerun starts a new conversation, because it reviews afresh. |
 | Reopened Worker | `claude --resume <uuid>` with no prompt, the Reviewing model and effort, and `--add-dir <review worktree>`. Setup runs again first. If the Task has no conversation ID, for example a Task from before conversation IDs, the reopen runs the review again in Reviewing. |
+| Hunk pane | `hunk gh pr <PR URL>` in the review worktree, to the right of the Worker in its tab, with half of the tab. See **The hunk pane** below. |
 
 If no `[[repos]]` checkout has the PR's repository as its `origin`, the add fails and names the repository.
 
@@ -248,6 +249,19 @@ If no `[[repos]]` checkout has the PR's repository as its `origin`, the add fail
 The lock keeps two starts from fetching into one checkout at once. A fetch from outside lineup, for example the user's editor, can still hold a ref lock in that checkout. If git reports `cannot lock ref`, lineup tries the fetch again after 0.5 s, 1 s, and 2 s. A failed step gives the flag `setup failed`.
 
 **Cleanup.** At Done, after the tab closes, lineup fetches and then removes the review worktree if it holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
+
+**The hunk pane.** Each review Worker gets the PR's diff beside it, so the user reads the diff next to the review. lineup splits the Worker's tab when the Worker starts: on the first start, a restart, a rerun, and a reopen. The Worker keeps the focus. The pane runs this command:
+
+```
+sh -c 'GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"' hunk <PR URL>
+```
+
+- `hunk` needs a token for a private repository. It reads `GH_TOKEN`.
+- The shell in the pane gets the token from `gh`. The token is in no command line that `ps` shows.
+- lineup never tracks the pane. The Worker's block stays the one block of the Task.
+- The events of the pane never change the Task. Closing the pane alone leaves the review as it is.
+- The pane holds the tab open after the Worker's block closes. lineup then closes the tab. Recovery does the same.
+- If the split fails, lineup logs a warning. The Worker runs without the pane.
 
 The review contract:
 
@@ -331,7 +345,7 @@ The Reviewer's settings deny `lineup add`, `lineup start`, `lineup merge`, and e
 5. **Fill.** Two fills in the same state start the same Tasks once. A paused queue starts nothing.
 6. **Review poll.** Against recorded responses, `pr-reviewed`, `pr-merged`, and `pr-closed` fire as the table says, wait while the Worker works, and fire on the next poll after the Worker stops. A pending review does not fire `pr-reviewed`.
 7. **Setup and cleanup.** Two review starts in one Repo fetch one after the other. Cleanup removes a clean review worktree and keeps one with an unpushed commit. A review Task never calls `wt remove`.
-8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then reopens the Worker in the same conversation. A closed tab in Reviewing starts a fresh Worker. Recovery with no tab in Review ready leaves the Task as it is.
+8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then reopens the Worker in the same conversation. A closed tab in Reviewing starts a fresh Worker. Recovery with no tab in Review ready leaves the Task as it is. The events of the hunk pane leave the Task as it is. A closed Worker block closes the hunk pane with its tab.
 9. **Config.** Load and validation: an unknown key, an empty filter list, a bad team or repository form, a duplicate name, and `slots` below 1 each fail at load.
 10. **Board.** A render test of the review view with a joined build Task and a joined review Task. `enter` on a joined row sends `focus` for that Task. Typing `q` in the search does not quit.
 11. **Speed.** The review view's first paint from the cache meets the Board's 100 ms budget.

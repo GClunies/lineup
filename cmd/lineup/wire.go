@@ -38,6 +38,11 @@ func (p rexPort) NewWindow(ctx context.Context, session, label, cwd string, env 
 	return scheduler.Window(w), err
 }
 
+func (p rexPort) Split(ctx context.Context, session, block, cwd string, argv []string) error {
+	_, err := p.c.Split(ctx, session, block, cwd, argv)
+	return err
+}
+
 func (p rexPort) CloseWindow(ctx context.Context, session, window string) error {
 	return p.c.CloseWindow(ctx, session, window)
 }

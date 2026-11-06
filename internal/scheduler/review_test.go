@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"uuid"
@@ -582,4 +584,177 @@ func TestFindingsForANewerHeadMeetTheContract(t *testing.T) {
 	if v := h.task("R-1"); v.Note != "" {
 		t.Fatalf("note %q, want none: the review read the current head", v.Note)
 	}
+}
+
+var hunkPR7 = []string{"sh", "-c", `GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"`, "hunk", prURL7}
+
+// waitSplit waits until Split has opened n blocks in all, and returns the last.
+func (h *harness) waitSplit(n int) split {
+	h.t.Helper()
+	var ss []split
+	eventually(h.t, itoa(n)+" hunk panes", func() bool { ss = h.rex.allSplits(); return len(ss) == n })
+	return ss[n-1]
+}
+
+// waitNewTab waits for the one open tab that runs cmd and is not the tab of block old.
+func (h *harness) waitNewTab(cmd, old string) tab {
+	h.t.Helper()
+	var tabs []tab
+	eventually(h.t, "a new tab running "+cmd, func() bool {
+		tabs = h.rex.open(cmd)
+		return len(tabs) == 1 && tabs[0].BlockID != old
+	})
+	return tabs[0]
+}
+
+func TestEachReviewWorkerStartOpensThePRInHunkBesideIt(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	started := h.waitTab("claude reviewing")
+	pane := h.waitSplit(1)
+	if pane.anchor != started.BlockID || pane.window != started.WindowID || pane.cwd != "/repos/acme/data.review-pr-7" || !slices.Equal(pane.argv, hunkPR7) {
+		t.Fatalf("hunk pane = %+v, want hunk on %s beside block %s in the review worktree", pane, prURL7, started.BlockID)
+	}
+
+	h.rex.CloseWindow(context.Background(), started.SessionID, started.WindowID)
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: started.BlockID}
+	restarted := h.waitNewTab("claude reviewing", started.BlockID)
+	if pane := h.waitSplit(2); pane.anchor != restarted.BlockID {
+		t.Fatalf("restart: hunk pane beside %s, want %s", pane.anchor, restarted.BlockID)
+	}
+
+	h.do(Request{Op: "rerun", Task: "R-1", Stage: "reviewing"})
+	rerun := h.waitNewTab("claude reviewing", restarted.BlockID)
+	if pane := h.waitSplit(3); pane.anchor != rerun.BlockID {
+		t.Fatalf("rerun: hunk pane beside %s, want %s", pane.anchor, rerun.BlockID)
+	}
+
+	h.writeFindings(7, "h1")
+	h.status(rerun.BlockID, "done")
+	h.waitStage("R-1", lifecycle.ReviewReady)
+	h.rex.CloseWindow(context.Background(), rerun.SessionID, rerun.WindowID)
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: rerun.BlockID}
+	eventually(t, "the Worker gone", func() bool { return !h.task("R-1").Live })
+	h.review(prURL7)
+	reopened := h.waitTab("claude review_ready")
+	if pane := h.waitSplit(4); pane.anchor != reopened.BlockID || !slices.Equal(pane.argv, hunkPR7) {
+		t.Fatalf("reopen: hunk pane = %+v, want hunk beside %s", pane, reopened.BlockID)
+	}
+	h.still("R-1", lifecycle.ReviewReady)
+	if n := len(h.rex.allSplits()); n != 4 {
+		t.Fatalf("%d hunk panes for 4 Worker starts", n)
+	}
+}
+
+func TestABuildWorkerOpensNoHunkPane(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.waitTab("claude working")
+	eventually(t, "the Worker live", func() bool { return h.task("ENG-1").Live })
+	if ss := h.rex.allSplits(); len(ss) != 0 {
+		t.Fatalf("a build Worker opened panes %+v", ss)
+	}
+}
+
+// syncBuffer is a log that a test reads while lanes write to it.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func TestAFailedHunkPaneLeavesTheReviewWorkerRunning(t *testing.T) {
+	var log syncBuffer
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) {
+		d.Log = slog.New(slog.NewTextHandler(&log, nil))
+	})
+	h.rex.splitErr = errors.New("rex split: no such block")
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	h.waitTab("claude reviewing")
+	eventually(t, "the warning", func() bool {
+		return strings.Contains(log.String(), `level=WARN msg="hunk pane" task=R-1 err="rex split: no such block"`)
+	})
+	if v := h.task("R-1"); !v.Live || v.Stage != "Reviewing" || v.Flag != "" {
+		t.Fatalf("task = %+v, want a live Worker in Reviewing with no flag", v)
+	}
+}
+
+func TestHunkPaneEventsLeaveTheReviewAsItWas(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.writeFindings(7, "h1")
+	h.review(prURL7)
+	worker := h.waitTab("claude reviewing")
+	pane := h.waitSplit(1)
+	eventually(t, "the Worker live", func() bool { return h.task("R-1").Live })
+	before := h.task("R-1")
+
+	for _, ev := range []RexEvent{
+		{Kind: EvStatus, Status: Status{State: "done"}},
+		{Kind: EvStatus, Status: Status{State: "blocked", Kind: "question"}},
+		{Kind: EvExited, ExitCode: 1},
+		{Kind: EvClosed},
+	} {
+		ev.BlockID = pane.BlockID
+		h.rex.events <- ev
+	}
+	h.still("R-1", lifecycle.Reviewing)
+	if v := h.task("R-1"); v != before {
+		t.Fatalf("task = %+v after hunk pane events, want it as it was: %+v", v, before)
+	}
+	if tabs := h.rex.open("claude reviewing"); len(tabs) != 1 || tabs[0].BlockID != worker.BlockID {
+		t.Fatalf("Worker tabs %+v, want the first Worker only", tabs)
+	}
+
+	// Closing the whole tab closes both blocks and restarts the Worker once.
+	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: pane.BlockID}
+	h.waitNewTab("claude reviewing", worker.BlockID)
+	h.still("R-1", lifecycle.Reviewing)
+	var left int
+	h.s.call(func() { left = h.s.recs["R-1"].Left.Restarts })
+	if left != testPolicy.Budgets.Restarts-1 {
+		t.Fatalf("restarts left %d, want one restart", left)
+	}
+}
+
+// The hunk pane holds a tab open after its Worker's block closes.
+func TestAClosedReviewWorkerClosesItsHunkPane(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.writeFindings(7, "h1")
+	h.review(prURL7)
+	worker := h.waitTab("claude reviewing")
+	h.waitSplit(1)
+	h.status(worker.BlockID, "done")
+	h.waitStage("R-1", lifecycle.ReviewReady)
+
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	eventually(t, "the hunk pane closed", func() bool { return h.rex.allSplits()[0].closed })
+	if v := h.task("R-1"); v.Live || v.Stage != "Review ready" || v.Flag != "" {
+		t.Fatalf("task = %+v, want Review ready with no Worker", v)
+	}
+}
+
+func TestRecoveryClosesTheHunkPaneOfALostReviewWorker(t *testing.T) {
+	rex := &fakeRex{events: make(chan RexEvent, 16), splits: []*split{{BlockID: "split:9", window: "window:gone"}}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReview(lifecycle.ReviewReady), func(d *Deps) { d.Rex = rex })
+	eventually(t, "the hunk pane closed", func() bool { return rex.allSplits()[0].closed })
+	h.still("R-3", lifecycle.ReviewReady)
 }

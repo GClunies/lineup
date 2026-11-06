@@ -254,6 +254,12 @@ func (s *Scheduler) setupReview(ctx context.Context, r Record) bool {
 	return true
 }
 
+// hunkArgv shows the PR's diff in hunk. hunk reads a token from GH_TOKEN for
+// a private repository. The shell sets it from gh, so the token is in no argv.
+func hunkArgv(url string) []string {
+	return []string{"sh", "-c", `GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"`, "hunk", url}
+}
+
 // removeReviewWorktree runs at Done, after the tab closed. It never runs
 // worktrunk: the review worktree is not worktrunk's.
 func (s *Scheduler) removeReviewWorktree(ctx context.Context, r Record) {

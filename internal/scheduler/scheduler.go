@@ -446,6 +446,11 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 	}
 	s.update(id, func(r *Record) { r.WorkerStage = stage })
 	s.attach(id, w, JobWorker)
+	if r.Review != nil {
+		if err := s.d.Rex.Split(ctx, w.SessionID, w.BlockID, r.Worktree, hunkArgv(r.Review.URL)); err != nil {
+			s.d.Log.Warn("hunk pane", "task", id, "err", err)
+		}
+	}
 }
 
 // detach forgets the Task's tab before closing it, so its exit is not read as a lost Worker.
@@ -531,7 +536,7 @@ func (s *Scheduler) onRex(ev RexEvent) {
 
 	case EvClosed:
 		job := r.Job
-		r.WindowID, r.BlockID, r.Job = "", "", JobNone
+		s.forgetTab(r)
 		s.save(r)
 		switch {
 		case job == JobSetup:
@@ -540,6 +545,21 @@ func (s *Scheduler) onRex(ev RexEvent) {
 			s.apply(r, lifecycle.WorkerLost{}, "")
 		}
 	}
+}
+
+// forgetTab drops the Task's tab after its block is gone. The hunk pane
+// holds a review tab open, so the Scheduler closes that tab.
+func (s *Scheduler) forgetTab(r *Record) {
+	id, session, window := r.ID, r.SessionID, r.WindowID
+	r.WindowID, r.BlockID, r.Job = "", "", JobNone
+	if r.Review == nil || window == "" {
+		return
+	}
+	s.enqueue(id, func(ctx context.Context) {
+		if err := s.d.Rex.CloseWindow(ctx, session, window); err != nil {
+			s.d.Log.Warn("close tab", "task", id, "err", err)
+		}
+	})
 }
 
 func (s *Scheduler) keepOrphan(ev RexEvent) {
@@ -684,7 +704,7 @@ func (s *Scheduler) recover(ctx context.Context) {
 			continue
 		}
 		job := r.Job
-		r.WindowID, r.BlockID, r.Job = "", "", JobNone
+		s.forgetTab(r)
 		s.save(r)
 		if r.Flag != "" && !r.Flag.Transient() {
 			continue
