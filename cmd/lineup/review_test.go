@@ -110,7 +110,7 @@ func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 		t.Fatalf("argv = %q, want --session-id %s", argv, spec.Conversation)
 	}
 	prompt := argv[len(argv)-1]
-	if !strings.HasPrefix(prompt, "/pr-review https://github.com/umbrella/data/pull/4955\n") || !strings.Contains(prompt, "Stop at Step 5") {
+	if !strings.HasPrefix(prompt, "/pr-review https://github.com/umbrella/data/pull/4955\n") || !strings.Contains(prompt, "At Step 5, wait for the user's decisions") {
 		t.Fatalf("prompt = %s", prompt)
 	}
 

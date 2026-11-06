@@ -45,10 +45,13 @@ type Record struct {
 	// Reviewing Worker starts a new one, and a reopen resumes it.
 	Conversation string `json:"conversation,omitempty"`
 
-	SessionID   string          `json:"session_id,omitempty"`
-	WindowID    string          `json:"window_id,omitempty"`
-	BlockID     string          `json:"block_id,omitempty"`
-	Job         Job             `json:"job,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	WindowID  string `json:"window_id,omitempty"`
+	BlockID   string `json:"block_id,omitempty"`
+	Job       Job    `json:"job,omitempty"`
+	// HunkBlockID is the hunk pane beside a review Worker. No event of it
+	// reaches the Task.
+	HunkBlockID string          `json:"hunk_block_id,omitempty"`
 	WorkerStage lifecycle.Stage `json:"worker_stage"`
 	// Pending is the Worker to start once setup finishes.
 	Pending *lifecycle.Stage `json:"pending,omitempty"`

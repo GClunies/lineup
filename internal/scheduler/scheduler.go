@@ -447,10 +447,23 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 	s.update(id, func(r *Record) { r.WorkerStage = stage })
 	s.attach(id, w, JobWorker)
 	if r.Review != nil {
-		if err := s.d.Rex.Split(ctx, w.SessionID, w.BlockID, r.Worktree, hunkArgv(r.Review.URL)); err != nil {
-			s.d.Log.Warn("hunk pane", "task", id, "err", err)
-		}
+		s.openHunk(ctx, id, w.SessionID, w.BlockID, r.Worktree, r.Review.URL)
 	}
+}
+
+// openHunk shows the PR in hunk beside a review Worker. A failed split leaves
+// the Worker running.
+func (s *Scheduler) openHunk(ctx context.Context, id, session, block, worktree, url string) {
+	hunk, err := s.d.Rex.Split(ctx, session, block, worktree, hunkArgv(url))
+	if err != nil {
+		s.d.Log.Warn("hunk pane", "task", id, "err", err)
+		return
+	}
+	s.update(id, func(r *Record) {
+		if r.BlockID == block {
+			r.HunkBlockID = hunk
+		}
+	})
 }
 
 // sessionEmpty reports whether a session holds no tabs. The user, or another
@@ -469,7 +482,7 @@ func (s *Scheduler) detach(ctx context.Context, r Record) {
 	if r.WindowID == "" {
 		return
 	}
-	s.update(r.ID, func(r *Record) { r.WindowID, r.BlockID, r.Job = "", "", JobNone })
+	s.update(r.ID, func(r *Record) { r.WindowID, r.BlockID, r.HunkBlockID, r.Job = "", "", "", JobNone })
 	if err := s.d.Rex.CloseWindow(ctx, r.SessionID, r.WindowID); err != nil {
 		s.d.Log.Warn("close tab", "task", r.ID, "err", err)
 	}
@@ -565,7 +578,7 @@ func (s *Scheduler) onRex(ev RexEvent) {
 // holds a review tab open, so the Scheduler closes that tab.
 func (s *Scheduler) forgetTab(r *Record) {
 	id, session, window := r.ID, r.SessionID, r.WindowID
-	r.WindowID, r.BlockID, r.Job = "", "", JobNone
+	r.WindowID, r.BlockID, r.HunkBlockID, r.Job = "", "", "", JobNone
 	if r.Review == nil || window == "" {
 		return
 	}
@@ -715,6 +728,10 @@ func (s *Scheduler) recover(ctx context.Context) {
 			if r.Job == JobWorker {
 				if st, err := s.d.Rex.ProgramStatus(ctx, r.SessionID, r.BlockID); err == nil && st.State != "" {
 					s.onRex(RexEvent{Kind: EvStatus, BlockID: r.BlockID, Status: st})
+				}
+				if r.Review != nil && !blocks[r.HunkBlockID] {
+					id, session, block, worktree, url := r.ID, r.SessionID, r.BlockID, r.Worktree, r.Review.URL
+					s.enqueue(id, func(ctx context.Context) { s.openHunk(ctx, id, session, block, worktree, url) })
 				}
 			}
 			continue

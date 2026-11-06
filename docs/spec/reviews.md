@@ -4,7 +4,7 @@ Status: built. This spec adds the `review` Hub tab, PR views, and review queues.
 
 ## Goal
 
-The user sees in one place which PRs need them: their own open PRs and the PRs that they must review. Agents start the reviews before the user arrives. A queued review stops before any write to GitHub, so the user decides every finding.
+The user sees in one place which PRs need them: their own open PRs and the PRs that they must review. Agents start the reviews before the user arrives. A queued review writes nothing to GitHub until the user decides every finding.
 
 ## Scope
 
@@ -260,14 +260,15 @@ sh -c 'GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"' hunk <PR URL>
 
 - `hunk` needs a token for a private repository. It reads `GH_TOKEN`.
 - The shell in the pane gets the token from `gh`. The token is in no command line that `ps` shows.
-- lineup never tracks the pane. The Worker's block stays the one block of the Task.
+- The pane's block has the label `hunk`. lineup keeps its ID, and the Worker's block stays the block of the Task.
+- When the Scheduler starts, it opens the pane again beside each live review Worker whose pane is gone.
 - The events of the pane never change the Task. Closing the pane alone leaves the review as it is.
 - The pane holds the tab open after the Worker's block closes. lineup then closes the tab. Recovery does the same.
 - If the split fails, lineup logs a warning. The Worker runs without the pane.
 
 The review contract:
 
-> Use the review worktree <path> as the worktree of `pr-review` Step 1. Check out each new head there, and keep it at Step 10. If the record holds findings at the current head, reuse them. If it holds an older review, review again at the current head. Do `pr-review` Steps 1 to 5. Stop at Step 5 and wait for the user's decisions. Write nothing to GitHub before the user decides. Leave the findings file of `pr-review` behind, also when there are no findings.
+> Use the review worktree <path> as the worktree of `pr-review` Step 1. Check out each new head there, and keep it at Step 10. If the record holds findings at the current head, reuse them. If it holds an older review, review again at the current head. Do `pr-review` Steps 1 to 10. At Step 5, wait for the user's decisions, and write nothing to GitHub before them. The decisions approve the pushes and the post of Steps 6 to 9, so go on to them without asking again. Leave the findings file of `pr-review` behind, also when there are no findings.
 
 The contract output is a file in the PR's `pr-review` record folder: `findings-<head>.json` for the head that the Task pinned when it was added, or any `findings-*.json` whose time is the same as or later than the start of Reviewing. The first case covers a review that reuses findings. lineup checks for the file when the Worker reports `done`, and when a Reviewing Worker asks a question. The folder is `${XDG_STATE_HOME:-~/.local/state}/pr-review/<owner>-<repo>-<number>/`. lineup resolves `XDG_STATE_HOME` from the Worker's environment, which it builds itself, so the two always agree. The file's `head` field names the head that the review read.
 

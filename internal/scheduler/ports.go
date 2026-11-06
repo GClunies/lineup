@@ -21,8 +21,8 @@ type Rex interface {
 	EnsureSession(ctx context.Context, label string) (string, error)
 	NewWindow(ctx context.Context, session, label, cwd string, env map[string]string, argv []string) (Window, error)
 	// Split opens argv beside block, in block's tab, and keeps the focus on
-	// block. The Scheduler never tracks the new block.
-	Split(ctx context.Context, session, block, cwd string, argv []string) error
+	// block. It returns the new block.
+	Split(ctx context.Context, session, block, cwd string, argv []string) (string, error)
 	CloseWindow(ctx context.Context, session, window string) error
 	DestroySession(ctx context.Context, session string) error
 	// Blocks returns the IDs of the live blocks in a session. A missing session has none.

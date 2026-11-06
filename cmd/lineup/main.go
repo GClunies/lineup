@@ -30,7 +30,7 @@ const usage = `usage: lineup [command]
   lineup add <ISSUE>           put an Issue on the Board: ENG-614, owner/repo#12, or local-7
   lineup add --repo <repo> "<text>"
   lineup start [--over-cap] <task>
-  lineup review <PR URL>       review someone else's PR; it stops before any write to GitHub
+  lineup review <PR URL>       review someone else's PR; it posts only what you decide
   lineup reviews [--json]      list each review queue: its started reviews and the PRs that wait
   lineup reviews pause | resume
                                stop or restart every review queue fill

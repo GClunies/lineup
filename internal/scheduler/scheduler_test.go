@@ -62,20 +62,20 @@ func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, env m
 	return w, nil
 }
 
-func (f *fakeRex) Split(_ context.Context, _, block, cwd string, argv []string) error {
+func (f *fakeRex) Split(_ context.Context, _, block, cwd string, argv []string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.splitErr != nil {
-		return f.splitErr
+		return "", f.splitErr
 	}
 	for _, t := range f.tabs {
 		if t.BlockID == block {
 			f.n++
 			f.splits = append(f.splits, &split{BlockID: fmt.Sprintf("split:%d", f.n), anchor: block, cwd: cwd, window: t.WindowID, argv: argv})
-			return nil
+			return f.splits[len(f.splits)-1].BlockID, nil
 		}
 	}
-	return fmt.Errorf("block %s not found", block)
+	return "", fmt.Errorf("block %s not found", block)
 }
 
 func (f *fakeRex) CloseWindow(_ context.Context, _, window string) error {

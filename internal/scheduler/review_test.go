@@ -542,12 +542,16 @@ func TestALostTabWhileReviewingStartsAFreshWorker(t *testing.T) {
 }
 
 func seedReview(stage lifecycle.Stage) func(*store.Store) {
+	return seedReviewTab(stage, "window:gone", "block:gone", "")
+}
+
+func seedReviewTab(stage lifecycle.Stage, window, block, hunk string) func(*store.Store) {
 	return func(st *store.Store) {
 		r := Record{
 			Task:  lifecycle.Task{ID: "R-3", Kind: lifecycle.KindReview, Stage: stage, Policy: testPolicy, Left: testPolicy.Budgets},
 			Title: "data#7 Fix the tooltip", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: reviewSession,
 			Review:   &ReviewPR{Repo: "acme/data", Number: 7, URL: prURL7, Head: "h1", Base: "main"},
-			Worktree: "/repos/acme/data.review-pr-7", SessionID: "session:reviews", WindowID: "window:gone", BlockID: "block:gone", Job: JobWorker,
+			Worktree: "/repos/acme/data.review-pr-7", SessionID: "session:reviews", WindowID: window, BlockID: block, HunkBlockID: hunk, Job: JobWorker,
 		}
 		data, _ := json.Marshal(r)
 		st.Save(r.ID, data, nil)
@@ -779,6 +783,33 @@ func TestRecoveryClosesTheHunkPaneOfALostReviewWorker(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReview(lifecycle.ReviewReady), func(d *Deps) { d.Rex = rex })
 	eventually(t, "the hunk pane closed", func() bool { return rex.allSplits()[0].closed })
 	h.still("R-3", lifecycle.ReviewReady)
+}
+
+// A Worker that an older lineup started, or whose hunk pane closed, gets the
+// pane back when the Scheduler starts.
+func TestRecoveryOpensAMissingHunkPaneBesideALiveReviewWorker(t *testing.T) {
+	live := &tab{Window: Window{"session:reviews", "window:live", "block:live"}, argv: []string{"claude", "reviewing"}}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{{BlockID: "split:9", window: "window:live", closed: true}}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReviewTab(lifecycle.ReviewReady, "window:live", "block:live", "split:9"), func(d *Deps) { d.Rex = rex })
+	eventually(t, "a new hunk pane", func() bool { return len(rex.allSplits()) == 2 })
+	got := rex.allSplits()[1]
+	if got.anchor != "block:live" || got.cwd != "/repos/acme/data.review-pr-7" || !slices.Equal(got.argv, hunkArgv(prURL7)) {
+		t.Fatalf("split = %+v", got)
+	}
+	h.still("R-3", lifecycle.ReviewReady)
+	if v := h.task("R-3"); !v.Live {
+		t.Fatalf("task = %+v, want its Worker kept", v)
+	}
+}
+
+func TestRecoveryKeepsALiveHunkPane(t *testing.T) {
+	live := &tab{Window: Window{"session:reviews", "window:live", "block:live"}, argv: []string{"claude", "reviewing"}}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{{BlockID: "split:9", window: "window:live"}}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReviewTab(lifecycle.ReviewReady, "window:live", "block:live", "split:9"), func(d *Deps) { d.Rex = rex })
+	h.still("R-3", lifecycle.ReviewReady)
+	if n := len(rex.allSplits()); n != 1 {
+		t.Fatalf("%d hunk panes, want the live one only", n)
+	}
 }
 
 // pr-review asks for the decision on each finding with AskUserQuestion after

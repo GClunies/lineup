@@ -270,7 +270,7 @@ func TestReviewPromptRunsPRReviewAndStopsBeforeGitHub(t *testing.T) {
 	for _, want := range []string{
 		"Review worktree: /repos/umbrella/data.review-pr-4955\n",
 		"Use the review worktree /repos/umbrella/data.review-pr-4955 as the worktree of `pr-review` Step 1.",
-		"Stop at Step 5 and wait for the user's decisions. Write nothing to GitHub before the user decides.",
+		"At Step 5, wait for the user's decisions, and write nothing to GitHub before them. The decisions approve the pushes and the post of Steps 6 to 9, so go on to them without asking again.",
 		"Leave the findings file of `pr-review` behind, also when there are no findings.",
 	} {
 		if !strings.Contains(p, want) {

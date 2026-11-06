@@ -213,7 +213,7 @@ const noPRContract = "Do not push a branch or open a pull request. Say what you 
 // %[1]s is the review worktree.
 const reviewContract = "Use the review worktree %[1]s as the worktree of `pr-review` Step 1. Check out each new head there, and keep it at Step 10. " +
 	"If the record holds findings at the current head, reuse them. If it holds an older review, review again at the current head. " +
-	"Do `pr-review` Steps 1 to 5. Stop at Step 5 and wait for the user's decisions. Write nothing to GitHub before the user decides. " +
+	"Do `pr-review` Steps 1 to 10. At Step 5, wait for the user's decisions, and write nothing to GitHub before them. The decisions approve the pushes and the post of Steps 6 to 9, so go on to them without asking again. " +
 	"Leave the findings file of `pr-review` behind, also when there are no findings."
 
 var intros = map[lifecycle.Stage]string{
