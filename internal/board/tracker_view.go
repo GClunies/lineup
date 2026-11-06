@@ -513,7 +513,7 @@ func (m Model) trackerHints() []hint {
 		if len(t.tabs) > 1 {
 			hs = append(hs, hint{"tab", "next view"}, hint{"< >", "move the tab"})
 		}
-		return append(hs, hint{"q", "quit"}, hint{"?", "all keys"})
+		return append(hs, hint{"R", "refresh now"}, hint{"q", "quit"}, hint{"?", "all keys"})
 	}
 	atHome := tb.view != nil && t.lvl == tb.home()
 	var hs []hint
@@ -554,5 +554,5 @@ func (m Model) trackerHints() []hint {
 	if tb.view != nil {
 		hs = append(hs, hint{"< >", "move the tab"})
 	}
-	return append(hs, hint{"q", "quit"}, hint{"?", "all keys"})
+	return append(hs, hint{"R", "refresh now"}, hint{"q", "quit"}, hint{"?", "all keys"})
 }

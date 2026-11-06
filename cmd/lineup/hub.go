@@ -48,11 +48,15 @@ const (
 // it, because a Monitor does not survive a restart of Claude.
 const watchPrompt = "Start the lineup watch Monitor, as CLAUDE.md says under Alerts."
 
-// orchestratorSettings gives the Orchestrator its status line and lets it run
-// the lineup CLI without a permission prompt.
+// orchestratorSettings gives the Orchestrator its status line, lets it run
+// the lineup CLI without a permission prompt, and leaves reviews to the
+// Reviewer.
 const orchestratorSettings = `{
   "statusLine": {"type": "command", "command": "echo Orchestrator"},
-  "permissions": {"allow": ["Bash(lineup:*)"]}
+  "permissions": {
+    "allow": ["Bash(lineup:*)"],
+    "deny": ["Bash(lineup review:*)", "Bash(lineup reviews:*)"]
+  }
 }
 `
 
@@ -155,9 +159,26 @@ type agentTab struct {
 
 // agentTabs are in Hub tab order. The first is the active tab of a new Hub.
 var agentTabs = []agentTab{
-	{"orchestrate", "BOARD", "ORCHESTRATOR", []string{"board"}, orchestratorRole, orchestratorSettings, "#1b2733", watchPrompt, nil},
+	{"work", "BOARD", "ORCHESTRATOR", []string{"board"}, orchestratorRole, orchestratorSettings, "#1b2733", watchPrompt, nil},
 	{"plan", "LINEAR", "PLANNER", []string{"board", "--linear"}, plannerRole, plannerSettings, "#2a2233", "", composePlanner},
 	{"review", "REVIEWS", "REVIEWER", []string{"board", "--review"}, reviewerRole, reviewerSettings, "#1f2b24", "", nil},
+}
+
+// formerLabels are the labels that a Hub tab had before a rename, by its
+// label now.
+var formerLabels = map[string]string{"work": "orchestrate"}
+
+// renamed is the Hub window to relabel as label: the one under the tab's
+// former label, when no window has the label yet. The rename keeps the agent
+// that runs there. openHub keeps a window that it does not know, so a new tab
+// beside the old one would run a second agent.
+func renamed(windows map[string]hubWindow, label string) (hubWindow, bool) {
+	old, ok := formerLabels[label]
+	if _, now := windows[label]; !ok || now {
+		return hubWindow{}, false
+	}
+	w, ok := windows[old]
+	return w, ok
 }
 
 func rexRun(args ...string) ([]byte, error) {
@@ -332,6 +353,16 @@ func openHub() error {
 	}
 
 	for i, t := range agentTabs {
+		if w, ok := renamed(windows, t.window); ok {
+			if _, err := rexRun("window", "rename", "-s", hubSession, w.ID, t.window); err != nil {
+				return err
+			}
+			// The agent reads its new role the next time it starts.
+			if _, err := prepareAgent(t); err != nil {
+				return err
+			}
+			windows[t.window] = w
+		}
 		if _, ok := windows[t.window]; ok {
 			continue
 		}
@@ -450,7 +481,7 @@ func runBoard(args []string) error {
 		opts.Tracker.Sources = boardSources(g, stateDir())
 		opts.Reviews.Views = reviewViews(g)
 	}
-	if flag == "" {
+	if flag != "--linear" {
 		opts.Notify = func(text string) { board.Toast(os.Stdout, text) }
 	}
 	return board.Run(socketPath(), filepath.Join(stateDir(), "board.json"), opts)

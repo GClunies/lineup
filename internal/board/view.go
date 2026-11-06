@@ -33,6 +33,9 @@ func (m Model) View() string {
 		case viewTracker:
 			return trackerHelp
 		case viewReview:
+			if m.rv.curTab().Tasks {
+				return reviewTasksHelp
+			}
 			return reviewHelp
 		}
 		return boardHelp
@@ -45,11 +48,8 @@ func (m Model) View() string {
 		body = m.reviewBody()
 	case m.detail:
 		body = m.vp.View()
-	case m.preview:
-		lw := m.width * 55 / 100
-		body = lipgloss.JoinHorizontal(lipgloss.Top, m.rows(lw), m.previewPane(m.width-lw))
 	default:
-		body = m.rows(m.width)
+		body = m.taskBody(max(m.height-3, 1))
 	}
 	lines := strings.Split(body, "\n")
 	h := max(m.height-3, 1)
@@ -80,13 +80,16 @@ func (m Model) header() string {
 	for _, t := range m.tasks {
 		count[t.Group]++
 	}
-	s := fmt.Sprintf(" %s  WIP %d/%d", bold.Render("lineup"), m.board.Started, m.board.Cap)
-	if m.board.OverCap > 0 {
-		s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
+	s := " " + bold.Render("lineup")
+	if m.kind == lifecycle.KindBuild {
+		s += fmt.Sprintf("  WIP %d/%d", m.board.Started, m.board.Cap)
+		if m.board.OverCap > 0 {
+			s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
+		}
 	}
 	s += fmt.Sprintf("   ●%d need you   ◐%d working   ◷%d waiting   %d queued",
 		count["Needs you"], count["Working"], count["Waiting"], count["Queued"])
-	if m.board.ReviewsPaused {
+	if m.kind == lifecycle.KindReview && m.board.ReviewsPaused {
 		s += "   " + bad.Render("reviews paused")
 	}
 	if !m.online {
@@ -141,11 +144,17 @@ func hintBar(width int, hints []hint) string {
 
 // boardHints lists the keys for the selected Task, most useful first.
 func (m Model) boardHints() []hint {
-	tail := []hint{{"z", "agent"}, {"q", "quit"}, {"?", "all keys"}}
+	tail := []hint{{"z", "agent"}, {"R", "refresh now"}, {"q", "quit"}, {"?", "all keys"}}
+	if m.view == viewReview {
+		tail = append([]hint{{"tab", "next view"}, {"< >", "move the tab"}}, tail...)
+	}
 	if m.detail {
 		return []hint{{"f", "back"}, {"j/k", "scroll"}, {"?", "all keys"}}
 	}
 	t, ok := m.current()
+	if !ok && m.kind == lifecycle.KindReview {
+		return append([]hint{{"tab", "find a PR to review"}}, tail...)
+	}
 	if !ok {
 		return append([]hint{{"plan tab", "start an Issue"}}, tail...)
 	}
@@ -178,8 +187,17 @@ func (m Model) boardHints() []hint {
 	return append(hs, tail...)
 }
 
-func (m Model) previewPane(w int) string {
-	h := max(m.height-3, 1)
+// taskBody is the Task rows, and the Worker's screen beside them while the
+// preview is on. h is the height of the body.
+func (m Model) taskBody(h int) string {
+	if !m.preview {
+		return m.rows(m.width)
+	}
+	lw := m.width * 55 / 100
+	return lipgloss.JoinHorizontal(lipgloss.Top, m.rows(lw), m.previewPane(m.width-lw, h))
+}
+
+func (m Model) previewPane(w, h int) string {
 	lines := strings.Split(strings.TrimRight(m.previewTxt, "\n"), "\n")
 	if len(lines) > h {
 		lines = lines[len(lines)-h:]
@@ -281,14 +299,14 @@ const boardHelp = `
  lineup board keys
 
    j k      move the selection
-   enter    focus the Task's tab in Rex, or reopen the closed Worker
-            of a review Task in Review ready
+   enter    focus the Task's tab in Rex
    p        live preview of the Worker's screen
    f        detail pane at full screen, and back
    m        merge the PR            (Ready to land)
    x        close the Task, or archive a Done Task, after y/n
    s        start a Queued Task
    o        open the PR or the Issue
+   R        refresh now: poll GitHub for every started Task
    z        zoom the agent pane
    ?        this help      q  quit
 
@@ -314,6 +332,7 @@ const trackerHelp = `
    A        assign the Issue to you
    n        add an Issue to this Project or team view
    o        open the Issue in the browser
+   R        refresh what is on screen now
    ?        this help      q  quit
 
  press any key to go back

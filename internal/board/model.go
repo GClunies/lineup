@@ -28,11 +28,12 @@ type Options struct {
 	Zoom func()
 	// Linear opens on the Linear browser instead of the Board.
 	Linear bool
-	// Review opens on the review tab's PR views instead of the Board.
+	// Review opens on the review tab instead of the Board. Its Reviews tab
+	// lists the review Tasks, and its other tabs list PRs.
 	Review  bool
 	Reviews Reviews
 	// Notify shows one alert line as a desktop toast. The Hub sets it for the
-	// Board in the orchestrate tab only, so each alert toasts once.
+	// work and review boards, and each toasts only its own Kind's alerts.
 	Notify func(text string)
 	// Open opens a URL. The default runs `open`.
 	Open func(url string) error
@@ -94,7 +95,8 @@ type Model struct {
 	client Client
 
 	board   scheduler.BoardView
-	tasks   []scheduler.TaskView // in group order
+	kind    lifecycle.Kind       // the Kind of the Tasks that this board shows
+	tasks   []scheduler.TaskView // the Tasks of kind, in group order
 	sel     string               // selected Task ID
 	online  bool
 	status  string
@@ -136,11 +138,11 @@ func New(v scheduler.BoardView, opts Options) Model {
 	case opts.Linear:
 		m.view = viewTracker
 	case opts.Review:
-		m.view = viewReview
+		m.view, m.kind = viewReview, lifecycle.KindReview
 	}
 	m.setBoard(v)
 	m.alerted = map[string]string{}
-	scheduler.Alerts(m.alerted, v) // the view it opens on is not news
+	scheduler.Alerts(m.alerted, v.OfKind(m.kind)) // the view it opens on is not news
 	return m
 }
 
@@ -148,8 +150,9 @@ func (m *Model) setBoard(v scheduler.BoardView) {
 	m.board = v
 	m.rv.reviews = reviewTasks(v.Tasks)
 	m.tasks = m.tasks[:0]
+	own := v.OfKind(m.kind).Tasks
 	for _, g := range groupOrder {
-		for _, t := range v.Tasks {
+		for _, t := range own {
 			if t.Group == g {
 				m.tasks = append(m.tasks, t)
 			}
@@ -271,6 +274,13 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case viewReview:
 		return m.reviewKey(msg)
 	}
+	return m.boardKey(msg)
+}
+
+// boardKey handles the keys of the Task rows. The work board and the review
+// tab's Reviews tab share it.
+func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	k := msg.String()
 	if m.detail {
 		switch k {
 		case "f", "esc":
@@ -296,6 +306,8 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.opts.Zoom != nil {
 			m.opts.Zoom()
 		}
+	case "R":
+		return m, m.op("refresh", scheduler.Request{Op: "poll"})
 	case "p":
 		m.preview = !m.preview
 		m.previewGen++
@@ -368,9 +380,13 @@ func (m Model) capKey(k string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) afterOp(msg opMsg) (tea.Model, tea.Cmd) {
+	what := msg.label
+	if msg.task != "" {
+		what += " " + msg.task
+	}
 	switch {
 	case msg.err == nil:
-		ok := msg.label + " " + msg.task + " ok"
+		ok := what + " ok"
 		if msg.note != "" {
 			ok += " · " + msg.note
 		}
@@ -378,7 +394,7 @@ func (m Model) afterOp(msg opMsg) (tea.Model, tea.Cmd) {
 	case msg.label == "start" && msg.err.Error() == capFull:
 		m.mode, m.pendingTask = modeCap, msg.task
 	default:
-		m.setStatus(msg.label+" "+msg.task+": "+msg.err.Error(), true)
+		m.setStatus(what+": "+msg.err.Error(), true)
 	}
 	return m, nil
 }
@@ -432,7 +448,7 @@ func firstNonEmpty(ss ...string) string {
 }
 
 func (m Model) toasts(v scheduler.BoardView) tea.Cmd {
-	alerts := scheduler.Alerts(m.alerted, v)
+	alerts := scheduler.Alerts(m.alerted, v.OfKind(m.kind))
 	if m.opts.Notify == nil || len(alerts) == 0 {
 		return nil
 	}

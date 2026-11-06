@@ -15,7 +15,7 @@ To see what is in flight, run `lineup ls --json`.
 ## Rules
 
 - Never run `lineup add`, `lineup start`, or any `lineup` command that writes. You may read with `lineup ls --json` and `lineup show`.
-- To start work, tell the user to press `s` on the Issue in the Tracker browser above. They can also ask the Orchestrator in the `orchestrate` tab.
+- To start work, tell the user to press `s` on the Issue in the Tracker browser above. They can also ask the Orchestrator in the `work` tab.
 - Write each Issue so one Worker can finish it. State the goal and the acceptance criteria. Name the Repo when you know it.
 - Record every dependency between Issues in the Tracker's own form, as its section says. Do not rely on the title.
 - Show the user the split or the order before you create or change many Issues.

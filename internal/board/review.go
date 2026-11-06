@@ -31,16 +31,19 @@ type ReviewAPI interface {
 
 // ReviewView is one tab of the review tab. Key names its cache file and its
 // place in the saved rank. A Queue tab lists only the PRs that the queue
-// reviews, in the order that its fills start them.
+// reviews, in the order that its fills start them. The Tasks tab lists the
+// review Tasks on the Board instead of PRs, so it has no Filter.
 type ReviewView struct {
 	Key, Name string
 	Filter    github.Filter
 	Queue     bool
+	Tasks     bool
 }
 
 // Reviews holds the review tab's outside world. Tests replace it.
 type Reviews struct {
-	// Views are the configured tabs, which follow My PRs and Requested.
+	// Views are the configured tabs, which follow Reviews, My PRs, and
+	// Requested.
 	Views      []ReviewView
 	API        ReviewAPI
 	ReadCache  func(key string) ([]github.PullRequest, bool)
@@ -53,6 +56,7 @@ type Reviews struct {
 }
 
 var builtinReviewViews = []ReviewView{
+	{Key: "tasks", Name: "Reviews", Tasks: true},
 	{Key: keyMine, Name: "My PRs", Filter: github.Filter{Base: github.MyPRs}},
 	{Key: "requested", Name: "Requested", Filter: github.Filter{Base: github.RequestedPRs}},
 }
@@ -185,6 +189,9 @@ func (m Model) loadReviews() tea.Cmd {
 		func() tea.Msg {
 			lists := map[string][]github.PullRequest{}
 			for _, tb := range tabs {
+				if tb.Tasks {
+					continue
+				}
 				if prs, ok := read(tb.Key); ok {
 					lists[tb.Key] = prs
 				}
@@ -240,6 +247,9 @@ func (m Model) refreshReviews() tea.Cmd {
 		lists := map[string][]github.PullRequest{}
 		var searches []github.Search
 		for _, tb := range tabs {
+			if tb.Tasks {
+				continue
+			}
 			q, ok := tb.Filter.Query(members)
 			if !ok {
 				lists[tb.Key] = []github.PullRequest{}
@@ -360,8 +370,6 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	rows := r.rows()
-	i := r.selected(rows)
 	switch k {
 	case "tab", "shift+tab":
 		d := 1
@@ -371,6 +379,9 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		r.tab = (r.tab + d) % len(r.tabs)
 		r.sel = ""
 		r.filter.SetValue("")
+		m.detail, m.preview = false, false
+		m.previewGen++
+		return m, nil
 	case "<", ">":
 		j := r.tab - 1
 		if k == ">" {
@@ -382,6 +393,15 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		r.tabs[r.tab], r.tabs[j] = r.tabs[j], r.tabs[r.tab]
 		r.tab = j
 		return m, m.saveReviewRank()
+	case "R":
+		return m, tea.Batch(m.refreshReviews(), m.pollQuietly())
+	}
+	if r.curTab().Tasks {
+		return m.boardKey(msg)
+	}
+	rows := r.rows()
+	i := r.selected(rows)
+	switch k {
 	case "j", "down":
 		if i+1 < len(rows) {
 			r.sel = rows[i+1].URL
@@ -395,8 +415,6 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, r.filter.Focus()
 	case "esc":
 		r.filter.SetValue("")
-	case "R":
-		return m, m.refreshReviews()
 	case "z":
 		if m.opts.Zoom != nil {
 			m.opts.Zoom()
@@ -423,6 +441,18 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// pollQuietly asks the Scheduler to poll now. Only an error reaches the
+// status line, so that it never hides an error of the PR search.
+func (m Model) pollQuietly() tea.Cmd {
+	c := m.client
+	return func() tea.Msg {
+		if err := c.Do(scheduler.Request{Op: "poll"}, nil); err != nil {
+			return opMsg{label: "refresh", err: err}
+		}
+		return nil
+	}
 }
 
 // reviewPR starts a review Task for the PR at url now, outside every queue's
@@ -461,7 +491,7 @@ func reopens(t scheduler.TaskView) bool {
 func reviewTasks(tasks []scheduler.TaskView) []github.ReviewTask {
 	var out []github.ReviewTask
 	for _, t := range tasks {
-		if t.ReviewHead != "" {
+		if t.Kind == lifecycle.KindReview {
 			out = append(out, github.ReviewTask{URL: t.PRURL, Head: t.ReviewHead, Done: t.Group == lifecycle.GroupDone.String()})
 		}
 	}
@@ -473,8 +503,8 @@ func (m Model) openURL(u string) tea.Cmd {
 	return func() tea.Msg { return opMsg{label: "open", err: open(u)} }
 }
 
-// joinPR maps a PR URL to the Task on the Board that has it. The Board lists
-// Tasks most urgent first, so a Needs you Task wins over a Done one.
+// joinPR maps a PR URL to the review Task that has it. The Board lists Tasks
+// most urgent first, so a Needs you Task wins over a Done one.
 func (m Model) joinPR() map[string]scheduler.TaskView {
 	out := map[string]scheduler.TaskView{}
 	for _, t := range m.tasks {

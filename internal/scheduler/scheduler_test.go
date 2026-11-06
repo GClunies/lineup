@@ -477,7 +477,7 @@ func TestTaskFromStartToMerged(t *testing.T) {
 	key := PRKey{"acme/data", "ada/eng-1-billing"}
 
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	if v := h.task("ENG-1"); v.Stage != "Queued" || v.Repo != "data" {
+	if v := h.task("ENG-1"); v.Stage != "Queued" || v.Repo != "data" || v.Kind != lifecycle.KindBuild {
 		t.Fatalf("added task = %+v", v)
 	}
 	h.do(Request{Op: "start", Task: "ENG-1"})
@@ -536,6 +536,24 @@ func TestTaskFromStartToMerged(t *testing.T) {
 	if !slices.Equal(h.tr.status, []string{"started", "in_review", "merged"}) {
 		t.Fatalf("tracker events = %v", h.tr.status)
 	}
+}
+
+func TestThePollOpPollsNow(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PollInterval = time.Hour })
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.waitTab("claude working")
+	polled := func() bool {
+		h.gh.mu.Lock()
+		defer h.gh.mu.Unlock()
+		return slices.Contains(h.gh.polled, PRKey{"acme/data", "ada/eng-1-billing"})
+	}
+	if polled() {
+		t.Fatal("GitHub was polled before the poll op")
+	}
+	h.do(Request{Op: "poll"})
+	eventually(t, "a poll of ENG-1's branch", polled)
 }
 
 func TestWIPCapFullFailsStart(t *testing.T) {
