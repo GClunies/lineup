@@ -201,8 +201,9 @@ A review Task never enters a Stage of a build Task, and a build Task never enter
 | From | Signal | To |
 |---|---|---|
 | Queued | `start`, and the queue has a free slot, or the Task has no queue | Reviewing |
-| Reviewing | `done`, and the findings file exists | Review ready |
+| Reviewing | `done` or a question, and the findings file exists | Review ready |
 | Reviewing | `done`, and no findings file exists | Reviewing, with the Needs you flag `stopped` |
+| Reviewing | a question, and no findings file exists | Reviewing, with the Needs you flag `question` |
 | Reviewing or Review ready | `pr-reviewed`: the user submitted a review after the Task was added. A pending review does not count. | Done, marked reviewed |
 | Reviewing or Review ready | `pr-merged` | Done, marked merged |
 | Reviewing or Review ready | `pr-closed`: closed without a merge | Done, marked closed |
@@ -213,7 +214,8 @@ A review Task never enters a Stage of a build Task, and a build Task never enter
 
 - `pr-reviewed`, `pr-merged`, and `pr-closed` are levels, not edges. Each full poll computes them from the PR's current state, so a Signal that waits is not lost.
 - The Scheduler applies them only while the Worker does not work. The Record keeps the Worker's last program status. The Worker does not work when that status is `done` or `idle`, when the Worker exited, or when the Task has no tab. `blocked` counts as working, because `pr-review` can ask for a permission in its Step 10. `pr-review` posts the review in its Step 9, and a Done in between would close the tab before that step ends.
-- Review ready is a Stage, not a flag. Recovery restarts a lost Worker only in an agent Stage, so a finished review never runs again after a restart.
+- A question is the program status `blocked` with the kind `question`. `pr-review` asks for the decision on each finding with `AskUserQuestion`, after it saves the findings file. A question after the findings file waits for the user, as `done` does. A `blocked` permission never meets the contract.
+- Review ready is a Stage, not a flag. The Worker's later statuses, for example `working` after the user's answer, never move the Task back to Reviewing. Recovery restarts a lost Worker only in an agent Stage, so a finished review never runs again after a restart.
 - `reopen` fits only Review ready. It clears the Task's flag and opens a new tab, and it takes no new slot.
 - `rerun` takes only the Stages of the Task's Kind, so a review Task never enters Working, CI running, or any other build Stage.
 - When a PR that the user reviewed requests the user again, its review Task is already Done. The queue then starts a new review Task. `pr-review` reads its review record and reviews only what changed.
@@ -267,7 +269,7 @@ The review contract:
 
 > Use the review worktree <path> as the worktree of `pr-review` Step 1. Check out each new head there, and keep it at Step 10. If the record holds findings at the current head, reuse them. If it holds an older review, review again at the current head. Do `pr-review` Steps 1 to 5. Stop at Step 5 and wait for the user's decisions. Write nothing to GitHub before the user decides. Leave the findings file of `pr-review` behind, also when there are no findings.
 
-The contract output is a file in the PR's `pr-review` record folder: `findings-<head>.json` for the head that the Task pinned when it was added, or any `findings-*.json` whose time is the same as or later than the start of Reviewing. The first case covers a review that reuses findings. The folder is `${XDG_STATE_HOME:-~/.local/state}/pr-review/<owner>-<repo>-<number>/`. lineup resolves `XDG_STATE_HOME` from the Worker's environment, which it builds itself, so the two always agree. The file's `head` field names the head that the review read.
+The contract output is a file in the PR's `pr-review` record folder: `findings-<head>.json` for the head that the Task pinned when it was added, or any `findings-*.json` whose time is the same as or later than the start of Reviewing. The first case covers a review that reuses findings. lineup checks for the file when the Worker reports `done`, and when a Reviewing Worker asks a question. The folder is `${XDG_STATE_HOME:-~/.local/state}/pr-review/<owner>-<repo>-<number>/`. lineup resolves `XDG_STATE_HOME` from the Worker's environment, which it builds itself, so the two always agree. The file's `head` field names the head that the review read.
 
 ## The pr-review and pr-explain change
 

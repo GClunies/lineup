@@ -758,3 +758,69 @@ func TestRecoveryClosesTheHunkPaneOfALostReviewWorker(t *testing.T) {
 	eventually(t, "the hunk pane closed", func() bool { return rex.allSplits()[0].closed })
 	h.still("R-3", lifecycle.ReviewReady)
 }
+
+// pr-review asks for the decision on each finding with AskUserQuestion after
+// it saves the findings.
+func TestAReviewQuestionMeetsTheContractOnlyAfterTheFindings(t *testing.T) {
+	cases := []struct {
+		name     string
+		findings bool
+		kind     string
+		stage    lifecycle.Stage
+		flag     string
+	}{
+		{"a question after the findings", true, "question", lifecycle.ReviewReady, ""},
+		{"a question before the findings", false, "question", lifecycle.Reviewing, "question"},
+		{"a permission after the findings", true, "permission", lifecycle.Reviewing, "permission"},
+	}
+	for _, c := range cases {
+		h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+		h.gh.setReview(openPR(7, "h1"))
+		h.review(prURL7)
+		worker := h.waitTab("claude reviewing")
+		if c.findings {
+			h.writeFindings(7, "h1")
+		}
+		h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "blocked", Kind: c.kind, Msg: "answer: finding 3"}}
+		h.waitStage("R-1", c.stage)
+		h.still("R-1", c.stage)
+		if v := h.task("R-1"); v.Flag != c.flag {
+			t.Errorf("%s: %s with flag %q, want %s with flag %q", c.name, v.Stage, v.Flag, c.stage, c.flag)
+		}
+	}
+}
+
+func TestLaterStatusesKeepAReviewReadyFromAQuestion(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	worker := h.waitTab("claude reviewing")
+	h.writeFindings(7, "h1")
+	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "blocked", Kind: "question"}}
+	h.waitStage("R-1", lifecycle.ReviewReady)
+	for _, state := range []string{"working", "done", "idle"} {
+		h.status(worker.BlockID, state)
+		h.still("R-1", lifecycle.ReviewReady)
+		if v := h.task("R-1"); v.Flag != "" {
+			t.Fatalf("after %s: flag %q, want none", state, v.Flag)
+		}
+	}
+	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	eventually(t, "the Worker gone", func() bool { return !h.task("R-1").Live })
+	if res := h.review(prURL7); res.Action != ReviewReopened {
+		t.Fatalf("review after the tab closed = %+v, want reopened", res)
+	}
+}
+
+func TestABuildWorkerQuestionOnlyFlagsTheTask(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.set(PRKey{"acme/data", "ada/eng-1-billing"}, 42)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	worker := h.waitTab("claude working")
+	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "blocked", Kind: "question"}}
+	eventually(t, "the question flag", func() bool { return h.task("ENG-1").Flag == "question" })
+	h.still("ENG-1", lifecycle.Working)
+}

@@ -511,11 +511,14 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		}
 		r.Status, r.WorkerState = ev.Status.Msg, ev.Status.State
 		if ev.Status.State == "done" {
-			s.checkContract(r)
+			s.checkContract(r, false)
 			s.save(r)
 			return
 		}
 		s.apply(r, lifecycle.WorkerStatus{State: ev.Status.State, Kind: ev.Status.Kind, Detail: ev.Status.Msg}, "")
+		if r.asksForDecisions(ev.Status) {
+			s.checkContract(r, true)
+		}
 		s.publish()
 
 	case EvExited:
@@ -531,7 +534,7 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		case job == JobWorker && ev.ExitCode != 0:
 			s.apply(r, lifecycle.WorkerExited{Code: ev.ExitCode}, "")
 		case job == JobWorker:
-			s.checkContract(r)
+			s.checkContract(r, false)
 		}
 
 	case EvClosed:
@@ -572,9 +575,11 @@ func (s *Scheduler) keepOrphan(ev RexEvent) {
 	s.orphans[ev.BlockID] = append(s.orphans[ev.BlockID], orphan{s.now(), ev})
 }
 
-// checkContract runs when a Worker reports done. It observes the Stage
-// contract's output and applies done with the result.
-func (s *Scheduler) checkContract(r *Record) {
+// checkContract runs when a Worker reports done, or when a review Worker asks
+// for decisions. It observes the Stage contract's output and applies done
+// with the result. An unmet contract after a question applies nothing, so the
+// Task keeps the question flag.
+func (s *Scheduler) checkContract(r *Record, question bool) {
 	id, stage, block, review, since := r.ID, r.Stage, r.BlockID, r.Review, r.StageSince
 	if !stage.Agent() {
 		return
@@ -596,7 +601,7 @@ func (s *Scheduler) checkContract(r *Record) {
 		}
 		s.call(func() {
 			r, ok := s.recs[id]
-			if ok && r.Stage == stage && (r.BlockID == block || r.BlockID == "") {
+			if ok && r.Stage == stage && (r.BlockID == block || r.BlockID == "") && (met || !question) {
 				if met && reviewed != "" {
 					r.ReviewedHead = reviewed
 				}

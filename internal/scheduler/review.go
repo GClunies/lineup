@@ -79,6 +79,13 @@ func (r *Record) workerWorking() bool {
 	return r.Job == JobWorker && r.WorkerState != "done" && r.WorkerState != "idle"
 }
 
+// asksForDecisions reports whether a Reviewing Worker asks the user a
+// question. pr-review asks for the decision on each finding that way after it
+// saves the findings, so the question meets the contract if the file exists.
+func (r *Record) asksForDecisions(st Status) bool {
+	return r.Review != nil && r.Stage == lifecycle.Reviewing && st.State == "blocked" && st.Kind == "question"
+}
+
 // ReviewAction says what the review op did.
 type ReviewAction string
 
