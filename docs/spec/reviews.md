@@ -11,7 +11,7 @@ The user sees in one place which PRs need them: their own open PRs and the PRs t
 | In this cut | Later |
 |---|---|
 | The `review` Hub tab with view tabs | Views that a `[[repos]]` entry or `.lineup.toml` scopes |
-| The built-in views `My PRs` and `Requested` | GitLab and other forges |
+| The built-in tabs `Reviews`, `My PRs`, and `Requested` | GitLab and other forges |
 | Views and queues in the global config | A queue that runs a skill other than `pr-review` |
 | Review Tasks: a Task Kind with its own Stages | |
 | Review slots for each queue, apart from the WIP cap | |
@@ -21,10 +21,10 @@ The user sees in one place which PRs need them: their own open PRs and the PRs t
 ## Shape
 
 ```
- ┌─────────────── Hub tab "review" ───────────────┐
- │ [My PRs]  Requested  My teammates  Q: platform │  tab / shift+tab, ranked with < >
- │ ▸ data#4945  Write the usage logs   CI running ENG-614 │  a row joins its Task by PR URL
- └──────────────┬─────────────────────────────────┘
+ ┌──────────────────── Hub tab "review" ────────────────────┐
+ │ [Reviews]  My PRs  Requested  My teammates  Q: platform  │  tab / shift+tab, ranked with < >
+ │ ▸ data#4945  Write the usage logs   R-14 Reviewing       │  a PR row joins its review Task by PR URL
+ └──────────────┬───────────────────────────────────────────┘
                 │ lineup board --review: one GraphQL search per refresh, cached on disk
                 │
  config ─ [[review.views]]   filters ─┐
@@ -36,7 +36,7 @@ The user sees in one place which PRs need them: their own open PRs and the PRs t
 ```
 
 - The Board process runs every view search. The Scheduler runs only the queue searches. Neither waits on the other.
-- A review Task is a Task. It shows on the Board, it alerts, and `enter` focuses its tab, as every other Task does.
+- A review Task is a Task. It shows on the Reviews tab, not on the Board in the `work` tab. It alerts as a toast from the review tab's board, and `enter` focuses its tab.
 - A review Task never writes to the PR that it reviews. lineup makes no GitHub write for it. The Worker writes to GitHub only after the user decides each finding, through `pr-review`.
 
 ## Filters
@@ -74,21 +74,22 @@ requested_teams = ["umbrella/data"]
 labels = ["needs-review"]
 ```
 
-The review tab shows these view tabs, in this order before the user ranks them:
+The review tab shows these tabs, in this order before the user ranks them:
 
-1. `My PRs`: the user's open PRs in every repository (`author:@me`). Drafts show.
-2. `Requested`: the open PRs that request the user, by name or through a team (`review-requested:@me draft:false`).
-3. Each `[[review.views]]` entry, in config order.
-4. Each `[[review.queues]]` entry, named `Q: <name>`. It lists the queue's ranked PRs. See [Queues](#queues).
+1. `Reviews`: the review Tasks, in the Board's groups and with the Board's rows. A review whose PR is on no other tab, for example a Done review of a merged PR, shows here.
+2. `My PRs`: the user's open PRs in every repository (`author:@me`). Drafts show.
+3. `Requested`: the open PRs that request the user, by name or through a team (`review-requested:@me draft:false`).
+4. Each `[[review.views]]` entry, in config order.
+5. Each `[[review.queues]]` entry, named `Q: <name>`. It lists the queue's ranked PRs. See [Queues](#queues).
 
-The user ranks the tabs with `<` and `>`. lineup keeps the rank in `review_views.json` in the state directory, apart from the tracker browser's `views.json`, so two Board processes never overwrite each other's rank.
+The user ranks the tabs with `<` and `>`. A tab that is not in the saved rank, such as a new view, comes after the ranked tabs. lineup keeps the rank in `review_views.json` in the state directory, apart from the tracker browser's `views.json`, so two Board processes never overwrite each other's rank.
 
 ### Rows
 
 ```
  My PRs  20
- ▸ data#4945   Write the usage logs again       ◷ CI   ✓ 1   ENG-614 CI running   2d
-   data#4919   Move the CSV coverage readers    ✗ CI         ENG-590 CI debug     5d
+ ▸ data#4945   Write the usage logs again       ◷ CI   ✓ 1   R-14 Reviewing       2d
+   data#4919   Move the CSV coverage readers    ✗ CI                              5d
    backend#25144 Stop using file age as …       draft
  Requested  36
  ▸ data#4955   Pull the base images through …   goldberg        R-12 Review ready   1h
@@ -103,14 +104,18 @@ A header row names the columns. A row shows these columns, in this order, with 3
 | `AUTHOR` | The author, in every view |
 | `CI` | The CI state, or `draft` |
 | `REVIEW` | `✗ changes` when changes are requested, or the count of approvals |
-| `TASK` | The joined Task, if one exists |
+| `TASK` | The joined review Task, if one exists |
 | `AGE` | The age of the PR |
 
 On a narrow screen the columns drop from the right, with their headings, so that the title keeps at least 24 cells.
 
-**The Task join.** A row joins the Task whose `pr_url` is the row's PR URL. A Task that builds a PR gets its URL from the Scheduler's poll. A review Task gets the URL from the moment it is added. A joined row shows the Task ID and its Stage, or its Needs you reason. A Done Task that left the Board does not join.
+**The Task join.** A row joins the review Task whose `pr_url` is the row's PR URL. A review Task gets the URL from the moment it is added. A build Task never joins: it belongs to the `work` tab. A joined row shows the Task ID and its Stage, or its Needs you reason. A Done Task that left the Board does not join.
 
 ### Keys
+
+On the Reviews tab, the keys are the Board's keys (see `docs/spec/mvp.md`), with `tab`, `shift+tab`, `<`, `>`, and `R` as below. `m` does nothing, because no review Task is Ready to land. `enter` on a review Task in Review ready whose Worker closed reopens the Worker.
+
+On a PR tab:
 
 | Key | Action |
 |---|---|
@@ -121,14 +126,14 @@ On a narrow screen the columns drop from the right, with their headings, so that
 | `enter` | Focus the Worker's tab of the joined Task. If the joined Task is in Review ready and its Worker closed, reopen the Worker, as `r` does. If no Worker runs for the row, open the PR in the browser. |
 | `o` | Open the PR in the browser |
 | `r` | Start a review Task for this PR now, outside every queue's slots. If the PR has an open review Task, start it if it is Queued, reopen its Worker if the Worker closed in Review ready, or run it again if it stopped for good. Else focus its tab. |
-| `R` | Refresh the view now |
+| `R` | Refresh now: search every PR tab again, and ask the Scheduler to poll every started Task |
 | `z` | Zoom the Reviewer pane to full height, and back |
 | `?` | Show all keys |
 
 ### Refresh and cache
 
 - The tab paints first from the disk cache, `cache/github/<view key>.json` in the state directory.
-- It searches every view in one GraphQL call when it starts, on `R`, and every 2 minutes. Each search reads the first 100 PRs, newest first.
+- It searches every PR tab in one GraphQL call when it starts, on `R`, and every 2 minutes. The Reviews tab has no search. Each search reads the first 100 PRs, newest first.
 - A cached list never replaces a live one. An empty live list is a result, not a load in progress.
 - If a search fails, the tab keeps the last list and shows the error in the status line.
 
@@ -173,7 +178,7 @@ Each fill is idempotent. The candidate check, the count, the add, and the start 
 
 If a queue leaves the config, its started review Tasks go on, and no fill starts another one for it. If `slots` drops, no review stops. Fills start nothing new until the count is below `slots`.
 
-`lineup reviews pause` stops every fill, and `lineup reviews resume` starts them again. A pause stops no review that already started. The pause holds across a restart of the Scheduler. The header shows `reviews paused` while the pause holds.
+`lineup reviews pause` stops every fill, and `lineup reviews resume` starts them again. A pause stops no review that already started. The pause holds across a restart of the Scheduler. The review tab's header shows `reviews paused` while the pause holds.
 
 When a review Task of a queue ends, its slot is free, and the next fill starts the next ranked PR. To stop the queue, pause it.
 
@@ -311,7 +316,7 @@ The skills live in the dotfiles repository, `~/.agents/skills`.
 | `lineup reviews` | Lists each queue with its slots, started reviews, and ranked PRs |
 | `lineup reviews pause` / `resume` | Stops or restarts every queue fill |
 
-The Orchestrator maps "review <url>" and `/pr-review <url>` to `lineup review <url>`. It keeps the `/pr-explain` row of its instructions. In a review Task's tab, the user asks the Worker for `/pr-explain` directly.
+The Reviewer maps "review <url>" and `/pr-review <url>` to `lineup review <url>`. The Orchestrator sends these requests to the Reviewer and does not touch review Tasks. It keeps the `/pr-explain` row of its instructions. In a review Task's tab, the user asks the Worker for `/pr-explain` directly.
 
 ## Code changes
 
@@ -324,15 +329,15 @@ The Orchestrator maps "review <url>" and `/pr-review <url>` to `lineup review <u
 | `internal/harness/claude` | The review intro, prompt, and contract. The `pr` override does not apply to a review Task. `--add-dir` for the review worktree. |
 | `internal/board` | The review view: a PR list model, its cache, its keys, and the Task join |
 | `cmd/lineup` | The `review` Hub tab, `lineup board --review`, `lineup review`, `lineup reviews` |
-| Orchestrator instructions | The review rows |
+| Orchestrator instructions | A rule that sends each review request to the Reviewer |
 | Reviewer instructions | `cmd/lineup/reviewer/CLAUDE.md` |
 
-The `review` Hub tab has two panes, as the `orchestrate` and `plan` tabs do:
+The `review` Hub tab has two panes, as the `work` and `plan` tabs do:
 
 - `REVIEWS` on top runs `lineup board --review`.
 - `REVIEWER` below runs Claude with the Reviewer role. It adds, steers, reruns, and closes review Tasks, and it pauses and resumes the queues, all through the `lineup` CLI.
 
-The Reviewer's settings deny `lineup add`, `lineup start`, `lineup merge`, and every GitHub write. The reviews run in their own tabs. The Orchestrator keeps its review rows, so that either agent takes a review request.
+The Reviewer's settings deny `lineup add`, `lineup start`, `lineup merge`, and every GitHub write. The reviews run in their own tabs. Only the Reviewer takes a review request. The Orchestrator's settings deny `lineup review` and `lineup reviews`.
 
 ## Success criteria and tests
 
@@ -350,7 +355,7 @@ The Reviewer's settings deny `lineup add`, `lineup start`, `lineup merge`, and e
 7. **Setup and cleanup.** Two review starts in one Repo fetch one after the other. Cleanup removes a clean review worktree and keeps one with an unpushed commit. A review Task never calls `wt remove`.
 8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then reopens the Worker in the same conversation. A closed tab in Reviewing starts a fresh Worker. Recovery with no tab in Review ready leaves the Task as it is. The events of the hunk pane leave the Task as it is. A closed Worker block closes the hunk pane with its tab.
 9. **Config.** Load and validation: an unknown key, an empty filter list, a bad team or repository form, a duplicate name, and `slots` below 1 each fail at load.
-10. **Board.** A render test of the review view with a joined build Task and a joined review Task. `enter` on a joined row sends `focus` for that Task. Typing `q` in the search does not quit.
+10. **Board.** A render test of the review view with a build Task and a review Task on PRs. Only the review Task joins. `enter` on a joined row sends `focus` for that Task. The Reviews tab lists only the review Task. Typing `q` in the search does not quit.
 11. **Speed.** The review view's first paint from the cache meets the Board's 100 ms budget.
 12. **Live.**
     - The review tab lists the user's open PRs, and a PR of a running Task shows that Task's Stage.

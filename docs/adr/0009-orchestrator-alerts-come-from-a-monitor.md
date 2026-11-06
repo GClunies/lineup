@@ -1,6 +1,6 @@
 # Orchestrator alerts come from a Monitor
 
-The Orchestrator learns about each alert from `lineup watch`, which it runs under Claude's Monitor tool. The Board in the `orchestrate` tab shows each alert as a Rex toast. We chose a Monitor because an organization policy can block channels. Under such a policy, `claude --dangerously-load-development-channels server:lineup` shows "blocked by org policy", and the channel event does not reach Claude.
+The Orchestrator learns about each alert from `lineup watch`, which it runs under Claude's Monitor tool. The Board in the `work` tab shows each alert as a Rex toast. We chose a Monitor because an organization policy can block channels. Under such a policy, `claude --dangerously-load-development-channels server:lineup` shows "blocked by org policy", and the channel event does not reach Claude.
 
 ## Considered Options
 
