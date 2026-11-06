@@ -90,12 +90,14 @@ func reviewFixture() map[string][]github.PullRequest {
 	}
 }
 
+// reviewBoard has a review Task on two PRs, and a build Task on a third.
 func reviewBoard() scheduler.BoardView {
-	logsRow := tv("ENG-614", lifecycle.CIRunning, "data", "Write the usage logs", "", 2*time.Hour)
-	logsRow.PRURL = urlLogs
-	asked := tv("ENG-590", lifecycle.Working, "data", "Base images", "question", 12*time.Minute)
-	asked.Flag, asked.Group, asked.PRURL = "question", "Needs you", urlBase
-	return scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{logsRow, asked}}
+	logsRow := rtv("R-14", lifecycle.Reviewing, "data#4945 Write the usage logs again", urlLogs, 2*time.Hour)
+	asked := rtv("R-10", lifecycle.Reviewing, "data#4955 Pull the base images", urlBase, 12*time.Minute)
+	asked.Flag, asked.Group, asked.Note = "question", "Needs you", "question"
+	build := tv("ENG-622", lifecycle.CIRunning, "data", "Move the CSV coverage readers", "", time.Hour)
+	build.PRURL = urlCSV
+	return scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{logsRow, asked, build}}
 }
 
 type rvEnv struct {
@@ -168,12 +170,13 @@ func line(v, s string) string {
 func TestReviewRowsShowTheJoinedTask(t *testing.T) {
 	e := newRvEnv(t)
 	e.open()
+	e.press("tab")
 	v := e.m.View()
-	if l := line(v, "[My PRs]"); !strings.Contains(l, "Requested") || !strings.Contains(l, "My teammates") || !strings.Contains(l, "Q: platform") {
+	if l := line(v, "[My PRs]"); !strings.Contains(l, "Reviews") || !strings.Contains(l, "Requested") || !strings.Contains(l, "My teammates") || !strings.Contains(l, "Q: platform") {
 		t.Fatalf("tab row = %q", l)
 	}
 	logsRow := line(v, "data#4945")
-	for _, want := range []string{"▸", "Write the usage logs again", "◷ CI", "✓ 1", "ENG-614 CI running", "2d"} {
+	for _, want := range []string{"▸", "Write the usage logs again", "◷ CI", "✓ 1", "R-14 Reviewing", "2d"} {
 		if !strings.Contains(logsRow, want) {
 			t.Errorf("joined row lacks %q: %q", want, logsRow)
 		}
@@ -188,7 +191,7 @@ func TestReviewRowsShowTheJoinedTask(t *testing.T) {
 		}
 	}
 	// Each heading starts at the column of its cells.
-	for _, c := range []struct{ head, cell string }{{"AUTHOR", "octocat"}, {"CI", "◷ CI"}, {"REVIEW", "✓ 1"}, {"TASK", "ENG-614"}, {"AGE", "2d"}} {
+	for _, c := range []struct{ head, cell string }{{"AUTHOR", "octocat"}, {"CI", "◷ CI"}, {"REVIEW", "✓ 1"}, {"TASK", "R-14"}, {"AGE", "2d"}} {
 		if hi, ci := strings.Index(head, c.head), strings.Index(logsRow, c.cell); ansi.StringWidth(head[:hi]) != ansi.StringWidth(logsRow[:ci]) {
 			t.Errorf("%s heading at cell %d, %q at cell %d", c.head, ansi.StringWidth(head[:hi]), c.cell, ansi.StringWidth(logsRow[:ci]))
 		}
@@ -202,18 +205,20 @@ func TestReviewRowsShowTheJoinedTask(t *testing.T) {
 
 	e.press("tab")
 	base := line(e.m.View(), "data#4955")
-	for _, want := range []string{"goldberg", "✗ changes", "ENG-590 ⚑ question"} {
+	for _, want := range []string{"goldberg", "✗ changes", "R-10 ⚑ question"} {
 		if !strings.Contains(base, want) {
 			t.Errorf("Requested row lacks %q: %q", want, base)
 		}
 	}
 }
 
+// The CSV PR has a build Task, which belongs to the work board, so the row
+// joins no Task.
 func TestReviewEnterFocusesTheJoinedTaskOrOpensThePR(t *testing.T) {
 	e := newRvEnv(t)
 	e.open()
-	e.press("enter")
-	if n := len(e.sched.calls); n != 1 || e.sched.calls[0].Op != "focus" || e.sched.calls[0].Task != "ENG-614" {
+	e.press("tab", "enter")
+	if n := len(e.sched.calls); n != 1 || e.sched.calls[0].Op != "focus" || e.sched.calls[0].Task != "R-14" {
 		t.Fatalf("enter on a joined row sent %+v", e.sched.calls)
 	}
 	if len(e.opened) != 0 {
@@ -233,8 +238,9 @@ func TestReviewEnterOpensThePRWhenTheTaskHasNoWorker(t *testing.T) {
 	e := newRvEnv(t)
 	b := reviewBoard()
 	b.Tasks[0].Live = false
-	e.m.board, e.m.tasks = b, b.Tasks
+	e.m.setBoard(b)
 	e.open()
+	e.press("tab")
 	if strings.Contains(e.m.View(), "go to the Worker") {
 		t.Error("the footer offers a Worker that does not run")
 	}
@@ -249,21 +255,25 @@ func TestReviewZZoomsTheReviewer(t *testing.T) {
 	zoomed := 0
 	e.m.opts.Zoom = func() { zoomed++ }
 	e.open()
+	e.press("z", "tab")
 	if !strings.Contains(e.m.View(), "go to the Worker") {
 		t.Error("the footer does not offer the joined Task's Worker")
 	}
 	e.press("z")
-	if zoomed != 1 {
-		t.Fatalf("z zoomed %d times", zoomed)
+	if zoomed != 2 {
+		t.Fatalf("z on the Reviews tab and My PRs zoomed %d times, want 2", zoomed)
 	}
 }
 
 func TestReviewTabsSwitch(t *testing.T) {
 	e := newRvEnv(t)
 	e.open()
+	if v := e.m.View(); !strings.Contains(v, "[Reviews]") {
+		t.Fatalf("the review tab does not open on Reviews:\n%s", v)
+	}
 	for _, c := range []struct{ key, open string }{
-		{"tab", "[Requested]"}, {"tab", "[My teammates]"}, {"shift+tab", "[Requested]"},
-		{"shift+tab", "[My PRs]"}, {"shift+tab", "[Q: platform]"}, {"tab", "[My PRs]"},
+		{"tab", "[My PRs]"}, {"tab", "[Requested]"}, {"tab", "[My teammates]"}, {"shift+tab", "[Requested]"},
+		{"shift+tab", "[My PRs]"}, {"shift+tab", "[Reviews]"}, {"shift+tab", "[Q: platform]"}, {"tab", "[Reviews]"},
 	} {
 		e.press(c.key)
 		if v := e.m.View(); !strings.Contains(v, c.open) {
@@ -283,6 +293,7 @@ func isQuit(cmd tea.Cmd) bool {
 func TestReviewSearchTakesQ(t *testing.T) {
 	e := newRvEnv(t)
 	e.open()
+	e.press("tab")
 	var cmd tea.Cmd
 	e.m, _ = press(e.m, "/")
 	e.m, cmd = press(e.m, "q")
@@ -323,6 +334,7 @@ func TestReviewPaintsFromCacheFirst(t *testing.T) {
 		}
 	}
 	m, _ := e.m.Update(cached)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	v := m.View()
 	if !strings.Contains(v, "Cached row") || !strings.Contains(v, "refreshing") {
 		t.Fatalf("cache paint:\n%s", v)
@@ -381,7 +393,7 @@ func TestReviewErrorKeepsTheLastList(t *testing.T) {
 	e := newRvEnv(t)
 	e.open()
 	e.api.err = errors.New("search My PRs, Requested: HTTP 502")
-	e.press("R")
+	e.press("tab", "R")
 	v := e.m.View()
 	if !strings.Contains(v, "data#4945") {
 		t.Fatalf("a failed search dropped the list:\n%s", v)
@@ -399,11 +411,11 @@ func TestReviewRankMovesAndSaves(t *testing.T) {
 		t.Fatalf("the saved rank does not lead: %q", l)
 	}
 	e.press(">")
-	want := []string{"mine", "queue:platform", "requested", "view:My teammates", "gone"}
+	want := []string{"tasks", "queue:platform", "mine", "requested", "view:My teammates", "gone"}
 	if len(e.saved) != 1 || !slices.Equal(e.saved[0], want) {
 		t.Fatalf("saved %v, want %v", e.saved, want)
 	}
-	if l := line(e.m.View(), "[Q: platform]"); !strings.Contains(l, "My PRs") || strings.Index(l, "My PRs") > strings.Index(l, "[Q: platform]") {
+	if l := line(e.m.View(), "[Q: platform]"); !strings.Contains(l, "Reviews") || strings.Index(l, "Reviews") > strings.Index(l, "[Q: platform]") {
 		t.Fatalf("the tab did not move right: %q", l)
 	}
 	e.press("<", "<")
@@ -415,13 +427,14 @@ func TestReviewRankMovesAndSaves(t *testing.T) {
 func TestReviewNarrowRowKeepsTheTitleAndTheTask(t *testing.T) {
 	e := newRvEnv(t)
 	e.open()
+	e.press("tab")
 	e.m.width = 70
 	v := e.m.View()
 	logsRow := line(v, "data#4945")
 	if !strings.Contains(logsRow, "Write the usage logs aga") {
 		t.Fatalf("the title lost its 24 cells: %q", logsRow)
 	}
-	if !strings.Contains(logsRow, "ENG-614") {
+	if !strings.Contains(logsRow, "R-14") {
 		t.Fatalf("the TASK column dropped before the others: %q", logsRow)
 	}
 	if strings.Contains(logsRow, "octocat") || strings.Contains(logsRow, "2d") {
@@ -441,7 +454,7 @@ func TestReviewRStartsAReviewOfTheSelectedPR(t *testing.T) {
 		t.Fatalf("r with no row sent %+v", e.sched.calls)
 	}
 
-	e.press("tab", "tab")
+	e.press("tab", "tab", "tab")
 	e.sched.review = scheduler.ReviewResult{TaskView: scheduler.TaskView{ID: "R-3", Stage: "Reviewing"}, Action: scheduler.ReviewAdded}
 	e.press("r")
 	if c := e.sched.calls; len(c) != 1 || c[0].Op != "review" || c[0].URL != urlBase {
@@ -520,12 +533,12 @@ func TestTheQueueTabListsThePRsThatWaitFirstToStartFirst(t *testing.T) {
 func TestReviewEnterReopensAClosedReviewWorker(t *testing.T) {
 	e := newRvEnv(t)
 	b := reviewBoard()
-	ready := tv("R-12", lifecycle.ReviewReady, "data", "data#4955 Pull the base images", "", time.Hour)
-	ready.Group, ready.PRURL, ready.ReviewHead, ready.Live = "Needs you", urlBase, "h1", false
+	ready := rtv("R-12", lifecycle.ReviewReady, "data#4955 Pull the base images", urlBase, time.Hour)
+	ready.Live = false
 	b.Tasks[1] = ready
-	e.m.board, e.m.tasks = b, b.Tasks
+	e.m.setBoard(b)
 	e.open()
-	e.press("tab")
+	e.press("tab", "tab")
 	if !strings.Contains(e.m.View(), "reopen the Worker") {
 		t.Fatalf("the footer does not offer the reopen:\n%s", e.m.View())
 	}
@@ -539,5 +552,79 @@ func TestReviewEnterReopensAClosedReviewWorker(t *testing.T) {
 	}
 	if l := line(e.m.View(), "review R-12"); !strings.Contains(l, "reopened") {
 		t.Fatalf("status line = %q", l)
+	}
+}
+
+func TestTheReviewsTabListsOnlyTheReviewTasks(t *testing.T) {
+	e := newRvEnv(t)
+	e.sched.capture = "reviewer screen"
+	e.open()
+	v := e.m.View()
+	if !strings.Contains(v, "R-14") || !strings.Contains(v, "R-10") || strings.Contains(v, "ENG-622") {
+		t.Fatalf("the Reviews tab does not list just the review Tasks:\n%s", v)
+	}
+	if l := line(v, "Reviews  "); !strings.HasSuffix(strings.TrimSpace(l), "2") {
+		t.Fatalf("Reviews head = %q, want 2 Tasks", l)
+	}
+	if f := line(v, "all keys"); !strings.Contains(f, "x close") || !strings.Contains(f, "tab next view") {
+		t.Fatalf("the footer lacks the Board's keys: %q", f)
+	}
+	e.press("enter")
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "focus" || c[0].Task != "R-10" {
+		t.Fatalf("enter sent %+v, want focus R-10", c)
+	}
+	e.press("x", "y")
+	if c := e.sched.calls[1:]; len(c) != 1 || c[0].Op != "close" || c[0].Task != "R-10" {
+		t.Fatalf("x then y sent %+v, want close R-10", c)
+	}
+	e.press("j", "f")
+	if c := e.sched.calls[2:]; len(c) != 1 || c[0].Op != "show" || c[0].Task != "R-14" || !strings.Contains(e.m.View(), "R-14  ") {
+		t.Fatalf("f sent %+v, want show R-14 at full screen:\n%s", c, e.m.View())
+	}
+	e.press("f")
+	var cmd tea.Cmd
+	e.m, cmd = press(e.m, "p")
+	e.m = run(e.m, cmd)
+	if !strings.Contains(e.m.View(), "reviewer screen") {
+		t.Fatalf("p shows no preview:\n%s", e.m.View())
+	}
+	e.press("?")
+	if v := e.m.View(); !strings.Contains(v, "the Reviews tab") {
+		t.Fatalf("? on the Reviews tab:\n%s", v)
+	}
+}
+
+// A review Task whose Worker closed in Review ready waits for the user's
+// decisions, so enter on its row reopens its Worker.
+func TestTheReviewsTabReopensAClosedReviewWorker(t *testing.T) {
+	e := newRvEnv(t)
+	ready := rtv("R-12", lifecycle.ReviewReady, "data#4955 Pull the base images", urlBase, time.Hour)
+	ready.Live = false
+	e.m.setBoard(scheduler.BoardView{Tasks: []scheduler.TaskView{ready}})
+	e.open()
+	if !strings.Contains(e.m.View(), "reopen the Worker") {
+		t.Fatalf("the hints do not offer the reopen:\n%s", e.m.View())
+	}
+	e.sched.review = scheduler.ReviewResult{TaskView: ready, Action: scheduler.ReviewReopened}
+	e.press("enter")
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "review" || c[0].URL != urlBase {
+		t.Fatalf("enter sent %+v, want review %s alone", c, urlBase)
+	}
+	if l := line(e.m.View(), "review R-12"); !strings.Contains(l, "reopened") {
+		t.Fatalf("status line = %q", l)
+	}
+}
+
+func TestTheReviewBoardToastsOnlyReviewTasks(t *testing.T) {
+	var toasts []string
+	m := New(reviewBoard(), Options{Review: true, Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
+	v := reviewBoard()
+	v.Tasks[0] = rtv("R-14", lifecycle.ReviewReady, "data#4945 Write the usage logs again", urlLogs, 0)
+	v.Tasks[2] = tv("ENG-622", lifecycle.ReadyToLand, "data", "Move the CSV coverage readers", "#4919", 0)
+	if _, cmd := m.Update(boardMsg(v)); cmd != nil {
+		cmd()
+	}
+	if want := []string{"R-14 Review ready: data#4945 Write the usage logs again"}; !slices.Equal(toasts, want) {
+		t.Fatalf("toasts %q, want %q", toasts, want)
 	}
 }

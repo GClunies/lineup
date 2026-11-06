@@ -13,13 +13,20 @@ import (
 
 func (m Model) reviewBody() string {
 	r := m.rv
+	tb := r.curTab()
+	if tb.Tasks && m.detail {
+		return m.vp.View()
+	}
 	names := make([]string, len(r.tabs))
 	for i, tb := range r.tabs {
 		names[i] = tb.Name
 	}
-	tb := r.curTab()
-	prs, loaded := r.list(tb)
 	head := " " + headRow.Render(tb.Name)
+	if tb.Tasks {
+		head += dim.Render(fmt.Sprintf("  %d", len(m.tasks)))
+		return m.tabStrip(names, r.tab) + "\n" + head + "\n" + m.taskBody(max(m.height-5, 1))
+	}
+	prs, loaded := r.list(tb)
 	if loaded {
 		head += dim.Render(fmt.Sprintf("  %d", len(prs)))
 	}
@@ -203,6 +210,8 @@ func (m Model) reviewFooter() string {
 		return bad.Render(" " + m.rv.err)
 	case m.rv.filtering:
 		return hintBar(m.width, []hint{{"enter", "keep the search"}, {"esc", "clear"}, {"?", "all keys"}})
+	case m.rv.curTab().Tasks:
+		return hintBar(m.width, m.boardHints())
 	}
 	hs := []hint{{"tab", "next view"}}
 	if pr, ok := m.rv.current(); ok {
@@ -221,9 +230,10 @@ func (m Model) reviewFooter() string {
 const reviewHelp = `
  lineup review keys
 
-   The tabs are My PRs, Requested, then each [[review.views]] and
-   [[review.queues]] entry of the config. A row shows the Task that has
-   its PR, if one is on the Board, in the TASK column. A Q: tab lists the PRs that wait for
+   The tabs are Reviews, My PRs, Requested, then each [[review.views]]
+   and [[review.queues]] entry of the config. Reviews lists the review
+   Tasks. A PR row shows the review Task that has its PR, if one is on
+   the Board, in the TASK column. A Q: tab lists the PRs that wait for
    the queue, first to start first.
 
    tab      next view       shift+tab  previous view
@@ -236,6 +246,29 @@ const reviewHelp = `
    o        open the PR in the browser
    r        start a review Task for this PR now, outside every queue's
             slots, or reopen its closed Worker in Review ready
+   R        refresh now; lineup also refreshes every 2 minutes
+   z        zoom the Reviewer below to full height, and back
+   ?        this help      q  quit
+
+ press any key to go back
+`
+
+const reviewTasksHelp = `
+ lineup review keys: the Reviews tab
+
+   The Reviews tab lists the review Tasks on the Board. The other tabs
+   list PRs.
+
+   tab      next view       shift+tab  previous view
+   < >      move this view's tab left or right; lineup keeps the order
+   j k      move the selection
+   enter    focus the Task's tab in Rex, or reopen its closed Worker
+            in Review ready
+   p        live preview of the Worker's screen
+   f        detail pane at full screen, and back
+   x        close the Task, or archive a Done Task, after y/n
+   s        start a Queued Task
+   o        open the PR
    R        refresh now; lineup also refreshes every 2 minutes
    z        zoom the Reviewer below to full height, and back
    ?        this help      q  quit
