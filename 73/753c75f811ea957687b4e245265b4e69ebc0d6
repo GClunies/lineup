@@ -1,0 +1,37 @@
+internal/board/board_test.go
+  s_16538f652416a6::t_1517aa660cfaaf 432-443
+internal/board/model.go
+  s_16538f652416a6::t_5b69ab631133b1 309-310,383-386,389,397
+internal/board/review.go
+  s_16538f652416a6::t_9c0f564bea5142 396,445-456
+internal/board/review_test.go
+  s_16538f652416a6::t_39d0989cb56e67 378-381
+internal/board/review_view.go
+  s_16538f652416a6::t_6d015d8d2ffcce 226,249-250,273-274
+internal/board/sources_test.go
+  s_16538f652416a6::t_7383dd0cbf6405 242-253
+internal/board/tracker.go
+  s_16538f652416a6::t_db4782ba772f30 1113-1114,1166-1189
+internal/board/tracker_test.go
+  s_16538f652416a6::t_11bc976cbed57f 31-32,60-62,66-68,630-667
+internal/board/tracker_view.go
+  s_16538f652416a6::t_682b0ac70e6ebe 516,557
+internal/board/view.go
+  s_16538f652416a6::t_5e8f4b9eed8c4b 147,309,335
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73753c75f811ea957687b4e245265b4e69ebc0d6",
+  "prompts": {},
+  "sessions": {
+    "s_16538f652416a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8e67ed23-5ca6-4384-8d9a-5eebab18aa93",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
