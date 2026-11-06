@@ -197,6 +197,28 @@ func TestMergedAndClosedPRsEndTheReview(t *testing.T) {
 	}
 }
 
+func TestTheLastReviewKeepsASessionThatHoldsOtherTabs(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	if _, err := h.rex.NewWindow(context.Background(), "session:reviews", "the user's own tab", "/", nil, []string{"zsh"}); err != nil {
+		t.Fatal(err)
+	}
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	worker := h.waitTab("claude reviewing")
+	merged := openPR(7, "h1")
+	merged.State = "MERGED"
+	h.gh.setReview(merged)
+	h.status(worker.BlockID, "idle")
+	h.waitStage("R-1", lifecycle.Done)
+	eventually(t, "the review worktree removed", func() bool { return len(h.reviewsRemoved()) == 1 })
+	time.Sleep(150 * time.Millisecond)
+	h.rex.mu.Lock()
+	defer h.rex.mu.Unlock()
+	if len(h.rex.destroyed) != 0 {
+		t.Fatalf("destroyed %v while it held the user's own tab", h.rex.destroyed)
+	}
+}
+
 func TestAReviewThatReusesFindingsMeetsTheContract(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))

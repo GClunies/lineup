@@ -453,6 +453,17 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 	}
 }
 
+// sessionEmpty reports whether a session holds no tabs. The user, or another
+// Scheduler, can open tabs in a session that lineup made.
+func (s *Scheduler) sessionEmpty(ctx context.Context, session string) bool {
+	blocks, err := s.d.Rex.Blocks(ctx, session)
+	if err != nil {
+		s.d.Log.Warn("list session blocks", "session", session, "err", err)
+		return false
+	}
+	return len(blocks) == 0
+}
+
 // detach forgets the Task's tab before closing it, so its exit is not read as a lost Worker.
 func (s *Scheduler) detach(ctx context.Context, r Record) {
 	if r.WindowID == "" {
@@ -482,7 +493,7 @@ func (s *Scheduler) cleanup(ctx context.Context, r Record) {
 			return o.ID != r.ID && o.Session == r.Session && o.Stage.Started()
 		})
 	})
-	if last && r.SessionID != "" {
+	if last && r.SessionID != "" && s.sessionEmpty(ctx, r.SessionID) {
 		if err := s.d.Rex.DestroySession(ctx, r.SessionID); err != nil {
 			s.d.Log.Warn("remove session", "session", r.Session, "err", err)
 		}

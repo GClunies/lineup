@@ -112,17 +112,17 @@ func (f *fakeRex) DestroySession(_ context.Context, session string) error {
 	return nil
 }
 
-func (f *fakeRex) Blocks(_ context.Context, _ string) (map[string]bool, error) {
+func (f *fakeRex) Blocks(_ context.Context, session string) (map[string]bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	live := map[string]bool{}
+	live, windows := map[string]bool{}, map[string]bool{}
 	for _, t := range f.tabs {
-		if !t.closed {
-			live[t.BlockID] = true
+		if !t.closed && t.SessionID == session {
+			live[t.BlockID], windows[t.WindowID] = true, true
 		}
 	}
 	for _, s := range f.splits {
-		if !s.closed {
+		if !s.closed && windows[s.window] {
 			live[s.BlockID] = true
 		}
 	}
