@@ -357,6 +357,10 @@ func openHub() error {
 			if _, err := rexRun("window", "rename", "-s", hubSession, w.ID, t.window); err != nil {
 				return err
 			}
+			// The agent reads its new role the next time it starts.
+			if _, err := prepareAgent(t); err != nil {
+				return err
+			}
 			windows[t.window] = w
 		}
 		if _, ok := windows[t.window]; ok {

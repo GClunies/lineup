@@ -379,7 +379,8 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		r.tab = (r.tab + d) % len(r.tabs)
 		r.sel = ""
 		r.filter.SetValue("")
-		m.detail = false
+		m.detail, m.preview = false, false
+		m.previewGen++
 		return m, nil
 	case "<", ">":
 		j := r.tab - 1

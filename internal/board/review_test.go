@@ -596,6 +596,11 @@ func TestTheReviewsTabListsOnlyTheReviewTasks(t *testing.T) {
 	if v := e.m.View(); !strings.Contains(v, "the Reviews tab") {
 		t.Fatalf("? on the Reviews tab:\n%s", v)
 	}
+	gen := e.m.previewGen
+	e.press("esc", "tab")
+	if _, cmd := e.m.Update(captureTick(gen)); cmd != nil {
+		t.Fatal("the preview still captures on a PR tab")
+	}
 }
 
 // A review Task whose Worker closed in Review ready waits for the user's
