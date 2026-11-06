@@ -1,0 +1,35 @@
+internal/rex/client.go
+  s_ef04b6a036d849::t_2b614ebd97b6ac 154-176
+cmd/lineup/wire.go
+  s_ef04b6a036d849::t_2c234d8f515230 41-45
+docs/spec/reviews.md
+  s_ef04b6a036d849::t_9651bc8c572248 239,253-265,348
+internal/rex/integration_test.go
+  s_ef04b6a036d849::t_654714d60559e1 9,140-192
+internal/scheduler/ports.go
+  s_ef04b6a036d849::t_3c8c9130225c93 23-25
+internal/scheduler/review.go
+  s_ef04b6a036d849::t_6a627805ea32ba 257-262
+internal/scheduler/review_test.go
+  s_ef04b6a036d849::t_1602ccba83c6e8 7,12,588-760
+internal/scheduler/scheduler.go
+  s_ef04b6a036d849::t_09c10538d92b3e 449-453,539,550-564,707
+internal/scheduler/scheduler_test.go
+  s_ef04b6a036d849::t_d21e525002d5a4 28-34,36-41,65-80,89-93,97-107,124-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d61450c6726fae6c3a77ea2cab15c235e9ad001d",
+  "prompts": {},
+  "sessions": {
+    "s_ef04b6a036d849": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "68abf2af-1a04-469b-9f71-c457ce738562",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
