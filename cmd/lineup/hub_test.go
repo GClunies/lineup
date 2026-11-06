@@ -144,3 +144,46 @@ func TestRunBoardRefusesAnUnknownFlag(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenHubRenamesTheOrchestrateTab(t *testing.T) {
+	old := hubWindow{ID: "w7", Label: "orchestrate"}
+	cases := []struct {
+		name    string
+		windows map[string]hubWindow
+		label   string
+		want    string // the ID of the window to rename, or ""
+	}{
+		{"an old Hub", map[string]hubWindow{"orchestrate": old, "plan": {ID: "w8"}}, "work", "w7"},
+		{"a Hub with both", map[string]hubWindow{"orchestrate": old, "work": {ID: "w9"}}, "work", ""},
+		{"a new Hub", map[string]hubWindow{}, "work", ""},
+		{"a tab that kept its label", map[string]hubWindow{"orchestrate": old}, "plan", ""},
+	}
+	for _, c := range cases {
+		got := ""
+		if w, ok := renamed(c.windows, c.label); ok {
+			got = w.ID
+		}
+		if got != c.want {
+			t.Errorf("%s: renamed %q = %q, want %q", c.name, c.label, got, c.want)
+		}
+	}
+	if agentTabs[0].window != "work" || agentTabs[0].agent != "ORCHESTRATOR" {
+		t.Errorf("the first tab is %s with %s, want work with ORCHESTRATOR", agentTabs[0].window, agentTabs[0].agent)
+	}
+}
+
+func TestTheOrchestratorLeavesReviewsToTheReviewer(t *testing.T) {
+	var v struct {
+		Permissions struct {
+			Deny []string `json:"deny"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(orchestratorSettings), &v); err != nil {
+		t.Fatal(err)
+	}
+	for _, cmd := range []string{"Bash(lineup review:*)", "Bash(lineup reviews:*)"} {
+		if !slices.Contains(v.Permissions.Deny, cmd) {
+			t.Errorf("orchestrator settings do not deny %s", cmd)
+		}
+	}
+}

@@ -32,12 +32,12 @@ You never do the work yourself, and you never follow a skill. When the user type
 2. Take the skill name from `<command-name>` and the request from `<command-args>`.
 3. If the skill is `pr-review`, run `lineup review <command-args>`.
 4. If the skill is `pr-explain`, find the PR's review Task in `lineup ls --json`. Run `lineup steer <task> "/pr-explain"`. If the PR has no review Task, run `lineup review <url>` first, and tell the user to ask again at `Review ready`.
-5. For any other skill, tell the user to ask the Orchestrator in the `orchestrate` tab.
+5. For any other skill, tell the user to ask the Orchestrator in the `work` tab.
 
 ## Rules
 
-- Answer status questions from `lineup ls --json`. Show only review Tasks, the Tasks whose ID starts with `R-`. A Task in the "Needs you" group shows its reason in `note`.
-- The Orchestrator in the `orchestrate` tab arms the alert watch. Do not run `lineup watch`.
+- Answer status questions from `lineup ls --json`. Show only review Tasks, the Tasks whose `kind` is `review`. A Task in the "Needs you" group shows its reason in `note`.
+- The review Board above you shows each review alert as a desktop toast. Do not run `lineup watch`.
 - Do not review, explain, comment on, approve, or merge a PR yourself. Workers do that work in their own tabs, and only the user posts to GitHub.
 - Do not add, start, or merge build Tasks. If the user asks, tell them to ask the Orchestrator.
 - Pass the user's words to a Worker with `lineup steer`, unchanged.
