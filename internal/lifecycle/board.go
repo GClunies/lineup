@@ -87,12 +87,16 @@ type Task struct {
 	Policy     Policy  `json:"policy"`
 	// Left is what remains of each Loop budget.
 	Left Budgets `json:"left"`
-	// BotScore is the review bot's score that started this Responding
-	// round. It is nil for a round that people's reviews started.
+	// BotScore is the review bot's score when a review cycle started this
+	// Responding round. It is nil for a round that people started.
 	BotScore *int `json:"bot_score,omitempty"`
-	// BotWait is the head commit that the Task waits in CI running for the
-	// review bot to score, or "".
-	BotWait string `json:"bot_wait,omitempty"`
+	// Standing is the Task's PR measured against its Landing bar at the
+	// latest poll. enter keeps it, so the next Worker's prompt can read it.
+	Standing Standing `json:"standing,omitzero"`
+	// BarFlag is true when the Standing set the budget spent flag. The next
+	// pr-seen clears such a flag once its gap closes. A budget spent on a
+	// review edge stays until the user acts.
+	BarFlag bool `json:"bar_flag,omitempty"`
 }
 
 // ReviewCycle is the review cycle that the Task is in, or nil.
@@ -283,6 +287,10 @@ func (t *Task) observe(s Signal) []Effect {
 			return nil
 		}
 		if !s.ContractMet {
+			if t.answered() {
+				t.enter(CIRunning)
+				return nil
+			}
 			t.flag(ReasonStopped, "")
 			return nil
 		}
@@ -300,58 +308,28 @@ func (t *Task) observe(s Signal) []Effect {
 			t.enter(CIRunning)
 		}
 
-	case CIFailed:
-		if t.Stage != CIRunning {
+	case PRSeen:
+		if t.Kind != KindBuild {
 			return nil
 		}
-		return t.spend(CIDebug, &t.Left.CIDebug)
-
-	case CIPassed:
-		if t.Stage != CIRunning {
-			return nil
-		}
-		if s.Draft {
-			t.flag(ReasonDraft, "")
-			return nil
-		}
-		if t.Flag == ReasonDraft {
-			t.flag("", "")
-		}
-		if g := t.Policy.Bar.Bot; g != nil {
-			switch {
-			case s.Bot == nil:
-				return nil
-			case s.Bot.Score == nil:
-				t.BotWait = s.Bot.Head
-				return nil
-			case *s.Bot.Score < g.MinScore:
-				return t.reviewCycle(*s.Bot.Score)
-			}
-		}
-		if s.NeedsReview {
-			t.enter(InReview)
-			return []Effect{TrackerStatus{"in_review"}}
-		}
-		return t.ready()
-
-	case ReviewApproved:
-		if t.Stage == InReview {
-			return t.ready()
+		t.Standing = t.Policy.Bar.Measure(s.Facts)
+		if t.settles() {
+			return t.settle()
 		}
 
 	case ReviewAdditionalAuthors:
 		if t.Stage == InReview {
-			return t.spend(Responding, &t.Left.Responding)
+			return t.spend(respondingLoop, "")
 		}
 
-	case ReviewCommented, ReviewChangesRequested, PRConflict:
+	case ReviewCommented, ReviewChangesRequested:
 		if t.Stage == InReview || t.Stage == ReadyToLand {
-			return t.spend(Responding, &t.Left.Responding)
+			return t.spend(respondingLoop, "")
 		}
 
 	case ReviewBotLate:
-		if t.Stage == CIRunning && t.BotWait != "" {
-			t.flag(ReasonNoBotReview, fmt.Sprintf("%s did not score %s", t.Policy.Bar.Bot.Title, t.BotWait[:min(7, len(t.BotWait))]))
+		if head := t.Standing.Head; t.Stage == CIRunning && t.Standing.Next() == GapScoreDue {
+			t.flag(ReasonNoBotReview, fmt.Sprintf("%s did not score %s", t.Policy.Bar.Bot.Title, head[:min(7, len(head))]))
 		}
 
 	case PRReviewed:
@@ -374,26 +352,128 @@ var afterContract = map[Stage]Stage{
 	Reviewing: ReviewReady,
 }
 
-// spend enters an agent Stage that a Loop budget limits. With budget left it
-// starts a Worker. With none left it flags the Task and starts nothing.
-func (t *Task) spend(stage Stage, left *int) []Effect {
-	if *left == 0 {
-		t.enter(stage)
-		t.flag(ReasonBudgetSpent, stage.String())
-		return nil
+// settles reports whether the Standing decides the Task's Stage. It does in
+// the build Stages that wait on the PR, and in an agent Stage where the
+// Standing spent a budget and so started no Worker.
+func (t *Task) settles() bool {
+	switch t.Stage {
+	case CIRunning, InReview, ReadyToLand:
+		return true
 	}
-	*left--
-	return t.startAgent(stage)
+	return t.Stage.Agent() && t.Flag == ReasonBudgetSpent && t.BarFlag
 }
 
-// reviewCycle starts a Responding round for a low review bot score. It spends
-// the review cycle budget, not the Responding budget.
-func (t *Task) reviewCycle(score int) []Effect {
-	effects := t.spend(Responding, &t.Left.ReviewCycles)
-	t.BotScore = &score
-	if effects == nil {
-		t.flag(ReasonBudgetSpent, fmt.Sprintf("%s after %d cycles", t.Policy.Bar.Bot.ScoreText(score), t.Policy.Budgets.ReviewCycles))
+// settle moves the Task to where the Standing's first gap leads. A Task that
+// is there already does not change, so a repeated pr-seen changes nothing.
+func (t *Task) settle() []Effect { return routes[t.Standing.Next()](t) }
+
+// routes is where each gap leads a Task.
+var routes = [...]func(*Task) []Effect{
+	NoGap:       (*Task).land,
+	GapConflict: func(t *Task) []Effect { return t.spend(respondingLoop, t.why()) },
+	GapFailed:   func(t *Task) []Effect { return t.spend(ciDebugLoop, t.why()) },
+	GapPending:  func(t *Task) []Effect { return t.hold("") },
+	GapDraft:    func(t *Task) []Effect { return t.hold(ReasonDraft) },
+	GapScoreDue: func(t *Task) []Effect { return t.hold(ReasonNoBotReview) },
+	GapScoreLow: (*Task).reviewCycle,
+	GapThreads:  (*Task).answer,
+	GapApproval: (*Task).await,
+}
+
+func (t *Task) why() string { return t.Policy.Bar.Explain(t.Standing) }
+
+// hold keeps the Task in CI running, or moves it there. keep is the PR flag
+// that the gap supports. A draft gets its flag. A head that the bot has not
+// scored keeps the flag that review-bot-late set. hold clears a PR flag that
+// the gap does not support.
+func (t *Task) hold(keep Reason) []Effect {
+	if t.Stage != CIRunning {
+		t.enter(CIRunning)
 	}
+	switch {
+	case keep == ReasonDraft:
+		t.flag(ReasonDraft, "")
+	case t.Flag == keep:
+	case t.Flag == ReasonDraft || t.Flag == ReasonNoBotReview:
+		t.flag("", "")
+	}
+	return nil
+}
+
+// answer starts a Responding round for the open review threads. A round for
+// bot threads alone, on a score that passes, is a review cycle.
+func (t *Task) answer() []Effect {
+	if t.Standing.Threads.People == 0 && t.Standing.Score != nil {
+		return t.reviewCycle()
+	}
+	return t.spend(respondingLoop, t.why())
+}
+
+func (t *Task) await() []Effect {
+	if t.Stage == InReview {
+		return nil
+	}
+	t.enter(InReview)
+	return []Effect{TrackerStatus{"in_review"}}
+}
+
+func (t *Task) land() []Effect {
+	if t.Stage == ReadyToLand {
+		return nil
+	}
+	return t.ready()
+}
+
+// answered reports whether a Responding round that pushed nothing did its
+// work: a poll saw the PR, the bar holds threads, and no thread, conflict, or
+// low score is open. The zero bar ignores threads, so its Tasks keep the
+// stopped flag.
+func (t *Task) answered() bool {
+	s := t.Standing
+	return t.Stage == Responding && s.Head != "" && t.Policy.Bar.Threads != IgnoredThreads &&
+		s.Threads.Total() == 0 && !s.Conflict && !s.ScoreLow
+}
+
+// loop is a Loop budget and the agent Stage that spends it.
+type loop struct {
+	stage Stage
+	left  func(*Budgets) *int
+	unit  string // one turn of the loop, in a flag detail
+}
+
+var (
+	ciDebugLoop     = loop{CIDebug, func(b *Budgets) *int { return &b.CIDebug }, "attempt"}
+	respondingLoop  = loop{Responding, func(b *Budgets) *int { return &b.Responding }, "round"}
+	reviewCycleLoop = loop{Responding, func(b *Budgets) *int { return &b.ReviewCycles }, "cycle"}
+)
+
+// spend enters the loop's agent Stage. With budget left it starts a Worker.
+// With none left it flags the Task and starts nothing. why is the gap that
+// spends the budget, or "" for a review edge. It goes in the flag detail, for
+// example "2 open threads (1 bot) after 3 rounds".
+func (t *Task) spend(l loop, why string) []Effect {
+	left := l.left(&t.Left)
+	if *left > 0 {
+		*left--
+		return t.startAgent(l.stage)
+	}
+	t.enter(l.stage)
+	detail := l.stage.String()
+	if why != "" {
+		detail = why + " after " + count(*l.left(&t.Policy.Budgets), l.unit)
+	}
+	t.flag(ReasonBudgetSpent, detail)
+	t.BarFlag = why != ""
+	return nil
+}
+
+// reviewCycle starts a Responding round that spends the review cycle budget,
+// not the Responding budget: for a low review bot score, or for open bot
+// threads on a score that passes.
+func (t *Task) reviewCycle() []Effect {
+	effects := t.spend(reviewCycleLoop, t.why())
+	score := *t.Standing.Score
+	t.BotScore = &score
 	return effects
 }
 
@@ -420,15 +500,15 @@ func (t *Task) finish(o Outcome) []Effect {
 	return []Effect{Cleanup{}, TrackerStatus{string(o)}}
 }
 
-// enter changes the Stage, clears the flag and the review bot's state, and
+// enter changes the Stage, clears the flag and the review cycle's score, and
 // refills the per-Stage budget.
 func (t *Task) enter(s Stage) {
 	t.Stage = s
 	t.flag("", "")
-	t.BotScore, t.BotWait = nil, ""
+	t.BotScore = nil
 	t.Left.Restarts = t.Policy.Budgets.Restarts
 }
 
 func (t *Task) flag(r Reason, detail string) {
-	t.Flag, t.FlagDetail = r, detail
+	t.Flag, t.FlagDetail, t.BarFlag = r, detail, false
 }

@@ -43,7 +43,6 @@ type PR struct {
 	IsDraft          bool
 	HeadSHA          string
 	MergeStateStatus string
-	Checks           CheckState
 	ReviewDecision   string
 	ReviewRequests   int
 	LatestReviews    []Review
@@ -102,7 +101,7 @@ fragment F on PullRequest {
   reviewRequests { totalCount }
   latestReviews(first: 50) { nodes { author { login } state submittedAt } }
   commits(last: 100) { totalCount nodes { commit { author { user { login } } } } }
-  head: commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 100) { nodes {
+  head: commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
     __typename
     ... on CheckRun { name status conclusion }
     ... on StatusContext { context state }
@@ -231,7 +230,6 @@ type gqlPR struct {
 		Nodes []struct {
 			Commit struct {
 				StatusCheckRollup *struct {
-					gqlRollup
 					Contexts struct {
 						Nodes []gqlContext `json:"nodes"`
 					} `json:"contexts"`
@@ -329,7 +327,6 @@ func (g gqlPR) toPR() *PR {
 		ReviewDecision:   g.ReviewDecision,
 		ReviewRequests:   g.ReviewRequests.TotalCount,
 		CommitCount:      g.Commits.TotalCount,
-		Checks:           ChecksNone,
 	}
 	for _, r := range g.LatestReviews.Nodes {
 		rv := Review{State: r.State, SubmittedAt: r.SubmittedAt}
@@ -345,15 +342,9 @@ func (g gqlPR) toPR() *PR {
 		}
 		pr.CommitAuthors = append(pr.CommitAuthors, login)
 	}
-	if n := len(g.Head.Nodes); n > 0 && g.Head.Nodes[n-1].Commit.StatusCheckRollup != nil {
-		pr.Checks = g.Head.Nodes[n-1].Commit.StatusCheckRollup.gqlRollup.checks()
-	}
+	pr.CheckRuns = g.checkRuns()
 	// GitHub creates a push's checks a few seconds after the push. In a repo
 	// whose base branch has checks, none yet means they are on their way.
-	if pr.Checks == ChecksNone && g.BaseRef != nil && g.BaseRef.Target.StatusCheckRollup != nil {
-		pr.Checks = ChecksPending
-	}
-	pr.CheckRuns = g.checkRuns()
 	pr.ChecksDue = len(pr.CheckRuns) == 0 && g.BaseRef != nil && g.BaseRef.Target.StatusCheckRollup != nil
 	pr.Threads = g.threads()
 	pr.ThreadsOver = g.ReviewThreads.TotalCount > len(g.ReviewThreads.Nodes)

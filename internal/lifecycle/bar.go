@@ -138,7 +138,7 @@ type Standing struct {
 	// it is below the minimum.
 	Score    *int        `json:"score,omitempty"`
 	ScoreLow bool        `json:"score_low,omitempty"`
-	Threads  OpenThreads `json:"threads"`
+	Threads  OpenThreads `json:"threads,omitzero"`
 	// Unapproved is true when the reviews that the bar asks for have not
 	// approved. Review keeps GitHub's decision for the text.
 	Unapproved bool     `json:"unapproved,omitempty"`

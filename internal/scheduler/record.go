@@ -3,6 +3,7 @@ package scheduler
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -169,12 +170,19 @@ func (r *Record) view() TaskView {
 			v.Note = fmt.Sprintf("%s, cycle %d/%d", c.ScoreText(c.Score), b.ReviewCycles-r.Left.ReviewCycles, b.ReviewCycles)
 		}
 	case lifecycle.InReview, lifecycle.ReadyToLand, lifecycle.CIRunning, lifecycle.Done:
+		var parts []string
 		if v.PRNumber != 0 {
-			v.Note = fmt.Sprintf("#%d", v.PRNumber)
+			parts = append(parts, fmt.Sprintf("#%d", v.PRNumber))
 		}
-		if r.BotWait != "" {
-			v.Note += " waiting for " + r.Policy.Bar.Bot.Title
+		if r.Stage != lifecycle.Done {
+			if why := r.Policy.Bar.Explain(r.Standing); why != "" {
+				parts = append(parts, why)
+			}
+			if o := r.Standing.Optional; len(o) > 0 {
+				parts = append(parts, "· optional failed: "+strings.Join(o, ", "))
+			}
 		}
+		v.Note = strings.Join(parts, " ")
 	case lifecycle.ReviewReady:
 		if r.ReviewedHead != "" && r.LatestHead != "" && r.LatestHead != r.ReviewedHead {
 			v.Note = "head moved"

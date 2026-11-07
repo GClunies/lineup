@@ -2,7 +2,6 @@ package github
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -76,26 +75,33 @@ func check(t *testing.T, got, want []lifecycle.Signal) {
 	}
 }
 
+// withSeen is the edges, then the pr-seen that each poll of an open PR ends with.
+func withSeen(cur *PR, viewer string, edges ...lifecycle.Signal) []lifecycle.Signal {
+	return append(edges, lifecycle.PRSeen{Facts: cur.Facts(viewer)})
+}
+
 func TestParseEachState(t *testing.T) {
 	cases := []struct {
 		fixture string
 		want    PR // the fields that identify the state
+		// gap is the PR's first gap under the zero bar, where every check gates.
+		gap lifecycle.Gap
 	}{
-		{"draft", PR{Number: 14783, State: "OPEN", IsDraft: true, Checks: ChecksPassed, ReviewDecision: "REVIEW_REQUIRED", CommitCount: 4}},
-		{"ci_failed", PR{Number: 13788, State: "OPEN", Checks: ChecksFailed, ReviewDecision: "REVIEW_REQUIRED", ReviewRequests: 2, CommitCount: 1}},
-		{"pending", PR{Number: 344637, State: "OPEN", Checks: ChecksPending, ReviewDecision: "REVIEW_REQUIRED", CommitCount: 3}},
-		{"pending_review_required", PR{Number: 14845, State: "OPEN", Checks: ChecksPassed, ReviewDecision: "REVIEW_REQUIRED", ReviewRequests: 2, CommitCount: 3}},
-		{"ci_passed_approved", PR{Number: 14825, State: "OPEN", Checks: ChecksPassed, ReviewDecision: "APPROVED", CommitCount: 1}},
-		{"approved_review_requested", PR{Number: 14716, State: "OPEN", Checks: ChecksPassed, ReviewDecision: "APPROVED", ReviewRequests: 1, CommitCount: 1}},
-		{"changes_requested_dirty", PR{Number: 13982, State: "OPEN", Checks: ChecksNone, ReviewDecision: "CHANGES_REQUESTED", MergeStateStatus: "DIRTY", CommitCount: 1}},
-		{"merged", PR{Number: 14840, State: "MERGED", Checks: ChecksPassed, ReviewDecision: "APPROVED", CommitCount: 1}},
-		{"multi_author", PR{Number: 389, State: "OPEN", Checks: ChecksPassed, CommitCount: 4}},
+		{"draft", PR{Number: 14783, State: "OPEN", IsDraft: true, ReviewDecision: "REVIEW_REQUIRED", CommitCount: 4}, lifecycle.GapDraft},
+		{"ci_failed", PR{Number: 13788, State: "OPEN", ReviewDecision: "REVIEW_REQUIRED", ReviewRequests: 2, CommitCount: 1}, lifecycle.GapFailed},
+		{"pending", PR{Number: 344637, State: "OPEN", ReviewDecision: "REVIEW_REQUIRED", CommitCount: 3}, lifecycle.GapPending},
+		{"pending_review_required", PR{Number: 14845, State: "OPEN", ReviewDecision: "REVIEW_REQUIRED", ReviewRequests: 2, CommitCount: 3}, lifecycle.GapApproval},
+		{"ci_passed_approved", PR{Number: 14825, State: "OPEN", ReviewDecision: "APPROVED", CommitCount: 1}, lifecycle.NoGap},
+		{"approved_review_requested", PR{Number: 14716, State: "OPEN", ReviewDecision: "APPROVED", ReviewRequests: 1, CommitCount: 1}, lifecycle.NoGap},
+		{"changes_requested_dirty", PR{Number: 13982, State: "OPEN", ReviewDecision: "CHANGES_REQUESTED", MergeStateStatus: "DIRTY", CommitCount: 1}, lifecycle.GapConflict},
+		{"merged", PR{Number: 14840, State: "MERGED", ReviewDecision: "APPROVED", CommitCount: 1}, lifecycle.NoGap},
+		{"multi_author", PR{Number: 389, State: "OPEN", CommitCount: 4}, lifecycle.NoGap},
 	}
 	for _, c := range cases {
 		t.Run(c.fixture, func(t *testing.T) {
 			got := load(t, c.fixture)
 			if got.Number != c.want.Number || got.State != c.want.State || got.IsDraft != c.want.IsDraft ||
-				got.Checks != c.want.Checks || got.ReviewDecision != c.want.ReviewDecision ||
+				got.ReviewDecision != c.want.ReviewDecision ||
 				got.ReviewRequests != c.want.ReviewRequests || got.CommitCount != c.want.CommitCount ||
 				(c.want.MergeStateStatus != "" && got.MergeStateStatus != c.want.MergeStateStatus) {
 				t.Errorf("got %+v, want fields of %+v", got, c.want)
@@ -103,111 +109,60 @@ func TestParseEachState(t *testing.T) {
 			if got.HeadSHA == "" || got.URL == "" || len(got.CommitAuthors) == 0 {
 				t.Errorf("missing head, url, or commit authors: %+v", got)
 			}
+			if s := (lifecycle.LandingBar{}).Measure(got.Facts("octo")); s.Next() != c.gap {
+				t.Errorf("first gap %d, want %d: %+v", s.Next(), c.gap, s)
+			}
 		})
 	}
 }
 
 func TestFirstSightingOfEachState(t *testing.T) {
-	cases := []struct {
-		fixture string
-		want    []lifecycle.Signal
-	}{
-		{"draft", sigs(lifecycle.PROpen{}, lifecycle.CIPassed{Draft: true, NeedsReview: true})},
-		{"ci_failed", sigs(lifecycle.PROpen{}, lifecycle.CIFailed{})},
-		{"pending", sigs(lifecycle.PROpen{})},
-		{"pending_review_required", sigs(lifecycle.PROpen{}, lifecycle.CIPassed{NeedsReview: true})},
-		{"ci_passed_approved", sigs(lifecycle.PROpen{}, lifecycle.CIPassed{})},
-		{"approved_review_requested", sigs(lifecycle.PROpen{}, lifecycle.CIPassed{})},
-		{"changes_requested_dirty", sigs(lifecycle.PROpen{}, lifecycle.CIPassed{NeedsReview: true})},
-		{"multi_author", sigs(lifecycle.PROpen{}, lifecycle.CIPassed{})},
-		{"merged", sigs(lifecycle.PRMerged{})},
-	}
-	for _, c := range cases {
-		t.Run(c.fixture, func(t *testing.T) {
-			check(t, Signals(nil, load(t, c.fixture), "octo"), c.want)
-		})
-	}
-}
-
-func TestNothingChangedNothingSignaled(t *testing.T) {
-	for _, f := range []string{"draft", "ci_failed", "pending", "ci_passed_approved", "changes_requested_dirty", "merged", "multi_author"} {
+	for _, f := range []string{"draft", "ci_failed", "pending", "pending_review_required", "ci_passed_approved", "approved_review_requested", "changes_requested_dirty", "multi_author"} {
 		pr := load(t, f)
-		check(t, Signals(clone(pr), clone(pr), "octo"), nil)
+		check(t, Signals(nil, pr, "octo"), withSeen(pr, "octo", lifecycle.PROpen{}))
 	}
-	check(t, Signals(load(t, "draft"), nil, "octo"), nil)
+	check(t, Signals(nil, load(t, "merged"), "octo"), sigs(lifecycle.PRMerged{}))
 }
 
-func TestChecksEdges(t *testing.T) {
-	pending := load(t, "pending")
-	passed, failed := clone(pending), clone(pending)
-	passed.Checks, failed.Checks = ChecksPassed, ChecksFailed
-
-	check(t, Signals(pending, passed, "v"), sigs(lifecycle.CIPassed{NeedsReview: true}))
-	check(t, Signals(pending, failed, "v"), sigs(lifecycle.CIFailed{}))
-	check(t, Signals(failed, failed, "v"), nil)
-	check(t, Signals(failed, pending, "v"), nil)
-
-	newHead := clone(failed)
-	newHead.HeadSHA = "new"
-	check(t, Signals(failed, newHead, "v"), sigs(lifecycle.Pushed{}, lifecycle.CIFailed{}))
-
-	newPassed := clone(passed)
-	newPassed.HeadSHA = "new"
-	check(t, Signals(passed, newPassed, "v"), sigs(lifecycle.Pushed{}, lifecycle.CIPassed{NeedsReview: true}))
-
-	none := clone(passed)
-	none.Checks = ChecksNone
-	check(t, Signals(pending, none, "v"), sigs(lifecycle.CIPassed{NeedsReview: true}))
-	check(t, Signals(none, passed, "v"), nil)
+func TestNothingChangedSendsOnlyPRSeen(t *testing.T) {
+	for _, f := range []string{"draft", "ci_failed", "pending", "ci_passed_approved", "changes_requested_dirty", "multi_author"} {
+		pr := load(t, f)
+		check(t, Signals(clone(pr), clone(pr), "octo"), withSeen(pr, "octo"))
+	}
+	check(t, Signals(clone(load(t, "merged")), load(t, "merged"), "octo"), nil)
+	check(t, Signals(load(t, "draft"), nil, "octo"), nil)
 }
 
 func TestPushWhilePending(t *testing.T) {
 	pending := load(t, "pending")
 	pushed := clone(pending)
 	pushed.HeadSHA = "new"
-	check(t, Signals(pending, pushed, "v"), sigs(lifecycle.Pushed{}))
+	check(t, Signals(pending, pushed, "v"), withSeen(pushed, "v", lifecycle.Pushed{}))
 }
 
-func TestDraftBecomingReadyRepeatsCIPassed(t *testing.T) {
-	ready := load(t, "pending_review_required")
-	draft := clone(ready)
-	draft.IsDraft = true
-	check(t, Signals(draft, ready, "v"), sigs(lifecycle.CIPassed{NeedsReview: true}))
-}
-
-func TestApproval(t *testing.T) {
-	cur := load(t, "ci_passed_approved")
-	prev := clone(cur)
-	prev.ReviewDecision = "REVIEW_REQUIRED"
-	prev.LatestReviews = prev.LatestReviews[:1] // the approving review is the second
-	check(t, Signals(prev, cur, "octo"), sigs(lifecycle.ReviewApproved{}))
-}
-
-func TestChangesRequestedAndConflict(t *testing.T) {
+func TestChangesRequested(t *testing.T) {
 	cur := load(t, "changes_requested_dirty")
 	prev := clone(cur)
 	prev.ReviewDecision = "REVIEW_REQUIRED"
-	prev.MergeStateStatus = "BLOCKED"
 	prev.LatestReviews = prev.LatestReviews[:1] // the CHANGES_REQUESTED review is the second
 
-	check(t, Signals(prev, cur, "octo"), sigs(lifecycle.ReviewChangesRequested{}, lifecycle.PRConflict{}))
-	check(t, Signals(prev, cur, "BagToad"), sigs(lifecycle.PRConflict{}))
-	check(t, Signals(cur, cur, "octo"), nil)
+	check(t, Signals(prev, cur, "octo"), withSeen(cur, "octo", lifecycle.ReviewChangesRequested{}))
+	check(t, Signals(prev, cur, "BagToad"), withSeen(cur, "BagToad"))
 }
 
 func TestCommentedReview(t *testing.T) {
 	cur := load(t, "pending")
 	prev := clone(cur)
 	prev.LatestReviews = nil
-	check(t, Signals(prev, cur, "octo"), sigs(lifecycle.ReviewCommented{}))
-	check(t, Signals(prev, cur, "copilot-pull-request-reviewer"), nil)
+	check(t, Signals(prev, cur, "octo"), withSeen(cur, "octo", lifecycle.ReviewCommented{}))
+	check(t, Signals(prev, cur, "copilot-pull-request-reviewer"), withSeen(cur, "copilot-pull-request-reviewer"))
 }
 
 func TestReviewerUpdatingTheirReviewIsNew(t *testing.T) {
 	cur := load(t, "ci_passed_approved")
 	cur.LatestReviews[0].SubmittedAt = cur.LatestReviews[1].SubmittedAt.Add(time.Hour)
 	prev := clone(load(t, "ci_passed_approved"))
-	check(t, Signals(prev, cur, "octo"), sigs(lifecycle.ReviewCommented{}))
+	check(t, Signals(prev, cur, "octo"), withSeen(cur, "octo", lifecycle.ReviewCommented{}))
 }
 
 func TestAdditionalAuthors(t *testing.T) {
@@ -216,16 +171,16 @@ func TestAdditionalAuthors(t *testing.T) {
 	prev.CommitCount = 2
 	prev.CommitAuthors = cur.CommitAuthors[:2]
 
-	check(t, Signals(prev, cur, "octo"), sigs(lifecycle.ReviewAdditionalAuthors{}))
-	check(t, Signals(prev, cur, "kktejas07"), nil)
+	check(t, Signals(prev, cur, "octo"), withSeen(cur, "octo", lifecycle.ReviewAdditionalAuthors{}))
+	check(t, Signals(prev, cur, "kktejas07"), withSeen(cur, "kktejas07"))
 
 	prev.CommitCount = 3
 	prev.CommitAuthors = cur.CommitAuthors[:3]
-	check(t, Signals(prev, cur, "kktejas07"), nil)
+	check(t, Signals(prev, cur, "kktejas07"), withSeen(cur, "kktejas07"))
 
 	unlinked := clone(cur)
 	unlinked.CommitAuthors[3] = ""
-	check(t, Signals(prev, unlinked, "kktejas07"), nil)
+	check(t, Signals(prev, unlinked, "kktejas07"), withSeen(unlinked, "kktejas07"))
 }
 
 func TestMerged(t *testing.T) {
@@ -383,37 +338,23 @@ esac
 // A PR whose checks GitHub has not created yet must not pass CI in a repo
 // whose base branch has checks, or a merge on green lands it before CI runs.
 func TestNoChecksYetIsPendingWhenTheBaseHasChecks(t *testing.T) {
-	raw, _ := os.ReadFile(filepath.Join("testdata", "ci_passed_approved.json"))
-	var d map[string]any
-	json.Unmarshal(raw, &d)
-	pr := d["data"].(map[string]any)["a0"].(map[string]any)["pullRequests"].(map[string]any)["nodes"].([]any)[0].(map[string]any)
-	for _, n := range pr["head"].(map[string]any)["nodes"].([]any) {
-		n.(map[string]any)["commit"].(map[string]any)["statusCheckRollup"] = nil
-	}
-	for base, want := range map[string]CheckState{`{"state":"SUCCESS"}`: ChecksPending, `null`: ChecksNone} {
-		var rollup any
-		json.Unmarshal([]byte(base), &rollup)
-		pr["baseRef"] = map[string]any{"target": map[string]any{"statusCheckRollup": rollup}}
-		out, _ := json.Marshal(d)
-		path := filepath.Join(t.TempDir(), "snap.json")
-		os.WriteFile(path, out, 0o644)
-		bin, _ := fakeGH(t, path, "")
-		prs, err := (&Client{Bin: bin}).Snapshot(context.Background(), []Key{anyKey})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := prs[anyKey].Checks; got != want {
-			t.Errorf("base rollup %s: checks %s, want %s", base, got, want)
-		}
-		if f := prs[anyKey].Facts("me"); f.ChecksDue != (want == ChecksPending) || len(f.Checks) != 0 {
-			t.Errorf("base rollup %s: facts %+v, want checks due only when the base has checks", base, f)
-		}
-		if want == ChecksPending {
-			for _, s := range Signals(nil, prs[anyKey], "me") {
-				if _, ok := s.(lifecycle.CIPassed); ok {
-					t.Error("CI passed before GitHub created the PR's checks")
-				}
+	for _, baseHasChecks := range []bool{true, false} {
+		pr := loadWith(t, "ci_passed_approved", func(pr map[string]any) {
+			for _, n := range pr["head"].(map[string]any)["nodes"].([]any) {
+				n.(map[string]any)["commit"].(map[string]any)["statusCheckRollup"] = nil
 			}
+			var rollup any
+			if baseHasChecks {
+				rollup = map[string]any{"state": "SUCCESS"}
+			}
+			pr["baseRef"] = map[string]any{"target": map[string]any{"statusCheckRollup": rollup}}
+		})
+		f := pr.Facts("me")
+		if f.ChecksDue != baseHasChecks || len(f.Checks) != 0 {
+			t.Errorf("base has checks %v: facts %+v, want checks due only when the base has checks", baseHasChecks, f)
+		}
+		if met := userBar.Measure(f).Met(); met == baseHasChecks {
+			t.Errorf("base has checks %v: bar met %v", baseHasChecks, met)
 		}
 	}
 }
@@ -468,23 +409,28 @@ func TestOnlyAGatedKeyAsksForComments(t *testing.T) {
 	}
 }
 
-func TestReviewBotSignals(t *testing.T) {
+// The bot's score counts only for the head that it reviewed.
+func TestTheBotScoresOnlyItsHead(t *testing.T) {
 	scoredAtHead := loadGated(t)
-	four := 4
-	check(t, Signals(nil, scoredAtHead, "octo"), sigs(lifecycle.PROpen{},
-		lifecycle.CIPassed{NeedsReview: true, Bot: &lifecycle.HeadScore{Head: reviewedHead, Score: &four}}))
+	if f := scoredAtHead.Facts("octo"); f.Score == nil || *f.Score != 4 || f.Head != reviewedHead {
+		t.Errorf("scored head: facts %+v, want 4 at %s", f, reviewedHead)
+	}
 
 	pushed := clone(scoredAtHead)
 	pushed.HeadSHA = "f00d"
-	check(t, Signals(nil, pushed, "octo"), sigs(lifecycle.PROpen{},
-		lifecycle.CIPassed{NeedsReview: true, Bot: &lifecycle.HeadScore{Head: "f00d"}}))
+	if f := pushed.Facts("octo"); f.Score != nil {
+		t.Errorf("a new head: score %d, want none", *f.Score)
+	}
 
 	// Greptile edits its summary a few seconds after its check run passes.
 	waiting := clone(scoredAtHead)
 	waiting.BotSummary = &BotSummary{Score: 5, Commit: "older"}
-	check(t, Signals(waiting, scoredAtHead, "octo"), sigs(
-		lifecycle.CIPassed{NeedsReview: true, Bot: &lifecycle.HeadScore{Head: reviewedHead, Score: &four}}))
-	check(t, Signals(clone(scoredAtHead), clone(scoredAtHead), "octo"), nil)
+	if f := waiting.Facts("octo"); f.Score != nil {
+		t.Errorf("a summary of an older head: score %d, want none", *f.Score)
+	}
+	if f := load(t, "review_bot").Facts("octo"); f.Score != nil {
+		t.Errorf("a Key with no bot: score %d, want none", *f.Score)
+	}
 }
 
 // The gate owns a bot's reviews, so they start no Responding round of their
@@ -494,8 +440,8 @@ func TestAGatedBotsReviewIsNotReviewCommented(t *testing.T) {
 	prev.LatestReviews = nil
 	cur := clone(prev)
 	cur.LatestReviews = []Review{{Author: "greptile-apps", State: "COMMENTED", SubmittedAt: time.Now()}}
-	check(t, Signals(prev, cur, "octo"), nil)
+	check(t, Signals(prev, cur, "octo"), withSeen(cur, "octo"))
 
 	prev.Bot, cur.Bot = "", ""
-	check(t, Signals(prev, cur, "octo"), sigs(lifecycle.ReviewCommented{}))
+	check(t, Signals(prev, cur, "octo"), withSeen(cur, "octo", lifecycle.ReviewCommented{}))
 }
