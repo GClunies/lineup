@@ -121,7 +121,7 @@ func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{claudeBin, "--model", model, "--effort", "max", "--resume", spec.Conversation, "--name", spec.Name, "--add-dir=/repos/umbrella/data.review-pr-4955"}
+	want := []string{claudeBin, "--model", model, "--effort", "max", "--resume", spec.Conversation, "--name", spec.Name, "--remote-control", spec.Name, "--add-dir=/repos/umbrella/data.review-pr-4955"}
 	if !slices.Equal(argv, want) {
 		t.Fatalf("reopen argv = %q, want %q", argv, want)
 	}

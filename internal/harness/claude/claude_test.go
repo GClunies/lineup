@@ -303,12 +303,12 @@ func TestCommandStartsAndResumesAConversation(t *testing.T) {
 	const id = "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20"
 	st := config.StageConfig{Model: "m", Effort: "max"}
 	start, _ := Command("/bin/claude", "", st, id, "R-7 data#7 Fix X", "/pr-review x", "/repos/data.review-pr-7")
-	want := []string{"/bin/claude", "--model", "m", "--effort", "max", "--session-id", id, "--name", "R-7 data#7 Fix X", "--add-dir=/repos/data.review-pr-7", "/pr-review x"}
+	want := []string{"/bin/claude", "--model", "m", "--effort", "max", "--session-id", id, "--name", "R-7 data#7 Fix X", "--remote-control", "R-7 data#7 Fix X", "--add-dir=/repos/data.review-pr-7", "/pr-review x"}
 	if !reflect.DeepEqual(start, want) {
 		t.Errorf("start argv = %q, want %q", start, want)
 	}
 	resume, _ := Command("/bin/claude", "", st, id, "R-7 data#7 Fix X", "", "/repos/data.review-pr-7")
-	want = []string{"/bin/claude", "--model", "m", "--effort", "max", "--resume", id, "--name", "R-7 data#7 Fix X", "--add-dir=/repos/data.review-pr-7"}
+	want = []string{"/bin/claude", "--model", "m", "--effort", "max", "--resume", id, "--name", "R-7 data#7 Fix X", "--remote-control", "R-7 data#7 Fix X", "--add-dir=/repos/data.review-pr-7"}
 	if !reflect.DeepEqual(resume, want) {
 		t.Errorf("resume argv = %q, want %q", resume, want)
 	}

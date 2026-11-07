@@ -129,16 +129,18 @@ Rex server
 │   ├── tab "plan"
 │   │   ├── block "LINEAR"            lineup board --linear  (top, most of the height)
 │   │   └── block "PLANNER"           claude --continue     (bottom, 25% of the height, own theme)
-│   └── tab "review"
-│       ├── block "REVIEWS"           lineup board --review  (top, most of the height)
-│       └── block "REVIEWER"          claude --continue     (bottom, 25% of the height, own theme)
+│   ├── tab "review"
+│   │   ├── block "REVIEWS"           lineup board --review  (top, most of the height)
+│   │   └── block "REVIEWER"          claude --continue     (bottom, 25% of the height, own theme)
+│   └── tab "assist"
+│       └── block "ASSIST"            claude                 (the whole tab, in assist_dir, own theme)
 ├── session "data"                    (one session for each Repo with an open Task)
 │   ├── tab "ENG-590 Add billing model"
 │   └── tab "ENG-592 Fix flaky test"
 ├── session "web"
 │   └── tab "WEB-12 …"
 └── session "ad hoc"                  (every ad hoc Task, whatever its Repo)
-    └── tab "B-9 Evaluate the ADR …"
+    └── tab "adhoc-9 Evaluate the ADR …"
 ```
 
 The Scheduler has no tab. launchd runs `lineup serve` as a user agent, and the log is `~/.local/state/lineup/scheduler.log`.
@@ -213,6 +215,8 @@ This sequence runs in the background. The Board shows only the Task as it change
    - The adapter takes Claude's own lock, the folder `.claude.json.lock`, and replaces the file with one rename. A lock folder older than 10 s is abandoned.
    - The Worker command sets `CLAUDE_CONFIG_DIR` itself, because Rex starts it through a login shell that runs no direnv.
 7. The Scheduler starts the Worker from the absolute path of the Harness, with the Stage's model, effort, prompt, and contract.
+   - The Worker command passes `--name <tab label> --remote-control <tab label>`. The tab label starts with the Task ID, so the user finds each Worker by its Task ID on claude.ai and on their phone. Each Hub agent gets the same flags, with the name `lineup-<tab>`: `lineup-work`, `lineup-plan`, `lineup-review`, and `lineup-assist`.
+   - `--remote-control` takes an optional value, so the command always gives it the name. Without a value, it takes the prompt as the name.
 
 Each agent Stage after Working starts a fresh Worker in the same tab and worktree. The Worker gets its context from the Issue and the PR.
 
@@ -264,6 +268,8 @@ An entry with only a glob, such as `match = "~/code/*/*"` above, lists every che
 `start_skills` is a top-level key in the global file. It lists the skills that the tracker browser offers when the user starts a Task. A chosen skill is stored as the Task override `skill`.
 
 `ad_hoc_session` is a top-level key in the global file. It names the Rex session for ad hoc Tasks. The default is `ad hoc`.
+
+`assist_dir` is a top-level key in the global file. It names the folder where the `assist` tab's agent starts, for example `~/repos`. The default is the home folder. The assist agent has no lineup role, so it is a general agent for one-off questions. It starts a new conversation each time the Hub opens its tab, because the folder can hold the user's own conversations.
 
 `linear_client_id` is a top-level key in the global file. Put it above the first `[table]`, or TOML reads it as part of that table. Leave it out to sign in through lineup's own Linear OAuth app, which any workspace can use. To use your own app, register an OAuth app in Linear with the redirect URI `http://localhost:47821/callback` and no client credentials. Then set its client ID here.
 

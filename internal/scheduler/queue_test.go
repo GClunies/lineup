@@ -158,7 +158,7 @@ func (h *harness) reviews() []string {
 	h.t.Helper()
 	var out []string
 	for _, v := range h.do(Request{Op: "ls"}).(BoardView).Tasks {
-		if strings.HasPrefix(v.ID, "R-") {
+		if v.Kind == lifecycle.KindReview {
 			out = append(out, fmt.Sprintf("%s #%d %s", v.ID, v.PRNumber, v.Stage))
 		}
 	}
@@ -171,10 +171,10 @@ func TestRepeatedFillsInOneStateAddEachReviewOnce(t *testing.T) {
 	h.gh.found = map[string][]github.PullRequest{"q1": {p7, p8}, "q2": {p8, p7}}
 	// One Repo takes one start in each fill, so q2 waits for the second fill.
 	want := [][]string{
-		{"R-1 #7 Reviewing"},
-		{"R-1 #7 Reviewing", "R-2 #8 Reviewing"},
-		{"R-1 #7 Reviewing", "R-2 #8 Reviewing"},
-		{"R-1 #7 Reviewing", "R-2 #8 Reviewing"},
+		{"pr-7 #7 Reviewing"},
+		{"pr-7 #7 Reviewing", "pr-8 #8 Reviewing"},
+		{"pr-7 #7 Reviewing", "pr-8 #8 Reviewing"},
+		{"pr-7 #7 Reviewing", "pr-8 #8 Reviewing"},
 	}
 	for i, w := range want {
 		h.s.fill(context.Background())
@@ -199,7 +199,7 @@ func TestTheTickFillsAQueueOnce(t *testing.T) {
 	eventually(t, "the tick's fill", func() bool { return len(h.reviews()) == 1 })
 	after := len(h.gh.searchCalls())
 	eventually(t, "five more fills", func() bool { return len(h.gh.searchCalls()) >= after+5 })
-	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Reviewing"}) {
+	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Reviewing"}) {
 		t.Fatalf("reviews %v, want one review of #7", got)
 	}
 	eventually(t, "the review worktree", func() bool { h.wt.mu.Lock(); defer h.wt.mu.Unlock(); return len(h.wt.added) == 1 })
@@ -230,7 +230,7 @@ func TestAFillThatIsDueWhileAnotherRunsIsSkipped(t *testing.T) {
 	}
 	close(hold)
 	<-first
-	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Reviewing"}) {
+	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Reviewing"}) {
 		t.Fatalf("reviews %v, want the first fill's review", got)
 	}
 	h.s.fill(context.Background())
@@ -247,8 +247,8 @@ func TestOnlyAFullPollFills(t *testing.T) {
 		t.Fatalf("a poll for one Task searched %d times and added %v", n, got)
 	}
 	h.s.poll(context.Background(), nil)
-	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Reviewing"}) {
-		t.Fatalf("a full poll added %v, want R-1", got)
+	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Reviewing"}) {
+		t.Fatalf("a full poll added %v, want pr-7", got)
 	}
 }
 
@@ -256,7 +256,7 @@ func TestAFillSkipsAPRWithNoCheckout(t *testing.T) {
 	h := queueHarness(t, authorQueue("q", 1, "hopper"))
 	h.gh.found = map[string][]github.PullRequest{"q": {queuePR("acme/other", 9, 99), queuePR("acme/data", 7, 30)}}
 	h.s.fill(context.Background())
-	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Reviewing"}) {
+	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Reviewing"}) {
 		t.Fatalf("reviews %v, want #7: acme/other has no checkout", got)
 	}
 	v := h.do(Request{Op: "reviews"}).(ReviewsView)
@@ -300,24 +300,24 @@ func TestAPauseHoldsEveryFillAcrossARestart(t *testing.T) {
 
 	h.s.fill(ctx)
 	v := h.do(Request{Op: "reviews"}).(ReviewsView)
-	if q := v.Queues[0]; v.Paused || len(q.Started) != 1 || q.Started[0].ID != "R-1" || len(q.Ranked) != 1 || q.Ranked[0].PR.Number != 8 {
-		t.Fatalf("reviews = %+v, want R-1 started and #8 waiting", v)
+	if q := v.Queues[0]; v.Paused || len(q.Started) != 1 || q.Started[0].ID != "pr-7" || len(q.Ranked) != 1 || q.Ranked[0].PR.Number != 8 {
+		t.Fatalf("reviews = %+v, want pr-7 started and #8 waiting", v)
 	}
 
 	h.do(Request{Op: "reviews-pause"})
 	if !h.do(Request{Op: "ls"}).(BoardView).ReviewsPaused {
 		t.Fatal("the Board does not show the pause")
 	}
-	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Reviewing"}) {
-		t.Fatalf("after the pause: %v, want R-1 still reviewing", got)
+	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Reviewing"}) {
+		t.Fatalf("after the pause: %v, want pr-7 still reviewing", got)
 	}
 	h.waitTab("claude reviewing")
-	h.do(Request{Op: "close", Task: "R-1"})
-	h.waitStage("R-1", lifecycle.Done)
-	eventually(t, "R-1's cleanup", func() bool { return len(h.reviewsRemoved()) == 1 })
+	h.do(Request{Op: "close", Task: "pr-7"})
+	h.waitStage("pr-7", lifecycle.Done)
+	eventually(t, "pr-7's cleanup", func() bool { return len(h.reviewsRemoved()) == 1 })
 	searched := len(h.gh.searchCalls())
 	h.s.fill(ctx)
-	if got := h.reviews(); !slices.Equal(got, []string{"R-1 #7 Done"}) || len(h.gh.searchCalls()) != searched {
+	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Done"}) || len(h.gh.searchCalls()) != searched {
 		t.Fatalf("a paused fill gave %v and searched %d times, want nothing", got, len(h.gh.searchCalls())-searched)
 	}
 	if v := h.do(Request{Op: "reviews"}).(ReviewsView); !v.Paused || len(v.Queues[0].Ranked) != 1 || v.Queues[0].Ranked[0].PR.Number != 8 {
@@ -331,13 +331,13 @@ func TestAPauseHoldsEveryFillAcrossARestart(t *testing.T) {
 		t.Fatal("the pause did not hold across a restart")
 	}
 	h2.s.fill(ctx)
-	if got := h2.reviews(); !slices.Equal(got, []string{"R-1 #7 Done"}) {
+	if got := h2.reviews(); !slices.Equal(got, []string{"pr-7 #7 Done"}) {
 		t.Fatalf("a fill after the restart gave %v", got)
 	}
 	h2.do(Request{Op: "reviews-resume"})
 	h2.s.fill(ctx)
-	if got := h2.reviews(); !slices.Equal(got, []string{"R-1 #7 Done", "R-2 #8 Reviewing"}) {
-		t.Fatalf("after the resume: %v, want R-2 for #8", got)
+	if got := h2.reviews(); !slices.Equal(got, []string{"pr-7 #7 Done", "pr-8 #8 Reviewing"}) {
+		t.Fatalf("after the resume: %v, want pr-8 for #8", got)
 	}
 	if h2.do(Request{Op: "ls"}).(BoardView).ReviewsPaused {
 		t.Fatal("the Board still shows the pause")

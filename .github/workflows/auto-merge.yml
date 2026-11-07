@@ -1,7 +1,10 @@
 name: Auto-merge
 
-# GitHub merges the PR when the checks that main requires pass. A PR from a
-# fork never gets auto-merge.
+# GitHub merges the PR when the checks that its base branch requires pass. A
+# base with no required `test` check would merge at once, so the job arms
+# auto-merge only for a base that requires it. A stack child targets a
+# feature branch, and `gh stack merge` lands it. A PR from a fork never gets
+# auto-merge.
 on:
   pull_request:
     types: [opened, reopened, ready_for_review]
@@ -16,7 +19,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: gh pr merge --auto --merge "$PR" --repo "$GITHUB_REPOSITORY"
+      - run: |
+          required=$(gh api "repos/$GITHUB_REPOSITORY/rules/branches/$BASE" \
+            --jq '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | index("test") != null')
+          if [ "$required" != "true" ]; then
+            echo "::notice::$BASE does not require the test check, so auto-merge stays off for #$PR."
+            exit 0
+          fi
+          gh pr merge --auto --merge "$PR" --repo "$GITHUB_REPOSITORY"
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
