@@ -73,7 +73,6 @@ type GitHub interface {
 	Poll(ctx context.Context, keys []PRKey) (map[PRKey]PRSnapshot, error)
 	// Signals compares two snapshots of one PR. prev is nil before the first.
 	Signals(prev, cur *PRSnapshot) []lifecycle.Signal
-	MarkReady(ctx context.Context, repo string, number int) error
 	Merge(ctx context.Context, repo string, number int) error
 	// SearchPRs runs every search in one call, as the user, and returns each
 	// Key's PRs.

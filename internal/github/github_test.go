@@ -310,7 +310,7 @@ func TestSnapshotWithNoKeysRunsNothing(t *testing.T) {
 	}
 }
 
-func TestMarkReadyAndMergeCommands(t *testing.T) {
+func TestMergeCommands(t *testing.T) {
 	cases := []struct {
 		settings string
 		want     string
@@ -333,14 +333,6 @@ func TestMarkReadyAndMergeCommands(t *testing.T) {
 	bin, _ := fakeGH(t, "", "false,false,false")
 	if err := (&Client{Bin: bin}).Merge(context.Background(), "o/r", 7); err == nil {
 		t.Error("a repo with no merge method must fail")
-	}
-
-	bin, log := fakeGH(t, "", "")
-	if err := (&Client{Bin: bin}).MarkReady(context.Background(), "o/r", 7); err != nil {
-		t.Fatal(err)
-	}
-	if got := calls(t, log); len(got) != 1 || got[0] != "pr|ready|7|--repo|o/r" {
-		t.Errorf("calls %v", got)
 	}
 }
 

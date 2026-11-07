@@ -199,10 +199,6 @@ func (p *githubPort) Signals(prev, cur *scheduler.PRSnapshot) []lifecycle.Signal
 	return github.Signals(decode(prev), decode(cur), p.viewer)
 }
 
-func (p *githubPort) MarkReady(ctx context.Context, repo string, n int) error {
-	return p.c.MarkReady(ctx, repo, n)
-}
-
 func (p *githubPort) Merge(ctx context.Context, repo string, n int) error {
 	return p.c.Merge(ctx, repo, n)
 }

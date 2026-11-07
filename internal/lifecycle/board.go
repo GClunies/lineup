@@ -247,7 +247,8 @@ func (t *Task) observe(s Signal) []Effect {
 			return nil
 		}
 		if s.Draft {
-			return []Effect{MarkReady{}}
+			t.flag(ReasonDraft, "")
+			return nil
 		}
 		if s.NeedsReview {
 			t.enter(InReview)

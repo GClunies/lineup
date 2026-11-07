@@ -206,7 +206,7 @@ type TaskInfo struct {
 }
 
 var contracts = map[lifecycle.Stage]string{
-	lifecycle.Working:    "Push the branch and open a draft PR.",
+	lifecycle.Working:    "Push the branch and open a PR that is ready for review, not a draft.",
 	lifecycle.CIDebug:    "Push a commit that targets the failed check.",
 	lifecycle.Responding: "Push the changes and reply to each open review thread. If the PR has a conflict, push a merge of the base branch that resolves it.",
 }

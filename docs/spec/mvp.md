@@ -38,7 +38,7 @@ A one-off skill run, for example `/pr-explain <url>`, is a Task with the overrid
 |---|---|---|
 | Rex (server API revision 7 or later) | Sessions, tabs, blocks, events, program status | `lineup` stops with an error |
 | worktrunk (`wt`) | Creates, sets up, and removes worktrees | `lineup` shows `worktrunk is required: brew install worktrunk (https://worktrunk.dev)` and starts no Task |
-| GitHub CLI (`gh`) | PR state, ready-for-review, reviewers, merge | `lineup` stops with an error |
+| GitHub CLI (`gh`) | PR state and merge | `lineup` stops with an error |
 | Claude Code | The Orchestrator and the Workers | `lineup` stops with an error |
 | Linear OAuth | Tracker access | The tracker browser asks the user to sign in |
 
@@ -69,7 +69,7 @@ lineup has no planning Stage. If the work needs a plan or the user's approval fi
 
 | Stage | Contract |
 |---|---|
-| Working | Push the branch and open a draft PR. |
+| Working | Push the branch and open a PR that is ready for review, not a draft. |
 | CI debug | Push a commit that targets the failed check. |
 | Responding | Push the changes and reply to each open review thread. If the PR has a conflict, push a merge of the base branch that resolves it. |
 
@@ -80,8 +80,9 @@ If a Worker reports `done` and the contract output is missing, the Task gets the
 | From | Signal | To |
 |---|---|---|
 | Queued | `start`, and the WIP cap allows it or the user confirms | Working |
-| Working | `done`, and a draft PR exists (`pr-open`) | CI running |
+| Working | `done`, and a PR exists (`pr-open`) | CI running |
 | CI running | `ci-failed` | CI debug |
+| CI running | `ci-passed`, and the PR is a draft | CI running, with the Needs you flag `draft` |
 | CI running | `ci-passed`, and reviewers exist and have not approved | In review |
 | CI running | `ci-passed`, and the PR is approved or needs no reviewer | Ready to land |
 | CI debug | `pushed` (a new head commit) | CI running |
@@ -93,7 +94,7 @@ If a Worker reports `done` and the contract output is missing, the Task gets the
 | Any Stage | `pr-merged` outside lineup, for example by a person or by GitHub auto-merge | Done, marked merged |
 | Any Stage | `task-closed` (user key `x`, confirmed) | Done, marked closed |
 
-When CI passes for the first time, the Scheduler marks the draft PR ready for review and requests reviewers from CODEOWNERS.
+The Worker opens the PR ready for review, so GitHub requests the CODEOWNERS reviewers when the PR opens. lineup never changes the draft state of a PR. A draft PR means that a person wants to hold it, for example the user who made it a draft. When the user marks the PR ready, the poll sees the change and sends `ci-passed` again.
 
 ### Needs you reasons
 
@@ -104,6 +105,7 @@ When CI passes for the first time, the Scheduler marks the draft PR ready for re
 | `setup failed` | A worktrunk hook exits with a code other than 0 |
 | `stopped` | `done` without the contract output |
 | `budget spent` | A Loop budget reaches 0 |
+| `draft` | `ci-passed` on a draft PR |
 | `worker lost` | The tab or block is gone, and the restart budget is spent |
 
 When the cause clears, for example when program status goes back to `working`, the Scheduler removes the flag.

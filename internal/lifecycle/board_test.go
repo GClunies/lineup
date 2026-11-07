@@ -31,7 +31,6 @@ func TestTransitions(t *testing.T) {
 		{"ci failed", CIRunning, CIFailed{}, CIDebug, []Effect{StartWorker{CIDebug}}, ""},
 		{"ci passed needs review", CIRunning, CIPassed{NeedsReview: true}, InReview, []Effect{TrackerStatus{"in_review"}}, ""},
 		{"ci passed approved", CIRunning, CIPassed{}, ReadyToLand, nil, ""},
-		{"ci passed on draft marks ready", CIRunning, CIPassed{Draft: true, NeedsReview: true}, CIRunning, []Effect{MarkReady{}}, ""},
 		{"ci debug pushed", CIDebug, Pushed{}, CIRunning, nil, ""},
 		{"review approved", InReview, ReviewApproved{}, ReadyToLand, nil, ""},
 		{"review commented", InReview, ReviewCommented{}, Responding, []Effect{StartWorker{Responding}}, ""},
@@ -234,6 +233,19 @@ func TestPROpenAfterUnmetContractMovesOn(t *testing.T) {
 	b.Apply("T", PROpen{})
 	if task.Stage != CIRunning || task.Flag != "" {
 		t.Fatalf("stage %s flag %q, want CI running with no flag", task.Stage, task.Flag)
+	}
+}
+
+// lineup never marks a PR ready, so a passing draft waits for the user to.
+func TestADraftWaitsForTheUserToMarkItReady(t *testing.T) {
+	b, task := taskIn(CIRunning)
+	effects, _ := b.Apply("T", CIPassed{Draft: true, NeedsReview: true})
+	if effects != nil || task.Stage != CIRunning || task.Flag != ReasonDraft || task.Group() != GroupNeedsYou {
+		t.Fatalf("draft: stage %s flag %q effects %v, want CI running flagged draft and no effect", task.Stage, task.Flag, effects)
+	}
+	b.Apply("T", CIPassed{NeedsReview: true})
+	if task.Stage != InReview || task.Flag != "" {
+		t.Fatalf("marked ready: stage %s flag %q, want In review with no flag", task.Stage, task.Flag)
 	}
 }
 

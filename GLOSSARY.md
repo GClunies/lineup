@@ -81,7 +81,7 @@ The place in the lifecycle where a Task waits, with exactly one owner: an agent,
 _Avoid_: Status, state, column, phase
 
 **Stage contract**:
-The output that an agent Stage must leave for the Scheduler to observe, for example a draft PR after Working. It says what to produce, never how.
+The output that an agent Stage must leave for the Scheduler to observe, for example an open PR after Working. It says what to produce, never how.
 _Avoid_: Definition of done, exit criteria, skill
 
 **Signal**:
@@ -89,7 +89,7 @@ An observed event that moves a Task from one Stage to another, for example `pr-o
 _Avoid_: Trigger, transition, state
 
 **Needs you**:
-A flag on a Task, in any Stage, that says the user must act and gives the reason: a question, a permission, an auth request, an error, a Worker that stopped before its Stage contract, or a spent Loop budget.
+A flag on a Task, in any Stage, that says the user must act and gives the reason: a question, a permission, an auth request, an error, a Worker that stopped before its Stage contract, a draft PR that passed CI, or a spent Loop budget.
 _Avoid_: Blocked, waiting, attention state
 
 **Ready to land**:

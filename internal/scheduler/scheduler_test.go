@@ -153,10 +153,9 @@ func (f *fakeRex) open(word string) []tab {
 // fakeGitHub keeps one PR per key. A snapshot's Raw is the list of Signal
 // names that GitHub would report for it.
 type fakeGitHub struct {
-	mu      sync.Mutex
-	prs     map[PRKey]PRSnapshot
-	merged  []int
-	readied []int
+	mu     sync.Mutex
+	prs    map[PRKey]PRSnapshot
+	merged []int
 	// polled is every key that a branch poll asked for.
 	polled  []PRKey
 	reviews map[ReviewKey]ReviewSnapshot
@@ -261,13 +260,6 @@ func (g *fakeGitHub) Signals(prev, cur *PRSnapshot) []lifecycle.Signal {
 		out = append(out, signalsByName[n])
 	}
 	return out
-}
-
-func (g *fakeGitHub) MarkReady(_ context.Context, _ string, n int) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.readied = append(g.readied, n)
-	return nil
 }
 
 func (g *fakeGitHub) Merge(_ context.Context, repo string, n int) error {

@@ -280,15 +280,6 @@ func (s *Scheduler) exec(ctx context.Context, id string, e lifecycle.Effect) {
 	switch e := e.(type) {
 	case lifecycle.StartWorker:
 		s.startWorker(ctx, id, e.Stage)
-	case lifecycle.MarkReady:
-		if r.PR == nil {
-			return
-		}
-		if err := s.d.GitHub.MarkReady(ctx, r.RepoSlug, r.PR.Number); err != nil {
-			s.fail(id, "mark ready", err)
-			return
-		}
-		s.poll(ctx, []string{id})
 	case lifecycle.Merge:
 		if r.PR == nil {
 			return

@@ -253,13 +253,6 @@ func (g gqlPR) toPR() *PR {
 	return pr
 }
 
-// MarkReady takes the PR out of draft. GitHub requests the CODEOWNERS
-// reviewers at that moment, so no other call is needed.
-func (c *Client) MarkReady(ctx context.Context, repo string, number int) error {
-	_, err := c.run(ctx, "pr", "ready", strconv.Itoa(number), "--repo", repo)
-	return err
-}
-
 // Merge merges with the repo's preferred allowed method: squash, then merge
 // commit, then rebase.
 func (c *Client) Merge(ctx context.Context, repo string, number int) error {

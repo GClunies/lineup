@@ -117,9 +117,6 @@ type Effect interface{ effect() }
 // StartWorker replaces any Worker in the Task's tab with a fresh one for Stage.
 type StartWorker struct{ Stage Stage }
 
-// MarkReady marks the draft PR ready for review and requests CODEOWNERS reviewers.
-type MarkReady struct{}
-
 type Merge struct{}
 
 // Cleanup closes the Task's tab and removes its worktree.
@@ -130,7 +127,6 @@ type Cleanup struct{}
 type TrackerStatus struct{ Event string }
 
 func (StartWorker) effect()   {}
-func (MarkReady) effect()     {}
 func (Merge) effect()         {}
 func (Cleanup) effect()       {}
 func (TrackerStatus) effect() {}

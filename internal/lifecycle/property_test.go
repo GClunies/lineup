@@ -183,7 +183,7 @@ func TestReviewTasksGetNoEffectThatWritesOutside(t *testing.T) {
 			}
 			for _, e := range effects {
 				switch e.(type) {
-				case MarkReady, Merge, TrackerStatus:
+				case Merge, TrackerStatus:
 					t.Fatalf("review Task %s got %#v from %s", task.ID, e, s.Name())
 				}
 			}
