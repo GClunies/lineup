@@ -368,7 +368,6 @@ func (t *Task) settles() bool {
 // is there already does not change, so a repeated pr-seen changes nothing.
 func (t *Task) settle() []Effect { return routes[t.Standing.Next()](t) }
 
-// routes is where each gap leads a Task.
 var routes = [...]func(*Task) []Effect{
 	NoGap:       (*Task).land,
 	GapConflict: func(t *Task) []Effect { return t.spend(respondingLoop, t.why()) },

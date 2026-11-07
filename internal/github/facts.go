@@ -6,7 +6,6 @@ import (
 	"github.com/gclunies/lineup/internal/lifecycle"
 )
 
-// Thread is a review thread on a PR.
 type Thread struct {
 	Resolved bool
 	// Opener is the login of the thread's first comment, or "" for a deleted
