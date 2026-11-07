@@ -690,6 +690,32 @@ func TestViewCarriesTheSkillOverride(t *testing.T) {
 	}
 }
 
+func TestTheViewShowsTheLandingBar(t *testing.T) {
+	five := 5
+	bar := lifecycle.LandingBar{Checks: lifecycle.RequiredChecks, Threads: lifecycle.RepliedThreads, Approvals: lifecycle.RequiredApprovals,
+		Bot: &lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 4, TopScore: 5}}
+	r := &Record{Task: lifecycle.Task{ID: "ENG-590", Stage: lifecycle.ReadyToLand, Policy: lifecycle.Policy{Bar: bar}}, PR: &PRSnapshot{Number: 42}}
+	r.Standing = bar.Measure(lifecycle.PRFacts{Head: testHead, Score: &five, Decision: lifecycle.DecisionApproved,
+		Checks: []lifecycle.Check{{Name: "test", State: lifecycle.CheckPassed, Required: true}, {Name: "lint", State: lifecycle.CheckFailed}}})
+	v := r.view()
+	if v.Note != "#42 · optional failed: lint" || !slices.Equal(v.Optional, []string{"lint"}) {
+		t.Errorf("note %q optional %q", v.Note, v.Optional)
+	}
+	want := []string{"✓ required checks passed", "✓ Greptile 5/5", "✓ review threads done", "✓ required reviews approved", "! optional checks failed: lint"}
+	if got := r.checklist(); !slices.Equal(got, want) {
+		t.Errorf("checklist %q, want %q", got, want)
+	}
+
+	r.Stage = lifecycle.InReview
+	r.Standing = bar.Measure(lifecycle.PRFacts{Head: testHead, Score: &five, Decision: lifecycle.DecisionRequired})
+	if v := r.view(); v.Note != "#42 needs approval" || r.checklist()[3] != "✗ needs approval" {
+		t.Errorf("In review: note %q checklist %q", v.Note, r.checklist())
+	}
+	if got := (&Record{Task: lifecycle.Task{ID: "ENG-591", Stage: lifecycle.Working}}).checklist(); got != nil {
+		t.Errorf("a Task with no measured PR: checklist %q", got)
+	}
+}
+
 func boardIDs(v BoardView) []string {
 	var ids []string
 	for _, t := range v.Tasks {

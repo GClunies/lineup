@@ -264,6 +264,12 @@ func cmdShow(c scheduler.Client, args []string, out io.Writer) error {
 			fmt.Fprintln(out, u)
 		}
 	}
+	if len(d.Bar) > 0 {
+		fmt.Fprintln(out, "Landing bar")
+		for _, line := range d.Bar {
+			fmt.Fprintln(out, "  "+line)
+		}
+	}
 	for _, e := range d.Events {
 		fmt.Fprintf(out, "  %s  %-26s %s -> %s  %s\n", e.At.Local().Format(time.DateTime), e.Signal, e.From, e.To, e.Detail)
 	}

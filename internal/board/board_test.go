@@ -650,3 +650,16 @@ func TestTheBoardToastsEachNewAlertOnce(t *testing.T) {
 		t.Fatalf("toasts %q, want %q", toasts, want)
 	}
 }
+
+func TestTheDetailPaneShowsTheLandingBar(t *testing.T) {
+	d := scheduler.TaskDetail{
+		TaskView: scheduler.TaskView{ID: "ENG-590", Title: "Add billing model", Stage: "Responding",
+			Flag: "budget spent", FlagDetail: "2 open threads (1 bot) after 3 rounds"},
+		Branch: "ada/eng-590-billing", Bar: []string{"✓ required checks passed", "✗ 2 open threads (1 bot)"},
+	}
+	want := "ENG-590  Add billing model\nResponding  ada/eng-590-billing\n⚑ budget spent 2 open threads (1 bot) after 3 rounds\n" +
+		"Landing bar\n  ✓ required checks passed\n  ✗ 2 open threads (1 bot)\n\n"
+	if got := formatDetail(d); got != want {
+		t.Errorf("detail %q, want %q", got, want)
+	}
+}

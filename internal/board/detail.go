@@ -39,6 +39,12 @@ func formatDetail(d scheduler.TaskDetail) string {
 	if d.Flag != "" {
 		fmt.Fprintf(&b, "⚑ %s %s\n", d.Flag, d.FlagDetail)
 	}
+	if len(d.Bar) > 0 {
+		b.WriteString("Landing bar\n")
+		for _, line := range d.Bar {
+			b.WriteString("  " + line + "\n")
+		}
+	}
 	b.WriteString("\n")
 	for _, e := range d.Events {
 		fmt.Fprintf(&b, "%s  %-16s %s → %s  %s\n", e.At.Local().Format(time.TimeOnly), e.Signal, e.From, e.To, e.Detail)

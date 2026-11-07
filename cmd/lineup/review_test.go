@@ -268,6 +268,23 @@ func TestLineupShowOfAReviewPrintsNoBranch(t *testing.T) {
 	}
 }
 
+func TestLineupShowPrintsTheLandingBar(t *testing.T) {
+	data, err := json.Marshal(scheduler.TaskDetail{TaskView: scheduler.TaskView{ID: "ENG-590", Repo: "data", Stage: "Ready to land", Title: "Add billing model"},
+		Branch: "ada/eng-590-billing", Bar: []string{"✓ required checks passed", "! optional checks failed: lint"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, _ := fakeScheduler(t, map[string]scheduler.Response{"show": {OK: true, Data: data}})
+	var out bytes.Buffer
+	if err := cmdShow(c, []string{"ENG-590"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	want := "ENG-590  Add billing model\nReady to land in data (ada/eng-590-billing)\nLanding bar\n  ✓ required checks passed\n  ! optional checks failed: lint\n"
+	if out.String() != want {
+		t.Fatalf("out = %q, want %q", out.String(), want)
+	}
+}
+
 func reviewsReply(t *testing.T, v scheduler.ReviewsView) scheduler.Response {
 	data, err := json.Marshal(v)
 	if err != nil {

@@ -42,7 +42,9 @@ type Response struct {
 
 type TaskDetail struct {
 	TaskView
-	Branch string        `json:"branch"`
+	Branch string `json:"branch"`
+	// Bar is the Landing bar's checklist, one line for each item.
+	Bar    []string      `json:"bar,omitempty"`
 	Events []store.Event `json:"events"`
 }
 
@@ -202,7 +204,7 @@ func (s *Scheduler) signal(id string, sig lifecycle.Signal) error {
 func (s *Scheduler) show(id string) (TaskDetail, error) {
 	var d TaskDetail
 	err := s.with(id, func(r *Record) error {
-		d.TaskView, d.Branch = r.view(), r.Branch
+		d.TaskView, d.Branch, d.Bar = r.view(), r.Branch, r.checklist()
 		return nil
 	})
 	if err != nil {

@@ -108,6 +108,7 @@ type TaskView struct {
 	FlagDetail string         `json:"flag_detail,omitempty"`
 	Outcome    string         `json:"outcome,omitempty"`
 	Note       string         `json:"note,omitempty"`
+	Optional   []string       `json:"optional,omitempty"` // the optional checks that failed on a build Task's PR
 	OverCap    bool           `json:"over_cap,omitempty"`
 	Skill      string         `json:"skill,omitempty"`
 	PRNumber   int            `json:"pr_number,omitempty"`
@@ -160,6 +161,9 @@ func (r *Record) view() TaskView {
 	if r.Review != nil {
 		v.PRNumber, v.PRURL, v.ReviewHead = r.Review.Number, r.Review.URL, r.Review.Head
 	}
+	if r.Stage.Started() {
+		v.Optional = r.Standing.Optional
+	}
 	b := r.Policy.Budgets
 	switch r.Stage {
 	case lifecycle.CIDebug:
@@ -198,4 +202,25 @@ func (r *Record) view() TaskView {
 		}
 	}
 	return v
+}
+
+// checklist is the Landing bar's checklist for a started Task whose PR a
+// poll has measured, one line for each item, then the optional checks that
+// failed.
+func (r *Record) checklist() []string {
+	if !r.Stage.Started() || r.Standing.Head == "" {
+		return nil
+	}
+	var out []string
+	for _, i := range r.Policy.Bar.Checklist(r.Standing) {
+		mark := "✓"
+		if i.Gap != lifecycle.NoGap {
+			mark = "✗"
+		}
+		out = append(out, mark+" "+i.Text)
+	}
+	if o := r.Standing.Optional; len(o) > 0 {
+		out = append(out, "! optional checks failed: "+strings.Join(o, ", "))
+	}
+	return out
 }
