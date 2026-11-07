@@ -113,6 +113,7 @@ type globalFile struct {
 	} `toml:"github"`
 	LocalTracker   bool   `toml:"local_tracker"`
 	LocalIssuesDir string `toml:"local_issues_dir"`
+	AssistDir      string `toml:"assist_dir"`
 	Review         struct {
 		Views  []ReviewView `toml:"views"`
 		Queues []queueFile  `toml:"queues"`
@@ -203,6 +204,14 @@ func (g *Global) LocalIssuesDir() string {
 		return g.expand(d)
 	}
 	return filepath.Join(g.home, ".local", "share", "lineup", "issues")
+}
+
+// AssistDir is the folder where the Hub's assist agent starts. The default is the home folder.
+func (g *Global) AssistDir() string {
+	if d := strings.TrimSpace(g.file.AssistDir); d != "" {
+		return g.expand(d)
+	}
+	return g.home
 }
 
 // LocalTrackerOn says whether the browser shows the Local Tracker: when no
