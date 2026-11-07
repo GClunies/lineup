@@ -410,6 +410,7 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 		Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
 		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
 		Conversation: r.Conversation, Name: r.tabLabel(), ReviewCycle: r.ReviewCycle(),
+		Bar: r.Policy.Bar, Standing: r.Standing,
 	}
 	folder := r.Worktree
 	if r.Review != nil {

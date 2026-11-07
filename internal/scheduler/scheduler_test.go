@@ -910,7 +910,8 @@ func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
 	h.hn.mu.Lock()
 	spec := h.hn.specs[len(h.hn.specs)-1]
 	h.hn.mu.Unlock()
-	if spec.Stage != lifecycle.Responding || spec.ReviewCycle == nil || spec.ReviewCycle.Score != 4 || spec.ReviewCycle.MinScore != 5 {
+	if spec.Stage != lifecycle.Responding || spec.ReviewCycle == nil || spec.ReviewCycle.Score != 4 || spec.ReviewCycle.MinScore != 5 ||
+		spec.Bar.Bot == nil || !spec.Standing.ScoreLow {
 		t.Fatalf("worker spec %+v, want a Responding round for Greptile 4 of 5", spec)
 	}
 }

@@ -88,6 +88,25 @@ func TestAReviewedPRMapsToTheCheckoutWhoseOriginIsItsRepository(t *testing.T) {
 	}
 }
 
+// The CI debug Worker reads the Standing, so it leaves the optional checks alone.
+func TestACIDebugWorkerSeesWhichChecksGate(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin:/bin") // no direnv: the default Claude profile
+	claudeBin := filepath.Join(t.TempDir(), "claude")
+	os.WriteFile(claudeBin, []byte("#!/bin/sh\n"), 0o755)
+	p := harnessPort{cfg: loadConfig(t, "[harness.claude]\npath = \""+claudeBin+"\"\n")}
+	spec := scheduler.WorkerSpec{
+		Stage: lifecycle.CIDebug, Repo: t.TempDir(), Branch: "ada/eng-1", Name: "ENG-1 Fix the tooltip",
+		PRURL: "https://github.com/umbrella/data/pull/7", Standing: lifecycle.Standing{Failed: []string{"test"}, Optional: []string{"lint"}},
+	}
+	argv, _, err := p.Command(context.Background(), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prompt := argv[len(argv)-1]; !strings.Contains(prompt, "keep it from landing: test.") || !strings.Contains(prompt, "optional checks failed too: lint.") {
+		t.Fatalf("prompt = %s", prompt)
+	}
+}
+
 func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin:/bin") // no direnv: the default Claude profile
 	claudeBin := filepath.Join(t.TempDir(), "claude")

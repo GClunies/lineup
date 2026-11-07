@@ -191,7 +191,7 @@ var task = TaskInfo{IssueID: "APP-1", IssueTitle: "Fix X", IssueURL: "https://li
 func TestPromptContracts(t *testing.T) {
 	cases := map[lifecycle.Stage]string{
 		lifecycle.Working:    "Push the branch and open a PR that is ready for review, not a draft.",
-		lifecycle.CIDebug:    "Push a commit that targets the failed check.",
+		lifecycle.CIDebug:    "Push a commit that targets the failed checks that keep the PR from landing.",
 		lifecycle.Responding: "Push the changes and reply to each open review thread. If the PR has a conflict, push a merge of the base branch that resolves it.",
 	}
 	for st, contract := range cases {
@@ -327,10 +327,60 @@ func TestAReviewCycleNamesTheScoreAndKeepsTheContract(t *testing.T) {
 			t.Errorf("missing %q in\n%s", want, p)
 		}
 	}
-	if !strings.HasSuffix(strings.TrimSpace(p), contracts[lifecycle.Responding]) || strings.Contains(p, "Reviewers left feedback") {
+	if c, _ := stageContract(lifecycle.Responding, bot.Bar); !strings.HasSuffix(strings.TrimSpace(p), c) || strings.Contains(p, "Reviewers left feedback") {
 		t.Errorf("a review cycle must keep the Responding contract and drop the people's intro:\n%s", p)
 	}
 	if p := Prompt(lifecycle.Responding, task, "", ""); strings.Contains(p, "Greptile") {
 		t.Errorf("a round that people started names the bot:\n%s", p)
+	}
+
+	// A cycle for bot threads on a score that passes is about the threads.
+	bot.ReviewCycle.Score = 5
+	bot.Standing.Threads.Bot = 2
+	if p := Prompt(lifecycle.Responding, bot, "", ""); strings.Contains(p, "below the minimum") || !strings.Contains(p, "It has 2 open threads (2 bot).") {
+		t.Errorf("a cycle for bot threads:\n%s", p)
+	}
+}
+
+func TestTheRespondingContractFollowsTheThreadRule(t *testing.T) {
+	cases := map[lifecycle.ThreadRule]string{
+		lifecycle.RepliedThreads:  "Reply to each open review thread, then resolve it. A thread that the user opened needs no reply. Push the changes that your replies promise.",
+		lifecycle.ResolvedThreads: "Resolve each open review thread after you address it. Push the changes that the threads ask for.",
+		lifecycle.IgnoredThreads:  "Push the changes and reply to each open review thread.",
+	}
+	for rule, want := range cases {
+		info := task
+		info.Bar.Threads = rule
+		p := strings.TrimSpace(Prompt(lifecycle.Responding, info, "", ""))
+		if !strings.HasSuffix(p, want+" If the PR has a conflict, push a merge of the base branch that resolves it.") {
+			t.Errorf("%s: contract missing at the end:\n%s", rule, p)
+		}
+	}
+}
+
+func TestTheIntroNamesWhatThePollSaw(t *testing.T) {
+	info := task
+	info.Standing = lifecycle.Standing{Failed: []string{"test"}, Optional: []string{"lint", "enable"}}
+	p := Prompt(lifecycle.CIDebug, info, "", "")
+	for _, want := range []string{
+		"These checks failed on the pull request for this Task, and they keep it from landing: test. Fix them.",
+		"These optional checks failed too: lint, enable. They do not keep the PR from landing. Leave them.",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("CI debug: missing %q in\n%s", want, p)
+		}
+	}
+	if p := Prompt(lifecycle.CIDebug, task, "", ""); !strings.Contains(p, "CI failed on the pull request for this Task. Fix it.") {
+		t.Errorf("CI debug with no Standing:\n%s", p)
+	}
+
+	info.Standing = lifecycle.Standing{Threads: lifecycle.OpenThreads{Bot: 1, People: 1}}
+	if p := Prompt(lifecycle.Responding, info, "", ""); !strings.Contains(p, "Reviewers left feedback on the pull request for this Task. Respond to it. It has 2 open threads (1 bot).") {
+		t.Errorf("Responding with threads:\n%s", p)
+	}
+	info.Standing = lifecycle.Standing{Conflict: true}
+	p = Prompt(lifecycle.Responding, info, "", "")
+	if !strings.Contains(p, "has a conflict with its base branch. Resolve it.") || strings.Contains(p, "Reviewers left feedback") {
+		t.Errorf("Responding for a conflict alone:\n%s", p)
 	}
 }

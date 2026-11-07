@@ -231,7 +231,7 @@ var gaps = []struct {
 	{GapDraft, func(s Standing) bool { return s.Draft }, func(LandingBar, Standing) string { return "draft" }},
 	{GapScoreDue, func(s Standing) bool { return s.ScoreDue }, func(b LandingBar, _ Standing) string { return "waiting for " + b.Bot.Title }},
 	{GapScoreLow, func(s Standing) bool { return s.ScoreLow }, func(b LandingBar, s Standing) string { return b.Bot.ScoreText(*s.Score) }},
-	{GapThreads, func(s Standing) bool { return s.Threads.Total() > 0 }, func(_ LandingBar, s Standing) string { return threadsText(s.Threads) }},
+	{GapThreads, func(s Standing) bool { return s.Threads.Total() > 0 }, func(_ LandingBar, s Standing) string { return s.Threads.String() }},
 	{GapApproval, func(s Standing) bool { return s.Unapproved }, func(_ LandingBar, s Standing) string {
 		if s.Review == DecisionChanges {
 			return "changes requested"
@@ -247,7 +247,8 @@ func count(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
-func threadsText(o OpenThreads) string {
+// String counts the threads for people, for example "2 open threads (1 bot)".
+func (o OpenThreads) String() string {
 	text := count(o.Total(), "open thread")
 	if o.Bot > 0 {
 		text += fmt.Sprintf(" (%d bot)", o.Bot)
