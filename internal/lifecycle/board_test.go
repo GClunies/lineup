@@ -352,6 +352,15 @@ func TestReviewGate(t *testing.T) {
 	}
 }
 
+func TestADraftMarkedReadyDropsItsFlagWhileTheBotReviews(t *testing.T) {
+	b, task := gatedIn(CIRunning)
+	b.Apply("T", CIPassed{Draft: true, Bot: &HeadScore{Head: "abc"}})
+	b.Apply("T", CIPassed{Bot: &HeadScore{Head: "abc"}})
+	if task.Stage != CIRunning || task.Flag != "" || task.BotWait != "abc" {
+		t.Fatalf("stage %s flag %q wait %q, want CI running with no flag, waiting for abc", task.Stage, task.Flag, task.BotWait)
+	}
+}
+
 func TestReviewCyclesSpendTheirOwnBudget(t *testing.T) {
 	b, task := gatedIn(CIRunning)
 	for i := range 2 {

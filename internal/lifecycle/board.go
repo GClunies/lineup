@@ -287,6 +287,9 @@ func (t *Task) observe(s Signal) []Effect {
 			t.flag(ReasonDraft, "")
 			return nil
 		}
+		if t.Flag == ReasonDraft {
+			t.flag("", "")
+		}
 		if g := t.Policy.Gate; g != nil {
 			switch {
 			case s.Bot == nil:
