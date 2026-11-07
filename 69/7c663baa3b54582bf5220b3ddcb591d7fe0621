@@ -1,0 +1,23 @@
+cmd/lineup/hub.go
+  s_52d218b5914bff::t_6bab60506b8295 162,164,166,170-172,381-384,386-387
+cmd/lineup/hub_test.go
+  s_52d218b5914bff::t_f6bf004be15b7e 173-181
+docs/spec/mvp.md
+  s_52d218b5914bff::t_46bcb695d31201 147-148,152-157,172,562
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "697c663baa3b54582bf5220b3ddcb591d7fe0621",
+  "prompts": {},
+  "sessions": {
+    "s_52d218b5914bff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75ce80f8-a5d7-4eea-a8fd-64026a16ec4d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
