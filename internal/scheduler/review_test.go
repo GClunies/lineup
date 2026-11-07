@@ -871,7 +871,7 @@ func TestLaterStatusesKeepAReviewReadyFromAQuestion(t *testing.T) {
 
 func TestABuildWorkerQuestionOnlyFlagsTheTask(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
-	h.gh.set(PRKey{"acme/data", "ada/eng-1-billing"}, 42)
+	h.gh.set(PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}, 42)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}

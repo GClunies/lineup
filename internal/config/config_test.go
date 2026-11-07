@@ -463,3 +463,66 @@ func TestTheReviewingStageHasItsOwnSection(t *testing.T) {
 		t.Errorf("[stage.reviewing] reached working: %+v", got)
 	}
 }
+
+func TestReviewBotGateIsPerRepo(t *testing.T) {
+	crexi, other := t.TempDir(), t.TempDir()
+	g := load(t, `
+[[repos]]
+match = "`+crexi+`"
+
+[repos.review_bot]
+name = "greptile"
+min_review_score = 5
+max_review_cycles = 5
+`)
+	r, err := g.Resolve(crexi, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := &lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5}
+	if p := r.Policy(); !reflect.DeepEqual(p.Gate, want) || p.Budgets.ReviewCycles != 5 {
+		t.Errorf("gate %+v cycles %d, want %+v and 5", p.Gate, p.Budgets.ReviewCycles, want)
+	}
+	if r, err := g.Resolve(other, nil); err != nil || r.Gate != nil || r.Budgets.ReviewCycles != 0 {
+		t.Errorf("a Repo with no table: gate %+v cycles %d err %v", r.Gate, r.Budgets.ReviewCycles, err)
+	}
+
+	write(t, filepath.Join(crexi, ".lineup.toml"), "[review_bot]\nmin_review_score = 4\n")
+	if r, err := g.Resolve(crexi, nil); err != nil || r.Gate.MinScore != 4 || r.Gate.Bot != "greptile" || r.Budgets.ReviewCycles != 5 {
+		t.Errorf("the Repo file must override one key and keep the rest: %+v %+v %v", r.Gate, r.Budgets, err)
+	}
+
+	r, err = load(t, "[review_bot]\nname = \"greptile\"\n").Resolve(other, nil)
+	if err != nil || r.Gate.MinScore != 5 || r.Budgets.ReviewCycles != 3 {
+		t.Errorf("defaults: gate %+v cycles %d err %v, want the top score and 3 cycles", r.Gate, r.Budgets.ReviewCycles, err)
+	}
+}
+
+func TestBadReviewBotFailsAtLoad(t *testing.T) {
+	for name, text := range map[string]string{
+		"unknown bot":      "[review_bot]\nname = \"coderabbit\"\n",
+		"score below 1":    "[review_bot]\nname = \"greptile\"\nmin_review_score = 0\n",
+		"score above top":  "[review_bot]\nname = \"greptile\"\nmin_review_score = 6\n",
+		"negative cycles":  "[review_bot]\nname = \"greptile\"\nmax_review_cycles = -1\n",
+		"unknown key":      "[review_bot]\nname = \"greptile\"\nmin_score = 4\n",
+		"in a repos entry": "[[repos]]\nmatch = \"/a\"\n[repos.review_bot]\nname = \"greptile\"\nmin_review_score = 9\n",
+	} {
+		if _, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), text)); err == nil {
+			t.Errorf("%s: no error", name)
+		}
+	}
+}
+
+// One table can leave out a key for a lower layer to set, so the merged
+// tables must still name a bot and keep its score in range.
+func TestTheMergedReviewBotMustBeWhole(t *testing.T) {
+	repo := t.TempDir()
+	write(t, filepath.Join(repo, ".lineup.toml"), "[review_bot]\nmin_review_score = 4\n")
+	if _, err := load(t, "").Resolve(repo, nil); err == nil || !strings.Contains(err.Error(), "name is required") {
+		t.Errorf("no bot named: err %v", err)
+	}
+	write(t, filepath.Join(repo, ".lineup.toml"), "[review_bot]\nmin_review_score = 7\n")
+	if _, err := load(t, "[review_bot]\nname = \"greptile\"\n").Resolve(repo, nil); err == nil {
+		t.Error("a score above the bot's top score passed")
+	}
+}

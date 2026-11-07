@@ -41,7 +41,7 @@ func calls(t *testing.T, log string) []string {
 	return strings.Split(strings.TrimSpace(string(b)), "\n")
 }
 
-var anyKey = Key{"o/r", "b"}
+var anyKey = Key{Repo: "o/r", Branch: "b"}
 
 func load(t *testing.T, fixture string) *PR {
 	t.Helper()
@@ -248,14 +248,14 @@ func TestMerged(t *testing.T) {
 func TestSnapshotSendsOneQueryForManyKeys(t *testing.T) {
 	bin, log := fakeGH(t, filepath.Join("testdata", "many.json"), "")
 	keys := []Key{
-		{"microsoft/vscode", "connor4312/ephemeral-hidden-sessions"},
-		{"cli/cli", "release-download-verify"},
-		{"cli/cli", "fix-percent-encoded-url"},
-		{"cli/cli", "bagtoad/ghsa-submission-template"},
-		{"cli/cli", "dependabot/github_actions/actions/create-github-app-token-3.3.0"},
-		{"cli/cli", "o1/add-latest-pre-release-and-pin-flags-to-gh-extension-upgrade/nysoxynolqlo"},
-		{"cli/cli", "no-such-branch-xyz"},
-		{"kktejas07/CodeSpectra-Master", "dependabot/npm_and_yarn/frontend/radix-ui/react-hover-card-1.2.1"},
+		{Repo: "microsoft/vscode", Branch: "connor4312/ephemeral-hidden-sessions"},
+		{Repo: "cli/cli", Branch: "release-download-verify"},
+		{Repo: "cli/cli", Branch: "fix-percent-encoded-url"},
+		{Repo: "cli/cli", Branch: "bagtoad/ghsa-submission-template"},
+		{Repo: "cli/cli", Branch: "dependabot/github_actions/actions/create-github-app-token-3.3.0"},
+		{Repo: "cli/cli", Branch: "o1/add-latest-pre-release-and-pin-flags-to-gh-extension-upgrade/nysoxynolqlo"},
+		{Repo: "cli/cli", Branch: "no-such-branch-xyz"},
+		{Repo: "kktejas07/CodeSpectra-Master", Branch: "dependabot/npm_and_yarn/frontend/radix-ui/react-hover-card-1.2.1"},
 	}
 	prs, err := (&Client{Bin: bin}).Snapshot(context.Background(), keys)
 	if err != nil {
@@ -413,4 +413,86 @@ func TestNoChecksYetIsPendingWhenTheBaseHasChecks(t *testing.T) {
 			}
 		}
 	}
+}
+
+var gatedKey = Key{Repo: "o/r", Branch: "b", Bot: "greptile"}
+
+// review_bot.json is better-auth/better-auth#12303, where Greptile scored the
+// head 4/5. Its comments come from vercel, Codex, pkg-pr-new, and Greptile.
+func loadGated(t *testing.T) *PR {
+	t.Helper()
+	bin, _ := fakeGH(t, filepath.Join("testdata", "review_bot.json"), "")
+	prs, err := (&Client{Bin: bin}).Snapshot(context.Background(), []Key{gatedKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return prs[gatedKey]
+}
+
+const reviewedHead = "eb6b436954c2e1f46ec8adbdb0c21a12c4802d22"
+
+func TestParseAReviewBotSummary(t *testing.T) {
+	pr := loadGated(t)
+	if pr.Bot != "greptile" || !reflect.DeepEqual(pr.BotSummary, &BotSummary{Score: 4, Commit: reviewedHead}) {
+		t.Fatalf("bot %q summary %+v, want greptile 4 at %s", pr.Bot, pr.BotSummary, reviewedHead)
+	}
+	if ungated := load(t, "review_bot"); ungated.Bot != "" || ungated.BotSummary != nil {
+		t.Errorf("a Key with no bot read a summary: %q %+v", ungated.Bot, ungated.BotSummary)
+	}
+}
+
+func TestOnlyTheBotWritesItsScore(t *testing.T) {
+	body := "<!-- greptile_confidence_score:5 -->\nReviews (1) · Last reviewed commit: [\"x\"](https://github.com/o/r/commit/" + reviewedHead + ")"
+	bot := ReviewBots["greptile"]
+	if s := bot.summary([]gqlComment{{Author: &gqlLogin{"octocat"}, Body: body}}); s != nil {
+		t.Errorf("a person's comment gave the score %+v", s)
+	}
+	if s := bot.summary([]gqlComment{{Author: &gqlLogin{"greptile-apps-staging"}, Body: body}}); s == nil || s.Score != 5 {
+		t.Errorf("the staging bot's comment gave %+v, want 5", s)
+	}
+}
+
+// The comment bodies are the costly part of the query, so only a gated Key asks for them.
+func TestOnlyAGatedKeyAsksForComments(t *testing.T) {
+	bin, log := fakeGH(t, filepath.Join("testdata", "review_bot.json"), "")
+	if _, err := (&Client{Bin: bin}).Snapshot(context.Background(), []Key{anyKey, gatedKey}); err != nil {
+		t.Fatal(err)
+	}
+	query := calls(t, log)[0]
+	a0, a1, _ := strings.Cut(query[strings.Index(query, "a0:"):], "a1:")
+	if strings.Contains(a0, "comments(") || !strings.Contains(a1, "comments(first: 20)") {
+		t.Errorf("query:\n%s", query)
+	}
+}
+
+func TestReviewBotSignals(t *testing.T) {
+	scoredAtHead := loadGated(t)
+	four := 4
+	check(t, Signals(nil, scoredAtHead, "octo"), sigs(lifecycle.PROpen{},
+		lifecycle.CIPassed{NeedsReview: true, Bot: &lifecycle.HeadScore{Head: reviewedHead, Score: &four}}))
+
+	pushed := clone(scoredAtHead)
+	pushed.HeadSHA = "f00d"
+	check(t, Signals(nil, pushed, "octo"), sigs(lifecycle.PROpen{},
+		lifecycle.CIPassed{NeedsReview: true, Bot: &lifecycle.HeadScore{Head: "f00d"}}))
+
+	// Greptile edits its summary a few seconds after its check run passes.
+	waiting := clone(scoredAtHead)
+	waiting.BotSummary = &BotSummary{Score: 5, Commit: "older"}
+	check(t, Signals(waiting, scoredAtHead, "octo"), sigs(
+		lifecycle.CIPassed{NeedsReview: true, Bot: &lifecycle.HeadScore{Head: reviewedHead, Score: &four}}))
+	check(t, Signals(clone(scoredAtHead), clone(scoredAtHead), "octo"), nil)
+}
+
+// The gate owns a bot's reviews, so they start no Responding round of their
+// own. With no gate, the bot is one more reviewer.
+func TestAGatedBotsReviewIsNotReviewCommented(t *testing.T) {
+	prev := loadGated(t)
+	prev.LatestReviews = nil
+	cur := clone(prev)
+	cur.LatestReviews = []Review{{Author: "greptile-apps", State: "COMMENTED", SubmittedAt: time.Now()}}
+	check(t, Signals(prev, cur, "octo"), nil)
+
+	prev.Bot, cur.Bot = "", ""
+	check(t, Signals(prev, cur, "octo"), sigs(lifecycle.ReviewCommented{}))
 }

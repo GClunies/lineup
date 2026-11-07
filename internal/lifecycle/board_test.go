@@ -308,3 +308,107 @@ func TestWorkerRestartBudgetIsPerStage(t *testing.T) {
 		t.Fatalf("a new Stage did not refill the restart budget: %v", effects)
 	}
 }
+
+var gated = Policy{
+	Budgets: Budgets{CIDebug: 3, Responding: 3, Restarts: 2, ReviewCycles: 2},
+	Gate:    &ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5},
+}
+
+func gatedIn(stage Stage) (*Board, *Task) {
+	b := NewBoard(5)
+	t := b.Add("T", gated)
+	t.Stage = stage
+	return b, t
+}
+
+func scored(head string, n int) *HeadScore { return &HeadScore{Head: head, Score: &n} }
+
+func TestReviewGate(t *testing.T) {
+	cases := []struct {
+		name    string
+		signal  Signal
+		to      Stage
+		effects []Effect
+		flag    Reason
+	}{
+		{"top score goes to review", CIPassed{NeedsReview: true, Bot: scored("abc", 5)}, InReview, []Effect{TrackerStatus{"in_review"}}, ""},
+		{"top score with no reviewer is ready", CIPassed{Bot: scored("abc", 5)}, ReadyToLand, nil, ""},
+		{"low score starts a review cycle", CIPassed{NeedsReview: true, Bot: scored("abc", 4)}, Responding, []Effect{StartWorker{Responding}}, ""},
+		{"no score yet waits", CIPassed{NeedsReview: true, Bot: &HeadScore{Head: "abc"}}, CIRunning, nil, ""},
+		{"no bot view waits", CIPassed{}, CIRunning, nil, ""},
+		{"a draft waits for the user first", CIPassed{Draft: true, Bot: scored("abc", 4)}, CIRunning, nil, ReasonDraft},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			b, task := gatedIn(CIRunning)
+			effects, err := b.Apply("T", c.signal)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if task.Stage != c.to || task.Flag != c.flag || !reflect.DeepEqual(effects, c.effects) {
+				t.Errorf("stage %s flag %q effects %#v, want %s %q %#v", task.Stage, task.Flag, effects, c.to, c.flag, c.effects)
+			}
+		})
+	}
+}
+
+func TestReviewCyclesSpendTheirOwnBudget(t *testing.T) {
+	b, task := gatedIn(CIRunning)
+	for i := range 2 {
+		effects, _ := b.Apply("T", CIPassed{Bot: scored("abc", 4)})
+		if !reflect.DeepEqual(effects, []Effect{StartWorker{Responding}}) || task.Stage != Responding {
+			t.Fatalf("round %d: stage %s effects %v", i+1, task.Stage, effects)
+		}
+		if r := task.ReviewCycle(); r == nil || r.Score != 4 || r.MinScore != 5 {
+			t.Fatalf("round %d: review cycle %+v, want Greptile 4 of minimum 5", i+1, r)
+		}
+		b.Apply("T", Pushed{})
+	}
+	if task.Left.Responding != 3 {
+		t.Fatalf("review cycles spent the Responding budget: %d left of 3", task.Left.Responding)
+	}
+	effects, _ := b.Apply("T", CIPassed{Bot: scored("abc", 4)})
+	if effects != nil || task.Stage != Responding || task.Flag != ReasonBudgetSpent || task.FlagDetail != "Greptile 4/5 after 2 cycles" {
+		t.Fatalf("third low score: stage %s flag %q %q effects %v", task.Stage, task.Flag, task.FlagDetail, effects)
+	}
+}
+
+func TestAPeopleRoundIsNotAReviewCycle(t *testing.T) {
+	b, task := gatedIn(CIRunning)
+	b.Apply("T", CIPassed{Bot: scored("abc", 4)})
+	b.Apply("T", Pushed{})
+	b.Apply("T", CIPassed{NeedsReview: true, Bot: scored("def", 5)})
+	b.Apply("T", ReviewCommented{})
+	if task.Stage != Responding || task.ReviewCycle() != nil {
+		t.Fatalf("stage %s review cycle %+v, want a Responding round that people started", task.Stage, task.ReviewCycle())
+	}
+	if task.Left.Responding != 2 || task.Left.ReviewCycles != 1 {
+		t.Fatalf("left %+v, want one Responding round and one bot cycle spent", task.Left)
+	}
+}
+
+// A gated Task must not wait in CI running forever for a bot that never
+// reviews, for example in a Repo where the bot is not installed.
+func TestALateBotFlagsTheTask(t *testing.T) {
+	b, task := gatedIn(CIRunning)
+	b.Apply("T", ReviewBotLate{})
+	if task.Flag != "" {
+		t.Fatalf("late before CI passed: flag %q", task.Flag)
+	}
+	b.Apply("T", CIPassed{Bot: &HeadScore{Head: "3591eba3593b066b117ac68de1d41f1a16f527dd"}})
+	b.Apply("T", ReviewBotLate{})
+	if task.Stage != CIRunning || task.Flag != ReasonNoBotReview || task.FlagDetail != "Greptile did not score 3591eba" {
+		t.Fatalf("late: stage %s flag %q %q", task.Stage, task.Flag, task.FlagDetail)
+	}
+	b.Apply("T", CIPassed{Bot: scored("3591eba3593b066b117ac68de1d41f1a16f527dd", 5)})
+	if task.Stage != ReadyToLand || task.Flag != "" {
+		t.Fatalf("score after the flag: stage %s flag %q, want Ready to land", task.Stage, task.Flag)
+	}
+
+	b, task = taskIn(CIRunning)
+	b.Apply("T", CIPassed{NeedsReview: true})
+	b.Apply("T", ReviewBotLate{})
+	if task.Stage != InReview || task.Flag != "" {
+		t.Fatalf("a Task with no gate: stage %s flag %q", task.Stage, task.Flag)
+	}
+}

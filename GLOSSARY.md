@@ -89,7 +89,7 @@ An observed event that moves a Task from one Stage to another, for example `pr-o
 _Avoid_: Trigger, transition, state
 
 **Needs you**:
-A flag on a Task, in any Stage, that says the user must act and gives the reason: a question, a permission, an auth request, an error, a Worker that stopped before its Stage contract, a draft PR that passed CI, or a spent Loop budget.
+A flag on a Task, in any Stage, that says the user must act and gives the reason: a question, a permission, an auth request, an error, a Worker that stopped before its Stage contract, a draft PR that passed CI, a review bot that did not score a passing PR, or a spent Loop budget.
 _Avoid_: Blocked, waiting, attention state
 
 **Ready to land**:
@@ -99,6 +99,14 @@ _Avoid_: Mergeable, approved
 **Loop budget**:
 The most automatic attempts that a Stage gets before the Task gets the Needs you flag, for example 3 CI debug attempts.
 _Avoid_: Retry limit, max attempts
+
+**Review bot**:
+A code review bot, for example Greptile, that scores each push to a PR. A Repo's review bot gate keeps a passing PR in CI running until the bot scores its head commit, and a score below the minimum starts a review cycle.
+_Avoid_: Reviewer, AI reviewer
+
+**Review cycle**:
+A Responding round that a review bot score below the minimum starts. Review cycles have their own Loop budget, apart from the Responding rounds that people's reviews start.
+_Avoid_: Bot round, greploop, review round
 
 ### Capacity
 

@@ -162,7 +162,8 @@ const (
 	ReasonWorkerLost  Reason = "worker lost"
 	// ReasonDraft is a passing PR that is a draft. lineup never marks a PR
 	// ready, so it waits for the user to.
-	ReasonDraft Reason = "draft"
+	ReasonDraft       Reason = "draft"
+	ReasonNoBotReview Reason = "no bot review"
 )
 
 // Transient reasons clear when the Worker's program status goes back to working.

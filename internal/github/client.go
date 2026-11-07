@@ -15,6 +15,8 @@ import (
 type Key struct {
 	Repo   string // owner/name
 	Branch string
+	// Bot is the review bot that gates the Task, a key of ReviewBots, or "".
+	Bot string
 }
 
 type CheckState string
@@ -48,6 +50,10 @@ type PR struct {
 	// It covers at most the newest 100 commits, so CommitCount carries the total.
 	CommitAuthors []string
 	CommitCount   int
+	// Bot is the review bot that gates the Task, or "". BotSummary is its
+	// summary comment, or nil before its first review.
+	Bot        string
+	BotSummary *BotSummary
 }
 
 // Client runs the gh CLI. Bin is the path to gh, and "gh" when empty.
@@ -91,13 +97,22 @@ fragment F on PullRequest {
   baseRef { target { ... on Commit { statusCheckRollup { state } } } }
 }`
 
+// botComments reads the comments that hold a review bot's summary. The bot
+// posts its summary at its first review and edits it after, so the summary
+// is among the PR's first comments. Only a gated Task's PR pays for the bodies.
+const botComments = " comments(first: 20) { nodes { author { login } body } }"
+
 // snapshotQuery builds one query that asks for the newest PR on each Key's
 // head branch. Values travel as variables, so branch names need no escaping.
-func snapshotQuery(n int) string {
+func snapshotQuery(keys []Key) string {
 	var decl, body strings.Builder
-	for i := 0; i < n; i++ {
+	for i, k := range keys {
+		extra := ""
+		if k.Bot != "" {
+			extra = botComments
+		}
 		fmt.Fprintf(&decl, "$o%[1]d: String!, $n%[1]d: String!, $b%[1]d: String!, ", i)
-		fmt.Fprintf(&body, "a%[1]d: repository(owner: $o%[1]d, name: $n%[1]d) { pullRequests(headRefName: $b%[1]d, first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { ...F } } }\n", i)
+		fmt.Fprintf(&body, "a%[1]d: repository(owner: $o%[1]d, name: $n%[1]d) { pullRequests(headRefName: $b%[1]d, first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { ...F%[2]s } } }\n", i, extra)
 	}
 	return "query(" + strings.TrimSuffix(decl.String(), ", ") + ") {\n" + body.String() + "}\n" + prFields
 }
@@ -109,7 +124,7 @@ func (c *Client) Snapshot(ctx context.Context, keys []Key) (map[Key]*PR, error) 
 	if len(keys) == 0 {
 		return prs, nil
 	}
-	args := []string{"api", "graphql", "-f", "query=" + snapshotQuery(len(keys))}
+	args := []string{"api", "graphql", "-f", "query=" + snapshotQuery(keys)}
 	for i, k := range keys {
 		owner, name, ok := strings.Cut(k.Repo, "/")
 		if !ok {
@@ -139,6 +154,11 @@ type gqlRepo struct {
 
 type gqlLogin struct {
 	Login string `json:"login"`
+}
+
+type gqlComment struct {
+	Author *gqlLogin `json:"author"`
+	Body   string    `json:"body"`
 }
 
 type gqlRollup struct {
@@ -193,6 +213,9 @@ type gqlPR struct {
 			} `json:"statusCheckRollup"`
 		} `json:"target"`
 	} `json:"baseRef"`
+	Comments struct {
+		Nodes []gqlComment `json:"nodes"`
+	} `json:"comments"`
 }
 
 func parseSnapshot(raw []byte, keys []Key) (map[Key]*PR, error) {
@@ -209,7 +232,12 @@ func parseSnapshot(raw []byte, keys []Key) (map[Key]*PR, error) {
 		if repo == nil || len(repo.PullRequests.Nodes) == 0 {
 			continue
 		}
-		prs[k] = repo.PullRequests.Nodes[0].toPR()
+		node := repo.PullRequests.Nodes[0]
+		pr := node.toPR()
+		if bot, ok := ReviewBots[k.Bot]; ok {
+			pr.Bot, pr.BotSummary = k.Bot, bot.summary(node.Comments.Nodes)
+		}
+		prs[k] = pr
 	}
 	return prs, nil
 }

@@ -3,9 +3,11 @@
 package config
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 )
 
@@ -26,6 +29,7 @@ const (
 	defaultHarness      = "claude"
 	repoFileName        = ".lineup.toml"
 	defaultAdHocSession = "ad hoc"
+	defaultReviewCycles = 3
 )
 
 // trackerEvents are the lifecycle events that a Tracker map can name.
@@ -37,7 +41,9 @@ type Resolved struct {
 	PR           bool
 	PollInterval time.Duration
 	Budgets      lifecycle.Budgets
-	Stages       map[lifecycle.Stage]StageConfig
+	// Gate is nil when no [review_bot] table applies to the Repo.
+	Gate   *lifecycle.ReviewGate
+	Stages map[lifecycle.Stage]StageConfig
 	// Harnesses maps each Harness name in use to its absolute path.
 	Harnesses map[string]string
 }
@@ -45,13 +51,21 @@ type Resolved struct {
 type StageConfig struct{ Harness, Model, Effort, Skill, Command string }
 
 func (r Resolved) Policy() lifecycle.Policy {
-	return lifecycle.Policy{Budgets: r.Budgets}
+	return lifecycle.Policy{Budgets: r.Budgets, Gate: r.Gate}
 }
 
 type budgetsFile struct {
 	CIDebug    *int `toml:"ci_debug"`
 	Responding *int `toml:"responding"`
 	Restarts   *int `toml:"restarts"`
+}
+
+// reviewBotFile is a [review_bot] table. A layer can leave out a key and
+// take it from a lower layer, as in [budgets].
+type reviewBotFile struct {
+	Name            *string `toml:"name"`
+	MinReviewScore  *int    `toml:"min_review_score"`
+	MaxReviewCycles *int    `toml:"max_review_cycles"`
 }
 
 type stageFile struct {
@@ -67,6 +81,7 @@ type layer struct {
 	WIPCap       *int                 `toml:"wip_cap"`
 	PollInterval *string              `toml:"poll_interval"`
 	Budgets      *budgetsFile         `toml:"budgets"`
+	ReviewBot    *reviewBotFile       `toml:"review_bot"`
 	Stage        map[string]stageFile `toml:"stage"`
 }
 
@@ -362,6 +377,11 @@ func (g *Global) validate(l *layer, where string) error {
 			}
 		}
 	}
+	if l.ReviewBot != nil {
+		if err := l.ReviewBot.check(where); err != nil {
+			return err
+		}
+	}
 	for key := range l.Stage {
 		if key == "default" {
 			continue
@@ -372,6 +392,53 @@ func (g *Global) validate(l *layer, where string) error {
 		}
 	}
 	return nil
+}
+
+// check validates the keys that one table sets. The bot's top score bounds
+// min_review_score only when the table names the bot. gate checks the merge.
+func (f *reviewBotFile) check(where string) error {
+	top := 0
+	if f.Name != nil {
+		bot, ok := github.ReviewBots[*f.Name]
+		if !ok {
+			return fmt.Errorf("%s: review_bot.name %q is not a known review bot: %s", where, *f.Name, strings.Join(slices.Sorted(maps.Keys(github.ReviewBots)), ", "))
+		}
+		top = bot.TopScore
+	}
+	if m := f.MinReviewScore; m != nil && (*m < 1 || top > 0 && *m > top) {
+		if top > 0 {
+			return fmt.Errorf("%s: review_bot.min_review_score must be from 1 to %d", where, top)
+		}
+		return fmt.Errorf("%s: review_bot.min_review_score must be at least 1", where)
+	}
+	if c := f.MaxReviewCycles; c != nil && *c < 0 {
+		return fmt.Errorf("%s: review_bot.max_review_cycles must not be negative", where)
+	}
+	return nil
+}
+
+// gate resolves the merged [review_bot] tables into the gate and its cycle
+// budget. No table means no gate.
+func (f reviewBotFile) gate() (*lifecycle.ReviewGate, int, error) {
+	if f == (reviewBotFile{}) {
+		return nil, 0, nil
+	}
+	if f.Name == nil {
+		return nil, 0, errors.New("review_bot: name is required")
+	}
+	if err := f.check("review_bot"); err != nil {
+		return nil, 0, err
+	}
+	bot := github.ReviewBots[*f.Name]
+	g := &lifecycle.ReviewGate{Bot: *f.Name, Title: bot.Title, MinScore: bot.TopScore, TopScore: bot.TopScore}
+	if f.MinReviewScore != nil {
+		g.MinScore = *f.MinReviewScore
+	}
+	cycles := defaultReviewCycles
+	if f.MaxReviewCycles != nil {
+		cycles = *f.MaxReviewCycles
+	}
+	return g, cycles, nil
 }
 
 func parseInterval(s string) (time.Duration, error) {
@@ -442,9 +509,15 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 	}
 	layers = append(layers, repoFile)
 
+	var bot reviewBotFile
 	for _, l := range layers {
 		if l.WIPCap != nil {
 			res.WIPCap = *l.WIPCap
+		}
+		if f := l.ReviewBot; f != nil {
+			bot.Name = cmp.Or(f.Name, bot.Name)
+			bot.MinReviewScore = cmp.Or(f.MinReviewScore, bot.MinReviewScore)
+			bot.MaxReviewCycles = cmp.Or(f.MaxReviewCycles, bot.MaxReviewCycles)
 		}
 		if l.PollInterval != nil {
 			res.PollInterval, _ = parseInterval(*l.PollInterval)
@@ -460,6 +533,10 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 				res.Budgets.Restarts = *b.Restarts
 			}
 		}
+	}
+
+	if res.Gate, res.Budgets.ReviewCycles, err = bot.gate(); err != nil {
+		return Resolved{}, err
 	}
 
 	base := StageConfig{Harness: defaultHarness, Model: defaultModel, Effort: defaultEffort}

@@ -165,9 +165,15 @@ func (r *Record) view() TaskView {
 		v.Note = fmt.Sprintf("attempt %d/%d", b.CIDebug-r.Left.CIDebug, b.CIDebug)
 	case lifecycle.Responding:
 		v.Note = fmt.Sprintf("round %d/%d", b.Responding-r.Left.Responding, b.Responding)
+		if c := r.ReviewCycle(); c != nil {
+			v.Note = fmt.Sprintf("%s, cycle %d/%d", c.ScoreText(c.Score), b.ReviewCycles-r.Left.ReviewCycles, b.ReviewCycles)
+		}
 	case lifecycle.InReview, lifecycle.ReadyToLand, lifecycle.CIRunning, lifecycle.Done:
 		if v.PRNumber != 0 {
 			v.Note = fmt.Sprintf("#%d", v.PRNumber)
+		}
+		if r.BotWait != "" {
+			v.Note += " waiting for " + r.Policy.Gate.Title
 		}
 	case lifecycle.ReviewReady:
 		if r.ReviewedHead != "" && r.LatestHead != "" && r.LatestHead != r.ReviewedHead {

@@ -34,7 +34,9 @@ type Rex interface {
 	Capture(ctx context.Context, session, block string) (string, error)
 }
 
-type PRKey struct{ Repo, Branch string }
+// PRKey names a build Task's PR by its branch. Bot is the review bot that
+// gates the Task, or "", so the poll reads the bot's summary only for it.
+type PRKey struct{ Repo, Branch, Bot string }
 
 // PRSnapshot is the GitHub adapter's view of one PR, kept opaque here so the
 // Scheduler can store it and hand it back for edge detection.
@@ -111,6 +113,9 @@ type WorkerSpec struct {
 	Conversation string
 	// Name is the Worker's session name, the same as its Rex tab label.
 	Name string
+	// ReviewCycle is the review bot's low score that started a Responding
+	// round, or nil.
+	ReviewCycle *lifecycle.ReviewCycle
 }
 
 type Harness interface {
