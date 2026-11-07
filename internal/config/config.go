@@ -3,9 +3,11 @@
 package config
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 )
 
@@ -26,6 +29,7 @@ const (
 	defaultHarness      = "claude"
 	repoFileName        = ".lineup.toml"
 	defaultAdHocSession = "ad hoc"
+	defaultReviewCycles = 3
 )
 
 // trackerEvents are the lifecycle events that a Tracker map can name.
@@ -37,7 +41,9 @@ type Resolved struct {
 	PR           bool
 	PollInterval time.Duration
 	Budgets      lifecycle.Budgets
-	Stages       map[lifecycle.Stage]StageConfig
+	// Gate is nil when no [review_bot] table applies to the Repo.
+	Gate   *lifecycle.ReviewGate
+	Stages map[lifecycle.Stage]StageConfig
 	// Harnesses maps each Harness name in use to its absolute path.
 	Harnesses map[string]string
 }
@@ -45,13 +51,21 @@ type Resolved struct {
 type StageConfig struct{ Harness, Model, Effort, Skill, Command string }
 
 func (r Resolved) Policy() lifecycle.Policy {
-	return lifecycle.Policy{Budgets: r.Budgets}
+	return lifecycle.Policy{Budgets: r.Budgets, Gate: r.Gate}
 }
 
 type budgetsFile struct {
 	CIDebug    *int `toml:"ci_debug"`
 	Responding *int `toml:"responding"`
 	Restarts   *int `toml:"restarts"`
+}
+
+// reviewBotFile is a [review_bot] table. A layer can leave out a key and
+// take it from a lower layer, as in [budgets].
+type reviewBotFile struct {
+	Name            *string `toml:"name"`
+	MinReviewScore  *int    `toml:"min_review_score"`
+	MaxReviewCycles *int    `toml:"max_review_cycles"`
 }
 
 type stageFile struct {
@@ -67,6 +81,7 @@ type layer struct {
 	WIPCap       *int                 `toml:"wip_cap"`
 	PollInterval *string              `toml:"poll_interval"`
 	Budgets      *budgetsFile         `toml:"budgets"`
+	ReviewBot    *reviewBotFile       `toml:"review_bot"`
 	Stage        map[string]stageFile `toml:"stage"`
 }
 
@@ -98,7 +113,44 @@ type globalFile struct {
 	} `toml:"github"`
 	LocalTracker   bool   `toml:"local_tracker"`
 	LocalIssuesDir string `toml:"local_issues_dir"`
+	AssistDir      string `toml:"assist_dir"`
+	Review         struct {
+		Views  []ReviewView `toml:"views"`
+		Queues []queueFile  `toml:"queues"`
+	} `toml:"review"`
 }
+
+// PRFilter picks pull requests. The items of one list combine with OR, and
+// two lists combine with AND. Authors and AuthorTeams are one list.
+type PRFilter struct {
+	Repos          []string `toml:"repos"`
+	Authors        []string `toml:"authors"`
+	AuthorTeams    []string `toml:"author_teams"`
+	RequestedTeams []string `toml:"requested_teams"`
+	Labels         []string `toml:"labels"`
+}
+
+// ReviewView is a tab of the review tab.
+type ReviewView struct {
+	Name string `toml:"name"`
+	PRFilter
+}
+
+// ReviewQueue is a view whose PRs lineup reviews without being asked. Slots
+// is how many of its review Tasks can be started at one time.
+type ReviewQueue struct {
+	Name string
+	PRFilter
+	Slots int
+}
+
+type queueFile struct {
+	Name string `toml:"name"`
+	PRFilter
+	Slots *int `toml:"slots"`
+}
+
+const defaultSlots = 3
 
 type Global struct {
 	file     globalFile
@@ -130,12 +182,36 @@ func (g *Global) LinearClientID(workspace string) string {
 // GitHubLabels maps a lifecycle event to the label it sets on a GitHub Issue.
 func (g *Global) GitHubLabels() map[string]string { return g.file.GitHub.Labels }
 
+// ReviewViews are the [[review.views]] entries, in config order.
+func (g *Global) ReviewViews() []ReviewView { return g.file.Review.Views }
+
+// ReviewQueues are the [[review.queues]] entries, in config order.
+func (g *Global) ReviewQueues() []ReviewQueue {
+	var out []ReviewQueue
+	for _, q := range g.file.Review.Queues {
+		slots := defaultSlots
+		if q.Slots != nil {
+			slots = *q.Slots
+		}
+		out = append(out, ReviewQueue{Name: q.Name, PRFilter: q.PRFilter, Slots: slots})
+	}
+	return out
+}
+
 // LocalIssuesDir is the Local Tracker's folder.
 func (g *Global) LocalIssuesDir() string {
 	if d := strings.TrimSpace(g.file.LocalIssuesDir); d != "" {
 		return g.expand(d)
 	}
 	return filepath.Join(g.home, ".local", "share", "lineup", "issues")
+}
+
+// AssistDir is the folder where the Hub's assist agent starts. The default is the home folder.
+func (g *Global) AssistDir() string {
+	if d := strings.TrimSpace(g.file.AssistDir); d != "" {
+		return g.expand(d)
+	}
+	return g.home
 }
 
 // LocalTrackerOn says whether the browser shows the Local Tracker: when no
@@ -201,7 +277,82 @@ func Load(globalPath string) (*Global, error) {
 			return nil, fmt.Errorf("%s: github.labels: unknown event %q", globalPath, ev)
 		}
 	}
+	if err := validateReview(g.file.Review.Views, g.file.Review.Queues); err != nil {
+		return nil, fmt.Errorf("%s: %w", globalPath, err)
+	}
 	return g, nil
+}
+
+// reservedViews are the built-in tabs of the review tab.
+var reservedViews = []string{"My PRs", "Requested"}
+
+func validateReview(views []ReviewView, queues []queueFile) error {
+	names := map[string]bool{}
+	check := func(where, name string, f PRFilter) error {
+		name = strings.TrimSpace(name)
+		switch {
+		case name == "":
+			return fmt.Errorf("%s: name is required", where)
+		case names[name] || slices.Contains(reservedViews, name):
+			return fmt.Errorf("%s: name %q is used twice", where, name)
+		}
+		names[name] = true
+		return f.validate(where)
+	}
+	for i, v := range views {
+		if err := check(fmt.Sprintf("review.views[%d]", i), v.Name, v.PRFilter); err != nil {
+			return err
+		}
+	}
+	for i, q := range queues {
+		where := fmt.Sprintf("review.queues[%d]", i)
+		if err := check(where, q.Name, q.PRFilter); err != nil {
+			return err
+		}
+		if q.Slots != nil && *q.Slots < 1 {
+			return fmt.Errorf("%s: slots must be at least 1", where)
+		}
+	}
+	return nil
+}
+
+func (f PRFilter) validate(where string) error {
+	lists := []struct {
+		key   string
+		items []string
+		want  string
+		good  func(string) bool
+	}{
+		{"repos", f.Repos, "owner/name", isPair},
+		{"authors", f.Authors, "a login", isWord},
+		{"author_teams", f.AuthorTeams, "org/slug", isPair},
+		{"requested_teams", f.RequestedTeams, "org/slug", isPair},
+		// A label travels in double quotes, so it can hold spaces but no quote.
+		{"labels", f.Labels, "a label with no double quote", func(s string) bool {
+			return strings.TrimSpace(s) != "" && !strings.Contains(s, `"`)
+		}},
+	}
+	empty := true
+	for _, l := range lists {
+		for j, it := range l.items {
+			empty = false
+			if !l.good(it) {
+				return fmt.Errorf("%s: %s[%d] %q must be %s", where, l.key, j, it, l.want)
+			}
+		}
+	}
+	if empty {
+		return fmt.Errorf("%s: needs at least one of repos, authors, author_teams, requested_teams, labels", where)
+	}
+	return nil
+}
+
+func isWord(s string) bool { return s != "" && !strings.ContainsAny(s, " \t\"") }
+
+// isPair is an "owner/name" or "org/slug" form.
+func isPair(s string) bool {
+	a, b, ok := strings.Cut(s, "/")
+	return ok && isWord(a) && isWord(b) && !strings.Contains(b, "/")
 }
 
 func decodeStrict(text string, v any) error {
@@ -235,6 +386,11 @@ func (g *Global) validate(l *layer, where string) error {
 			}
 		}
 	}
+	if l.ReviewBot != nil {
+		if err := l.ReviewBot.check(where); err != nil {
+			return err
+		}
+	}
 	for key := range l.Stage {
 		if key == "default" {
 			continue
@@ -245,6 +401,53 @@ func (g *Global) validate(l *layer, where string) error {
 		}
 	}
 	return nil
+}
+
+// check validates the keys that one table sets. The bot's top score bounds
+// min_review_score only when the table names the bot. gate checks the merge.
+func (f *reviewBotFile) check(where string) error {
+	top := 0
+	if f.Name != nil {
+		bot, ok := github.ReviewBots[*f.Name]
+		if !ok {
+			return fmt.Errorf("%s: review_bot.name %q is not a known review bot: %s", where, *f.Name, strings.Join(slices.Sorted(maps.Keys(github.ReviewBots)), ", "))
+		}
+		top = bot.TopScore
+	}
+	if m := f.MinReviewScore; m != nil && (*m < 1 || top > 0 && *m > top) {
+		if top > 0 {
+			return fmt.Errorf("%s: review_bot.min_review_score must be from 1 to %d", where, top)
+		}
+		return fmt.Errorf("%s: review_bot.min_review_score must be at least 1", where)
+	}
+	if c := f.MaxReviewCycles; c != nil && *c < 0 {
+		return fmt.Errorf("%s: review_bot.max_review_cycles must not be negative", where)
+	}
+	return nil
+}
+
+// gate resolves the merged [review_bot] tables into the gate and its cycle
+// budget. No table means no gate.
+func (f reviewBotFile) gate() (*lifecycle.ReviewGate, int, error) {
+	if f == (reviewBotFile{}) {
+		return nil, 0, nil
+	}
+	if f.Name == nil {
+		return nil, 0, errors.New("review_bot: name is required")
+	}
+	if err := f.check("review_bot"); err != nil {
+		return nil, 0, err
+	}
+	bot := github.ReviewBots[*f.Name]
+	g := &lifecycle.ReviewGate{Bot: *f.Name, Title: bot.Title, MinScore: bot.TopScore, TopScore: bot.TopScore}
+	if f.MinReviewScore != nil {
+		g.MinScore = *f.MinReviewScore
+	}
+	cycles := defaultReviewCycles
+	if f.MaxReviewCycles != nil {
+		cycles = *f.MaxReviewCycles
+	}
+	return g, cycles, nil
 }
 
 func parseInterval(s string) (time.Duration, error) {
@@ -315,9 +518,15 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 	}
 	layers = append(layers, repoFile)
 
+	var bot reviewBotFile
 	for _, l := range layers {
 		if l.WIPCap != nil {
 			res.WIPCap = *l.WIPCap
+		}
+		if f := l.ReviewBot; f != nil {
+			bot.Name = cmp.Or(f.Name, bot.Name)
+			bot.MinReviewScore = cmp.Or(f.MinReviewScore, bot.MinReviewScore)
+			bot.MaxReviewCycles = cmp.Or(f.MaxReviewCycles, bot.MaxReviewCycles)
 		}
 		if l.PollInterval != nil {
 			res.PollInterval, _ = parseInterval(*l.PollInterval)
@@ -335,6 +544,10 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 		}
 	}
 
+	if res.Gate, res.Budgets.ReviewCycles, err = bot.gate(); err != nil {
+		return Resolved{}, err
+	}
+
 	base := StageConfig{Harness: defaultHarness, Model: defaultModel, Effort: defaultEffort}
 	for _, l := range layers {
 		if s, ok := l.Stage["default"]; ok {
@@ -342,7 +555,7 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 		}
 	}
 	res.Stages = map[lifecycle.Stage]StageConfig{}
-	for st := lifecycle.Queued; st <= lifecycle.Done; st++ {
+	for _, st := range lifecycle.Stages() {
 		if !st.Agent() {
 			continue
 		}

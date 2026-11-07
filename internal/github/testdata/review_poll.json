@@ -1,0 +1,87 @@
+{
+  "data": {
+    "r0": {
+      "pullRequest": {
+        "number": 4916,
+        "url": "https://github.com/umbrella/data/pull/4916",
+        "title": "CORE-34: Replace the legacy sale flag with a category column",
+        "state": "OPEN",
+        "isCrossRepository": false,
+        "headRefOid": "77ca03ed2a555181b6861959fcbca729eaffd6f3",
+        "baseRefName": "develop",
+        "repository": {
+          "nameWithOwner": "umbrella/data"
+        },
+        "reviews": {
+          "nodes": [
+            {
+              "state": "COMMENTED",
+              "submittedAt": "2026-11-04T07:52:04Z"
+            }
+          ]
+        }
+      }
+    },
+    "r1": {
+      "pullRequest": {
+        "number": 4915,
+        "url": "https://github.com/umbrella/data/pull/4915",
+        "title": "CORE-425: Add the search pipeline diagrams page",
+        "state": "MERGED",
+        "isCrossRepository": false,
+        "headRefOid": "b36ff439428277464e0853ad6ded11bdf5aef87c",
+        "baseRefName": "develop",
+        "repository": {
+          "nameWithOwner": "umbrella/data"
+        },
+        "reviews": {
+          "nodes": [
+            {
+              "state": "APPROVED",
+              "submittedAt": "2026-11-04T18:55:47Z"
+            }
+          ]
+        }
+      }
+    },
+    "r2": {
+      "pullRequest": {
+        "number": 4911,
+        "url": "https://github.com/umbrella/data/pull/4911",
+        "title": "OPS-2761: Add search metric views with coverage caveats",
+        "state": "CLOSED",
+        "isCrossRepository": false,
+        "headRefOid": "96b2711b7852507a577ab018f3175c6ca0f4967d",
+        "baseRefName": "develop",
+        "repository": {
+          "nameWithOwner": "umbrella/data"
+        },
+        "reviews": {
+          "nodes": []
+        }
+      }
+    },
+    "r3": {
+      "pullRequest": {
+        "number": 4959,
+        "url": "https://github.com/umbrella/data/pull/4959",
+        "title": "Stop cancelling the schema check on a pull request review",
+        "state": "OPEN",
+        "isCrossRepository": false,
+        "headRefOid": "994cbc7df96e1c3cab2e144d8952064d6a530e50",
+        "baseRefName": "develop",
+        "repository": {
+          "nameWithOwner": "umbrella/data"
+        },
+        "reviews": {
+          "nodes": [
+            {
+              "state": "APPROVED",
+              "submittedAt": "2026-11-05T19:53:37Z"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

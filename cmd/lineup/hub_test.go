@@ -9,6 +9,9 @@ import (
 
 func TestAgentTabSettings(t *testing.T) {
 	for _, tab := range agentTabs {
+		if tab.role == nil {
+			continue
+		}
 		var v struct {
 			Permissions struct {
 				Allow []string `json:"allow"`
@@ -45,10 +48,10 @@ func TestAgentTabsAreDistinct(t *testing.T) {
 }
 
 func TestAgentArgvUnsetsAnEmptyConfigDir(t *testing.T) {
-	if got := strings.Join(agentArgv("", "/bin/claude", "planner"), " "); got != "env -u CLAUDE_CONFIG_DIR /bin/claude --name planner --remote-control planner" {
+	if got := strings.Join(agentArgv("", "/bin/claude", "lineup-plan"), " "); got != "env -u CLAUDE_CONFIG_DIR /bin/claude --name lineup-plan --remote-control lineup-plan" {
 		t.Errorf("default profile: %s", got)
 	}
-	if got := strings.Join(agentArgv("/p/work", "/bin/claude", "orchestrator"), " "); got != "env CLAUDE_CONFIG_DIR=/p/work /bin/claude --name orchestrator --remote-control orchestrator" {
+	if got := strings.Join(agentArgv("/p/work", "/bin/claude", "lineup-work"), " "); got != "env CLAUDE_CONFIG_DIR=/p/work /bin/claude --name lineup-work --remote-control lineup-work" {
 		t.Errorf("named profile: %s", got)
 	}
 }
@@ -101,5 +104,96 @@ func TestThePlannerLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 	}
 	if got := trackersLine(trackersOn{linear: true, local: true}); !strings.HasPrefix(got, "Trackers on now: Linear, Local.") {
 		t.Errorf("trackersLine = %q", got)
+	}
+}
+
+func TestTheReviewTabHasTheReviewer(t *testing.T) {
+	i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == "review" })
+	if i < 0 {
+		t.Fatal("the Hub has no review tab")
+	}
+	tab := agentTabs[i]
+	if tab.view != "REVIEWS" || !slices.Equal(tab.boardArgs, []string{"board", "--review"}) || tab.agent != "REVIEWER" {
+		t.Errorf("review tab = %s %s %s %v", tab.window, tab.view, tab.agent, tab.boardArgs)
+	}
+	if !strings.Contains(string(tab.role), "# Reviewer") {
+		t.Error("the review tab has no Reviewer role")
+	}
+	var v struct {
+		Permissions struct {
+			Allow []string `json:"allow"`
+			Deny  []string `json:"deny"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(tab.settings), &v); err != nil {
+		t.Fatalf("reviewer settings are not valid JSON: %v", err)
+	}
+	for _, cmd := range []string{"Bash(lineup review:*)", "Bash(lineup reviews:*)", "Bash(lineup steer:*)"} {
+		if !slices.Contains(v.Permissions.Allow, cmd) {
+			t.Errorf("reviewer settings do not allow %s", cmd)
+		}
+	}
+	for _, cmd := range []string{"Bash(lineup start:*)", "Bash(lineup merge:*)", "Bash(gh pr review:*)", "Bash(gh pr comment:*)", "Bash(gh api:*)"} {
+		if !slices.Contains(v.Permissions.Deny, cmd) || slices.Contains(v.Permissions.Allow, cmd) {
+			t.Errorf("reviewer settings do not deny %s", cmd)
+		}
+	}
+}
+
+func TestRunBoardRefusesAnUnknownFlag(t *testing.T) {
+	for _, args := range [][]string{{"--bogus"}, {"--linear", "--review"}} {
+		if err := runBoard(args); err == nil || !strings.Contains(err.Error(), "--review") {
+			t.Errorf("runBoard(%q) = %v", args, err)
+		}
+	}
+}
+
+func TestOpenHubRenamesTheOrchestrateTab(t *testing.T) {
+	old := hubWindow{ID: "w7", Label: "orchestrate"}
+	cases := []struct {
+		name    string
+		windows map[string]hubWindow
+		label   string
+		want    string // the ID of the window to rename, or ""
+	}{
+		{"an old Hub", map[string]hubWindow{"orchestrate": old, "plan": {ID: "w8"}}, "work", "w7"},
+		{"a Hub with both", map[string]hubWindow{"orchestrate": old, "work": {ID: "w9"}}, "work", ""},
+		{"a new Hub", map[string]hubWindow{}, "work", ""},
+		{"a tab that kept its label", map[string]hubWindow{"orchestrate": old}, "plan", ""},
+	}
+	for _, c := range cases {
+		got := ""
+		if w, ok := renamed(c.windows, c.label); ok {
+			got = w.ID
+		}
+		if got != c.want {
+			t.Errorf("%s: renamed %q = %q, want %q", c.name, c.label, got, c.want)
+		}
+	}
+	var order []string
+	for _, tab := range agentTabs {
+		order = append(order, tab.window)
+	}
+	if !slices.Equal(order, []string{"assist", "plan", "work", "review"}) {
+		t.Errorf("tab order = %v, want assist, plan, work, review", order)
+	}
+	if i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == activeTab }); i < 0 || agentTabs[i].agent != "ORCHESTRATOR" {
+		t.Errorf("a new Hub opens on %q, want the work tab with the ORCHESTRATOR", activeTab)
+	}
+}
+
+func TestTheOrchestratorLeavesReviewsToTheReviewer(t *testing.T) {
+	var v struct {
+		Permissions struct {
+			Deny []string `json:"deny"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(orchestratorSettings), &v); err != nil {
+		t.Fatal(err)
+	}
+	for _, cmd := range []string{"Bash(lineup review:*)", "Bash(lineup reviews:*)"} {
+		if !slices.Contains(v.Permissions.Deny, cmd) {
+			t.Errorf("orchestrator settings do not deny %s", cmd)
+		}
 	}
 }

@@ -16,6 +16,9 @@ type TaskClosed struct{}
 // Rerun is the Orchestrator's override that starts a fresh Worker for Stage.
 type Rerun struct{ Stage Stage }
 
+// Reopen starts the Task's Worker again in its Stage, in the same conversation.
+type Reopen struct{}
+
 // Worker signals.
 
 // WorkerDone means the Worker reported done. The Scheduler checks the Stage
@@ -39,11 +42,25 @@ type PROpen struct{}
 type Pushed struct{}
 type CIFailed struct{}
 
-// CIPassed carries the review facts that decide between In review and Ready to land.
+// CIPassed carries the review facts that decide where a passing PR goes next.
 type CIPassed struct {
 	Draft       bool
 	NeedsReview bool // reviewers exist and have not approved
+	// Bot is the review bot's view of the head, for a Task that a bot
+	// gates. It is nil for a Task with no gate.
+	Bot *HeadScore
 }
+
+// HeadScore is the review bot's score for the PR's head commit. Score is
+// nil until the bot reviews Head.
+type HeadScore struct {
+	Head  string
+	Score *int
+}
+
+// ReviewBotLate is the Scheduler's timer: the Task has been in CI running
+// long enough that a review bot that reviews the head would have scored it.
+type ReviewBotLate struct{}
 
 type ReviewApproved struct{}
 type ReviewCommented struct{}
@@ -52,10 +69,21 @@ type ReviewAdditionalAuthors struct{}
 type PRConflict struct{}
 type PRMerged struct{}
 
+// Review signals. Each is a level, not an edge: the Scheduler computes it from
+// the reviewed PR's current state on each full poll.
+
+// PRReviewed means the user submitted a review after the Task was added. A
+// pending review is not submitted.
+type PRReviewed struct{}
+
+// PRClosed means the PR closed without a merge.
+type PRClosed struct{}
+
 func (Start) Name() string                   { return "start" }
 func (PRMerge) Name() string                 { return "pr-merge" }
 func (TaskClosed) Name() string              { return "task-closed" }
 func (Rerun) Name() string                   { return "rerun" }
+func (Reopen) Name() string                  { return "reopen" }
 func (WorkerDone) Name() string              { return "done" }
 func (WorkerStatus) Name() string            { return "status" }
 func (WorkerExited) Name() string            { return "exited" }
@@ -71,11 +99,15 @@ func (ReviewChangesRequested) Name() string  { return "review-changes-requested"
 func (ReviewAdditionalAuthors) Name() string { return "review-additional-authors" }
 func (PRConflict) Name() string              { return "pr-conflict" }
 func (PRMerged) Name() string                { return "pr-merged" }
+func (ReviewBotLate) Name() string           { return "review-bot-late" }
+func (PRReviewed) Name() string              { return "pr-reviewed" }
+func (PRClosed) Name() string                { return "pr-closed" }
 
 func (Start) signal()                   {}
 func (PRMerge) signal()                 {}
 func (TaskClosed) signal()              {}
 func (Rerun) signal()                   {}
+func (Reopen) signal()                  {}
 func (WorkerDone) signal()              {}
 func (WorkerStatus) signal()            {}
 func (WorkerExited) signal()            {}
@@ -91,15 +123,15 @@ func (ReviewChangesRequested) signal()  {}
 func (ReviewAdditionalAuthors) signal() {}
 func (PRConflict) signal()              {}
 func (PRMerged) signal()                {}
+func (ReviewBotLate) signal()           {}
+func (PRReviewed) signal()              {}
+func (PRClosed) signal()                {}
 
 // Effect is work the Scheduler must do after a transition, in order.
 type Effect interface{ effect() }
 
 // StartWorker replaces any Worker in the Task's tab with a fresh one for Stage.
 type StartWorker struct{ Stage Stage }
-
-// MarkReady marks the draft PR ready for review and requests CODEOWNERS reviewers.
-type MarkReady struct{}
 
 type Merge struct{}
 
@@ -111,7 +143,6 @@ type Cleanup struct{}
 type TrackerStatus struct{ Event string }
 
 func (StartWorker) effect()   {}
-func (MarkReady) effect()     {}
 func (Merge) effect()         {}
 func (Cleanup) effect()       {}
 func (TrackerStatus) effect() {}

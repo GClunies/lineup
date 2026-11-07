@@ -239,3 +239,15 @@ func TestTheTabRowKeepsTheOpenTabInView(t *testing.T) {
 		t.Fatalf("the first tab: %q", got)
 	}
 }
+
+func TestRReadsASourceTabAgain(t *testing.T) {
+	gh := ghSource()
+	e := sourceEnv(t, false, gh)
+	gh.mu.Lock()
+	gh.items = append(gh.items, Item{Kind: scheduler.KindGitHub, ID: "o/sandbox#3", Title: "Add a farewell", Status: "open", Repo: "o/sandbox"})
+	gh.mu.Unlock()
+	e.press("R")
+	if v := e.m.View(); !strings.Contains(v, "Add a farewell") {
+		t.Fatalf("R did not read the list again:\n%s", v)
+	}
+}

@@ -28,6 +28,7 @@ type fakeClient struct {
 	calls   []scheduler.Request
 	errs    map[string]error
 	capture string
+	review  scheduler.ReviewResult // the answer to each review op
 }
 
 func (f *fakeClient) Do(req scheduler.Request, out any) error {
@@ -43,6 +44,8 @@ func (f *fakeClient) Do(req scheduler.Request, out any) error {
 		*(out.(*string)) = f.capture
 	case "show":
 		*(out.(*scheduler.TaskDetail)) = scheduler.TaskDetail{TaskView: scheduler.TaskView{ID: req.Task, Stage: "Working"}, Branch: "b"}
+	case "review":
+		*(out.(*scheduler.ReviewResult)) = f.review
 	}
 	return nil
 }
@@ -61,7 +64,7 @@ func (f *fakeClient) ops() []string {
 var groupOf = map[lifecycle.Stage]string{
 	lifecycle.Queued: "Queued", lifecycle.Working: "Working", lifecycle.CIRunning: "Waiting", lifecycle.CIDebug: "Working",
 	lifecycle.InReview: "Waiting", lifecycle.Responding: "Working", lifecycle.ReadyToLand: "Needs you",
-	lifecycle.Done: "Done",
+	lifecycle.Done: "Done", lifecycle.Reviewing: "Working", lifecycle.ReviewReady: "Needs you",
 }
 
 func tv(id string, st lifecycle.Stage, repo, title, note string, age time.Duration) scheduler.TaskView {
@@ -85,6 +88,13 @@ func fixture() scheduler.BoardView {
 		question,
 		tv("ENG-592", lifecycle.CIDebug, "data", "Fix flaky test", "attempt 2/3", time.Minute),
 	}}
+}
+
+// rtv is a review Task.
+func rtv(id string, st lifecycle.Stage, title, url string, age time.Duration) scheduler.TaskView {
+	t := tv(id, st, "data", title, "", age)
+	t.Kind, t.PRURL, t.ReviewHead = lifecycle.KindReview, url, "h1"
+	return t
 }
 
 func newModel(c Client, v scheduler.BoardView) Model {
@@ -312,6 +322,52 @@ func TestOverCapHeaderAndOffline(t *testing.T) {
 	}
 }
 
+func TestOnlyTheReviewBoardShowsThatReviewsArePaused(t *testing.T) {
+	for _, paused := range []bool{false, true} {
+		v := fixture()
+		v.ReviewsPaused = paused
+		m := newModel(&fakeClient{}, v)
+		if strings.Contains(m.header(), "reviews paused") {
+			t.Errorf("paused %v: the work board shows reviews paused", paused)
+		}
+		rm := New(v, Options{Review: true, Client: &fakeClient{}})
+		rm.width = 200
+		if got := strings.Contains(ansi.Strip(rm.header()), "reviews paused"); got != paused {
+			t.Errorf("paused %v: the review board shows reviews paused: %v", paused, got)
+		}
+		if strings.Contains(rm.header(), "WIP") {
+			t.Errorf("the review board shows the WIP cap: %q", rm.header())
+		}
+	}
+}
+
+// The work board lists, counts, and toasts only build Tasks.
+func TestTheWorkBoardHoldsOnlyBuildTasks(t *testing.T) {
+	var toasts []string
+	v := fixture()
+	v.Tasks = append(v.Tasks, rtv("R-3", lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour))
+	m := New(v, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
+	m.width, m.height = 160, 30
+	if out := m.View(); strings.Contains(out, "R-3") || !strings.Contains(m.header(), "◐2 working") {
+		t.Fatalf("the work board shows the review Task:\n%s", out)
+	}
+	m, _ = press(m, "j", "j", "j", "j", "j", "j", "j")
+	if m.sel == "R-3" {
+		t.Fatal("j reached the review Task")
+	}
+
+	v.Tasks[len(v.Tasks)-1] = rtv("R-3", lifecycle.ReviewReady, "data#7 Fix the tooltip", urlBase, 0)
+	v.Tasks[2] = tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636", 0)
+	t2, cmd := m.Update(boardMsg(v))
+	m = t2.(Model)
+	if cmd != nil {
+		cmd()
+	}
+	if want := []string{"ENG-571 Ready to land, #4636: Rate limit login"}; !slices.Equal(toasts, want) {
+		t.Fatalf("toasts %q, want %q", toasts, want)
+	}
+}
+
 func TestAgeAndRows(t *testing.T) {
 	m := newModel(&fakeClient{}, fixture())
 	out := m.View()
@@ -370,6 +426,18 @@ func TestEventsDetailForOtherTasks(t *testing.T) {
 	m, _ = press(m, "f")
 	if m.detail {
 		t.Fatal("f toggles back")
+	}
+}
+
+func TestRPollsNow(t *testing.T) {
+	f := &fakeClient{}
+	m, cmd := press(newModel(f, fixture()), "R")
+	m = run(m, cmd)
+	if got := f.ops(); !slices.Equal(got, []string{"poll"}) {
+		t.Fatalf("R sent %v, want poll", got)
+	}
+	if l := footerAt(m, 100); !strings.Contains(l, "refresh ok") {
+		t.Fatalf("status line = %q", l)
 	}
 }
 

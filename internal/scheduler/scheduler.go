@@ -11,7 +11,10 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
+	"uuid"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/store"
@@ -29,6 +32,12 @@ type Deps struct {
 	PollInterval time.Duration
 	// AdHocSession is the Rex session for Tasks with no Issue.
 	AdHocSession string
+	// Queues are the review queues that each full poll fills.
+	Queues []Queue
+	// StateHome is the XDG state folder. A review Worker gets it as
+	// XDG_STATE_HOME, so the Scheduler finds pr-review's record where the
+	// Worker writes it.
+	StateHome string
 	// BoardCache is where the Scheduler writes the latest BoardView, so the
 	// Board paints from disk before it connects.
 	BoardCache string
@@ -62,6 +71,16 @@ type Scheduler struct {
 	// program can exit before NewWindow returns its block ID.
 	orphans map[string][]orphan
 	ctx     context.Context
+
+	locksMu   sync.Mutex
+	repoLocks map[string]*sync.Mutex
+
+	filling atomic.Bool
+	// paused is `lineup reviews pause`: no fill starts a review.
+	paused bool
+	// members holds the logins of the queues' author teams, read at membersAt.
+	members   map[string][]string
+	membersAt time.Time
 }
 
 type orphan struct {
@@ -80,12 +99,21 @@ func New(d Deps) (*Scheduler, error) {
 		d: d, inbox: make(chan func()), board: lifecycle.NewBoard(d.DefaultCap),
 		recs: map[string]*Record{}, lanes: map[string]chan func(context.Context){},
 		watchers: map[chan BoardView]struct{}{}, orphans: map[string][]orphan{},
+		repoLocks: map[string]*sync.Mutex{},
+	}
+	for _, q := range d.Queues {
+		s.board.Slots[q.Name] = q.Slots
 	}
 	if v, err := d.Store.Setting("wip_cap"); err != nil {
 		return nil, err
 	} else if v != "" {
 		s.board.Cap, _ = strconv.Atoi(v)
 	}
+	paused, err := d.Store.Setting(pausedKey)
+	if err != nil {
+		return nil, err
+	}
+	s.paused, _ = strconv.ParseBool(paused)
 	raw, err := d.Store.Tasks()
 	if err != nil {
 		return nil, err
@@ -138,12 +166,15 @@ func (s *Scheduler) now() time.Time { return s.d.Now() }
 // apply runs one Signal through the reducer, records the change, and queues
 // the Effects on the Task's lane.
 func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error {
-	from, flag, outcome := r.Stage, r.Flag, r.Outcome
+	from, flag, outcome, wait := r.Stage, r.Flag, r.Outcome, r.BotWait
 	effects, err := s.board.Apply(r.ID, sig)
 	if err != nil {
 		return err
 	}
 	if r.Stage == from && r.Flag == flag && r.Outcome == outcome && len(effects) == 0 {
+		if r.BotWait != wait {
+			s.save(r)
+		}
 		return nil
 	}
 	if r.Stage != from {
@@ -252,15 +283,6 @@ func (s *Scheduler) exec(ctx context.Context, id string, e lifecycle.Effect) {
 	switch e := e.(type) {
 	case lifecycle.StartWorker:
 		s.startWorker(ctx, id, e.Stage)
-	case lifecycle.MarkReady:
-		if r.PR == nil {
-			return
-		}
-		if err := s.d.GitHub.MarkReady(ctx, r.RepoSlug, r.PR.Number); err != nil {
-			s.fail(id, "mark ready", err)
-			return
-		}
-		s.poll(ctx, []string{id})
 	case lifecycle.Merge:
 		if r.PR == nil {
 			return
@@ -317,7 +339,7 @@ func (s *Scheduler) attach(id string, w Window, job Job) {
 			return
 		}
 		r.SessionID, r.WindowID, r.BlockID, r.Job = w.SessionID, w.WindowID, w.BlockID, job
-		r.Status = ""
+		r.Status, r.WorkerState = "", ""
 		s.save(r)
 		for _, o := range s.orphans[w.BlockID] {
 			s.onRex(o.ev)
@@ -363,20 +385,47 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 	if !ok || r.Stage != stage {
 		return
 	}
-	if r.Job == JobSetup || r.Worktree == "" {
+	switch {
+	case r.Review != nil:
+		if !s.setupReview(ctx, r) {
+			return
+		}
+		if r, ok = s.snapshot(id); !ok || r.Stage != stage {
+			return
+		}
+	case r.Job == JobSetup || r.Worktree == "":
 		s.update(id, func(r *Record) { r.Pending = &stage })
 		if r.Job != JobSetup {
 			s.setup(ctx, r)
 		}
 		return
 	}
-	argv, env, err := s.d.Harness.Command(ctx, WorkerSpec{
-		Task: r.ID, Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
+	if r.Review != nil && stage == lifecycle.Reviewing {
+		// A restart or a rerun reviews afresh, so it never resumes the last review.
+		r.Conversation = uuid.NewV4().String()
+		s.update(id, func(rec *Record) { rec.Conversation = r.Conversation })
+	}
+	spec := WorkerSpec{
+		Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
 		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
-	})
+		Conversation: r.Conversation, Name: r.tabLabel(), ReviewCycle: r.ReviewCycle(),
+	}
+	folder := r.Worktree
+	if r.Review != nil {
+		// The PR's code never becomes the Worker's folder: its .claude
+		// settings and hooks would run.
+		spec.PRURL, folder = r.Review.URL, r.Repo
+	}
+	argv, env, err := s.d.Harness.Command(ctx, spec)
 	if err != nil {
 		s.fail(id, "worker command", err)
 		return
+	}
+	if r.Review != nil {
+		if env == nil {
+			env = map[string]string{}
+		}
+		env["XDG_STATE_HOME"] = s.d.StateHome
 	}
 	s.detach(ctx, r)
 	session, err := s.d.Rex.EnsureSession(ctx, r.Session)
@@ -384,13 +433,42 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 		s.fail(id, "rex session", err)
 		return
 	}
-	w, err := s.d.Rex.NewWindow(ctx, session, r.tabLabel(), r.Worktree, env, argv)
+	w, err := s.d.Rex.NewWindow(ctx, session, r.tabLabel(), folder, env, argv)
 	if err != nil {
 		s.fail(id, "rex tab", err)
 		return
 	}
 	s.update(id, func(r *Record) { r.WorkerStage = stage })
 	s.attach(id, w, JobWorker)
+	if r.Review != nil {
+		s.openHunk(ctx, id, w.SessionID, w.BlockID, r.Worktree, r.Review.URL)
+	}
+}
+
+// openHunk shows the PR in hunk beside a review Worker. A failed split leaves
+// the Worker running.
+func (s *Scheduler) openHunk(ctx context.Context, id, session, block, worktree, url string) {
+	hunk, err := s.d.Rex.Split(ctx, session, block, worktree, hunkArgv(url))
+	if err != nil {
+		s.d.Log.Warn("hunk pane", "task", id, "err", err)
+		return
+	}
+	s.update(id, func(r *Record) {
+		if r.BlockID == block {
+			r.HunkBlockID = hunk
+		}
+	})
+}
+
+// sessionEmpty reports whether a session holds no tabs. The user, or another
+// Scheduler, can open tabs in a session that lineup made.
+func (s *Scheduler) sessionEmpty(ctx context.Context, session string) bool {
+	blocks, err := s.d.Rex.Blocks(ctx, session)
+	if err != nil {
+		s.d.Log.Warn("list session blocks", "session", session, "err", err)
+		return false
+	}
+	return len(blocks) == 0
 }
 
 // detach forgets the Task's tab before closing it, so its exit is not read as a lost Worker.
@@ -398,7 +476,7 @@ func (s *Scheduler) detach(ctx context.Context, r Record) {
 	if r.WindowID == "" {
 		return
 	}
-	s.update(r.ID, func(r *Record) { r.WindowID, r.BlockID, r.Job = "", "", JobNone })
+	s.update(r.ID, func(r *Record) { r.WindowID, r.BlockID, r.HunkBlockID, r.Job = "", "", "", JobNone })
 	if err := s.d.Rex.CloseWindow(ctx, r.SessionID, r.WindowID); err != nil {
 		s.d.Log.Warn("close tab", "task", r.ID, "err", err)
 	}
@@ -406,9 +484,12 @@ func (s *Scheduler) detach(ctx context.Context, r Record) {
 
 func (s *Scheduler) cleanup(ctx context.Context, r Record) {
 	s.detach(ctx, r)
+	switch {
+	case r.Review != nil:
+		s.removeReviewWorktree(ctx, r)
 	// A Task gets a SessionID when setup opens its tab. Setup can fail after
 	// worktrunk made the worktree but before the Record holds its path.
-	if r.Worktree != "" || r.SessionID != "" {
+	case r.Worktree != "" || r.SessionID != "":
 		if err := s.d.Worktrees.Remove(ctx, r.Repo, r.Branch); err != nil {
 			s.d.Log.Error("remove worktree", "task", r.ID, "err", err)
 		}
@@ -419,7 +500,7 @@ func (s *Scheduler) cleanup(ctx context.Context, r Record) {
 			return o.ID != r.ID && o.Session == r.Session && o.Stage.Started()
 		})
 	})
-	if last && r.SessionID != "" {
+	if last && r.SessionID != "" && s.sessionEmpty(ctx, r.SessionID) {
 		if err := s.d.Rex.DestroySession(ctx, r.SessionID); err != nil {
 			s.d.Log.Warn("remove session", "session", r.Session, "err", err)
 		}
@@ -446,13 +527,16 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		if r.Job != JobWorker {
 			return
 		}
-		r.Status = ev.Status.Msg
+		r.Status, r.WorkerState = ev.Status.Msg, ev.Status.State
 		if ev.Status.State == "done" {
-			s.checkContract(r)
+			s.checkContract(r, false)
 			s.save(r)
 			return
 		}
 		s.apply(r, lifecycle.WorkerStatus{State: ev.Status.State, Kind: ev.Status.Kind, Detail: ev.Status.Msg}, "")
+		if r.asksForDecisions(ev.Status) {
+			s.checkContract(r, true)
+		}
 		s.publish()
 
 	case EvExited:
@@ -468,20 +552,35 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		case job == JobWorker && ev.ExitCode != 0:
 			s.apply(r, lifecycle.WorkerExited{Code: ev.ExitCode}, "")
 		case job == JobWorker:
-			s.checkContract(r)
+			s.checkContract(r, false)
 		}
 
 	case EvClosed:
 		job := r.Job
-		r.WindowID, r.BlockID, r.Job = "", "", JobNone
+		s.forgetTab(r)
 		s.save(r)
-		switch job {
-		case JobSetup:
+		switch {
+		case job == JobSetup:
 			s.apply(r, lifecycle.SetupFailed{Detail: "setup tab closed"}, "")
-		case JobWorker:
+		case job == JobWorker:
 			s.apply(r, lifecycle.WorkerLost{}, "")
 		}
 	}
+}
+
+// forgetTab drops the Task's tab after its block is gone. The hunk pane
+// holds a review tab open, so the Scheduler closes that tab.
+func (s *Scheduler) forgetTab(r *Record) {
+	id, session, window := r.ID, r.SessionID, r.WindowID
+	r.WindowID, r.BlockID, r.HunkBlockID, r.Job = "", "", "", JobNone
+	if r.Review == nil || window == "" {
+		return
+	}
+	s.enqueue(id, func(ctx context.Context) {
+		if err := s.d.Rex.CloseWindow(ctx, session, window); err != nil {
+			s.d.Log.Warn("close tab", "task", id, "err", err)
+		}
+	})
 }
 
 func (s *Scheduler) keepOrphan(ev RexEvent) {
@@ -494,16 +593,21 @@ func (s *Scheduler) keepOrphan(ev RexEvent) {
 	s.orphans[ev.BlockID] = append(s.orphans[ev.BlockID], orphan{s.now(), ev})
 }
 
-// checkContract runs when a Worker reports done. It observes the Stage
-// contract's output and applies done with the result.
-func (s *Scheduler) checkContract(r *Record) {
-	id, stage, block := r.ID, r.Stage, r.BlockID
+// checkContract runs when a Worker reports done, or when a review Worker asks
+// for decisions. It observes the Stage contract's output and applies done
+// with the result. An unmet contract after a question applies nothing, so the
+// Task keeps the question flag.
+func (s *Scheduler) checkContract(r *Record, question bool) {
+	id, stage, block, review, since := r.ID, r.Stage, r.BlockID, r.Review, r.StageSince
 	if !stage.Agent() {
 		return
 	}
 	s.enqueue(id, func(ctx context.Context) {
 		met := false
+		var reviewed string
 		switch stage {
+		case lifecycle.Reviewing:
+			reviewed, met = s.findings(*review, since)
 		case lifecycle.Working:
 			s.poll(ctx, []string{id})
 			r, _ := s.snapshot(id)
@@ -515,24 +619,47 @@ func (s *Scheduler) checkContract(r *Record) {
 		}
 		s.call(func() {
 			r, ok := s.recs[id]
-			if ok && r.Stage == stage && (r.BlockID == block || r.BlockID == "") {
+			if ok && r.Stage == stage && (r.BlockID == block || r.BlockID == "") && (met || !question) {
+				if met && reviewed != "" {
+					r.ReviewedHead = reviewed
+				}
 				s.apply(r, lifecycle.WorkerDone{ContractMet: met}, "")
 			}
 		})
 	})
 }
 
-// poll reads GitHub for the given Tasks, or for every started Task when ids is nil.
+// poll reads GitHub for the given Tasks, or for every started Task when ids
+// is nil. A full poll then fills the review queues.
 func (s *Scheduler) poll(ctx context.Context, ids []string) {
+	s.pollTasks(ctx, ids)
+	if ids == nil {
+		s.fill(ctx)
+	}
+}
+
+// pollTasks reads the PRs of the Tasks. A build Task's PR comes by its
+// branch, and a review Task's PR by its number, so the branch Signals never
+// reach a PR that lineup reviews.
+func (s *Scheduler) pollTasks(ctx context.Context, ids []string) {
 	keys := map[PRKey]string{}
+	reviews := map[ReviewKey]string{}
 	s.call(func() {
 		for _, r := range s.list() {
-			if r.RepoSlug == "" || !r.Stage.Started() || (ids != nil && !slices.Contains(ids, r.ID)) {
-				continue
+			switch {
+			case !r.Stage.Started() || (ids != nil && !slices.Contains(ids, r.ID)):
+			case r.Review != nil:
+				reviews[r.Review.key()] = r.ID
+			case r.RepoSlug != "":
+				key := PRKey{Repo: r.RepoSlug, Branch: r.Branch}
+				if g := r.Policy.Gate; g != nil {
+					key.Bot = g.Bot
+				}
+				keys[key] = r.ID
 			}
-			keys[PRKey{r.RepoSlug, r.Branch}] = r.ID
 		}
 	})
+	s.pollReviews(ctx, reviews)
 	if len(keys) == 0 {
 		return
 	}
@@ -554,9 +681,19 @@ func (s *Scheduler) poll(ctx context.Context, ids []string) {
 			for _, sig := range sigs {
 				s.apply(r, sig, "")
 			}
+			if r.BotWait != "" && s.now().Sub(r.StageSince) >= botReviewWait {
+				s.apply(r, lifecycle.ReviewBotLate{}, "")
+			}
 		}
 	})
 }
+
+// botReviewWait is how long a gated Task can be in CI running before passed
+// checks with no review bot score flag it. Greptile's check run keeps CI
+// pending while it reviews, and it scored each probed push within 4
+// minutes. Passed checks and no score after this long mean the bot is not
+// reviewing, for example in a Repo where it is not installed.
+const botReviewWait = 15 * time.Minute
 
 func mapKeys[K comparable, V any](m map[K]V) func(func(K) bool) {
 	return func(yield func(K) bool) {
@@ -600,16 +737,23 @@ func (s *Scheduler) recover(ctx context.Context) {
 				if st, err := s.d.Rex.ProgramStatus(ctx, r.SessionID, r.BlockID); err == nil && st.State != "" {
 					s.onRex(RexEvent{Kind: EvStatus, BlockID: r.BlockID, Status: st})
 				}
+				if r.Review != nil && !blocks[r.HunkBlockID] {
+					id, session, block, worktree, url := r.ID, r.SessionID, r.BlockID, r.Worktree, r.Review.URL
+					s.enqueue(id, func(ctx context.Context) { s.openHunk(ctx, id, session, block, worktree, url) })
+				}
 			}
 			continue
 		}
 		job := r.Job
-		r.WindowID, r.BlockID, r.Job = "", "", JobNone
+		s.forgetTab(r)
 		s.save(r)
 		if r.Flag != "" && !r.Flag.Transient() {
 			continue
 		}
 		switch {
+		case r.Review != nil && r.Worktree == "" && r.Stage.Agent():
+			id, stage := r.ID, r.Stage
+			s.enqueue(id, func(ctx context.Context) { s.startWorker(ctx, id, stage) })
 		case job == JobSetup || r.Worktree == "" && r.Stage.Agent():
 			stage := r.Stage
 			r.Pending = &stage
@@ -654,7 +798,7 @@ func cmpString(a, b string) int {
 const doneShownFor = 7 * 24 * time.Hour
 
 func (s *Scheduler) view() BoardView {
-	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap()}
+	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap(), ReviewsPaused: s.paused}
 	for _, r := range s.list() {
 		if r.Stage == lifecycle.Done && (r.Archived || s.now().Sub(r.StageSince) > doneShownFor) {
 			continue

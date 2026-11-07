@@ -151,6 +151,30 @@ func (c *Client) NewWindow(ctx context.Context, session, label, cwd string, env 
 	return Window{SessionID: session, WindowID: v.WindowID, BlockID: v.BlockIDs[0]}, nil
 }
 
+// Split opens argv in a new block labeled hunk to the right of block, with
+// half of the tab, and keeps the focus where it is. It returns the new
+// block's ID.
+func (c *Client) Split(ctx context.Context, session, block, cwd string, argv []string) (string, error) {
+	args := []string{"split", "-s", session, "-b", block, "--split", "right", "--ratio", "50", "--label", "hunk", "--focus=false", "--json"}
+	if cwd != "" {
+		args = append(args, "-c", cwd)
+	}
+	out, err := c.run(ctx, append(append(args, "--"), argv...)...)
+	if err != nil {
+		return "", err
+	}
+	var v struct {
+		BlockIDs []string `json:"block_ids"`
+	}
+	if err := json.Unmarshal(out, &v); err != nil {
+		return "", err
+	}
+	if len(v.BlockIDs) == 0 {
+		return "", errors.New("rex split returned no block")
+	}
+	return v.BlockIDs[0], nil
+}
+
 func (c *Client) CloseWindow(ctx context.Context, session, windowID string) error {
 	_, err := c.run(ctx, "window", "close", "-s", session, windowID)
 	if isNotFound(err) {

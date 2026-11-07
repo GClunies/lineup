@@ -17,7 +17,9 @@ const usage = `usage: lineup [command]
   lineup restart               install the Scheduler's launchd agent and restart it
   lineup stop                  stop the Scheduler until the next restart or login
   lineup logs                  follow the Scheduler's log
-  lineup board [--linear]      run the Board, or the Linear browser with --linear
+  lineup board [--linear | --review]
+                               run the Board, the Linear browser with --linear,
+                               or the PR views with --review
   lineup login [linear [workspace] | github]
                                sign in to a Tracker; with no argument, asks which
   lineup logout linear [workspace] [--local]
@@ -28,9 +30,13 @@ const usage = `usage: lineup [command]
   lineup add <ISSUE>           put an Issue on the Board: ENG-614, owner/repo#12, or local-7
   lineup add --repo <repo> "<text>"
   lineup start [--over-cap] <task>
+  lineup review <PR URL>       review someone else's PR; it posts only what you decide
+  lineup reviews [--json]      list each review queue: its started reviews and the PRs that wait
+  lineup reviews pause | resume
+                               stop or restart every review queue fill
   lineup ls [--json]           list the Tasks
   lineup show [--json] <task>
-  lineup watch                 print a line each time a Task needs you or ends
+  lineup watch                 print a line each time a build Task needs you or ends
   lineup steer <task> "<text>" type text into the Task's Worker
   lineup set <task> key=value  override configuration, for example harness=pi
   lineup cap <n>               set the WIP cap

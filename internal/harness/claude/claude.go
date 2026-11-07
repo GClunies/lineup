@@ -145,30 +145,49 @@ func lock(dir string) (func(), error) {
 	}
 }
 
-// Command builds the argv and environment for an interactive Worker whose
-// first message is the prompt. Rex starts it through a login shell that runs
-// no direnv, so the command sets CLAUDE_CONFIG_DIR itself.
-func Command(bin, configDir, name string, st config.StageConfig, prompt string) ([]string, map[string]string) {
-	argv := append([]string{bin}, SessionFlags(name)...)
+// SessionFlags name the session and turn on Remote Control, so that the user
+// finds it by name on claude.ai and on their phone. --remote-control takes an
+// optional value, so it always gets the name: alone, it would take the prompt.
+func SessionFlags(name string) []string {
+	return []string{"--name", name, "--remote-control", name}
+}
+
+// Command builds the argv and environment for an interactive Worker. A
+// Worker with a prompt starts a new conversation, with the prompt as its first
+// message and conversation as its ID when that is not "". A Worker with no
+// prompt resumes the conversation. name, when not "", is the session's name in
+// Claude's session list. Rex starts it through a login shell that
+// runs no direnv, so the command sets CLAUDE_CONFIG_DIR itself. addDirs are
+// folders outside the Worker's own that it reads with no permission prompt.
+func Command(bin, configDir string, st config.StageConfig, conversation, name, prompt string, addDirs ...string) ([]string, map[string]string) {
+	argv := []string{bin}
 	if st.Model != "" {
 		argv = append(argv, "--model", st.Model)
 	}
 	if st.Effort != "" {
 		argv = append(argv, "--effort", st.Effort)
 	}
-	argv = append(argv, prompt)
+	switch {
+	case prompt == "":
+		argv = append(argv, "--resume", conversation)
+	case conversation != "":
+		argv = append(argv, "--session-id", conversation)
+	}
+	if name != "" {
+		argv = append(argv, SessionFlags(name)...)
+	}
+	for _, d := range addDirs {
+		// --add-dir takes many values, so a separate value would also take the prompt.
+		argv = append(argv, "--add-dir="+d)
+	}
+	if prompt != "" {
+		argv = append(argv, prompt)
+	}
 	env := map[string]string{}
 	if configDir != "" {
 		env["CLAUDE_CONFIG_DIR"] = configDir
 	}
 	return argv, env
-}
-
-// SessionFlags name the session and turn on Remote Control, so that the user
-// finds it by name on claude.ai and on their phone. --remote-control takes an
-// optional value, so it always gets the name: alone, it would take the prompt.
-func SessionFlags(name string) []string {
-	return []string{"--name", name, "--remote-control", name}
 }
 
 type TaskInfo struct {
@@ -189,25 +208,46 @@ type TaskInfo struct {
 	// PR is false for a Task whose work ends without a pull request, for
 	// example a skill that explains a PR.
 	PR bool
+	// ReviewWorktree is where a review Task's Worker reads the PR's code.
+	ReviewWorktree string
+	// ReviewCycle is the review bot's low score that started a Responding
+	// round, or nil for a round that people's reviews started.
+	ReviewCycle *lifecycle.ReviewCycle
 }
 
 var contracts = map[lifecycle.Stage]string{
-	lifecycle.Working:    "Push the branch and open a draft PR.",
+	lifecycle.Working:    "Push the branch and open a PR that is ready for review, not a draft.",
 	lifecycle.CIDebug:    "Push a commit that targets the failed check.",
 	lifecycle.Responding: "Push the changes and reply to each open review thread. If the PR has a conflict, push a merge of the base branch that resolves it.",
 }
 
 const noPRContract = "Do not push a branch or open a pull request. Say what you produced, then stop."
 
+// reviewContract keeps a review from writing to GitHub before the user decides.
+// %[1]s is the review worktree.
+const reviewContract = "Use the review worktree %[1]s as the worktree of `pr-review` Step 1. Check out each new head there, and keep it at Step 10. " +
+	"If the record holds findings at the current head, reuse them. If it holds an older review, review again at the current head. " +
+	"Do `pr-review` Steps 1 to 10. At Step 5, wait for the user's decisions, and write nothing to GitHub before them. The decisions approve the pushes and the post of Steps 6 to 9, so go on to them without asking again. " +
+	"Leave the findings file of `pr-review` behind, also when there are no findings."
+
 var intros = map[lifecycle.Stage]string{
+	lifecycle.Reviewing:  "Review this pull request for the user.",
 	lifecycle.Working:    "Do the work for this Task.",
 	lifecycle.CIDebug:    "CI failed on the pull request for this Task. Fix it.",
 	lifecycle.Responding: "Reviewers left feedback on the pull request for this Task. Respond to it.",
 }
 
+// cycleIntro opens a Responding round that a low review bot score started.
+// %[1]s is the bot, %[2]d/%[3]d its score, and %[4]d the minimum.
+const cycleIntro = "%[1]s scored the pull request for this Task %[2]d/%[3]d, below the minimum of %[4]d. " +
+	"Address %[1]s's unresolved review comments and the suggestions in its summary comment. Resolve each review thread that you addressed."
+
 // Prompt returns the Stage prompt with the Stage contract appended. extra is
 // free text from configuration, for example a command to run first.
 func Prompt(stage lifecycle.Stage, task TaskInfo, skill, extra string) string {
+	if stage == lifecycle.Reviewing {
+		return reviewPrompt(task, extra)
+	}
 	contract, ok := contracts[stage]
 	if !ok {
 		return ""
@@ -224,7 +264,11 @@ func Prompt(stage lifecycle.Stage, task TaskInfo, skill, extra string) string {
 		// The user's words come first, so that they are the skill's arguments.
 		b.WriteString(task.Ask + "\n\n")
 	}
-	b.WriteString(intros[stage] + "\n\n")
+	intro := intros[stage]
+	if r := task.ReviewCycle; r != nil && stage == lifecycle.Responding {
+		intro = fmt.Sprintf(cycleIntro, r.Title, r.Score, r.TopScore, r.MinScore)
+	}
+	b.WriteString(intro + "\n\n")
 	tracker := cmp.Or(task.Tracker, "Linear")
 	if task.IssueID != "" {
 		fmt.Fprintf(&b, "%s Issue: %s %s\nURL: %s\n", tracker, task.IssueID, task.IssueTitle, task.IssueURL)
@@ -246,5 +290,16 @@ func Prompt(stage lifecycle.Stage, task TaskInfo, skill, extra string) string {
 		contract += " The PR body must contain the line `" + task.Fixes + "`, so that the merge closes the Issue."
 	}
 	b.WriteString("\nContract. When you finish, leave this behind: " + contract + "\n")
+	return b.String()
+}
+
+// reviewPrompt always runs pr-review. The Task's skill and its pr override do not apply.
+func reviewPrompt(task TaskInfo, extra string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "/pr-review %s\n\n%s\n\nReview worktree: %s\nRepo: %s\n", task.PRURL, intros[lifecycle.Reviewing], task.ReviewWorktree, task.Repo)
+	if extra != "" {
+		b.WriteString("\n" + extra + "\n")
+	}
+	b.WriteString("\nContract. " + fmt.Sprintf(reviewContract, task.ReviewWorktree) + "\n")
 	return b.String()
 }

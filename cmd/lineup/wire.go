@@ -38,6 +38,10 @@ func (p rexPort) NewWindow(ctx context.Context, session, label, cwd string, env 
 	return scheduler.Window(w), err
 }
 
+func (p rexPort) Split(ctx context.Context, session, block, cwd string, argv []string) (string, error) {
+	return p.c.Split(ctx, session, block, cwd, argv)
+}
+
 func (p rexPort) CloseWindow(ctx context.Context, session, window string) error {
 	return p.c.CloseWindow(ctx, session, window)
 }
@@ -145,7 +149,7 @@ func (p *githubPort) RepoSlug(ctx context.Context, repoPath string) (string, err
 func (p *githubPort) Poll(ctx context.Context, keys []scheduler.PRKey) (map[scheduler.PRKey]scheduler.PRSnapshot, error) {
 	gk := make([]github.Key, len(keys))
 	for i, k := range keys {
-		gk[i] = github.Key{Repo: k.Repo, Branch: k.Branch}
+		gk[i] = github.Key{Repo: k.Repo, Branch: k.Branch, Bot: k.Bot}
 	}
 	prs, err := p.c.Snapshot(ctx, gk)
 	if err != nil {
@@ -157,7 +161,26 @@ func (p *githubPort) Poll(ctx context.Context, keys []scheduler.PRKey) (map[sche
 		if err != nil {
 			return nil, err
 		}
-		out[scheduler.PRKey{Repo: k.Repo, Branch: k.Branch}] = scheduler.PRSnapshot{Number: pr.Number, URL: pr.URL, Raw: raw}
+		out[scheduler.PRKey{Repo: k.Repo, Branch: k.Branch, Bot: k.Bot}] = scheduler.PRSnapshot{Number: pr.Number, URL: pr.URL, Raw: raw}
+	}
+	return out, nil
+}
+
+func (p *githubPort) ReviewPRs(ctx context.Context, keys []scheduler.ReviewKey) (map[scheduler.ReviewKey]scheduler.ReviewSnapshot, error) {
+	refs := make([]github.PRRef, len(keys))
+	for i, k := range keys {
+		refs[i] = github.PRRef{Repo: k.Repo, Number: k.Number}
+	}
+	prs, err := p.c.ReviewedPRs(ctx, p.viewer, refs)
+	if err != nil {
+		return nil, err
+	}
+	out := map[scheduler.ReviewKey]scheduler.ReviewSnapshot{}
+	for ref, pr := range prs {
+		out[scheduler.ReviewKey{Repo: ref.Repo, Number: ref.Number}] = scheduler.ReviewSnapshot{
+			Repo: pr.Repo, Number: pr.Number, URL: pr.URL, Title: pr.Title, State: pr.State,
+			Fork: pr.Fork, Head: pr.Head, Base: pr.Base, ReviewedAt: pr.ReviewedAt,
+		}
 	}
 	return out, nil
 }
@@ -176,12 +199,16 @@ func (p *githubPort) Signals(prev, cur *scheduler.PRSnapshot) []lifecycle.Signal
 	return github.Signals(decode(prev), decode(cur), p.viewer)
 }
 
-func (p *githubPort) MarkReady(ctx context.Context, repo string, n int) error {
-	return p.c.MarkReady(ctx, repo, n)
-}
-
 func (p *githubPort) Merge(ctx context.Context, repo string, n int) error {
 	return p.c.Merge(ctx, repo, n)
+}
+
+func (p *githubPort) SearchPRs(ctx context.Context, searches []github.Search) (map[string][]github.PullRequest, error) {
+	return p.c.SearchPRs(ctx, p.viewer, searches)
+}
+
+func (p *githubPort) TeamMembers(ctx context.Context, teams []string) (map[string][]string, error) {
+	return p.c.TeamMembers(ctx, teams)
 }
 
 type worktreePort struct{ bin string }
@@ -202,6 +229,15 @@ func (p worktreePort) Remove(ctx context.Context, repo, branch string) error {
 	return worktree.Remove(ctx, p.bin, repo, branch)
 }
 
+func (p worktreePort) AddReview(ctx context.Context, repo string, pr scheduler.ReviewPR) (string, error) {
+	path := worktree.ReviewPath(repo, pr.Number)
+	return path, worktree.AddReview(ctx, repo, path, pr.Number, pr.Base, pr.Head)
+}
+
+func (p worktreePort) RemoveReview(ctx context.Context, repo, path string, pr scheduler.ReviewPR) (bool, error) {
+	return worktree.RemoveReview(ctx, repo, path, pr.Number)
+}
+
 type harnessPort struct {
 	cfg     *config.Global
 	tracker trackerMux
@@ -220,7 +256,12 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 	if err != nil {
 		return nil, nil, err
 	}
-	st := res.Stages[w.Stage]
+	stage := w.Stage
+	if stage == lifecycle.ReviewReady {
+		// The Worker resumes the Reviewing conversation, so it keeps its settings.
+		stage = lifecycle.Reviewing
+	}
+	st := res.Stages[stage]
 	if st.Harness != "claude" {
 		return nil, nil, fmt.Errorf("harness %q is not in the MVP: only claude", st.Harness)
 	}
@@ -228,7 +269,11 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 	if err != nil {
 		return nil, nil, err
 	}
-	info := claude.TaskInfo{Ask: w.Text, PRURL: w.PRURL, Branch: w.Branch, Repo: w.Repo, PR: res.PR}
+	info := claude.TaskInfo{Ask: w.Text, PRURL: w.PRURL, Branch: w.Branch, Repo: w.Repo, PR: res.PR, ReviewCycle: w.ReviewCycle}
+	var addDirs []string
+	if lifecycle.KindReview.Has(w.Stage) {
+		info.ReviewWorktree, addDirs = w.Worktree, []string{w.Worktree}
+	}
 	if w.Issue != nil {
 		info.IssueID, info.IssueTitle, info.IssueURL = w.Issue.Identifier, w.Issue.Title, w.Issue.URL
 		info.Tracker = trackerNames[w.Issue.Tracker()]
@@ -243,7 +288,11 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 	if st.Command != "" {
 		extra = "Run " + st.Command + " first."
 	}
-	argv, env := claude.Command(res.Harnesses[st.Harness], dir, w.Task, st, claude.Prompt(w.Stage, info, st.Skill, extra))
+	prompt := claude.Prompt(w.Stage, info, st.Skill, extra)
+	if prompt == "" && w.Conversation == "" {
+		return nil, nil, fmt.Errorf("%s has no prompt and no conversation to resume", w.Stage)
+	}
+	argv, env := claude.Command(res.Harnesses[st.Harness], dir, st, w.Conversation, w.Name, prompt, addDirs...)
 	return argv, env, nil
 }
 
@@ -477,7 +526,11 @@ func (p configPort) Policy(repo string, overrides map[string]string) (lifecycle.
 func (p configPort) RepoForIssue(is scheduler.Issue) (string, bool) {
 	switch is.Tracker() {
 	case scheduler.KindGitHub:
-		return p.repoForGitHub(is.Identifier)
+		slug, _, err := github.ParseIssueID(is.Identifier)
+		if err != nil {
+			return "", false
+		}
+		return p.RepoForGitHub(slug)
 	case scheduler.KindLocal:
 		if is.RepoHint == "" {
 			return "", false
@@ -496,14 +549,10 @@ func (p configPort) RepoForIssue(is scheduler.Issue) (string, bool) {
 	return "", false
 }
 
-// repoForGitHub finds the checkout whose origin is the Issue's repository:
+// RepoForGitHub finds the checkout whose origin is the repository owner/name:
 // a [[repos]] path first, then a [[repos]] checkout with the repository's
 // name. The name ignores case, as GitHub names do.
-func (p configPort) repoForGitHub(identifier string) (string, bool) {
-	slug, _, err := github.ParseIssueID(identifier)
-	if err != nil {
-		return "", false
-	}
+func (p configPort) RepoForGitHub(slug string) (string, bool) {
 	_, name, _ := strings.Cut(slug, "/")
 	paths := p.cfg.RepoPaths()
 	for _, c := range p.cfg.Checkouts() {
@@ -587,4 +636,38 @@ func boardSources(cfg *config.Global, stateDir string) func(linearOn bool) []boa
 		}
 		return out
 	}
+}
+
+// reviewStores keeps the review tab's cache and tab rank in the state
+// folder. The rank has its own file, apart from the Linear browser's.
+func reviewStores(stateDir string) board.Reviews {
+	cache := github.PRCache{Dir: filepath.Join(stateDir, "cache", "github")}
+	order := config.NewViewOrder(filepath.Join(stateDir, "review_views.json"))
+	return board.Reviews{ReadCache: cache.Read, WriteCache: cache.Write, Order: order.Get, SaveOrder: order.Set}
+}
+
+// reviewViews are the review tabs of the config, after My PRs and Requested.
+func reviewViews(g *config.Global) []board.ReviewView {
+	var out []board.ReviewView
+	for _, v := range g.ReviewViews() {
+		out = append(out, board.ReviewView{Key: "view:" + v.Name, Name: v.Name, Filter: prFilter(github.ViewPRs, v.PRFilter)})
+	}
+	for _, q := range reviewQueues(g) {
+		out = append(out, board.ReviewView{Key: "queue:" + q.Name, Name: "Q: " + q.Name, Filter: q.Filter, Queue: true})
+	}
+	return out
+}
+
+// reviewQueues are the config's queues, as the Scheduler fills them.
+func reviewQueues(g *config.Global) []scheduler.Queue {
+	var out []scheduler.Queue
+	for _, q := range g.ReviewQueues() {
+		out = append(out, scheduler.Queue{Name: q.Name, Filter: prFilter(github.QueuePRs, q.PRFilter), Slots: q.Slots})
+	}
+	return out
+}
+
+func prFilter(base string, f config.PRFilter) github.Filter {
+	return github.Filter{Base: base, Repos: f.Repos, Authors: f.Authors, AuthorTeams: f.AuthorTeams,
+		RequestedTeams: f.RequestedTeams, Labels: f.Labels}
 }

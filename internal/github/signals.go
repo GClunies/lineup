@@ -1,6 +1,7 @@
 package github
 
 import (
+	"slices"
 	"time"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -44,11 +45,14 @@ func Signals(prev, cur *PR, viewer string) []lifecycle.Signal {
 		was = ci(prev.Checks)
 	}
 	now := ci(cur.Checks)
+	// A Task can wait in CI running for a draft to be marked ready, or for
+	// the review bot to score the head, so either change is news.
+	news := prev != nil && (prev.IsDraft != cur.IsDraft || botScore(prev) != botScore(cur))
 	switch {
 	case now == ChecksFailed && (was != ChecksFailed || headChanged):
 		out = append(out, lifecycle.CIFailed{})
-	case now == ChecksPassed && (was != ChecksPassed || headChanged || (prev != nil && prev.IsDraft != cur.IsDraft)):
-		out = append(out, lifecycle.CIPassed{Draft: cur.IsDraft, NeedsReview: needsReview(cur)})
+	case now == ChecksPassed && (was != ChecksPassed || headChanged || news):
+		out = append(out, lifecycle.CIPassed{Draft: cur.IsDraft, NeedsReview: needsReview(cur), Bot: headScore(cur)})
 	}
 
 	if prev == nil {
@@ -68,6 +72,26 @@ func Signals(prev, cur *PR, viewer string) []lifecycle.Signal {
 	return out
 }
 
+// botScore is the review bot's score for the head commit, or -1 when no bot
+// gates the PR or the bot has not reviewed the head.
+func botScore(pr *PR) int {
+	if pr.Bot == "" || pr.BotSummary == nil || pr.BotSummary.Commit != pr.HeadSHA {
+		return -1
+	}
+	return pr.BotSummary.Score
+}
+
+func headScore(pr *PR) *lifecycle.HeadScore {
+	if pr.Bot == "" {
+		return nil
+	}
+	h := &lifecycle.HeadScore{Head: pr.HeadSHA}
+	if n := botScore(pr); n >= 0 {
+		h.Score = &n
+	}
+	return h
+}
+
 func needsReview(pr *PR) bool {
 	if pr.ReviewDecision == "APPROVED" {
 		return false
@@ -76,7 +100,9 @@ func needsReview(pr *PR) bool {
 }
 
 // newReviews returns one Signal per kind, in the order the reviews arrived.
+// The gate owns a review bot's reviews, so they are not news here.
 func newReviews(prev, cur *PR, viewer string) []lifecycle.Signal {
+	bot := ReviewBots[cur.Bot].Logins
 	var seen time.Time
 	for _, r := range prev.LatestReviews {
 		if r.SubmittedAt.After(seen) {
@@ -85,7 +111,7 @@ func newReviews(prev, cur *PR, viewer string) []lifecycle.Signal {
 	}
 	var fresh []Review
 	for _, r := range cur.LatestReviews {
-		if r.SubmittedAt.After(seen) && r.Author != viewer {
+		if r.SubmittedAt.After(seen) && r.Author != viewer && !slices.Contains(bot, r.Author) {
 			fresh = append(fresh, r)
 		}
 	}

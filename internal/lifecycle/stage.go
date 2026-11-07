@@ -15,6 +15,45 @@ const (
 	Responding
 	ReadyToLand
 	Done
+	Reviewing
+	ReviewReady
+)
+
+// Kind is the sort of work that a Task does. A build Task makes the user's own
+// PR. A review Task reviews someone else's PR. Each Kind has its own Stages,
+// and Queued and Done belong to both.
+type Kind int
+
+const (
+	KindBuild Kind = iota
+	KindReview
+)
+
+var kindNames = [...]string{KindBuild: "build", KindReview: "review"}
+
+func (k Kind) String() string { return kindNames[k] }
+
+// Has reports whether a Task of this Kind can be in the Stage.
+func (k Kind) Has(s Stage) bool { return stages[s].kinds&(1<<k) != 0 }
+
+func (k Kind) MarshalText() ([]byte, error) { return []byte(k.String()), nil }
+
+func (k *Kind) UnmarshalText(b []byte) error {
+	for i, name := range kindNames {
+		if name == string(b) {
+			*k = Kind(i)
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown kind %q", b)
+}
+
+// kindSet is a set of Kinds, one bit for each.
+type kindSet uint8
+
+const (
+	build  = kindSet(1 << KindBuild)
+	review = kindSet(1 << KindReview)
 )
 
 type Owner int
@@ -42,15 +81,31 @@ var stages = [...]struct {
 	key   string
 	owner Owner
 	group Group
+	kinds kindSet
+	// resumesWorker marks a Stage whose Worker the user can reopen by
+	// resuming its conversation. Review ready waits for the user's decisions
+	// in that conversation, so a closed tab loses nothing.
+	resumesWorker bool
 }{
-	Queued:      {"Queued", "queued", OwnerUser, GroupQueued},
-	Working:     {"Working", "working", OwnerAgent, GroupWorking},
-	CIRunning:   {"CI running", "ci_running", OwnerCI, GroupWaiting},
-	CIDebug:     {"CI debug", "ci_debug", OwnerAgent, GroupWorking},
-	InReview:    {"In review", "in_review", OwnerReviewers, GroupWaiting},
-	Responding:  {"Responding", "responding", OwnerAgent, GroupWorking},
-	ReadyToLand: {"Ready to land", "ready_to_land", OwnerUser, GroupNeedsYou},
-	Done:        {"Done", "done", OwnerNone, GroupDone},
+	Queued:      {"Queued", "queued", OwnerUser, GroupQueued, build | review, false},
+	Working:     {"Working", "working", OwnerAgent, GroupWorking, build, false},
+	CIRunning:   {"CI running", "ci_running", OwnerCI, GroupWaiting, build, false},
+	CIDebug:     {"CI debug", "ci_debug", OwnerAgent, GroupWorking, build, false},
+	InReview:    {"In review", "in_review", OwnerReviewers, GroupWaiting, build, false},
+	Responding:  {"Responding", "responding", OwnerAgent, GroupWorking, build, false},
+	ReadyToLand: {"Ready to land", "ready_to_land", OwnerUser, GroupNeedsYou, build, false},
+	Done:        {"Done", "done", OwnerNone, GroupDone, build | review, false},
+	Reviewing:   {"Reviewing", "reviewing", OwnerAgent, GroupWorking, review, false},
+	ReviewReady: {"Review ready", "review_ready", OwnerUser, GroupNeedsYou, review, true},
+}
+
+// Stages lists every Stage of every Kind.
+func Stages() []Stage {
+	out := make([]Stage, len(stages))
+	for i := range stages {
+		out[i] = Stage(i)
+	}
+	return out
 }
 
 func (s Stage) String() string { return stages[s].name }
@@ -62,8 +117,13 @@ func (s Stage) Owner() Owner { return stages[s].owner }
 
 func (s Stage) Agent() bool { return stages[s].owner == OwnerAgent }
 
-// Started reports whether the Stage counts toward the WIP cap.
+// Started reports whether a Task in the Stage has started: it counts toward
+// the WIP cap for a build Task, and toward its queue's slots for a review Task.
 func (s Stage) Started() bool { return s != Queued && s != Done }
+
+// Resumable reports whether the user can reopen the Stage's Worker by
+// resuming its conversation.
+func (s Stage) Resumable() bool { return stages[s].resumesWorker }
 
 // MarshalText saves the Stage by its key, so that the store does not depend on
 // the order of the constants.
@@ -100,6 +160,10 @@ const (
 	ReasonStopped     Reason = "stopped"
 	ReasonBudgetSpent Reason = "budget spent"
 	ReasonWorkerLost  Reason = "worker lost"
+	// ReasonDraft is a passing PR that is a draft. lineup never marks a PR
+	// ready, so it waits for the user to.
+	ReasonDraft       Reason = "draft"
+	ReasonNoBotReview Reason = "no bot review"
 )
 
 // Transient reasons clear when the Worker's program status goes back to working.
@@ -116,7 +180,8 @@ func (r Reason) Transient() bool {
 type Outcome string
 
 const (
-	OutcomeNone   Outcome = ""
-	OutcomeMerged Outcome = "merged"
-	OutcomeClosed Outcome = "closed"
+	OutcomeNone     Outcome = ""
+	OutcomeMerged   Outcome = "merged"
+	OutcomeClosed   Outcome = "closed"
+	OutcomeReviewed Outcome = "reviewed"
 )

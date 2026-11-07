@@ -22,14 +22,21 @@ var (
 	bad     = lipgloss.NewStyle().Foreground(pink)
 	selRow  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e3f1ef"))
 	headRow = lipgloss.NewStyle().Foreground(teal).Bold(true)
+	colHead = lipgloss.NewStyle().Foreground(gray).Bold(true)
 )
 
 var groupMark = map[string]string{"Needs you": "●", "Working": "◐", "Waiting": "◷"}
 
 func (m Model) View() string {
 	if m.mode == modeHelp {
-		if m.view == viewTracker {
+		switch m.view {
+		case viewTracker:
 			return trackerHelp
+		case viewReview:
+			if m.rv.curTab().Tasks {
+				return reviewTasksHelp
+			}
+			return reviewHelp
 		}
 		return boardHelp
 	}
@@ -37,13 +44,12 @@ func (m Model) View() string {
 	switch {
 	case m.view == viewTracker:
 		body = m.trackerBody()
+	case m.view == viewReview:
+		body = m.reviewBody()
 	case m.detail:
 		body = m.vp.View()
-	case m.preview:
-		lw := m.width * 55 / 100
-		body = lipgloss.JoinHorizontal(lipgloss.Top, m.rows(lw), m.previewPane(m.width-lw))
 	default:
-		body = m.rows(m.width)
+		body = m.taskBody(max(m.height-3, 1))
 	}
 	lines := strings.Split(body, "\n")
 	h := max(m.height-3, 1)
@@ -74,12 +80,18 @@ func (m Model) header() string {
 	for _, t := range m.tasks {
 		count[t.Group]++
 	}
-	s := fmt.Sprintf(" %s  WIP %d/%d", bold.Render("lineup"), m.board.Started, m.board.Cap)
-	if m.board.OverCap > 0 {
-		s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
+	s := " " + bold.Render("lineup")
+	if m.kind == lifecycle.KindBuild {
+		s += fmt.Sprintf("  WIP %d/%d", m.board.Started, m.board.Cap)
+		if m.board.OverCap > 0 {
+			s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
+		}
 	}
 	s += fmt.Sprintf("   ●%d need you   ◐%d working   ◷%d waiting   %d queued",
 		count["Needs you"], count["Working"], count["Waiting"], count["Queued"])
+	if m.kind == lifecycle.KindReview && m.board.ReviewsPaused {
+		s += "   " + bad.Render("reviews paused")
+	}
 	if !m.online {
 		s += "   " + bad.Render("scheduler offline, showing cache: run lineup restart")
 	}
@@ -90,6 +102,9 @@ func (m Model) footer() string {
 	var s string
 	if m.view == viewTracker && m.mode == modeNormal {
 		return ansi.Truncate(m.trackerFooter(), m.width, "…")
+	}
+	if m.view == viewReview && m.mode == modeNormal {
+		return ansi.Truncate(m.reviewFooter(), m.width, "…")
 	}
 	switch m.mode {
 	case modeConfirm:
@@ -129,11 +144,17 @@ func hintBar(width int, hints []hint) string {
 
 // boardHints lists the keys for the selected Task, most useful first.
 func (m Model) boardHints() []hint {
-	tail := []hint{{"z", "agent"}, {"q", "quit"}, {"?", "all keys"}}
+	tail := []hint{{"z", "agent"}, {"R", "refresh now"}, {"q", "quit"}, {"?", "all keys"}}
+	if m.view == viewReview {
+		tail = append([]hint{{"tab", "next view"}, {"< >", "move the tab"}}, tail...)
+	}
 	if m.detail {
 		return []hint{{"f", "back"}, {"j/k", "scroll"}, {"?", "all keys"}}
 	}
 	t, ok := m.current()
+	if !ok && m.kind == lifecycle.KindReview {
+		return append([]hint{{"tab", "find a PR to review"}}, tail...)
+	}
 	if !ok {
 		return append([]hint{{"plan tab", "start an Issue"}}, tail...)
 	}
@@ -144,8 +165,11 @@ func (m Model) boardHints() []hint {
 	if t.Group == lifecycle.GroupQueued.String() {
 		hs = append(hs, hint{"s", "start"})
 	}
-	if t.Live {
+	switch {
+	case t.Live:
 		hs = append(hs, hint{"enter", "go to the Worker"}, hint{"p", "preview"})
+	case reopens(t):
+		hs = append(hs, hint{"enter", "reopen the Worker"})
 	}
 	switch {
 	case t.PRURL != "":
@@ -163,8 +187,17 @@ func (m Model) boardHints() []hint {
 	return append(hs, tail...)
 }
 
-func (m Model) previewPane(w int) string {
-	h := max(m.height-3, 1)
+// taskBody is the Task rows, and the Worker's screen beside them while the
+// preview is on. h is the height of the body.
+func (m Model) taskBody(h int) string {
+	if !m.preview {
+		return m.rows(m.width)
+	}
+	lw := m.width * 55 / 100
+	return lipgloss.JoinHorizontal(lipgloss.Top, m.rows(lw), m.previewPane(m.width-lw, h))
+}
+
+func (m Model) previewPane(w, h int) string {
 	lines := strings.Split(strings.TrimRight(m.previewTxt, "\n"), "\n")
 	if len(lines) > h {
 		lines = lines[len(lines)-h:]
@@ -244,9 +277,14 @@ func (m Model) age(t scheduler.TaskView) string {
 	}
 	now := m.opts.Now()
 	d := now.Sub(t.Since)
-	switch {
-	case t.Group == "Done" && t.Since.Local().YearDay() == now.Local().YearDay() && d < 24*time.Hour:
+	if t.Group == "Done" && t.Since.Local().YearDay() == now.Local().YearDay() && d < 24*time.Hour {
 		return "today"
+	}
+	return ago(d)
+}
+
+func ago(d time.Duration) string {
+	switch {
 	case d < time.Minute:
 		return "now"
 	case d < time.Hour:
@@ -268,6 +306,7 @@ const boardHelp = `
    x        close the Task, or archive a Done Task, after y/n
    s        start a Queued Task
    o        open the PR or the Issue
+   R        refresh now: poll GitHub for every started Task
    z        zoom the agent pane
    ?        this help      q  quit
 
@@ -293,6 +332,7 @@ const trackerHelp = `
    A        assign the Issue to you
    n        add an Issue to this Project or team view
    o        open the Issue in the browser
+   R        refresh what is on screen now
    ?        this help      q  quit
 
  press any key to go back

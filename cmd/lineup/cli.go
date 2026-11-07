@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -20,6 +21,8 @@ import (
 var clientCommands = map[string]func(c scheduler.Client, args []string, out io.Writer) error{
 	"add":     cmdAdd,
 	"start":   cmdStart,
+	"review":  cmdReview,
+	"reviews": cmdReviews,
 	"ls":      cmdLs,
 	"watch":   cmdWatch,
 	"show":    cmdShow,
@@ -110,6 +113,100 @@ func cmdStart(c scheduler.Client, args []string, out io.Writer) error {
 	return nil
 }
 
+// cmdReview adds and starts a review Task for the PR. If the PR has an open
+// review Task, it adds nothing. It starts that Task if it is Queued, runs it
+// again if it stopped for good, and otherwise focuses its tab.
+func cmdReview(c scheduler.Client, args []string, out io.Writer) error {
+	if len(args) != 1 {
+		return fmt.Errorf("%w: lineup review <PR URL>", errUsage)
+	}
+	var res scheduler.ReviewResult
+	if err := c.Do(scheduler.Request{Op: "review", URL: args[0]}, &res); err != nil {
+		return err
+	}
+	switch res.Action {
+	case scheduler.ReviewAdded:
+		fmt.Fprintf(out, "%s reviewing in %s: %s\n", res.ID, res.Repo, res.Title)
+		return nil
+	case scheduler.ReviewStarted, scheduler.ReviewRestarted, scheduler.ReviewReopened:
+		fmt.Fprintf(out, "%s %s: %s\n", res.ID, res.Action, res.Title)
+		return nil
+	}
+	fmt.Fprintf(out, "%s is already open (%s): %s\n", res.ID, res.Stage, res.Title)
+	if err := c.Do(scheduler.Request{Op: "focus", Task: res.ID}, nil); err != nil {
+		fmt.Fprintf(out, "Not focused: %v\n", err)
+	}
+	return nil
+}
+
+// cmdReviews lists each review queue with its started reviews and the PRs
+// that wait, or pauses or resumes every queue fill.
+func cmdReviews(c scheduler.Client, args []string, out io.Writer) error {
+	var asJSON bool
+	fs, err := parse("reviews", "[--json] | pause | resume", args, func(fs *flag.FlagSet) { fs.BoolVar(&asJSON, "json", false, "print JSON") })
+	if err != nil {
+		return err
+	}
+	switch {
+	case fs.NArg() == 0:
+	case fs.NArg() == 1 && !asJSON && (fs.Arg(0) == "pause" || fs.Arg(0) == "resume"):
+		if err := c.Do(scheduler.Request{Op: "reviews-" + fs.Arg(0)}, nil); err != nil {
+			return err
+		}
+		if fs.Arg(0) == "pause" {
+			fmt.Fprintln(out, "Review queues paused. Started reviews go on, and no fill starts another.")
+		} else {
+			fmt.Fprintln(out, "Review queues resumed.")
+		}
+		return nil
+	default:
+		fs.Usage()
+		return errUsage
+	}
+	var v scheduler.ReviewsView
+	if err := c.Do(scheduler.Request{Op: "reviews"}, &v); err != nil {
+		return err
+	}
+	if asJSON {
+		return json.NewEncoder(out).Encode(v)
+	}
+	if len(v.Queues) == 0 {
+		fmt.Fprintln(out, "No review queues. Add a [[review.queues]] entry to the config.")
+		return nil
+	}
+	if v.Paused {
+		fmt.Fprintln(out, "Reviews paused: no fill starts a review until lineup reviews resume.")
+	}
+	for _, q := range v.Queues {
+		fmt.Fprintf(out, "Q: %s  %d/%d started\n", q.Name, len(q.Started), q.Slots)
+		tw := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
+		for _, t := range q.Started {
+			fmt.Fprintf(tw, "  %s\t%s\t%s\n", t.ID, t.Stage, t.Title)
+		}
+		for i, c := range q.Ranked {
+			why := ""
+			switch {
+			case c.Rereview:
+				why = "re-review"
+			case c.ByName:
+				why = "by name"
+			}
+			_, name, _ := strings.Cut(c.PR.Repo, "/")
+			fmt.Fprintf(tw, "  %d\t%s\t%s#%d %s\t%s\n", i+1, why, name, c.PR.Number, c.PR.Title, c.PR.Author)
+		}
+		if len(q.Ranked) == 0 {
+			fmt.Fprintln(tw, "  no PR waits")
+		}
+		if err := tw.Flush(); err != nil {
+			return err
+		}
+	}
+	for _, s := range v.Skipped {
+		fmt.Fprintln(out, "Skipped: "+s)
+	}
+	return nil
+}
+
 func cmdLs(c scheduler.Client, args []string, out io.Writer) error {
 	var asJSON bool
 	if _, err := parse("ls", "[--json]", args, func(fs *flag.FlagSet) { fs.BoolVar(&asJSON, "json", false, "print JSON") }); err != nil {
@@ -151,7 +248,11 @@ func cmdShow(c scheduler.Client, args []string, out io.Writer) error {
 	if asJSON {
 		return json.NewEncoder(out).Encode(d)
 	}
-	fmt.Fprintf(out, "%s  %s\n%s in %s (%s)\n", d.ID, d.Title, d.Stage, d.Repo, d.Branch)
+	fmt.Fprintf(out, "%s  %s\n%s in %s", d.ID, d.Title, d.Stage, d.Repo)
+	if d.Branch != "" { // a review Task has no branch
+		fmt.Fprintf(out, " (%s)", d.Branch)
+	}
+	fmt.Fprintln(out)
 	if d.Note != "" {
 		fmt.Fprintln(out, d.Note)
 	}
@@ -215,11 +316,7 @@ func stateDir() string {
 	if d := os.Getenv("LINEUP_STATE_DIR"); d != "" {
 		return d
 	}
-	if d := os.Getenv("XDG_STATE_HOME"); d != "" {
-		return d + "/lineup"
-	}
-	home, _ := os.UserHomeDir()
-	return home + "/.local/state/lineup"
+	return filepath.Join(xdgStateHome(), "lineup")
 }
 
 func socketPath() string { return stateDir() + "/lineup.sock" }
