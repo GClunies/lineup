@@ -159,13 +159,16 @@ type agentTab struct {
 	compose func(role []byte, settings string) ([]byte, string, error)
 }
 
-// agentTabs are in Hub tab order. The first is the active tab of a new Hub.
+// agentTabs are in Hub tab order.
 var agentTabs = []agentTab{
-	{"work", "BOARD", "ORCHESTRATOR", []string{"board"}, orchestratorRole, orchestratorSettings, "#1b2733", watchPrompt, nil},
-	{"plan", "LINEAR", "PLANNER", []string{"board", "--linear"}, plannerRole, plannerSettings, "#2a2233", "", composePlanner},
-	{"review", "REVIEWS", "REVIEWER", []string{"board", "--review"}, reviewerRole, reviewerSettings, "#1f2b24", "", nil},
 	{"assist", "", "ASSIST", nil, nil, "", "#262626", "", nil},
+	{"plan", "LINEAR", "PLANNER", []string{"board", "--linear"}, plannerRole, plannerSettings, "#2a2233", "", composePlanner},
+	{"work", "BOARD", "ORCHESTRATOR", []string{"board"}, orchestratorRole, orchestratorSettings, "#1b2733", watchPrompt, nil},
+	{"review", "REVIEWS", "REVIEWER", []string{"board", "--review"}, reviewerRole, reviewerSettings, "#1f2b24", "", nil},
 }
+
+// activeTab is the tab that a new Hub opens on.
+const activeTab = "work"
 
 // formerLabels are the labels that a Hub tab had before a rename, by its
 // label now.
@@ -375,12 +378,13 @@ func openHub() error {
 			}
 			windows[t.window] = w
 		}
-		if _, ok := windows[t.window]; ok {
-			continue
+		if _, ok := windows[t.window]; !ok {
+			if err := openAgentTab(t, self, claudeBin, t.window == activeTab); err != nil {
+				return err
+			}
 		}
-		if err := openAgentTab(t, self, claudeBin, i == 0); err != nil {
-			return err
-		}
+		// Each run moves every tab to its place, so a Hub from before a new
+		// tab order takes the new order too.
 		if _, err := rexRun("window", "move", "-s", hubSession, t.window, "--index", strconv.Itoa(i+1)); err != nil {
 			return err
 		}
