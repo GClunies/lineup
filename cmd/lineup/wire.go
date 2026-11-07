@@ -243,7 +243,7 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 	if st.Command != "" {
 		extra = "Run " + st.Command + " first."
 	}
-	argv, env := claude.Command(res.Harnesses[st.Harness], dir, st, claude.Prompt(w.Stage, info, st.Skill, extra))
+	argv, env := claude.Command(res.Harnesses[st.Harness], dir, w.Task, st, claude.Prompt(w.Stage, info, st.Skill, extra))
 	return argv, env, nil
 }
 

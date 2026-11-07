@@ -226,6 +226,9 @@ func (s *Scheduler) toWorker(ctx context.Context, req Request) (any, error) {
 
 var notSlug = regexp.MustCompile(`[^a-z0-9]+`)
 
+// prLink finds a GitHub pull request in a review Task's text and captures its number.
+var prLink = regexp.MustCompile(`github\.com/[^/\s]+/[^/\s]+/pull/(\d+)`)
+
 func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 	r := &Record{Text: strings.TrimSpace(req.Text), CreatedAt: s.now(), StageSince: s.now()}
 	var err error
@@ -265,12 +268,16 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 	var v TaskView
 	err = s.withLoop(func() error {
 		if r.ID == "" {
-			n := 1
-			if cur, _ := s.d.Store.Setting("next_id"); cur != "" {
-				n, _ = strconv.Atoi(cur)
+			if m := prLink.FindStringSubmatch(r.Text); m != nil {
+				r.ID = "pr-" + m[1]
+			} else {
+				n := 1
+				if cur, _ := s.d.Store.Setting("next_id"); cur != "" {
+					n, _ = strconv.Atoi(cur)
+				}
+				s.d.Store.SetSetting("next_id", strconv.Itoa(n+1))
+				r.ID = fmt.Sprintf("adhoc-%d", n)
 			}
-			s.d.Store.SetSetting("next_id", strconv.Itoa(n+1))
-			r.ID = fmt.Sprintf("B-%d", n)
 			slug := strings.Trim(notSlug.ReplaceAllString(strings.ToLower(r.Title), "-"), "-")
 			if len(slug) > 40 {
 				slug = strings.Trim(slug[:40], "-")

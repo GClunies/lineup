@@ -371,7 +371,7 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 		return
 	}
 	argv, env, err := s.d.Harness.Command(ctx, WorkerSpec{
-		Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
+		Task: r.ID, Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
 		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
 	})
 	if err != nil {

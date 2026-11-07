@@ -133,7 +133,8 @@ Rex server
 ├── session "web"
 │   └── tab "WEB-12 …"
 └── session "ad hoc"                  (every ad hoc Task, whatever its Repo)
-    └── tab "B-9 Evaluate the ADR …"
+    └── tab "adhoc-9 Evaluate the ADR …"
+    └── tab "pr-34 https://github.com/acme/web/pull/34"
 ```
 
 The Scheduler has no tab. launchd runs `lineup serve` as a user agent, and the log is `~/.local/state/lineup/scheduler.log`.
@@ -206,6 +207,8 @@ This sequence runs in the background. The Board shows only the Task as it change
    - The adapter takes Claude's own lock, the folder `.claude.json.lock`, and replaces the file with one rename. A lock folder older than 10 s is abandoned.
    - The Worker command sets `CLAUDE_CONFIG_DIR` itself, because Rex starts it through a login shell that runs no direnv.
 7. The Scheduler starts the Worker from the absolute path of the Harness, with the Stage's model, effort, prompt, and contract.
+   - The Worker command passes `--name <Task ID> --remote-control <Task ID>`. The user then finds each Worker by its Task ID on claude.ai and on their phone. The Orchestrator and the Planner get the same flags, with the names `orchestrator` and `planner`.
+   - `--remote-control` takes an optional value, so the command always gives it the name. Without a value, it takes the prompt as the name.
 
 Each agent Stage after Working starts a fresh Worker in the same tab and worktree. The Worker gets its context from the Issue and the PR.
 

@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -186,6 +187,9 @@ type fakeHarness struct{}
 
 func (fakeHarness) Prepare(context.Context, string, string) error { return nil }
 func (fakeHarness) Command(_ context.Context, w WorkerSpec) ([]string, map[string]string, error) {
+	if w.Task == "" {
+		return nil, nil, errors.New("WorkerSpec has no Task ID to name the session")
+	}
 	return []string{"claude", w.Stage.Key()}, nil, nil
 }
 
@@ -369,10 +373,10 @@ func TestWIPCapFullFailsStart(t *testing.T) {
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	if _, err := h.s.Handle(context.Background(), Request{Op: "start", Task: "B-1"}); err == nil || err.Error() != "wip cap full" {
+	if _, err := h.s.Handle(context.Background(), Request{Op: "start", Task: "adhoc-1"}); err == nil || err.Error() != "wip cap full" {
 		t.Fatalf("start over cap: err = %v, want wip cap full", err)
 	}
-	h.do(Request{Op: "start", Task: "B-1", OverCap: true})
+	h.do(Request{Op: "start", Task: "adhoc-1", OverCap: true})
 	v := h.do(Request{Op: "ls"}).(BoardView)
 	if v.Started != 2 || v.OverCap != 1 || v.Cap != 1 {
 		t.Fatalf("board = %d started, %d over, cap %d", v.Started, v.OverCap, v.Cap)
@@ -548,7 +552,7 @@ func TestTaskWithNoIssueOpensInTheAdHocSession(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "B-1"})
+	h.do(Request{Op: "start", Task: "adhoc-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
 
 	sessions := map[string]string{}
@@ -560,19 +564,37 @@ func TestTaskWithNoIssueOpensInTheAdHocSession(t *testing.T) {
 		}
 		return len(sessions) == 2
 	})
-	if s := sessions["B-1 Fix map tooltip"]; s != "session:ad hoc" {
+	if s := sessions["adhoc-1 Fix map tooltip"]; s != "session:ad hoc" {
 		t.Errorf("text Task session = %q, want session:ad hoc (all: %v)", s, sessions)
 	}
 	if s := sessions["ENG-1 Add billing model"]; s != "session:data" {
 		t.Errorf("Issue Task session = %q, want session:data", s)
 	}
-	if v := h.task("B-1"); v.Repo != "web" {
+	if v := h.task("adhoc-1"); v.Repo != "web" {
 		t.Errorf("text Task Repo column = %q, want web", v.Repo)
 	}
 }
 
+func TestTaskIDsNameTheWork(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	for _, c := range []struct {
+		req  Request
+		want string
+	}{
+		{Request{Op: "add", Issue: "ENG-1"}, "ENG-1"},
+		{Request{Op: "add", Repo: "web", Text: "Fix map tooltip"}, "adhoc-1"},
+		{Request{Op: "add", Repo: "web", Text: "https://github.com/o/web/pull/34"}, "pr-34"},
+		{Request{Op: "add", Repo: "web", Text: "Look at https://github.com/o/web/pull/7/files first"}, "pr-7"},
+		{Request{Op: "add", Repo: "web", Text: "Tidy the README"}, "adhoc-2"},
+	} {
+		if got := h.do(c.req).(TaskView).ID; got != c.want {
+			t.Errorf("add %q%q: ID = %q, want %q", c.req.Issue, c.req.Text, got, c.want)
+		}
+	}
+}
+
 func TestARecordFromBeforeRepoLabelShowsItsSession(t *testing.T) {
-	r := &Record{Task: lifecycle.Task{ID: "B-1"}, Session: "backend"}
+	r := &Record{Task: lifecycle.Task{ID: "adhoc-1"}, Session: "backend"}
 	if got := r.view().Repo; got != "backend" {
 		t.Errorf("Repo = %q, want backend", got)
 	}
