@@ -1,0 +1,67 @@
+internal/github/reviewbot.go
+  s_52d218b5914bff::t_03d11932f4922b 1-57
+GLOSSARY.md
+  s_52d218b5914bff::t_7fcd3bdb804f87 92,103-110
+cmd/lineup/wire.go
+  s_52d218b5914bff::t_c0646d8f69dc75 152,164,272
+docs/adr/0013-a-review-bot-gates-ci-passed.md
+  s_52d218b5914bff::t_bdc34df41221c3 1-17
+docs/spec/mvp.md
+  s_52d218b5914bff::t_c17ff08eb3c6a9 86-88,102-115,126,138-140,212,214,273-280,294-303,320-322,532,538,555-559
+internal/config/config.go
+  s_52d218b5914bff::t_d6aa7558b3f619 6,10,20,32,44-46,54,63-70,84,380-384,397-443,512,517-521,538-541
+internal/config/config_test.go
+  s_52d218b5914bff::t_b0c8479916effc 466-528
+internal/github/client.go
+  s_52d218b5914bff::t_7ac20ed811263f 18-19,53-56,100-104,107,109-113,115,127,159-163,216-218,235-240
+internal/github/github_test.go
+  s_52d218b5914bff::t_221bc15b8cd4c9 44,251-258,417-498
+internal/github/signals.go
+  s_52d218b5914bff::t_5672ef2a853d1c 4,48-50,54-55,75-94,103,105,114
+internal/github/testdata/review_bot.json
+  s_52d218b5914bff::t_73ad777aa5197e 1
+internal/harness/claude/claude.go
+  s_52d218b5914bff::t_2dad895154271a 206-208,233-237,260-264
+internal/harness/claude/claude_test.go
+  s_52d218b5914bff::t_42be4236f8cfc4 316-336
+internal/lifecycle/board.go
+  s_52d218b5914bff::t_62089e491de8ee 28-30,36-55,72-85,290-300,322-326,359-369,376,393-394,398
+internal/lifecycle/board_test.go
+  s_52d218b5914bff::t_cd6cf6acffe5df 311-414
+internal/lifecycle/property_test.go
+  s_52d218b5914bff::t_0818c9d565ce66 6,21-22,31,62-65,76-83,87-91,231-270
+internal/lifecycle/signal.go
+  s_52d218b5914bff::t_955f981f0ea0fc 45,49-51,54-64,102,126
+internal/lifecycle/stage.go
+  s_52d218b5914bff::t_53e17ff6890a1e 165-166
+internal/lifecycle/testdata/rapid/TestAGatedTaskLandsOnlyWithAPassingHeadScore/TestAGatedTaskLandsOnlyWithAPassingHeadScore-20261107102335-32762.fail
+  s_52d218b5914bff::t_5bbd5c6f7929ea 1-119
+internal/lifecycle/testdata/rapid/TestReviewCyclesNeverPassTheirBudget/TestReviewCyclesNeverPassTheirBudget-20261107102340-32794.fail
+  s_52d218b5914bff::t_000ff80a9b446c 1-151
+internal/scheduler/ports.go
+  s_52d218b5914bff::t_85e286539c97b4 37-39,116-118
+internal/scheduler/record.go
+  s_52d218b5914bff::t_66a885d500a8a6 168-170,175-177
+internal/scheduler/review_test.go
+  s_52d218b5914bff::t_7d403799bc8530 874
+internal/scheduler/scheduler.go
+  s_52d218b5914bff::t_fcedbb00b26ef1 169,175-177,411,654-658,684-686,691-697
+internal/scheduler/scheduler_test.go
+  s_52d218b5914bff::t_a54fe18af3aeb5 209-210,213-214,273,473,546,634,823-923
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f4e8279f73fcbef7ac942e3698956acfe1b4205a",
+  "prompts": {},
+  "sessions": {
+    "s_52d218b5914bff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75ce80f8-a5d7-4eea-a8fd-64026a16ec4d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
