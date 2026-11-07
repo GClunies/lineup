@@ -145,6 +145,13 @@ func lock(dir string) (func(), error) {
 	}
 }
 
+// SessionFlags name the session and turn on Remote Control, so that the user
+// finds it by name on claude.ai and on their phone. --remote-control takes an
+// optional value, so it always gets the name: alone, it would take the prompt.
+func SessionFlags(name string) []string {
+	return []string{"--name", name, "--remote-control", name}
+}
+
 // Command builds the argv and environment for an interactive Worker. A
 // Worker with a prompt starts a new conversation, with the prompt as its first
 // message and conversation as its ID when that is not "". A Worker with no
@@ -167,7 +174,7 @@ func Command(bin, configDir string, st config.StageConfig, conversation, name, p
 		argv = append(argv, "--session-id", conversation)
 	}
 	if name != "" {
-		argv = append(argv, "--name", name)
+		argv = append(argv, SessionFlags(name)...)
 	}
 	for _, d := range addDirs {
 		// --add-dir takes many values, so a separate value would also take the prompt.

@@ -145,7 +145,9 @@ const reviewerSettings = `{
 }
 `
 
-// agentTab is one Hub tab: a Board view on top and a Claude agent below.
+// agentTab is one Hub tab: a Board view on top and a Claude agent below. A
+// tab with no Board and no role holds only a general agent, in the folder
+// that assist_dir names.
 type agentTab struct {
 	window, view, agent string // Rex window label, top block label, agent block label
 	boardArgs           []string
@@ -162,6 +164,7 @@ var agentTabs = []agentTab{
 	{"work", "BOARD", "ORCHESTRATOR", []string{"board"}, orchestratorRole, orchestratorSettings, "#1b2733", watchPrompt, nil},
 	{"plan", "LINEAR", "PLANNER", []string{"board", "--linear"}, plannerRole, plannerSettings, "#2a2233", "", composePlanner},
 	{"review", "REVIEWS", "REVIEWER", []string{"board", "--review"}, reviewerRole, reviewerSettings, "#1f2b24", "", nil},
+	{"assist", "", "ASSIST", nil, nil, "", "#262626", "", nil},
 }
 
 // formerLabels are the labels that a Hub tab had before a rename, by its
@@ -192,8 +195,17 @@ func rexRun(args ...string) ([]byte, error) {
 	return out, nil
 }
 
-// prepareAgent writes the agent's folder and trusts it for Claude.
+// prepareAgent writes the agent's folder and trusts it for Claude. An agent
+// with no role works in assist_dir and writes nothing there.
 func prepareAgent(t agentTab) (string, error) {
+	if t.role == nil {
+		cfg, err := config.Load(configPath())
+		if err != nil {
+			return "", err
+		}
+		dir := cfg.AssistDir()
+		return dir, claude.Trust(os.Getenv("CLAUDE_CONFIG_DIR"), dir)
+	}
 	dir := filepath.Join(stateDir(), strings.ToLower(t.agent))
 	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o700); err != nil {
 		return "", err
@@ -385,33 +397,45 @@ func openAgentTab(t agentTab, self, claudeBin string, focus bool) error {
 	if err != nil {
 		return err
 	}
-	out, err := rexRun(append([]string{"window", "new", "-s", hubSession, t.window, "--focus=" + strconv.FormatBool(focus), "--json", "--", self}, t.boardArgs...)...)
-	if err != nil {
-		return err
-	}
-	top, err := firstBlock(out)
-	if err != nil {
-		return err
-	}
-	if _, err := rexRun("block", "rename", "-s", hubSession, top, t.view); err != nil {
-		return err
-	}
-	args := append([]string{"split", "-s", hubSession, "-b", top, "--split", "below",
-		"--ratio", fmt.Sprint(agentRows), "--focus=false", "--json", "-c", dir, "--"},
-		agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin)...)
-	if hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {
-		args = append(args, "--continue")
+	cmd := agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, "lineup-"+t.window)
+	// The assist folder holds the user's own conversations, so the assist
+	// agent never continues one.
+	if t.role != nil && hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {
+		cmd = append(cmd, "--continue")
 	}
 	if t.prompt != "" {
-		args = append(args, t.prompt)
+		cmd = append(cmd, t.prompt)
 	}
-	split, err := rexRun(args...)
-	if err != nil {
-		return err
-	}
-	agent, err := firstBlock(split)
-	if err != nil {
-		return err
+	newWindow := []string{"window", "new", "-s", hubSession, t.window, "--focus=" + strconv.FormatBool(focus), "--json"}
+	var agent string
+	if t.boardArgs == nil {
+		out, err := rexRun(slices.Concat(newWindow, []string{"-c", dir, "--"}, cmd)...)
+		if err != nil {
+			return err
+		}
+		if agent, err = firstBlock(out); err != nil {
+			return err
+		}
+	} else {
+		out, err := rexRun(slices.Concat(newWindow, []string{"--", self}, t.boardArgs)...)
+		if err != nil {
+			return err
+		}
+		top, err := firstBlock(out)
+		if err != nil {
+			return err
+		}
+		if _, err := rexRun("block", "rename", "-s", hubSession, top, t.view); err != nil {
+			return err
+		}
+		split, err := rexRun(slices.Concat([]string{"split", "-s", hubSession, "-b", top, "--split", "below",
+			"--ratio", fmt.Sprint(agentRows), "--focus=false", "--json", "-c", dir, "--"}, cmd)...)
+		if err != nil {
+			return err
+		}
+		if agent, err = firstBlock(split); err != nil {
+			return err
+		}
 	}
 	if _, err := rexRun("block", "rename", "-s", hubSession, agent, t.agent); err != nil {
 		return err
@@ -424,11 +448,12 @@ func openAgentTab(t agentTab, self, claudeBin string, focus bool) error {
 // agentArgv runs Claude on the profile of the shell that opened the Hub. An
 // empty CLAUDE_CONFIG_DIR is not the default profile: Claude reads it as the
 // working folder, so the default profile unsets the variable.
-func agentArgv(configDir, claudeBin string) []string {
+func agentArgv(configDir, claudeBin, name string) []string {
+	env := []string{"env", "CLAUDE_CONFIG_DIR=" + configDir}
 	if configDir == "" {
-		return []string{"env", "-u", "CLAUDE_CONFIG_DIR", claudeBin}
+		env = []string{"env", "-u", "CLAUDE_CONFIG_DIR"}
 	}
-	return []string{"env", "CLAUDE_CONFIG_DIR=" + configDir, claudeBin}
+	return slices.Concat(env, []string{claudeBin}, claude.SessionFlags(name))
 }
 
 // hasConversation reports whether Claude has a conversation for dir to

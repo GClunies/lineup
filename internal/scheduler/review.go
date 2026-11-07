@@ -172,6 +172,18 @@ type reviewAdd struct {
 	Queue  string
 }
 
+// reviewID names a review Task after its PR number. The caller has found no
+// open review of the PR, so a live Task with the ID reviews another
+// repository's PR, and the ID then adds the repository's name.
+func (s *Scheduler) reviewID(pr ReviewPR) string {
+	id := fmt.Sprintf("pr-%d", pr.Number)
+	if o, ok := s.recs[id]; ok && o.Stage != lifecycle.Done {
+		_, name, _ := strings.Cut(pr.Repo, "/")
+		id += "-" + name
+	}
+	return id
+}
+
 // addReview puts a review Task on the Board and starts it. Only the loop
 // calls it.
 func (s *Scheduler) addReview(a reviewAdd) (*Record, error) {
@@ -180,7 +192,7 @@ func (s *Scheduler) addReview(a reviewAdd) (*Record, error) {
 		Title: fmt.Sprintf("%s#%d %s", name, a.PR.Number, a.Title), Repo: a.Repo, RepoSlug: a.PR.Repo, Session: reviewSession,
 		Review: &a.PR, CreatedAt: s.now(), StageSince: s.now(),
 	}
-	r.ID = s.nextID("R")
+	r.ID = s.reviewID(a.PR)
 	r.RepoLabel = sessionLabel(r.Repo, s.repos())
 	r.Task = *s.board.AddReview(r.ID, a.Queue, a.Policy)
 	s.board.Tasks[r.ID] = &r.Task
