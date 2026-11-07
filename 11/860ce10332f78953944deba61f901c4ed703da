@@ -1,0 +1,47 @@
+docs/spec/mvp.md
+  s_52d218b5914bff::t_86a8cae43e70e6 136-137,210-211
+GLOSSARY.md
+  s_52d218b5914bff::t_86a8cae43e70e6 38,41-43
+  s_52d218b5914bff::t_6fc76ae2e97431 44
+internal/harness/claude/claude_test.go
+  s_52d218b5914bff::t_60d2d0ee6ee893 179-180,184
+internal/scheduler/scheduler.go
+  s_52d218b5914bff::t_df06ee585fb9e1 374
+cmd/lineup/hub.go
+  s_52d218b5914bff::t_22b1f9a941b747 332
+  s_52d218b5914bff::t_a829c3c310583c 358-359,361,363
+internal/harness/claude/claude.go
+  s_52d218b5914bff::t_f9bd77ea77a95b 167-173
+  s_52d218b5914bff::t_6de7af18d099c8 151-152
+cmd/lineup/wire.go
+  s_52d218b5914bff::t_1c6a4f8f435ffa 246
+cmd/lineup/hub_test.go
+  s_52d218b5914bff::t_60d2d0ee6ee893 48,51
+internal/scheduler/api.go
+  s_52d218b5914bff::t_6b06bf072e6026 229-231
+  s_52d218b5914bff::t_82008c19adb339 271-279
+internal/scheduler/scheduler_test.go
+  s_52d218b5914bff::t_b0f5a35c6f8252 6,578-592
+  s_52d218b5914bff::t_60d2d0ee6ee893 190-192,376,379,555,567,573,593,597
+  s_52d218b5914bff::t_9f44622c0eb671 594-595
+cmd/lineup/orchestrator/CLAUDE.md
+  s_52d218b5914bff::t_86a8cae43e70e6 22,37
+internal/scheduler/ports.go
+  s_52d218b5914bff::t_62ee6ca72b16bd 61-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "11860ce10332f78953944deba61f901c4ed703da",
+  "prompts": {},
+  "sessions": {
+    "s_52d218b5914bff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75ce80f8-a5d7-4eea-a8fd-64026a16ec4d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
