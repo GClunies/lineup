@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gclunies/lineup/internal/lifecycle"
 )
 
 type Key struct {
@@ -54,6 +56,15 @@ type PR struct {
 	// summary comment, or nil before its first review.
 	Bot        string
 	BotSummary *BotSummary
+	// CheckRuns are the head's checks, each marked when the base branch's
+	// rules require it, plus each required check that GitHub has not made
+	// yet, as pending.
+	CheckRuns []lifecycle.Check
+	// ChecksDue is true when the head has no checks yet and the base branch has some.
+	ChecksDue bool
+	Threads   []Thread
+	// ThreadsOver is true when the PR has more review threads than the poll reads.
+	ThreadsOver bool
 }
 
 // Client runs the gh CLI. Bin is the path to gh, and "gh" when empty.
@@ -90,11 +101,22 @@ fragment F on PullRequest {
   number url state isDraft headRefOid mergeStateStatus reviewDecision
   reviewRequests { totalCount }
   latestReviews(first: 50) { nodes { author { login } state submittedAt } }
-  commits(last: 100) {
-    totalCount
-    nodes { commit { author { user { login } } statusCheckRollup { state } } }
+  commits(last: 100) { totalCount nodes { commit { author { user { login } } } } }
+  head: commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 100) { nodes {
+    __typename
+    ... on CheckRun { name status conclusion }
+    ... on StatusContext { context state }
+  } } } } } }
+  baseRef {
+    refUpdateRule { requiredStatusCheckContexts }
+    rules(first: 50) { nodes { type repositoryRuleset { enforcement }
+      parameters { ... on RequiredStatusChecksParameters { requiredStatusChecks { context } } } } }
+    target { ... on Commit { statusCheckRollup { state } } }
   }
-  baseRef { target { ... on Commit { statusCheckRollup { state } } } }
+  reviewThreads(first: 50) { totalCount nodes { isResolved
+    opener: comments(first: 1) { nodes { author { __typename login } } }
+    recent: comments(last: 5) { nodes { author { login } } }
+  } }
 }`
 
 // botComments reads the comments that hold a review bot's summary. The bot
@@ -202,20 +224,74 @@ type gqlPR struct {
 				Author *struct {
 					User *gqlLogin `json:"user"`
 				} `json:"author"`
-				StatusCheckRollup *gqlRollup `json:"statusCheckRollup"`
 			} `json:"commit"`
 		} `json:"nodes"`
 	} `json:"commits"`
+	Head struct {
+		Nodes []struct {
+			Commit struct {
+				StatusCheckRollup *struct {
+					gqlRollup
+					Contexts struct {
+						Nodes []gqlContext `json:"nodes"`
+					} `json:"contexts"`
+				} `json:"statusCheckRollup"`
+			} `json:"commit"`
+		} `json:"nodes"`
+	} `json:"head"`
 	BaseRef *struct {
+		RefUpdateRule *struct {
+			RequiredStatusCheckContexts []string `json:"requiredStatusCheckContexts"`
+		} `json:"refUpdateRule"`
+		Rules struct {
+			Nodes []struct {
+				Type              string `json:"type"`
+				RepositoryRuleset *struct {
+					Enforcement string `json:"enforcement"`
+				} `json:"repositoryRuleset"`
+				Parameters struct {
+					RequiredStatusChecks []struct {
+						Context string `json:"context"`
+					} `json:"requiredStatusChecks"`
+				} `json:"parameters"`
+			} `json:"nodes"`
+		} `json:"rules"`
 		Target struct {
-			StatusCheckRollup *struct {
-				State string `json:"state"`
-			} `json:"statusCheckRollup"`
+			StatusCheckRollup *gqlRollup `json:"statusCheckRollup"`
 		} `json:"target"`
 	} `json:"baseRef"`
+	ReviewThreads struct {
+		TotalCount int `json:"totalCount"`
+		Nodes      []struct {
+			IsResolved bool `json:"isResolved"`
+			Opener     struct {
+				Nodes []struct {
+					Author *struct {
+						Typename string `json:"__typename"`
+						Login    string `json:"login"`
+					} `json:"author"`
+				} `json:"nodes"`
+			} `json:"opener"`
+			Recent struct {
+				Nodes []struct {
+					Author *gqlLogin `json:"author"`
+				} `json:"nodes"`
+			} `json:"recent"`
+		} `json:"nodes"`
+	} `json:"reviewThreads"`
 	Comments struct {
 		Nodes []gqlComment `json:"nodes"`
 	} `json:"comments"`
+}
+
+// gqlContext is one check on a commit: a CheckRun or a StatusContext.
+type gqlContext struct {
+	Typename   string `json:"__typename"`
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+	Context    string `json:"context"`
+	State      string `json:"state"`
 }
 
 func parseSnapshot(raw []byte, keys []Key) (map[Key]*PR, error) {
@@ -269,15 +345,18 @@ func (g gqlPR) toPR() *PR {
 		}
 		pr.CommitAuthors = append(pr.CommitAuthors, login)
 	}
-	// The checks of the PR are the checks of its head commit, the newest node.
-	if n := len(g.Commits.Nodes); n > 0 {
-		pr.Checks = g.Commits.Nodes[n-1].Commit.StatusCheckRollup.checks()
+	if n := len(g.Head.Nodes); n > 0 && g.Head.Nodes[n-1].Commit.StatusCheckRollup != nil {
+		pr.Checks = g.Head.Nodes[n-1].Commit.StatusCheckRollup.gqlRollup.checks()
 	}
 	// GitHub creates a push's checks a few seconds after the push. In a repo
 	// whose base branch has checks, none yet means they are on their way.
 	if pr.Checks == ChecksNone && g.BaseRef != nil && g.BaseRef.Target.StatusCheckRollup != nil {
 		pr.Checks = ChecksPending
 	}
+	pr.CheckRuns = g.checkRuns()
+	pr.ChecksDue = len(pr.CheckRuns) == 0 && g.BaseRef != nil && g.BaseRef.Target.StatusCheckRollup != nil
+	pr.Threads = g.threads()
+	pr.ThreadsOver = g.ReviewThreads.TotalCount > len(g.ReviewThreads.Nodes)
 	return pr
 }
 

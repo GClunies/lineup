@@ -387,7 +387,7 @@ func TestNoChecksYetIsPendingWhenTheBaseHasChecks(t *testing.T) {
 	var d map[string]any
 	json.Unmarshal(raw, &d)
 	pr := d["data"].(map[string]any)["a0"].(map[string]any)["pullRequests"].(map[string]any)["nodes"].([]any)[0].(map[string]any)
-	for _, n := range pr["commits"].(map[string]any)["nodes"].([]any) {
+	for _, n := range pr["head"].(map[string]any)["nodes"].([]any) {
 		n.(map[string]any)["commit"].(map[string]any)["statusCheckRollup"] = nil
 	}
 	for base, want := range map[string]CheckState{`{"state":"SUCCESS"}`: ChecksPending, `null`: ChecksNone} {
@@ -404,6 +404,9 @@ func TestNoChecksYetIsPendingWhenTheBaseHasChecks(t *testing.T) {
 		}
 		if got := prs[anyKey].Checks; got != want {
 			t.Errorf("base rollup %s: checks %s, want %s", base, got, want)
+		}
+		if f := prs[anyKey].Facts("me"); f.ChecksDue != (want == ChecksPending) || len(f.Checks) != 0 {
+			t.Errorf("base rollup %s: facts %+v, want checks due only when the base has checks", base, f)
 		}
 		if want == ChecksPending {
 			for _, s := range Signals(nil, prs[anyKey], "me") {
