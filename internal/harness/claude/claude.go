@@ -148,8 +148,8 @@ func lock(dir string) (func(), error) {
 // Command builds the argv and environment for an interactive Worker whose
 // first message is the prompt. Rex starts it through a login shell that runs
 // no direnv, so the command sets CLAUDE_CONFIG_DIR itself.
-func Command(bin, configDir string, st config.StageConfig, prompt string) ([]string, map[string]string) {
-	argv := []string{bin}
+func Command(bin, configDir, name string, st config.StageConfig, prompt string) ([]string, map[string]string) {
+	argv := append([]string{bin}, SessionFlags(name)...)
 	if st.Model != "" {
 		argv = append(argv, "--model", st.Model)
 	}
@@ -162,6 +162,13 @@ func Command(bin, configDir string, st config.StageConfig, prompt string) ([]str
 		env["CLAUDE_CONFIG_DIR"] = configDir
 	}
 	return argv, env
+}
+
+// SessionFlags name the session and turn on Remote Control, so that the user
+// finds it by name on claude.ai and on their phone. --remote-control takes an
+// optional value, so it always gets the name: alone, it would take the prompt.
+func SessionFlags(name string) []string {
+	return []string{"--name", name, "--remote-control", name}
 }
 
 type TaskInfo struct {

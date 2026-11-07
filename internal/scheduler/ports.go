@@ -58,6 +58,8 @@ type Worktrees interface {
 
 // WorkerSpec is what a Harness needs to start a Worker.
 type WorkerSpec struct {
+	// Task is the Task ID. The Harness names the agent's session after it.
+	Task      string
 	Stage     lifecycle.Stage
 	Repo      string
 	Worktree  string

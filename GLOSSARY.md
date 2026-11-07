@@ -35,8 +35,12 @@ One unit of work on the Board, in exactly one Repo, done by Workers in one isola
 _Avoid_: Job, thread, card, item
 
 **Ad hoc Task**:
-A Task with no Issue, made from the user's own words. Its ID has the form `B-<n>`, and its tab opens in the ad hoc session instead of its Repo's session.
+A Task with no Issue, made from the user's own words. Its ID has the form `adhoc-<n>`, and its tab opens in the ad hoc session instead of its Repo's session.
 _Avoid_: Text Task, one-off
+
+**Review Task**:
+An Ad hoc Task whose text names a GitHub pull request, for example a `pr-review` or `pr-explain` run. Its ID has the form `pr-<n>`, where `<n>` is the PR number.
+_Avoid_: PR Task, review job
 
 **Intake**:
 The act of putting a Task on the Board, from the tracker browser, the Orchestrator, or the CLI. Auto-intake is Intake that the Scheduler does by itself from a Tracker status.

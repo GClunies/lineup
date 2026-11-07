@@ -329,7 +329,7 @@ func openAgentTab(t agentTab, self, claudeBin string, focus bool) error {
 	}
 	args := append([]string{"split", "-s", hubSession, "-b", top, "--split", "below",
 		"--ratio", fmt.Sprint(agentRows), "--focus=false", "--json", "-c", dir, "--"},
-		agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin)...)
+		agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, strings.ToLower(t.agent))...)
 	if hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {
 		args = append(args, "--continue")
 	}
@@ -355,11 +355,12 @@ func openAgentTab(t agentTab, self, claudeBin string, focus bool) error {
 // agentArgv runs Claude on the profile of the shell that opened the Hub. An
 // empty CLAUDE_CONFIG_DIR is not the default profile: Claude reads it as the
 // working folder, so the default profile unsets the variable.
-func agentArgv(configDir, claudeBin string) []string {
+func agentArgv(configDir, claudeBin, name string) []string {
+	env := []string{"env", "CLAUDE_CONFIG_DIR=" + configDir}
 	if configDir == "" {
-		return []string{"env", "-u", "CLAUDE_CONFIG_DIR", claudeBin}
+		env = []string{"env", "-u", "CLAUDE_CONFIG_DIR"}
 	}
-	return []string{"env", "CLAUDE_CONFIG_DIR=" + configDir, claudeBin}
+	return slices.Concat(env, []string{claudeBin}, claude.SessionFlags(name))
 }
 
 // hasConversation reports whether Claude has a conversation for dir to
