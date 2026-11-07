@@ -97,7 +97,7 @@ func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 	spec := scheduler.WorkerSpec{
 		Stage: lifecycle.Reviewing, Repo: t.TempDir(), Worktree: "/repos/umbrella/data.review-pr-4955",
 		PRURL: "https://github.com/umbrella/data/pull/4955", Overrides: map[string]string{"pr": "true"},
-		Conversation: "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20",
+		Conversation: "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20", Name: "R-1 data#4955 Fix the tooltip",
 	}
 	argv, _, err := p.Command(context.Background(), spec)
 	if err != nil {
@@ -121,7 +121,7 @@ func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{claudeBin, "--model", model, "--effort", "max", "--resume", spec.Conversation, "--add-dir=/repos/umbrella/data.review-pr-4955"}
+	want := []string{claudeBin, "--model", model, "--effort", "max", "--resume", spec.Conversation, "--name", spec.Name, "--add-dir=/repos/umbrella/data.review-pr-4955"}
 	if !slices.Equal(argv, want) {
 		t.Fatalf("reopen argv = %q, want %q", argv, want)
 	}
