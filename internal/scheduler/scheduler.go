@@ -657,7 +657,7 @@ func (s *Scheduler) pollTasks(ctx context.Context, ids []string) {
 				reviews[r.Review.key()] = r.ID
 			case r.RepoSlug != "":
 				key := PRKey{Repo: r.RepoSlug, Branch: r.Branch}
-				if g := r.Policy.Gate; g != nil {
+				if g := r.Policy.Bar.Bot; g != nil {
 					key.Bot = g.Bot
 				}
 				keys[key] = r.ID

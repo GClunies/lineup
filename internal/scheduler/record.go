@@ -173,7 +173,7 @@ func (r *Record) view() TaskView {
 			v.Note = fmt.Sprintf("#%d", v.PRNumber)
 		}
 		if r.BotWait != "" {
-			v.Note += " waiting for " + r.Policy.Gate.Title
+			v.Note += " waiting for " + r.Policy.Bar.Bot.Title
 		}
 	case lifecycle.ReviewReady:
 		if r.ReviewedHead != "" && r.LatestHead != "" && r.LatestHead != r.ReviewedHead {

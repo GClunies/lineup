@@ -827,7 +827,7 @@ type gatedConfig struct{ fakeConfig }
 func (gatedConfig) Policy(string, map[string]string) (lifecycle.Policy, error) {
 	p := testPolicy
 	p.Budgets.ReviewCycles = 2
-	p.Gate = &lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5}
+	p.Bar.Bot = &lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5}
 	return p, nil
 }
 

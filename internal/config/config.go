@@ -4,6 +4,7 @@ package config
 
 import (
 	"cmp"
+	"encoding"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -41,8 +42,9 @@ type Resolved struct {
 	PR           bool
 	PollInterval time.Duration
 	Budgets      lifecycle.Budgets
-	// Gate is nil when no [review_bot] table applies to the Repo.
-	Gate   *lifecycle.ReviewGate
+	// Bar is the Landing bar. Its Bot is nil when no [review_bot] table
+	// applies to the Repo.
+	Bar    lifecycle.LandingBar
 	Stages map[lifecycle.Stage]StageConfig
 	// Harnesses maps each Harness name in use to its absolute path.
 	Harnesses map[string]string
@@ -51,7 +53,7 @@ type Resolved struct {
 type StageConfig struct{ Harness, Model, Effort, Skill, Command string }
 
 func (r Resolved) Policy() lifecycle.Policy {
-	return lifecycle.Policy{Budgets: r.Budgets, Gate: r.Gate}
+	return lifecycle.Policy{Budgets: r.Budgets, Bar: r.Bar}
 }
 
 type budgetsFile struct {
@@ -68,6 +70,36 @@ type reviewBotFile struct {
 	MaxReviewCycles *int    `toml:"max_review_cycles"`
 }
 
+// landingBarFile is a [landing_bar] table. A layer can leave out a key and
+// take it from a lower layer, as in [budgets].
+type landingBarFile struct {
+	Checks    *string `toml:"checks"`
+	Threads   *string `toml:"threads"`
+	Approvals *string `toml:"approvals"`
+}
+
+// defaultBar is the user's bar.
+var defaultBar = lifecycle.LandingBar{
+	Checks: lifecycle.RequiredChecks, Threads: lifecycle.RepliedThreads, Approvals: lifecycle.RequiredApprovals,
+}
+
+// apply sets each rule that the table names. The error names the key.
+func (f *landingBarFile) apply(b *lifecycle.LandingBar) error {
+	for _, k := range []struct {
+		key   string
+		value *string
+		rule  encoding.TextUnmarshaler
+	}{{"checks", f.Checks, &b.Checks}, {"threads", f.Threads, &b.Threads}, {"approvals", f.Approvals, &b.Approvals}} {
+		if k.value == nil {
+			continue
+		}
+		if err := k.rule.UnmarshalText([]byte(*k.value)); err != nil {
+			return fmt.Errorf("landing_bar.%s: %w", k.key, err)
+		}
+	}
+	return nil
+}
+
 type stageFile struct {
 	Harness *string `toml:"harness"`
 	Model   *string `toml:"model"`
@@ -82,6 +114,7 @@ type layer struct {
 	PollInterval *string              `toml:"poll_interval"`
 	Budgets      *budgetsFile         `toml:"budgets"`
 	ReviewBot    *reviewBotFile       `toml:"review_bot"`
+	LandingBar   *landingBarFile      `toml:"landing_bar"`
 	Stage        map[string]stageFile `toml:"stage"`
 }
 
@@ -405,6 +438,11 @@ func (g *Global) validate(l *layer, where string) error {
 			return err
 		}
 	}
+	if l.LandingBar != nil {
+		if err := l.LandingBar.apply(&lifecycle.LandingBar{}); err != nil {
+			return fmt.Errorf("%s: %w", where, err)
+		}
+	}
 	for key := range l.Stage {
 		if key == "default" {
 			continue
@@ -533,9 +571,15 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 	layers = append(layers, repoFile)
 
 	var bot reviewBotFile
+	res.Bar = defaultBar
 	for _, l := range layers {
 		if l.WIPCap != nil {
 			res.WIPCap = *l.WIPCap
+		}
+		if f := l.LandingBar; f != nil {
+			if err := f.apply(&res.Bar); err != nil {
+				return Resolved{}, err
+			}
 		}
 		if f := l.ReviewBot; f != nil {
 			bot.Name = cmp.Or(f.Name, bot.Name)
@@ -558,7 +602,7 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 		}
 	}
 
-	if res.Gate, res.Budgets.ReviewCycles, err = bot.gate(); err != nil {
+	if res.Bar.Bot, res.Budgets.ReviewCycles, err = bot.gate(); err != nil {
 		return Resolved{}, err
 	}
 

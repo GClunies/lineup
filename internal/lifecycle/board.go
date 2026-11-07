@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -32,9 +33,26 @@ type Budgets struct {
 
 // Policy is the resolved configuration that a Task keeps from its start.
 type Policy struct {
-	Budgets Budgets `json:"budgets"`
-	// Gate is nil for a Task that no review bot gates.
-	Gate *ReviewGate `json:"gate,omitempty"`
+	Budgets Budgets    `json:"budgets"`
+	Bar     LandingBar `json:"bar"`
+}
+
+// UnmarshalJSON also reads a Policy from before the Landing bar, which kept
+// the review bot gate in gate. It gets the zero LandingBar with that gate.
+func (p *Policy) UnmarshalJSON(b []byte) error {
+	type policy Policy
+	var old struct {
+		policy
+		Gate *ReviewGate `json:"gate"`
+	}
+	if err := json.Unmarshal(b, &old); err != nil {
+		return err
+	}
+	*p = Policy(old.policy)
+	if p.Bar.Bot == nil {
+		p.Bar.Bot = old.Gate
+	}
+	return nil
 }
 
 // ReviewGate keeps a PR in CI running until a review bot scores its head
@@ -79,10 +97,10 @@ type Task struct {
 
 // ReviewCycle is the review cycle that the Task is in, or nil.
 func (t *Task) ReviewCycle() *ReviewCycle {
-	if t.BotScore == nil || t.Policy.Gate == nil {
+	if t.BotScore == nil || t.Policy.Bar.Bot == nil {
 		return nil
 	}
-	return &ReviewCycle{*t.Policy.Gate, *t.BotScore}
+	return &ReviewCycle{*t.Policy.Bar.Bot, *t.BotScore}
 }
 
 func (t *Task) Group() Group {
@@ -299,7 +317,7 @@ func (t *Task) observe(s Signal) []Effect {
 		if t.Flag == ReasonDraft {
 			t.flag("", "")
 		}
-		if g := t.Policy.Gate; g != nil {
+		if g := t.Policy.Bar.Bot; g != nil {
 			switch {
 			case s.Bot == nil:
 				return nil
@@ -333,7 +351,7 @@ func (t *Task) observe(s Signal) []Effect {
 
 	case ReviewBotLate:
 		if t.Stage == CIRunning && t.BotWait != "" {
-			t.flag(ReasonNoBotReview, fmt.Sprintf("%s did not score %s", t.Policy.Gate.Title, t.BotWait[:min(7, len(t.BotWait))]))
+			t.flag(ReasonNoBotReview, fmt.Sprintf("%s did not score %s", t.Policy.Bar.Bot.Title, t.BotWait[:min(7, len(t.BotWait))]))
 		}
 
 	case PRReviewed:
@@ -374,7 +392,7 @@ func (t *Task) reviewCycle(score int) []Effect {
 	effects := t.spend(Responding, &t.Left.ReviewCycles)
 	t.BotScore = &score
 	if effects == nil {
-		t.flag(ReasonBudgetSpent, fmt.Sprintf("%s after %d cycles", t.Policy.Gate.ScoreText(score), t.Policy.Budgets.ReviewCycles))
+		t.flag(ReasonBudgetSpent, fmt.Sprintf("%s after %d cycles", t.Policy.Bar.Bot.ScoreText(score), t.Policy.Budgets.ReviewCycles))
 	}
 	return effects
 }

@@ -61,7 +61,7 @@ func randomBoard(t *rapid.T) (*Board, []string) {
 			},
 		}
 		if rapid.Bool().Draw(t, "gated") {
-			p.Gate = &ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: rapid.IntRange(1, 5).Draw(t, "min score"), TopScore: 5}
+			p.Bar.Bot = &ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: rapid.IntRange(1, 5).Draw(t, "min score"), TopScore: 5}
 			p.Budgets.ReviewCycles = rapid.IntRange(0, 3).Draw(t, "cycles")
 		}
 		if rapid.Bool().Draw(t, "review") {
@@ -245,7 +245,7 @@ func TestAGatedTaskLandsOnlyWithAPassingHeadScore(t *testing.T) {
 			task := anyTask(t, b, ids)
 			from := task.Stage
 			s, _, _ := stepFrom(t, b, task, gateSignal)
-			g := task.Policy.Gate
+			g := task.Policy.Bar.Bot
 			if c, ok := s.(CIPassed); ok && from == CIRunning && g != nil {
 				passed[task.ID] = c.Bot != nil && c.Bot.Score != nil && *c.Bot.Score >= g.MinScore
 			}

@@ -86,6 +86,25 @@ func TestATaskSavesItsStageByKey(t *testing.T) {
 	}
 }
 
+// A Task from before the Landing bar kept its review bot gate in policy.gate.
+// It loads with the gate and the zero bar, so its old rules stay.
+func TestAnOldTaskKeepsItsGateAndTheOldRules(t *testing.T) {
+	var old Task
+	raw := `{"id":"ENG-1","stage":"ci_running","policy":{"budgets":{"ci_debug":3},"gate":{"bot":"greptile","title":"Greptile","min_score":4,"top_score":5}}}`
+	if err := json.Unmarshal([]byte(raw), &old); err != nil {
+		t.Fatal(err)
+	}
+	want := LandingBar{Bot: &ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 4, TopScore: 5}}
+	if !reflect.DeepEqual(old.Policy.Bar, want) || old.Policy.Budgets.CIDebug != 3 {
+		t.Fatalf("policy %+v, want budgets kept and bar %+v", old.Policy, want)
+	}
+	saved, _ := json.Marshal(old)
+	var back Task
+	if err := json.Unmarshal(saved, &back); err != nil || !reflect.DeepEqual(back.Policy, old.Policy) {
+		t.Fatalf("saved %s, loaded %+v, %v", saved, back.Policy, err)
+	}
+}
+
 func TestWIPCap(t *testing.T) {
 	b := NewBoard(1)
 	b.Add("A", policy)
@@ -311,7 +330,7 @@ func TestWorkerRestartBudgetIsPerStage(t *testing.T) {
 
 var gated = Policy{
 	Budgets: Budgets{CIDebug: 3, Responding: 3, Restarts: 2, ReviewCycles: 2},
-	Gate:    &ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5},
+	Bar:     LandingBar{Bot: greptile(5)},
 }
 
 func gatedIn(stage Stage) (*Board, *Task) {
