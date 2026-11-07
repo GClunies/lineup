@@ -2,9 +2,9 @@ name: Auto-merge
 
 # GitHub merges the PR when the checks that its base branch requires pass. A
 # base with no required `test` check would merge at once, so the job arms
-# auto-merge only for a base that requires it. A stack child targets a
-# feature branch, and `gh stack merge` lands it. A PR from a fork never gets
-# auto-merge.
+# auto-merge only for a base that requires it. GitHub has no auto-merge for
+# a PR in a stack, so `gh stack merge` lands each one. A PR from a fork never
+# gets auto-merge.
 on:
   pull_request:
     types: [opened, reopened, ready_for_review]
@@ -26,7 +26,15 @@ jobs:
             echo "::notice::$BASE does not require the test check, so auto-merge stays off for #$PR."
             exit 0
           fi
-          gh pr merge --auto --merge "$PR" --repo "$GITHUB_REPOSITORY"
+          if ! out=$(gh pr merge --auto --merge "$PR" --repo "$GITHUB_REPOSITORY" 2>&1); then
+            case "$out" in
+              *"not supported for stacked pull requests"*)
+                echo "::notice::#$PR is in a stack, so gh stack merge lands it."
+                exit 0 ;;
+            esac
+            echo "$out" >&2
+            exit 1
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}

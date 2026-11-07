@@ -153,10 +153,9 @@ func (f *fakeRex) open(word string) []tab {
 // fakeGitHub keeps one PR per key. A snapshot's Raw is the list of Signal
 // names that GitHub would report for it.
 type fakeGitHub struct {
-	mu      sync.Mutex
-	prs     map[PRKey]PRSnapshot
-	merged  []int
-	readied []int
+	mu     sync.Mutex
+	prs    map[PRKey]PRSnapshot
+	merged []int
 	// polled is every key that a branch poll asked for.
 	polled  []PRKey
 	reviews map[ReviewKey]ReviewSnapshot
@@ -207,7 +206,11 @@ var signalsByName = map[string]lifecycle.Signal{
 	"pr-open": lifecycle.PROpen{}, "pushed": lifecycle.Pushed{}, "ci-failed": lifecycle.CIFailed{},
 	"ci-passed": lifecycle.CIPassed{}, "ci-passed-review": lifecycle.CIPassed{NeedsReview: true},
 	"review-approved": lifecycle.ReviewApproved{}, "pr-merged": lifecycle.PRMerged{},
+	"ci-passed-unscored": lifecycle.CIPassed{NeedsReview: true, Bot: &lifecycle.HeadScore{Head: "c0ffee1234"}},
+	"ci-passed-low":      lifecycle.CIPassed{NeedsReview: true, Bot: &lifecycle.HeadScore{Head: "c0ffee1234", Score: &four}},
 }
+
+var four = 4
 
 func (g *fakeGitHub) set(key PRKey, number int, signals ...string) {
 	raw, _ := json.Marshal(signals)
@@ -263,18 +266,11 @@ func (g *fakeGitHub) Signals(prev, cur *PRSnapshot) []lifecycle.Signal {
 	return out
 }
 
-func (g *fakeGitHub) MarkReady(_ context.Context, _ string, n int) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.readied = append(g.readied, n)
-	return nil
-}
-
 func (g *fakeGitHub) Merge(_ context.Context, repo string, n int) error {
 	g.mu.Lock()
 	g.merged = append(g.merged, n)
 	g.mu.Unlock()
-	g.set(PRKey{repo, "ada/eng-1-billing"}, n, "pr-merged")
+	g.set(PRKey{Repo: repo, Branch: "ada/eng-1-billing"}, n, "pr-merged")
 	return nil
 }
 
@@ -474,7 +470,7 @@ func (h *harness) waitTab(cmd string) tab {
 
 func TestTaskFromStartToMerged(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
-	key := PRKey{"acme/data", "ada/eng-1-billing"}
+	key := PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}
 
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	if v := h.task("ENG-1"); v.Stage != "Queued" || v.Repo != "data" || v.Kind != lifecycle.KindBuild {
@@ -547,7 +543,7 @@ func TestThePollOpPollsNow(t *testing.T) {
 	polled := func() bool {
 		h.gh.mu.Lock()
 		defer h.gh.mu.Unlock()
-		return slices.Contains(h.gh.polled, PRKey{"acme/data", "ada/eng-1-billing"})
+		return slices.Contains(h.gh.polled, PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"})
 	}
 	if polled() {
 		t.Fatal("GitHub was polled before the poll op")
@@ -635,7 +631,7 @@ func TestCloseRemovesTheWorktreeOfAFailedSetupOnly(t *testing.T) {
 
 func TestChecksThatPassedBeforeCIRunningStillCount(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
-	key := PRKey{"acme/data", "ada/eng-1-billing"}
+	key := PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
@@ -822,5 +818,106 @@ func TestAFastSetupOpensOneSetupTab(t *testing.T) {
 	}
 	if setups != 1 {
 		t.Fatalf("opened %d setup tabs, want 1", setups)
+	}
+}
+
+// gatedConfig gates every Task on Greptile.
+type gatedConfig struct{ fakeConfig }
+
+func (gatedConfig) Policy(string, map[string]string) (lifecycle.Policy, error) {
+	p := testPolicy
+	p.Budgets.ReviewCycles = 2
+	p.Gate = &lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5}
+	return p, nil
+}
+
+type clock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *clock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *clock) add(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.t = c.t.Add(d)
+}
+
+func (h *harness) polls() int {
+	h.gh.mu.Lock()
+	defer h.gh.mu.Unlock()
+	return len(h.gh.polled)
+}
+
+// A gated Task waits in CI running for the bot's score, flags the user when
+// no score comes, and starts a review cycle for a low score.
+func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
+	c := &clock{t: time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Config, d.Now = gatedConfig{}, c.now })
+	key := PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing", Bot: "greptile"}
+
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	worker := h.waitTab("claude working")
+	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "done"}}
+	eventually(t, "stopped", func() bool { return h.task("ENG-1").Flag == "stopped" })
+	h.gh.set(key, 42, "pr-open")
+	h.waitStage("ENG-1", lifecycle.CIRunning)
+
+	h.gh.set(key, 42, "ci-passed-unscored")
+	eventually(t, "the wait note", func() bool { return h.task("ENG-1").Note == "#42 waiting for Greptile" })
+	c.add(14 * time.Minute)
+	for n := h.polls(); h.polls() < n+3; {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if v := h.task("ENG-1"); v.Stage != "CI running" || v.Flag != "" {
+		t.Fatalf("flagged before the wait ended: %+v", v)
+	}
+	c.add(2 * time.Minute)
+	eventually(t, "the no bot review flag", func() bool {
+		v := h.task("ENG-1")
+		return v.Stage == "CI running" && v.Note == "no bot review: Greptile did not score c0ffee1"
+	})
+
+	h.gh.set(key, 42, "ci-passed-low")
+	h.waitStage("ENG-1", lifecycle.Responding)
+	h.waitTab("claude responding")
+	if v := h.task("ENG-1"); v.Note != "Greptile 4/5, cycle 1/2" {
+		t.Fatalf("review cycle note = %q", v.Note)
+	}
+	h.hn.mu.Lock()
+	spec := h.hn.specs[len(h.hn.specs)-1]
+	h.hn.mu.Unlock()
+	if spec.Stage != lifecycle.Responding || spec.ReviewCycle == nil || spec.ReviewCycle.Score != 4 || spec.ReviewCycle.MinScore != 5 {
+		t.Fatalf("worker spec %+v, want a Responding round for Greptile 4 of 5", spec)
+	}
+}
+
+// A gated Task saves its wait for the bot at once. A wait that is lost in a
+// restart never flags the Task, because the poll sees no new edge.
+func TestAGatedTaskSavesItsWaitForTheBot(t *testing.T) {
+	gated, _ := gatedConfig{}.Policy("", nil)
+	seed := func(st *store.Store) {
+		r := Record{Task: lifecycle.Task{ID: "ENG-7", Stage: lifecycle.CIRunning, Policy: gated, Left: gated.Budgets},
+			Title: "Backfill events", RepoSlug: "acme/data", Branch: "ada/eng-7"}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, func(d *Deps) { d.PollInterval = time.Hour })
+	const head = "c0ffee1c0ffee1c0ffee1c0ffee1c0ffee1c0ff"
+	h.s.call(func() { h.s.apply(h.s.recs["ENG-7"], lifecycle.CIPassed{Bot: &lifecycle.HeadScore{Head: head}}, "") })
+	raw, err := h.st.Tasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved Record
+	if err := json.Unmarshal(raw["ENG-7"], &saved); err != nil || saved.BotWait != head {
+		t.Fatalf("saved bot wait = %q, %v, want %s", saved.BotWait, err, head)
 	}
 }

@@ -42,11 +42,25 @@ type PROpen struct{}
 type Pushed struct{}
 type CIFailed struct{}
 
-// CIPassed carries the review facts that decide between In review and Ready to land.
+// CIPassed carries the review facts that decide where a passing PR goes next.
 type CIPassed struct {
 	Draft       bool
 	NeedsReview bool // reviewers exist and have not approved
+	// Bot is the review bot's view of the head, for a Task that a bot
+	// gates. It is nil for a Task with no gate.
+	Bot *HeadScore
 }
+
+// HeadScore is the review bot's score for the PR's head commit. Score is
+// nil until the bot reviews Head.
+type HeadScore struct {
+	Head  string
+	Score *int
+}
+
+// ReviewBotLate is the Scheduler's timer: the Task has been in CI running
+// long enough that a review bot that reviews the head would have scored it.
+type ReviewBotLate struct{}
 
 type ReviewApproved struct{}
 type ReviewCommented struct{}
@@ -85,6 +99,7 @@ func (ReviewChangesRequested) Name() string  { return "review-changes-requested"
 func (ReviewAdditionalAuthors) Name() string { return "review-additional-authors" }
 func (PRConflict) Name() string              { return "pr-conflict" }
 func (PRMerged) Name() string                { return "pr-merged" }
+func (ReviewBotLate) Name() string           { return "review-bot-late" }
 func (PRReviewed) Name() string              { return "pr-reviewed" }
 func (PRClosed) Name() string                { return "pr-closed" }
 
@@ -108,6 +123,7 @@ func (ReviewChangesRequested) signal()  {}
 func (ReviewAdditionalAuthors) signal() {}
 func (PRConflict) signal()              {}
 func (PRMerged) signal()                {}
+func (ReviewBotLate) signal()           {}
 func (PRReviewed) signal()              {}
 func (PRClosed) signal()                {}
 
@@ -116,9 +132,6 @@ type Effect interface{ effect() }
 
 // StartWorker replaces any Worker in the Task's tab with a fresh one for Stage.
 type StartWorker struct{ Stage Stage }
-
-// MarkReady marks the draft PR ready for review and requests CODEOWNERS reviewers.
-type MarkReady struct{}
 
 type Merge struct{}
 
@@ -130,7 +143,6 @@ type Cleanup struct{}
 type TrackerStatus struct{ Event string }
 
 func (StartWorker) effect()   {}
-func (MarkReady) effect()     {}
 func (Merge) effect()         {}
 func (Cleanup) effect()       {}
 func (TrackerStatus) effect() {}

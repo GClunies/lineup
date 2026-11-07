@@ -38,7 +38,7 @@ A one-off skill run, for example `/pr-explain <url>`, is a Task with the overrid
 |---|---|---|
 | Rex (server API revision 7 or later) | Sessions, tabs, blocks, events, program status | `lineup` stops with an error |
 | worktrunk (`wt`) | Creates, sets up, and removes worktrees | `lineup` shows `worktrunk is required: brew install worktrunk (https://worktrunk.dev)` and starts no Task |
-| GitHub CLI (`gh`) | PR state, ready-for-review, reviewers, merge | `lineup` stops with an error |
+| GitHub CLI (`gh`) | PR state and merge | `lineup` stops with an error |
 | Claude Code | The Orchestrator and the Workers | `lineup` stops with an error |
 | Linear OAuth | Tracker access | The tracker browser asks the user to sign in |
 
@@ -69,7 +69,7 @@ lineup has no planning Stage. If the work needs a plan or the user's approval fi
 
 | Stage | Contract |
 |---|---|
-| Working | Push the branch and open a draft PR. |
+| Working | Push the branch and open a PR that is ready for review, not a draft. |
 | CI debug | Push a commit that targets the failed check. |
 | Responding | Push the changes and reply to each open review thread. If the PR has a conflict, push a merge of the base branch that resolves it. |
 
@@ -80,8 +80,12 @@ If a Worker reports `done` and the contract output is missing, the Task gets the
 | From | Signal | To |
 |---|---|---|
 | Queued | `start`, and the WIP cap allows it or the user confirms | Working |
-| Working | `done`, and a draft PR exists (`pr-open`) | CI running |
+| Working | `done`, and a PR exists (`pr-open`) | CI running |
 | CI running | `ci-failed` | CI debug |
+| CI running | `ci-passed`, and the PR is a draft | CI running, with the Needs you flag `draft` |
+| CI running | `ci-passed`, and the review bot has not scored the head commit | CI running, waiting for the bot |
+| CI running | `ci-passed`, and the review bot's score for the head commit is below the minimum | Responding, for one review cycle |
+| CI running | `review-bot-late` | CI running, with the Needs you flag `no bot review` |
 | CI running | `ci-passed`, and reviewers exist and have not approved | In review |
 | CI running | `ci-passed`, and the PR is approved or needs no reviewer | Ready to land |
 | CI debug | `pushed` (a new head commit) | CI running |
@@ -93,7 +97,21 @@ If a Worker reports `done` and the contract output is missing, the Task gets the
 | Any Stage | `pr-merged` outside lineup, for example by a person or by GitHub auto-merge | Done, marked merged |
 | Any Stage | `task-closed` (user key `x`, confirmed) | Done, marked closed |
 
-When CI passes for the first time, the Scheduler marks the draft PR ready for review and requests reviewers from CODEOWNERS.
+The Worker opens the PR ready for review, so GitHub requests the CODEOWNERS reviewers when the PR opens. lineup never changes the draft state of a PR. A draft PR means that a person wants to hold it, for example the user who made it a draft. When the user marks the PR ready, the poll sees the change and sends `ci-passed` again.
+
+### Review bot gate
+
+A Repo can have a review bot gate, which keeps a passing PR in CI running until a review bot scores it. The gate applies only to the Tasks whose Repo configuration has a `[review_bot]` table. lineup knows one bot, Greptile. Greptile reviews each push by itself and keeps one summary comment on the PR. lineup reads the confidence score and the reviewed commit from that comment. See [ADR 0013](../adr/0013-a-review-bot-gates-ci-passed.md).
+
+- A score counts only when its reviewed commit is the head commit of the PR.
+- Only a comment by Greptile's GitHub App counts. The PR body and comments by other authors never give a score.
+- Greptile's check run passes at a low score too, so the gate acts on `ci-passed`.
+- With a score at or above the minimum, `ci-passed` goes on to In review or Ready to land, as with no gate.
+- A score below the minimum starts a Responding round, which spends one review cycle. The Worker prompt names the score and the minimum. It tells the Worker to address Greptile's unresolved review comments and the suggestions in its summary, and to resolve each thread that it addressed. The Responding contract stays the same.
+- With no review cycle left, the Task gets the flag `budget spent`, with a detail such as `Greptile 4/5 after 5 cycles`.
+- Greptile's own PR reviews do not send `review-commented`. The score decides each round.
+
+A Repo where the bot does not review must not hold a Task forever. If a gated Task is in CI running for 15 minutes, and its checks passed with no score for the head commit, the Scheduler sends `review-bot-late`. The Task then gets the flag `no bot review`, with a detail such as `Greptile did not score 3591eba`. Greptile's check run keeps CI pending while it reviews, and in the probes Greptile scored a push within 4 minutes. The flag clears when Greptile scores the head commit.
 
 ### Needs you reasons
 
@@ -104,6 +122,8 @@ When CI passes for the first time, the Scheduler marks the draft PR ready for re
 | `setup failed` | A worktrunk hook exits with a code other than 0 |
 | `stopped` | `done` without the contract output |
 | `budget spent` | A Loop budget reaches 0 |
+| `draft` | `ci-passed` on a draft PR |
+| `no bot review` | `review-bot-late`: the review bot did not score the head commit of a passing PR |
 | `worker lost` | The tab or block is gone, and the restart budget is spent |
 
 When the cause clears, for example when program status goes back to `working`, the Scheduler removes the flag.
@@ -115,6 +135,9 @@ When the cause clears, for example when program status goes back to `working`, t
 | CI debug attempts | 3 | per Task |
 | Responding rounds | 3 | per review |
 | Worker restarts | 2 | per Stage |
+| Review cycles | 3 | per Task, only with a review bot gate |
+
+People's reviews spend the Responding rounds, and a low review bot score spends a review cycle.
 
 ## Rex layout
 
@@ -188,8 +211,9 @@ Rex has no key/value metadata on its objects. The store keeps the session, windo
 | Rex events: `terminal.program_status_changed`, `terminal.child_exited`, `block_closed` | `done`, `blocked`, `error`, worker lost. `child_exited` comes for every exit. `block_closed` does not come when Rex keeps the tab open. |
 | GitHub, one batched GraphQL query for all open Task PRs every 30 s, and one query right after a Worker reports `done` | `pr-open`, `pushed`, `ci-passed`, `ci-failed`, `review-*`, `pr-conflict` (`mergeStateStatus: DIRTY`), `pr-merged` |
 | The user, through Board keys or the CLI | `start`, `pr-merge`, `task-closed` |
+| The Scheduler's clock, at each poll | `review-bot-late` |
 
-The GraphQL query reads `statusCheckRollup`, `reviewDecision`, `latestReviews`, `reviewRequests`, `commits`, `mergeStateStatus`, and `isDraft`.
+The GraphQL query reads `statusCheckRollup`, `reviewDecision`, `latestReviews`, `reviewRequests`, `commits`, `mergeStateStatus`, and `isDraft`. For a Task with a review bot gate, it also reads the author and body of the first 20 PR comments.
 
 A PR whose head commit has no checks counts as `ci-passed`, so a Repo with no CI goes on to review. The exception is a Repo whose base branch has checks. GitHub creates a push's checks a few seconds after the push, so there a PR with no checks yet stays in CI running. Without this rule, the Task could reach Ready to land, and the user could merge the PR, before its CI starts.
 
@@ -251,6 +275,14 @@ effort = "high"
 match = "~/code/*/*"
 
 [[repos]]
+match = "~/code/acme/*"
+
+[repos.review_bot]
+name = "greptile"
+min_review_score = 5
+max_review_cycles = 5
+
+[[repos]]
 match = "~/code/acme/data"
 teams = ["APP", "ENG"]
 ```
@@ -262,6 +294,16 @@ A `[[repos]]` `match` is a path or a glob. It sets keys for the Repos that it ma
 - The Repo picker lists these checkouts.
 
 An entry with only a glob, such as `match = "~/code/*/*"` above, lists every checkout two folders below `~/code`.
+
+`[review_bot]` turns on the review bot gate. Put it in the `[[repos]]` entry for the Repos where the bot is installed, as `[repos.review_bot]` above, or in a Repo's `.lineup.toml`. The example gates each Repo below `~/code/acme`, and no other Repo.
+
+| Key | Value | Default |
+|---|---|---|
+| `name` | The bot. The only bot is `greptile`. | none, required |
+| `min_review_score` | The lowest score that passes, from 1 to 5 | 5 |
+| `max_review_cycles` | The review cycle budget | 3 |
+
+A higher layer can set one key and keep the others from a lower layer, as in `[budgets]`. lineup checks each `[review_bot]` table when it loads the configuration. A Task keeps the gate that it had at Intake.
 
 `start_skills` is a top-level key in the global file. It lists the skills that the tracker browser offers when the user starts a Task. A chosen skill is stored as the Task override `skill`.
 
@@ -281,6 +323,9 @@ The Task override `pr=false` is for work that ends without a pull request. Its W
 # .lineup.toml in a Repo
 [stage.ci_debug]
 skill = "diagnosing-bugs"
+
+[review_bot]
+min_review_score = 4
 ```
 
 The Scheduler finds each Harness path when it loads the configuration. Rex starts commands through the login shell, which can resolve a name to a different binary than the Scheduler sees.
@@ -490,12 +535,13 @@ The Board shows cached data and refreshes it in the background.
 | The Scheduler reads program status correctly | An integration test that runs `claude` in a throwaway Rex session and reads `working`, `done`, and `blocked` (`kind: permission`) |
 | Recovery restarts a lost Worker | An integration test that kills a Task tab and restarts `lineup serve` |
 | The GitHub Signals are correct | Tests against recorded GraphQL responses for each PR state |
+| A gated Task never reaches Ready to land with a head score below the minimum, and its review cycles never pass the budget | Property-based tests with `pgregory.net/rapid` |
 | The speed budget holds | A benchmark of the Board's first paint and of its keypress render, run in CI |
 | End to end | One real Linear Issue in a sandbox repo goes from start to Done |
 
 ## Probe results that shaped this spec
 
-These facts come from probes in throwaway Rex sessions on this machine.
+These facts come from probes on this machine: throwaway Rex sessions, and `gh api` calls for GitHub.
 
 | Fact | Evidence |
 |---|---|
@@ -512,3 +558,8 @@ These facts come from probes in throwaway Rex sessions on this machine.
 | A running Claude keeps a project entry that another process added under the lock | A live `claude` with a throwaway profile exited and rewrote the file. The added entry stayed. |
 | `direnv exec <dir>` unloads the caller's own `.envrc` values and keeps exported values | `printenv CLAUDE_CONFIG_DIR` through `direnv exec` for two Repos |
 | Claude has no flag that skips the trust dialog in an interactive session | `claude --help`: only `-p` skips it |
+| Greptile keeps one summary comment on a PR. The comment holds `<!-- greptile_confidence_score:N -->` and `Last reviewed commit: …/commit/<sha>`. | `gh api repos/better-auth/better-auth/issues/12303/comments`: the `greptile-apps[bot]` comment holds score 4 and the head commit. `internal/github/testdata/review_bot.json` is a trimmed copy. |
+| GraphQL names Greptile's author `greptile-apps`, with no `[bot]` suffix | `Client.Snapshot` against better-auth/better-auth#12303 |
+| The `Greptile Review` check run passes at a score below 5 | `gh api repos/better-auth/better-auth/commits/eb6b436/check-runs`: conclusion `success` at score 4/5 |
+| Greptile edits its summary about 2 s after its check run completes | The same PR: the check run completed at 18:00:46Z, and the comment changed at 18:00:48Z |
+| Some Greptile installs write the summary into the PR body, which the PR author can edit | `gh api repos/synnaxlabs/synnax/pulls/4881`: the body holds the score, and Greptile wrote no comment |

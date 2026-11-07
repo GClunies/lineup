@@ -190,7 +190,7 @@ var task = TaskInfo{IssueID: "APP-1", IssueTitle: "Fix X", IssueURL: "https://li
 
 func TestPromptContracts(t *testing.T) {
 	cases := map[lifecycle.Stage]string{
-		lifecycle.Working:    "Push the branch and open a draft PR.",
+		lifecycle.Working:    "Push the branch and open a PR that is ready for review, not a draft.",
 		lifecycle.CIDebug:    "Push a commit that targets the failed check.",
 		lifecycle.Responding: "Push the changes and reply to each open review thread. If the PR has a conflict, push a merge of the base branch that resolves it.",
 	}
@@ -311,5 +311,26 @@ func TestCommandStartsAndResumesAConversation(t *testing.T) {
 	want = []string{"/bin/claude", "--model", "m", "--effort", "max", "--resume", id, "--name", "R-7 data#7 Fix X", "--remote-control", "R-7 data#7 Fix X", "--add-dir=/repos/data.review-pr-7"}
 	if !reflect.DeepEqual(resume, want) {
 		t.Errorf("resume argv = %q, want %q", resume, want)
+	}
+}
+
+func TestAReviewCycleNamesTheScoreAndKeepsTheContract(t *testing.T) {
+	bot := task
+	bot.ReviewCycle = &lifecycle.ReviewCycle{ReviewGate: lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5}, Score: 4}
+	p := Prompt(lifecycle.Responding, bot, "", "")
+	for _, want := range []string{
+		"Greptile scored the pull request for this Task 4/5, below the minimum of 5.",
+		"Address Greptile's unresolved review comments and the suggestions in its summary comment. Resolve each review thread that you addressed.",
+		"Pull request: " + task.PRURL,
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("missing %q in\n%s", want, p)
+		}
+	}
+	if !strings.HasSuffix(strings.TrimSpace(p), contracts[lifecycle.Responding]) || strings.Contains(p, "Reviewers left feedback") {
+		t.Errorf("a review cycle must keep the Responding contract and drop the people's intro:\n%s", p)
+	}
+	if p := Prompt(lifecycle.Responding, task, "", ""); strings.Contains(p, "Greptile") {
+		t.Errorf("a round that people started names the bot:\n%s", p)
 	}
 }

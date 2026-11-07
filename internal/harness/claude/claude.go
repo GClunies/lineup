@@ -210,10 +210,13 @@ type TaskInfo struct {
 	PR bool
 	// ReviewWorktree is where a review Task's Worker reads the PR's code.
 	ReviewWorktree string
+	// ReviewCycle is the review bot's low score that started a Responding
+	// round, or nil for a round that people's reviews started.
+	ReviewCycle *lifecycle.ReviewCycle
 }
 
 var contracts = map[lifecycle.Stage]string{
-	lifecycle.Working:    "Push the branch and open a draft PR.",
+	lifecycle.Working:    "Push the branch and open a PR that is ready for review, not a draft.",
 	lifecycle.CIDebug:    "Push a commit that targets the failed check.",
 	lifecycle.Responding: "Push the changes and reply to each open review thread. If the PR has a conflict, push a merge of the base branch that resolves it.",
 }
@@ -233,6 +236,11 @@ var intros = map[lifecycle.Stage]string{
 	lifecycle.CIDebug:    "CI failed on the pull request for this Task. Fix it.",
 	lifecycle.Responding: "Reviewers left feedback on the pull request for this Task. Respond to it.",
 }
+
+// cycleIntro opens a Responding round that a low review bot score started.
+// %[1]s is the bot, %[2]d/%[3]d its score, and %[4]d the minimum.
+const cycleIntro = "%[1]s scored the pull request for this Task %[2]d/%[3]d, below the minimum of %[4]d. " +
+	"Address %[1]s's unresolved review comments and the suggestions in its summary comment. Resolve each review thread that you addressed."
 
 // Prompt returns the Stage prompt with the Stage contract appended. extra is
 // free text from configuration, for example a command to run first.
@@ -256,7 +264,11 @@ func Prompt(stage lifecycle.Stage, task TaskInfo, skill, extra string) string {
 		// The user's words come first, so that they are the skill's arguments.
 		b.WriteString(task.Ask + "\n\n")
 	}
-	b.WriteString(intros[stage] + "\n\n")
+	intro := intros[stage]
+	if r := task.ReviewCycle; r != nil && stage == lifecycle.Responding {
+		intro = fmt.Sprintf(cycleIntro, r.Title, r.Score, r.TopScore, r.MinScore)
+	}
+	b.WriteString(intro + "\n\n")
 	tracker := cmp.Or(task.Tracker, "Linear")
 	if task.IssueID != "" {
 		fmt.Fprintf(&b, "%s Issue: %s %s\nURL: %s\n", tracker, task.IssueID, task.IssueTitle, task.IssueURL)

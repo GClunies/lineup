@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 
 	"pgregory.net/rapid"
@@ -17,6 +18,8 @@ var anySignal = rapid.SampledFrom([]Signal{
 	PROpen{}, Pushed{}, CIFailed{}, CIPassed{}, CIPassed{Draft: true}, CIPassed{NeedsReview: true},
 	ReviewApproved{}, ReviewCommented{}, ReviewChangesRequested{}, ReviewAdditionalAuthors{}, PRConflict{}, PRMerged{},
 	PRReviewed{}, PRClosed{},
+	CIPassed{Bot: &HeadScore{Head: "h"}}, CIPassed{Bot: scored("h", 3)}, CIPassed{NeedsReview: true, Bot: scored("h", 4)},
+	CIPassed{Bot: scored("h", 5)}, CIPassed{NeedsReview: true, Bot: scored("h", 5)}, ReviewBotLate{},
 })
 
 // failure is what a Worker that never succeeds, and a world that keeps
@@ -25,7 +28,7 @@ var anySignal = rapid.SampledFrom([]Signal{
 func failure(t *rapid.T, s Stage, pushes bool) Signal {
 	switch s {
 	case CIRunning:
-		return CIFailed{}
+		return rapid.SampledFrom([]Signal{CIFailed{}, CIPassed{Bot: scored("h", 0)}}).Draw(t, "ci")
 	case InReview:
 		return rapid.SampledFrom([]Signal{ReviewCommented{}, ReviewChangesRequested{}, ReviewAdditionalAuthors{}, PRConflict{}}).Draw(t, "review")
 	case CIDebug, Responding:
@@ -56,6 +59,10 @@ func randomBoard(t *rapid.T) (*Board, []string) {
 				Restarts:   rapid.IntRange(0, 2).Draw(t, "restarts"),
 			},
 		}
+		if rapid.Bool().Draw(t, "gated") {
+			p.Gate = &ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: rapid.IntRange(1, 5).Draw(t, "min score"), TopScore: 5}
+			p.Budgets.ReviewCycles = rapid.IntRange(0, 3).Draw(t, "cycles")
+		}
 		if rapid.Bool().Draw(t, "review") {
 			b.AddReview(id, rapid.SampledFrom(queues).Draw(t, "queue"), p)
 		} else {
@@ -66,10 +73,22 @@ func randomBoard(t *rapid.T) (*Board, []string) {
 	return b, ids
 }
 
+// gateSignal favors the Signals that carry a Task to CI running and through
+// the review gate. With anySignal alone, a run reaches the gate rarely.
+var gateSignal = rapid.OneOf(anySignal, rapid.SampledFrom([]Signal{
+	Start{OverCap: true}, WorkerDone{ContractMet: true}, Pushed{}, ReviewApproved{},
+	CIPassed{Bot: &HeadScore{Head: "h"}}, CIPassed{Bot: scored("h", 0)}, CIPassed{Bot: scored("h", 3)},
+	CIPassed{NeedsReview: true, Bot: scored("h", 4)}, CIPassed{Bot: scored("h", 5)},
+}))
+
 // step applies one random Signal to the Task and fails on an error that no
 // caller expects.
 func step(t *rapid.T, b *Board, task *Task) (Signal, []Effect, error) {
-	s := anySignal.Draw(t, "signal")
+	return stepFrom(t, b, task, anySignal)
+}
+
+func stepFrom(t *rapid.T, b *Board, task *Task, signals *rapid.Generator[Signal]) (Signal, []Effect, error) {
+	s := signals.Draw(t, "signal")
 	effects, err := b.Apply(task.ID, s)
 	var na *NotAllowedError
 	if err != nil && !errors.As(err, &na) && !errors.Is(err, ErrWIPCapFull) && !errors.Is(err, ErrSlotsFull) {
@@ -183,7 +202,7 @@ func TestReviewTasksGetNoEffectThatWritesOutside(t *testing.T) {
 			}
 			for _, e := range effects {
 				switch e.(type) {
-				case MarkReady, Merge, TrackerStatus:
+				case Merge, TrackerStatus:
 					t.Fatalf("review Task %s got %#v from %s", task.ID, e, s.Name())
 				}
 			}
@@ -205,6 +224,46 @@ func TestAReviewReadyTaskLeavesOnlyByThePROrTheUser(t *testing.T) {
 			case PRReviewed, PRMerged, PRClosed, TaskClosed, Rerun:
 			default:
 				t.Fatalf("%s left Review ready for %s", s.Name(), task.Stage)
+			}
+		}
+	})
+}
+
+// A gated Task reaches Ready to land only after a head score at or above its
+// minimum. No path skips the gate, and no override enters Ready to land.
+func TestAGatedTaskLandsOnlyWithAPassingHeadScore(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b, ids := randomBoard(t)
+		// passed is whether the last ci-passed that the Task got in CI
+		// running had a head score at or above its minimum.
+		passed := map[string]bool{}
+		for range rapid.IntRange(0, 200).Draw(t, "steps") {
+			task := anyTask(t, b, ids)
+			from := task.Stage
+			s, _, _ := stepFrom(t, b, task, gateSignal)
+			g := task.Policy.Gate
+			if c, ok := s.(CIPassed); ok && from == CIRunning && g != nil {
+				passed[task.ID] = c.Bot != nil && c.Bot.Score != nil && *c.Bot.Score >= g.MinScore
+			}
+			if g != nil && from != ReadyToLand && task.Stage == ReadyToLand && !passed[task.ID] {
+				t.Fatalf("%s entered Ready to land from %s on %s with no passing head score", task.ID, from, s.Name())
+			}
+		}
+	})
+}
+
+func TestReviewCyclesNeverPassTheirBudget(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b, ids := randomBoard(t)
+		rounds := map[string]int{}
+		for range rapid.IntRange(0, 200).Draw(t, "steps") {
+			task := anyTask(t, b, ids)
+			s, effects, _ := stepFrom(t, b, task, gateSignal)
+			if _, ok := s.(CIPassed); ok && slices.Contains(effects, Effect(StartWorker{Responding})) {
+				rounds[task.ID]++
+			}
+			if rounds[task.ID] > task.Policy.Budgets.ReviewCycles || task.Left.ReviewCycles < 0 {
+				t.Fatalf("%s started %d review cycles with a budget of %d, %d left", task.ID, rounds[task.ID], task.Policy.Budgets.ReviewCycles, task.Left.ReviewCycles)
 			}
 		}
 	})

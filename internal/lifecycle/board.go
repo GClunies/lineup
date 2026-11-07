@@ -25,11 +25,34 @@ type Budgets struct {
 	CIDebug    int `json:"ci_debug"`
 	Responding int `json:"responding"`
 	Restarts   int `json:"restarts"`
+	// ReviewCycles is how many Responding rounds a low review bot score can
+	// start. It is apart from Responding, which people's reviews spend.
+	ReviewCycles int `json:"review_cycles"`
 }
 
 // Policy is the resolved configuration that a Task keeps from its start.
 type Policy struct {
 	Budgets Budgets `json:"budgets"`
+	// Gate is nil for a Task that no review bot gates.
+	Gate *ReviewGate `json:"gate,omitempty"`
+}
+
+// ReviewGate keeps a PR in CI running until a review bot scores its head
+// commit. A score below MinScore starts a Responding round.
+type ReviewGate struct {
+	Bot      string `json:"bot"`   // the bot's name in the configuration, for example greptile
+	Title    string `json:"title"` // the bot's name for people, for example Greptile
+	MinScore int    `json:"min_score"`
+	TopScore int    `json:"top_score"`
+}
+
+// ScoreText names a score of the bot, for example "Greptile 4/5".
+func (g ReviewGate) ScoreText(n int) string { return fmt.Sprintf("%s %d/%d", g.Title, n, g.TopScore) }
+
+// ReviewCycle is a Responding round that a low review bot score started.
+type ReviewCycle struct {
+	ReviewGate
+	Score int
 }
 
 type Task struct {
@@ -46,6 +69,20 @@ type Task struct {
 	Policy     Policy  `json:"policy"`
 	// Left is what remains of each Loop budget.
 	Left Budgets `json:"left"`
+	// BotScore is the review bot's score that started this Responding
+	// round. It is nil for a round that people's reviews started.
+	BotScore *int `json:"bot_score,omitempty"`
+	// BotWait is the head commit that the Task waits in CI running for the
+	// review bot to score, or "".
+	BotWait string `json:"bot_wait,omitempty"`
+}
+
+// ReviewCycle is the review cycle that the Task is in, or nil.
+func (t *Task) ReviewCycle() *ReviewCycle {
+	if t.BotScore == nil || t.Policy.Gate == nil {
+		return nil
+	}
+	return &ReviewCycle{*t.Policy.Gate, *t.BotScore}
 }
 
 func (t *Task) Group() Group {
@@ -247,7 +284,22 @@ func (t *Task) observe(s Signal) []Effect {
 			return nil
 		}
 		if s.Draft {
-			return []Effect{MarkReady{}}
+			t.flag(ReasonDraft, "")
+			return nil
+		}
+		if t.Flag == ReasonDraft {
+			t.flag("", "")
+		}
+		if g := t.Policy.Gate; g != nil {
+			switch {
+			case s.Bot == nil:
+				return nil
+			case s.Bot.Score == nil:
+				t.BotWait = s.Bot.Head
+				return nil
+			case *s.Bot.Score < g.MinScore:
+				return t.reviewCycle(*s.Bot.Score)
+			}
 		}
 		if s.NeedsReview {
 			t.enter(InReview)
@@ -268,6 +320,11 @@ func (t *Task) observe(s Signal) []Effect {
 	case ReviewCommented, ReviewChangesRequested, PRConflict:
 		if t.Stage == InReview || t.Stage == ReadyToLand {
 			return t.spend(Responding, &t.Left.Responding)
+		}
+
+	case ReviewBotLate:
+		if t.Stage == CIRunning && t.BotWait != "" {
+			t.flag(ReasonNoBotReview, fmt.Sprintf("%s did not score %s", t.Policy.Gate.Title, t.BotWait[:min(7, len(t.BotWait))]))
 		}
 
 	case PRReviewed:
@@ -302,13 +359,24 @@ func (t *Task) spend(stage Stage, left *int) []Effect {
 	return t.startAgent(stage)
 }
 
+// reviewCycle starts a Responding round for a low review bot score. It spends
+// the review cycle budget, not the Responding budget.
+func (t *Task) reviewCycle(score int) []Effect {
+	effects := t.spend(Responding, &t.Left.ReviewCycles)
+	t.BotScore = &score
+	if effects == nil {
+		t.flag(ReasonBudgetSpent, fmt.Sprintf("%s after %d cycles", t.Policy.Gate.ScoreText(score), t.Policy.Budgets.ReviewCycles))
+	}
+	return effects
+}
+
 func (t *Task) startAgent(stage Stage) []Effect {
 	t.enter(stage)
 	return []Effect{StartWorker{stage}}
 }
 
 // ready enters Ready to land. The Responding budget is per review, so a fresh
-// review cycle gets it back.
+// review gets it back.
 func (t *Task) ready() []Effect {
 	t.enter(ReadyToLand)
 	t.Left.Responding = t.Policy.Budgets.Responding
@@ -325,10 +393,12 @@ func (t *Task) finish(o Outcome) []Effect {
 	return []Effect{Cleanup{}, TrackerStatus{string(o)}}
 }
 
-// enter changes the Stage, clears the flag, and refills the per-Stage budget.
+// enter changes the Stage, clears the flag and the review bot's state, and
+// refills the per-Stage budget.
 func (t *Task) enter(s Stage) {
 	t.Stage = s
 	t.flag("", "")
+	t.BotScore, t.BotWait = nil, ""
 	t.Left.Restarts = t.Policy.Budgets.Restarts
 }
 

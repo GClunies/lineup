@@ -149,7 +149,7 @@ func (p *githubPort) RepoSlug(ctx context.Context, repoPath string) (string, err
 func (p *githubPort) Poll(ctx context.Context, keys []scheduler.PRKey) (map[scheduler.PRKey]scheduler.PRSnapshot, error) {
 	gk := make([]github.Key, len(keys))
 	for i, k := range keys {
-		gk[i] = github.Key{Repo: k.Repo, Branch: k.Branch}
+		gk[i] = github.Key{Repo: k.Repo, Branch: k.Branch, Bot: k.Bot}
 	}
 	prs, err := p.c.Snapshot(ctx, gk)
 	if err != nil {
@@ -161,7 +161,7 @@ func (p *githubPort) Poll(ctx context.Context, keys []scheduler.PRKey) (map[sche
 		if err != nil {
 			return nil, err
 		}
-		out[scheduler.PRKey{Repo: k.Repo, Branch: k.Branch}] = scheduler.PRSnapshot{Number: pr.Number, URL: pr.URL, Raw: raw}
+		out[scheduler.PRKey{Repo: k.Repo, Branch: k.Branch, Bot: k.Bot}] = scheduler.PRSnapshot{Number: pr.Number, URL: pr.URL, Raw: raw}
 	}
 	return out, nil
 }
@@ -197,10 +197,6 @@ func (p *githubPort) Signals(prev, cur *scheduler.PRSnapshot) []lifecycle.Signal
 		return &pr
 	}
 	return github.Signals(decode(prev), decode(cur), p.viewer)
-}
-
-func (p *githubPort) MarkReady(ctx context.Context, repo string, n int) error {
-	return p.c.MarkReady(ctx, repo, n)
 }
 
 func (p *githubPort) Merge(ctx context.Context, repo string, n int) error {
@@ -273,7 +269,7 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 	if err != nil {
 		return nil, nil, err
 	}
-	info := claude.TaskInfo{Ask: w.Text, PRURL: w.PRURL, Branch: w.Branch, Repo: w.Repo, PR: res.PR}
+	info := claude.TaskInfo{Ask: w.Text, PRURL: w.PRURL, Branch: w.Branch, Repo: w.Repo, PR: res.PR, ReviewCycle: w.ReviewCycle}
 	var addDirs []string
 	if lifecycle.KindReview.Has(w.Stage) {
 		info.ReviewWorktree, addDirs = w.Worktree, []string{w.Worktree}

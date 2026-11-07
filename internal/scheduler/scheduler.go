@@ -166,12 +166,15 @@ func (s *Scheduler) now() time.Time { return s.d.Now() }
 // apply runs one Signal through the reducer, records the change, and queues
 // the Effects on the Task's lane.
 func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error {
-	from, flag, outcome := r.Stage, r.Flag, r.Outcome
+	from, flag, outcome, wait := r.Stage, r.Flag, r.Outcome, r.BotWait
 	effects, err := s.board.Apply(r.ID, sig)
 	if err != nil {
 		return err
 	}
 	if r.Stage == from && r.Flag == flag && r.Outcome == outcome && len(effects) == 0 {
+		if r.BotWait != wait {
+			s.save(r)
+		}
 		return nil
 	}
 	if r.Stage != from {
@@ -280,15 +283,6 @@ func (s *Scheduler) exec(ctx context.Context, id string, e lifecycle.Effect) {
 	switch e := e.(type) {
 	case lifecycle.StartWorker:
 		s.startWorker(ctx, id, e.Stage)
-	case lifecycle.MarkReady:
-		if r.PR == nil {
-			return
-		}
-		if err := s.d.GitHub.MarkReady(ctx, r.RepoSlug, r.PR.Number); err != nil {
-			s.fail(id, "mark ready", err)
-			return
-		}
-		s.poll(ctx, []string{id})
 	case lifecycle.Merge:
 		if r.PR == nil {
 			return
@@ -414,7 +408,7 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 	spec := WorkerSpec{
 		Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
 		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
-		Conversation: r.Conversation, Name: r.tabLabel(),
+		Conversation: r.Conversation, Name: r.tabLabel(), ReviewCycle: r.ReviewCycle(),
 	}
 	folder := r.Worktree
 	if r.Review != nil {
@@ -657,7 +651,11 @@ func (s *Scheduler) pollTasks(ctx context.Context, ids []string) {
 			case r.Review != nil:
 				reviews[r.Review.key()] = r.ID
 			case r.RepoSlug != "":
-				keys[PRKey{r.RepoSlug, r.Branch}] = r.ID
+				key := PRKey{Repo: r.RepoSlug, Branch: r.Branch}
+				if g := r.Policy.Gate; g != nil {
+					key.Bot = g.Bot
+				}
+				keys[key] = r.ID
 			}
 		}
 	})
@@ -683,9 +681,19 @@ func (s *Scheduler) pollTasks(ctx context.Context, ids []string) {
 			for _, sig := range sigs {
 				s.apply(r, sig, "")
 			}
+			if r.BotWait != "" && s.now().Sub(r.StageSince) >= botReviewWait {
+				s.apply(r, lifecycle.ReviewBotLate{}, "")
+			}
 		}
 	})
 }
+
+// botReviewWait is how long a gated Task can be in CI running before passed
+// checks with no review bot score flag it. Greptile's check run keeps CI
+// pending while it reviews, and it scored each probed push within 4
+// minutes. Passed checks and no score after this long mean the bot is not
+// reviewing, for example in a Repo where it is not installed.
+const botReviewWait = 15 * time.Minute
 
 func mapKeys[K comparable, V any](m map[K]V) func(func(K) bool) {
 	return func(yield func(K) bool) {
