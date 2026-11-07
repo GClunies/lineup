@@ -296,7 +296,7 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 	if prompt == "" && w.Conversation == "" {
 		return nil, nil, fmt.Errorf("%s has no prompt and no conversation to resume", w.Stage)
 	}
-	argv, env := claude.Command(res.Harnesses[st.Harness], dir, st, w.Conversation, prompt, addDirs...)
+	argv, env := claude.Command(res.Harnesses[st.Harness], dir, st, w.Conversation, w.Name, prompt, addDirs...)
 	return argv, env, nil
 }
 

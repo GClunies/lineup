@@ -414,7 +414,7 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 	spec := WorkerSpec{
 		Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
 		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
-		Conversation: r.Conversation,
+		Conversation: r.Conversation, Name: r.tabLabel(),
 	}
 	folder := r.Worktree
 	if r.Review != nil {

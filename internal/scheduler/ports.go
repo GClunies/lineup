@@ -110,6 +110,8 @@ type WorkerSpec struct {
 	// Conversation is the ID of a review Worker's Claude conversation. A
 	// Reviewing Worker starts it, and a Review ready Worker resumes it.
 	Conversation string
+	// Name is the Worker's session name, the same as its Rex tab label.
+	Name string
 }
 
 type Harness interface {

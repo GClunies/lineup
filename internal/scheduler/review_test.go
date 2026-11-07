@@ -128,6 +128,9 @@ func TestReviewFromStartToReviewedAndCleanedUp(t *testing.T) {
 	if spec.Worktree != "/repos/acme/data.review-pr-7" || spec.PRURL != prURL7 || spec.Branch != "" {
 		t.Fatalf("worker spec = %+v", spec)
 	}
+	if spec.Name != worker.label {
+		t.Fatalf("session name %q, want the tab label %q", spec.Name, worker.label)
+	}
 
 	h.status(worker.BlockID, "done")
 	eventually(t, "stopped without findings", func() bool { return h.task("R-1").Flag == "stopped" })
