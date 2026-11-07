@@ -277,7 +277,7 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 	var v TaskView
 	err = s.withLoop(func() error {
 		if r.ID == "" {
-			r.ID = s.nextID("B")
+			r.ID = s.nextID("adhoc")
 			slug := strings.Trim(notSlug.ReplaceAllString(strings.ToLower(r.Title), "-"), "-")
 			if len(slug) > 40 {
 				slug = strings.Trim(slug[:40], "-")
@@ -308,8 +308,7 @@ func (s *Scheduler) withLoop(f func() error) error {
 	return err
 }
 
-// nextID takes the next number of the counter that ad hoc and review Tasks
-// share. Only the loop calls it.
+// nextID takes the next number of the ad hoc Task counter. Only the loop calls it.
 func (s *Scheduler) nextID(prefix string) string {
 	n := 1
 	if cur, _ := s.d.Store.Setting("next_id"); cur != "" {

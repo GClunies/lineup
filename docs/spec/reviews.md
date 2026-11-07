@@ -23,7 +23,7 @@ The user sees in one place which PRs need them: their own open PRs and the PRs t
 ```
  ┌──────────────────── Hub tab "review" ────────────────────┐
  │ [Reviews]  My PRs  Requested  My teammates  Q: platform  │  tab / shift+tab, ranked with < >
- │ ▸ data#4945  Write the usage logs   R-14 Reviewing       │  a PR row joins its review Task by PR URL
+ │ ▸ data#4945  Write the usage logs   pr-4945 Reviewing       │  a PR row joins its review Task by PR URL
  └──────────────┬───────────────────────────────────────────┘
                 │ lineup board --review: one GraphQL search per refresh, cached on disk
                 │
@@ -88,11 +88,11 @@ The user ranks the tabs with `<` and `>`. A tab that is not in the saved rank, s
 
 ```
  My PRs  20
- ▸ data#4945   Write the usage logs again       ◷ CI   ✓ 1   R-14 Reviewing       2d
+ ▸ data#4945   Write the usage logs again       ◷ CI   ✓ 1   pr-4945 Reviewing       2d
    data#4919   Move the CSV coverage readers    ✗ CI                              5d
    backend#25144 Stop using file age as …       draft
  Requested  36
- ▸ data#4955   Pull the base images through …   goldberg        R-12 Review ready   1h
+ ▸ data#4955   Pull the base images through …   goldberg        pr-4955 Review ready   1h
 ```
 
 A header row names the columns. A row shows these columns, in this order, with 3 cells between them:
@@ -186,7 +186,7 @@ The Scheduler reads the queues and their slots when it starts. After a change to
 
 ## Review Tasks
 
-A review Task is a Task with Kind `review`. Its ID has the form `R-<n>`, from the same counter as the ad hoc IDs. It keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `r` or `lineup review` has no queue.
+A review Task is a Task with Kind `review`. Its ID has the form `pr-<number>`, for example `pr-4955`. If a live Task already has that ID for another repository's PR, the ID adds the repository's name, for example `pr-4955-web`. A new review of a PR whose review Task is Done takes the same ID. It keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `r` or `lineup review` has no queue.
 
 `lineup review` and `r` read the URL as `owner/repo#number`. If a review Task for that PR is open, they add nothing. They start that Task if it is Queued. They reopen its Worker if the Worker closed in Review ready. They run it again if it stopped for good, for example after a failed setup. If it runs, they focus its tab. They refuse a PR from a fork, and a PR that is closed or merged.
 
@@ -236,7 +236,7 @@ If the PR's head moves after Review ready, the row shows the note `head moved`. 
 | Item | Value |
 |---|---|
 | Rex session | `reviews` |
-| Tab label | `R-12 data#4955 <title>` |
+| Tab label | `pr-4955 data#4955 <title>` |
 | Main checkout | The `[[repos]]` checkout whose `origin` is the PR's repository. It is the Worker's folder and the trusted checkout of `pr-review` Step 1. The PR's code never becomes the Worker's folder, because a folder's `.claude` settings and hooks would run. |
 | Review worktree | `<main checkout's parent>/<repo>.review-pr-<number>`, detached at the PR's head. lineup makes it and removes it. |
 | Prompt | `/pr-review <PR URL>`, the review worktree, then the review contract |
