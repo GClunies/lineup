@@ -18,7 +18,8 @@ type watcher interface {
 	Watch(f func(scheduler.BoardView)) error
 }
 
-// cmdWatch prints one line each time a Task starts to need the user or ends.
+// cmdWatch prints one line each time a build Task starts to need the user or
+// ends. The review tab's board toasts the review Tasks' alerts.
 // The Orchestrator runs it under Claude's Monitor tool, which wakes the
 // Orchestrator for each line. It reconnects when the Scheduler restarts.
 func cmdWatch(c scheduler.Client, args []string, out io.Writer) error {
@@ -50,6 +51,7 @@ func watchOnce(w watcher, path string, out io.Writer) error {
 	}
 	var saveErr error
 	w.Watch(func(v scheduler.BoardView) {
+		v = v.OfKind(lifecycle.KindBuild)
 		if seen == nil {
 			seen = map[string]string{}
 			for _, t := range v.Tasks {

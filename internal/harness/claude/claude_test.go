@@ -176,12 +176,12 @@ func TestConfigDir(t *testing.T) {
 
 func TestCommand(t *testing.T) {
 	st := config.StageConfig{Harness: "claude", Model: "claude-opus-5-5", Effort: "high"}
-	argv, env := Command("/bin/claude", "/profiles/work", st, "do it")
+	argv, env := Command("/bin/claude", "/profiles/work", st, "", "", "do it")
 	want := []string{"/bin/claude", "--model", "claude-opus-5-5", "--effort", "high", "do it"}
 	if !reflect.DeepEqual(argv, want) || !reflect.DeepEqual(env, map[string]string{"CLAUDE_CONFIG_DIR": "/profiles/work"}) {
 		t.Errorf("%v %v", argv, env)
 	}
-	if _, env := Command("/bin/claude", "", st, "x"); len(env) != 0 {
+	if _, env := Command("/bin/claude", "", st, "", "", "x"); len(env) != 0 {
 		t.Errorf("default profile must set no env: %v", env)
 	}
 }
@@ -258,5 +258,58 @@ func TestPromptForAGitHubIssueAsksForTheFixesLine(t *testing.T) {
 	}
 	if p := Prompt(lifecycle.Working, task, "", ""); !strings.Contains(p, "Linear Issue: APP-1") {
 		t.Errorf("a Linear Issue lost its label:\n%s", p)
+	}
+}
+
+func TestReviewPromptRunsPRReviewAndStopsBeforeGitHub(t *testing.T) {
+	review := TaskInfo{PRURL: "https://github.com/umbrella/data/pull/4955", ReviewWorktree: "/repos/umbrella/data.review-pr-4955", Repo: "/repos/umbrella/data"}
+	p := Prompt(lifecycle.Reviewing, review, "kit:tdd", "")
+	if !strings.HasPrefix(p, "/pr-review https://github.com/umbrella/data/pull/4955\n") {
+		t.Errorf("the prompt must start with /pr-review and the URL:\n%s", p)
+	}
+	for _, want := range []string{
+		"Review worktree: /repos/umbrella/data.review-pr-4955\n",
+		"Use the review worktree /repos/umbrella/data.review-pr-4955 as the worktree of `pr-review` Step 1.",
+		"At Step 5, wait for the user's decisions, and write nothing to GitHub before them. The decisions approve the pushes and the post of Steps 6 to 9, so go on to them without asking again.",
+		"Leave the findings file of `pr-review` behind, also when there are no findings.",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("missing %q in\n%s", want, p)
+		}
+	}
+	for _, not := range []string{"kit:tdd", noPRContract, "draft PR", "Branch:"} {
+		if strings.Contains(p, not) {
+			t.Errorf("review prompt has %q:\n%s", not, p)
+		}
+	}
+	review.PR = true
+	if Prompt(lifecycle.Reviewing, review, "", "") != Prompt(lifecycle.Reviewing, TaskInfo{PRURL: review.PRURL, ReviewWorktree: review.ReviewWorktree, Repo: review.Repo}, "", "") {
+		t.Error("the pr override changed a review prompt")
+	}
+}
+
+// claude's --add-dir takes many values, so a separate value would swallow the prompt.
+func TestCommandAddsEachDirInOneArgument(t *testing.T) {
+	argv, _ := Command("/bin/claude", "", config.StageConfig{Model: "m"}, "", "", "the prompt", "/repos/data.review-pr-7")
+	want := []string{"/bin/claude", "--model", "m", "--add-dir=/repos/data.review-pr-7", "the prompt"}
+	if !reflect.DeepEqual(argv, want) {
+		t.Errorf("argv = %q, want %q", argv, want)
+	}
+}
+
+// A review Worker starts its conversation under a known ID and name, so that a
+// reopen resumes it with no prompt and the user finds it by name.
+func TestCommandStartsAndResumesAConversation(t *testing.T) {
+	const id = "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20"
+	st := config.StageConfig{Model: "m", Effort: "max"}
+	start, _ := Command("/bin/claude", "", st, id, "R-7 data#7 Fix X", "/pr-review x", "/repos/data.review-pr-7")
+	want := []string{"/bin/claude", "--model", "m", "--effort", "max", "--session-id", id, "--name", "R-7 data#7 Fix X", "--add-dir=/repos/data.review-pr-7", "/pr-review x"}
+	if !reflect.DeepEqual(start, want) {
+		t.Errorf("start argv = %q, want %q", start, want)
+	}
+	resume, _ := Command("/bin/claude", "", st, id, "R-7 data#7 Fix X", "", "/repos/data.review-pr-7")
+	want = []string{"/bin/claude", "--model", "m", "--effort", "max", "--resume", id, "--name", "R-7 data#7 Fix X", "--add-dir=/repos/data.review-pr-7"}
+	if !reflect.DeepEqual(resume, want) {
+		t.Errorf("resume argv = %q, want %q", resume, want)
 	}
 }

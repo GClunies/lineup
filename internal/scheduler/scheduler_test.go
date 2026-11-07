@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/store"
 )
@@ -19,14 +20,25 @@ type tab struct {
 	Window
 	label  string
 	cwd    string
+	env    map[string]string
 	argv   []string
 	closed bool
 }
 
+// split is a block that Split opened beside the anchor block of a tab.
+type split struct {
+	BlockID, anchor, cwd, window string
+	argv                         []string
+	closed                       bool
+}
+
 type fakeRex struct {
-	mu        sync.Mutex
-	n         int
-	tabs      []*tab
+	mu     sync.Mutex
+	n      int
+	tabs   []*tab
+	splits []*split
+	// splitErr fails every Split call.
+	splitErr  error
 	destroyed []string
 	events    chan RexEvent
 	// exitFast makes a tab whose argv starts with this word exit with 0
@@ -38,16 +50,32 @@ func (f *fakeRex) EnsureSession(_ context.Context, label string) (string, error)
 	return "session:" + label, nil
 }
 
-func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, _ map[string]string, argv []string) (Window, error) {
+func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, env map[string]string, argv []string) (Window, error) {
 	f.mu.Lock()
 	f.n++
 	w := Window{session, fmt.Sprintf("window:%d", f.n), fmt.Sprintf("block:%d", f.n)}
-	f.tabs = append(f.tabs, &tab{Window: w, label: label, cwd: cwd, argv: argv})
+	f.tabs = append(f.tabs, &tab{Window: w, label: label, cwd: cwd, env: env, argv: argv})
 	f.mu.Unlock()
 	if f.exitFast != "" && argv[0] == f.exitFast {
 		f.events <- RexEvent{Kind: EvExited, BlockID: w.BlockID}
 	}
 	return w, nil
+}
+
+func (f *fakeRex) Split(_ context.Context, _, block, cwd string, argv []string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.splitErr != nil {
+		return "", f.splitErr
+	}
+	for _, t := range f.tabs {
+		if t.BlockID == block {
+			f.n++
+			f.splits = append(f.splits, &split{BlockID: fmt.Sprintf("split:%d", f.n), anchor: block, cwd: cwd, window: t.WindowID, argv: argv})
+			return f.splits[len(f.splits)-1].BlockID, nil
+		}
+	}
+	return "", fmt.Errorf("block %s not found", block)
 }
 
 func (f *fakeRex) CloseWindow(_ context.Context, _, window string) error {
@@ -58,7 +86,23 @@ func (f *fakeRex) CloseWindow(_ context.Context, _, window string) error {
 			t.closed = true
 		}
 	}
+	for _, s := range f.splits {
+		if s.window == window {
+			s.closed = true
+		}
+	}
 	return nil
+}
+
+// allSplits returns every split that Split opened, closed or not.
+func (f *fakeRex) allSplits() []split {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []split
+	for _, s := range f.splits {
+		out = append(out, *s)
+	}
+	return out
 }
 
 func (f *fakeRex) DestroySession(_ context.Context, session string) error {
@@ -68,13 +112,18 @@ func (f *fakeRex) DestroySession(_ context.Context, session string) error {
 	return nil
 }
 
-func (f *fakeRex) Blocks(_ context.Context, _ string) (map[string]bool, error) {
+func (f *fakeRex) Blocks(_ context.Context, session string) (map[string]bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	live := map[string]bool{}
+	live, windows := map[string]bool{}, map[string]bool{}
 	for _, t := range f.tabs {
-		if !t.closed {
-			live[t.BlockID] = true
+		if !t.closed && t.SessionID == session {
+			live[t.BlockID], windows[t.WindowID] = true, true
+		}
+	}
+	for _, s := range f.splits {
+		if !s.closed && windows[s.window] {
+			live[s.BlockID] = true
 		}
 	}
 	return live, nil
@@ -108,6 +157,50 @@ type fakeGitHub struct {
 	prs     map[PRKey]PRSnapshot
 	merged  []int
 	readied []int
+	// polled is every key that a branch poll asked for.
+	polled  []PRKey
+	reviews map[ReviewKey]ReviewSnapshot
+	// found is each queue search's rows, by queue name. searches logs each
+	// SearchPRs call, and a search waits for hold while hold is set.
+	found       map[string][]github.PullRequest
+	searches    [][]github.Search
+	hold        chan struct{}
+	members     map[string][]string
+	memberCalls int
+}
+
+func (g *fakeGitHub) SearchPRs(_ context.Context, ss []github.Search) (map[string][]github.PullRequest, error) {
+	g.mu.Lock()
+	g.searches = append(g.searches, ss)
+	hold := g.hold
+	g.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := map[string][]github.PullRequest{}
+	for _, s := range ss {
+		out[s.Key] = slices.Clone(g.found[s.Key])
+	}
+	return out, nil
+}
+
+func (g *fakeGitHub) TeamMembers(_ context.Context, teams []string) (map[string][]string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.memberCalls++
+	out := map[string][]string{}
+	for _, t := range teams {
+		out[t] = g.members[t]
+	}
+	return out, nil
+}
+
+func (g *fakeGitHub) searchCalls() [][]github.Search {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return slices.Clone(g.searches)
 }
 
 var signalsByName = map[string]lifecycle.Signal{
@@ -128,9 +221,29 @@ func (g *fakeGitHub) RepoSlug(context.Context, string) (string, error) { return 
 func (g *fakeGitHub) Poll(_ context.Context, keys []PRKey) (map[PRKey]PRSnapshot, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.polled = append(g.polled, keys...)
 	out := map[PRKey]PRSnapshot{}
 	for _, k := range keys {
 		if pr, ok := g.prs[k]; ok {
+			out[k] = pr
+		}
+	}
+	return out, nil
+}
+
+// setReview sets the PR that the review poll returns. GitHub names ignore case.
+func (g *fakeGitHub) setReview(pr ReviewSnapshot) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.reviews[ReviewKey{strings.ToLower(pr.Repo), pr.Number}] = pr
+}
+
+func (g *fakeGitHub) ReviewPRs(_ context.Context, keys []ReviewKey) (map[ReviewKey]ReviewSnapshot, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := map[ReviewKey]ReviewSnapshot{}
+	for _, k := range keys {
+		if pr, ok := g.reviews[ReviewKey{strings.ToLower(k.Repo), k.Number}]; ok {
 			out[k] = pr
 		}
 	}
@@ -169,6 +282,40 @@ type fakeWorktrees struct {
 	mu      sync.Mutex
 	root    string
 	removed []string
+	// added and reviewsRemoved log the review worktree calls. inFlight and
+	// mostInFlight count the AddReview calls that run at one time.
+	added          []int
+	reviewsRemoved []string
+	inFlight       int
+	mostInFlight   int
+	// keep makes RemoveReview keep the worktree, as for an unpushed commit.
+	keep bool
+	// addErr fails the next AddReview call.
+	addErr error
+}
+
+func (w *fakeWorktrees) AddReview(_ context.Context, repo string, pr ReviewPR) (string, error) {
+	w.mu.Lock()
+	w.inFlight++
+	w.mostInFlight = max(w.mostInFlight, w.inFlight)
+	w.mu.Unlock()
+	time.Sleep(30 * time.Millisecond)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.inFlight--
+	if err := w.addErr; err != nil {
+		w.addErr = nil
+		return "", err
+	}
+	w.added = append(w.added, pr.Number)
+	return fmt.Sprintf("%s.review-pr-%d", repo, pr.Number), nil
+}
+
+func (w *fakeWorktrees) RemoveReview(_ context.Context, _, path string, _ ReviewPR) (bool, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.reviewsRemoved = append(w.reviewsRemoved, path)
+	return w.keep, nil
 }
 
 func (w *fakeWorktrees) CreateArgv(_, branch string) []string { return []string{"wt", branch} }
@@ -182,10 +329,24 @@ func (w *fakeWorktrees) Remove(_ context.Context, _, branch string) error {
 	return nil
 }
 
-type fakeHarness struct{}
+type fakeHarness struct {
+	mu sync.Mutex
+	// trusted lists each folder that Prepare trusted.
+	trusted []string
+	specs   []WorkerSpec
+}
 
-func (fakeHarness) Prepare(context.Context, string, string) error { return nil }
-func (fakeHarness) Command(_ context.Context, w WorkerSpec) ([]string, map[string]string, error) {
+func (h *fakeHarness) Prepare(_ context.Context, _, worktree string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.trusted = append(h.trusted, worktree)
+	return nil
+}
+
+func (h *fakeHarness) Command(_ context.Context, w WorkerSpec) ([]string, map[string]string, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.specs = append(h.specs, w)
 	return []string{"claude", w.Stage.Key()}, nil, nil
 }
 
@@ -216,20 +377,29 @@ var testPolicy = lifecycle.Policy{Budgets: lifecycle.Budgets{CIDebug: 3, Respond
 func (fakeConfig) Policy(string, map[string]string) (lifecycle.Policy, error) { return testPolicy, nil }
 func (fakeConfig) RepoForIssue(Issue) (string, bool)                          { return "/repos/acme/data", true }
 func (fakeConfig) ResolveRepo(name string) (string, error)                    { return "/repos/acme/" + name, nil }
-
-type harness struct {
-	t      *testing.T
-	s      *Scheduler
-	rex    *fakeRex
-	gh     *fakeGitHub
-	wt     *fakeWorktrees
-	tr     *fakeTracker
-	st     *store.Store
-	cancel context.CancelFunc
-	done   chan error
+func (fakeConfig) RepoForGitHub(slug string) (string, bool) {
+	if strings.EqualFold(slug, "acme/data") {
+		return "/repos/acme/data", true
+	}
+	return "", false
 }
 
-func newHarness(t *testing.T, dbPath string, seed func(*store.Store)) *harness {
+type harness struct {
+	t   *testing.T
+	s   *Scheduler
+	rex *fakeRex
+	gh  *fakeGitHub
+	wt  *fakeWorktrees
+	hn  *fakeHarness
+	tr  *fakeTracker
+	// stateHome is the XDG state folder of review Workers.
+	stateHome string
+	st        *store.Store
+	cancel    context.CancelFunc
+	done      chan error
+}
+
+func newHarness(t *testing.T, dbPath string, seed func(*store.Store), opts ...func(*Deps)) *harness {
 	t.Helper()
 	st, err := store.Open(dbPath)
 	if err != nil {
@@ -240,12 +410,17 @@ func newHarness(t *testing.T, dbPath string, seed func(*store.Store)) *harness {
 	}
 	h := &harness{
 		t: t, rex: &fakeRex{events: make(chan RexEvent, 16)},
-		gh: &fakeGitHub{prs: map[PRKey]PRSnapshot{}}, wt: &fakeWorktrees{root: t.TempDir()}, tr: &fakeTracker{}, st: st,
+		gh: &fakeGitHub{prs: map[PRKey]PRSnapshot{}, reviews: map[ReviewKey]ReviewSnapshot{}}, wt: &fakeWorktrees{root: t.TempDir()},
+		hn: &fakeHarness{}, tr: &fakeTracker{}, st: st, stateHome: t.TempDir(),
 	}
-	h.s, err = New(Deps{
-		Rex: h.rex, GitHub: h.gh, Worktrees: h.wt, Harness: fakeHarness{}, Tracker: h.tr, Config: fakeConfig{},
-		Store: st, DefaultCap: 5, PollInterval: 20 * time.Millisecond, AdHocSession: "ad hoc",
-	})
+	d := Deps{
+		Rex: h.rex, GitHub: h.gh, Worktrees: h.wt, Harness: h.hn, Tracker: h.tr, Config: fakeConfig{},
+		Store: st, DefaultCap: 5, PollInterval: 20 * time.Millisecond, AdHocSession: "ad hoc", StateHome: h.stateHome,
+	}
+	for _, o := range opts {
+		o(&d)
+	}
+	h.s, err = New(d)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +477,7 @@ func TestTaskFromStartToMerged(t *testing.T) {
 	key := PRKey{"acme/data", "ada/eng-1-billing"}
 
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	if v := h.task("ENG-1"); v.Stage != "Queued" || v.Repo != "data" {
+	if v := h.task("ENG-1"); v.Stage != "Queued" || v.Repo != "data" || v.Kind != lifecycle.KindBuild {
 		t.Fatalf("added task = %+v", v)
 	}
 	h.do(Request{Op: "start", Task: "ENG-1"})
@@ -361,6 +536,24 @@ func TestTaskFromStartToMerged(t *testing.T) {
 	if !slices.Equal(h.tr.status, []string{"started", "in_review", "merged"}) {
 		t.Fatalf("tracker events = %v", h.tr.status)
 	}
+}
+
+func TestThePollOpPollsNow(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PollInterval = time.Hour })
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.waitTab("claude working")
+	polled := func() bool {
+		h.gh.mu.Lock()
+		defer h.gh.mu.Unlock()
+		return slices.Contains(h.gh.polled, PRKey{"acme/data", "ada/eng-1-billing"})
+	}
+	if polled() {
+		t.Fatal("GitHub was polled before the poll op")
+	}
+	h.do(Request{Op: "poll"})
+	eventually(t, "a poll of ENG-1's branch", polled)
 }
 
 func TestWIPCapFullFailsStart(t *testing.T) {

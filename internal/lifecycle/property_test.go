@@ -10,12 +10,13 @@ import (
 
 var anySignal = rapid.SampledFrom([]Signal{
 	Start{}, Start{OverCap: true}, PRMerge{}, TaskClosed{},
-	Rerun{Working}, Rerun{CIDebug}, Rerun{Responding},
+	Rerun{Working}, Rerun{CIDebug}, Rerun{Responding}, Rerun{Reviewing}, Reopen{},
 	WorkerDone{ContractMet: true}, WorkerDone{ContractMet: false},
 	WorkerStatus{State: "working"}, WorkerStatus{State: "blocked", Kind: "permission"}, WorkerStatus{State: "error"},
 	WorkerExited{Code: 0}, WorkerExited{Code: 1}, WorkerLost{}, SetupFailed{},
 	PROpen{}, Pushed{}, CIFailed{}, CIPassed{}, CIPassed{Draft: true}, CIPassed{NeedsReview: true},
 	ReviewApproved{}, ReviewCommented{}, ReviewChangesRequested{}, ReviewAdditionalAuthors{}, PRConflict{}, PRMerged{},
+	PRReviewed{}, PRClosed{},
 })
 
 // failure is what a Worker that never succeeds, and a world that keeps
@@ -35,21 +36,50 @@ func failure(t *rapid.T, s Stage, pushes bool) Signal {
 	return WorkerLost{}
 }
 
+// queues are the review queues of a random Board. "" is a review with no queue.
+var queues = []string{"", "q1", "q2"}
+
+// randomBoard mixes build Tasks with review Tasks. q1 and q2 get 0 to 2
+// slots, so some review starts must fail.
 func randomBoard(t *rapid.T) (*Board, []string) {
 	b := NewBoard(rapid.IntRange(1, 4).Draw(t, "cap"))
+	for _, q := range queues[1:] {
+		b.Slots[q] = rapid.IntRange(0, 2).Draw(t, "slots "+q)
+	}
 	var ids []string
 	for i := range rapid.IntRange(1, 8).Draw(t, "tasks") {
 		id := fmt.Sprintf("T%d", i)
-		b.Add(id, Policy{
+		p := Policy{
 			Budgets: Budgets{
 				CIDebug:    rapid.IntRange(0, 3).Draw(t, "ci"),
 				Responding: rapid.IntRange(0, 3).Draw(t, "resp"),
 				Restarts:   rapid.IntRange(0, 2).Draw(t, "restarts"),
 			},
-		})
+		}
+		if rapid.Bool().Draw(t, "review") {
+			b.AddReview(id, rapid.SampledFrom(queues).Draw(t, "queue"), p)
+		} else {
+			b.Add(id, p)
+		}
 		ids = append(ids, id)
 	}
 	return b, ids
+}
+
+// step applies one random Signal to the Task and fails on an error that no
+// caller expects.
+func step(t *rapid.T, b *Board, task *Task) (Signal, []Effect, error) {
+	s := anySignal.Draw(t, "signal")
+	effects, err := b.Apply(task.ID, s)
+	var na *NotAllowedError
+	if err != nil && !errors.As(err, &na) && !errors.Is(err, ErrWIPCapFull) && !errors.Is(err, ErrSlotsFull) {
+		t.Fatal(err)
+	}
+	return s, effects, err
+}
+
+func anyTask(t *rapid.T, b *Board, ids []string) *Task {
+	return b.Tasks[rapid.SampledFrom(ids).Draw(t, "task")]
 }
 
 func TestWIPCapNeverPassedWithoutOverride(t *testing.T) {
@@ -60,7 +90,7 @@ func TestWIPCapNeverPassedWithoutOverride(t *testing.T) {
 			s := anySignal.Draw(t, "signal")
 			before := b.Started()
 			_, err := b.Apply(id, s)
-			if start, ok := s.(Start); ok && err == nil && !start.OverCap && before >= b.Cap {
+			if start, ok := s.(Start); ok && err == nil && !start.OverCap && before >= b.Cap && b.Tasks[id].Kind == KindBuild {
 				t.Fatalf("start without override with %d started and cap %d", before, b.Cap)
 			}
 			if b.Started()-b.OverCap() > b.Cap {
@@ -74,11 +104,7 @@ func TestEveryStartedTaskEndsInDoneOrNeedsYou(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		b, ids := randomBoard(t)
 		for range rapid.IntRange(0, 100).Draw(t, "steps") {
-			_, err := b.Apply(rapid.SampledFrom(ids).Draw(t, "task"), anySignal.Draw(t, "signal"))
-			var na *NotAllowedError
-			if err != nil && !errors.As(err, &na) && !errors.Is(err, ErrWIPCapFull) {
-				t.Fatal(err)
-			}
+			step(t, b, anyTask(t, b, ids))
 		}
 		// Budgets total at most 3+3+2 per Stage visit, so a bounded number of
 		// failures must reach the user.
@@ -96,6 +122,89 @@ func TestEveryStartedTaskEndsInDoneOrNeedsYou(t *testing.T) {
 				if _, err := b.Apply(id, failure(t, task.Stage, pushes)); err != nil {
 					t.Fatal(err)
 				}
+			}
+		}
+	})
+}
+
+func TestReviewStartNeverPassesItsQueueSlots(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b, ids := randomBoard(t)
+		for range rapid.IntRange(0, 200).Draw(t, "steps") {
+			task := anyTask(t, b, ids)
+			before := b.QueueStarted(task.Queue)
+			s, _, err := step(t, b, task)
+			if _, ok := s.(Start); ok && err == nil && task.Kind == KindReview && task.Queue != "" && before >= b.Slots[task.Queue] {
+				t.Fatalf("%s started in %s with %d started and %d slots", task.ID, task.Queue, before, b.Slots[task.Queue])
+			}
+			for _, q := range queues[1:] {
+				if b.QueueStarted(q) > b.Slots[q] {
+					t.Fatalf("%s has %d started reviews and %d slots", q, b.QueueStarted(q), b.Slots[q])
+				}
+			}
+		}
+	})
+}
+
+func TestReviewTasksNeverChangeTheWIPCount(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b, ids := randomBoard(t)
+		for range rapid.IntRange(0, 200).Draw(t, "steps") {
+			task := anyTask(t, b, ids)
+			before, over := b.Started(), b.OverCap()
+			if _, err := b.Apply(task.ID, anySignal.Draw(t, "signal")); err == nil && task.Kind == KindReview && (b.Started() != before || b.OverCap() != over) {
+				t.Fatalf("a review signal moved started %d->%d, over cap %d->%d", before, b.Started(), over, b.OverCap())
+			}
+		}
+	})
+}
+
+func TestEachKindStaysInItsOwnStages(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b, ids := randomBoard(t)
+		for range rapid.IntRange(0, 200).Draw(t, "steps") {
+			task := anyTask(t, b, ids)
+			s, _, _ := step(t, b, task)
+			if !task.Kind.Has(task.Stage) {
+				t.Fatalf("%s Task %s entered %s after %s", task.Kind, task.ID, task.Stage, s.Name())
+			}
+		}
+	})
+}
+
+func TestReviewTasksGetNoEffectThatWritesOutside(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b, ids := randomBoard(t)
+		for range rapid.IntRange(0, 200).Draw(t, "steps") {
+			task := anyTask(t, b, ids)
+			s, effects, _ := step(t, b, task)
+			if task.Kind != KindReview {
+				continue
+			}
+			for _, e := range effects {
+				switch e.(type) {
+				case MarkReady, Merge, TrackerStatus:
+					t.Fatalf("review Task %s got %#v from %s", task.ID, e, s.Name())
+				}
+			}
+		}
+	})
+}
+
+// A Review ready Task, and so its slot, stays until the PR or the user ends
+// the review. No Worker signal moves it.
+func TestAReviewReadyTaskLeavesOnlyByThePROrTheUser(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b, task := reviewIn(ReviewReady, rapid.SampledFrom(queues).Draw(t, "queue"))
+		for task.Stage == ReviewReady {
+			s, _, _ := step(t, b, task)
+			if task.Stage == ReviewReady {
+				continue
+			}
+			switch s.(type) {
+			case PRReviewed, PRMerged, PRClosed, TaskClosed, Rerun:
+			default:
+				t.Fatalf("%s left Review ready for %s", s.Name(), task.Stage)
 			}
 		}
 	})

@@ -34,7 +34,11 @@ func (m Model) trackerBody() string {
 	var lines []string
 	// A lone Source tab still shows its name, as the list has no crumbs.
 	if len(t.tabs) > 1 || t.curSource() != nil {
-		lines = append(lines, m.tabStrip())
+		names := make([]string, len(t.tabs))
+		for i, tb := range t.tabs {
+			names[i] = tb.name()
+		}
+		lines = append(lines, m.tabStrip(names, t.tab))
 	}
 	if tb := t.curTab(); tb.browse() || t.lvl != tb.home() {
 		lines = append(lines, m.crumbs())
@@ -73,18 +77,17 @@ func (m Model) trackerBody() string {
 
 // tabStrip names the tabs, with the open tab in brackets. When the row is
 // too wide, it drops tabs from the left until the open tab fits.
-func (m Model) tabStrip() string {
-	t := m.tr
-	segs := make([]string, len(t.tabs))
-	for i, tb := range t.tabs {
-		if i == t.tab {
-			segs[i] = headRow.Render("["+tb.name()+"]") + " "
+func (m Model) tabStrip(names []string, cur int) string {
+	segs := make([]string, len(names))
+	for i, name := range names {
+		if i == cur {
+			segs[i] = headRow.Render("["+name+"]") + " "
 		} else {
-			segs[i] = dim.Render(" "+tb.name()+" ") + " "
+			segs[i] = dim.Render(" "+name+" ") + " "
 		}
 	}
 	start := 0
-	for start < t.tab && ansi.StringWidth(" "+strings.Join(segs[start:t.tab+1], "")) > m.width {
+	for start < cur && ansi.StringWidth(" "+strings.Join(segs[start:cur+1], "")) > m.width {
 		start++
 	}
 	lead := " "
@@ -510,7 +513,7 @@ func (m Model) trackerHints() []hint {
 		if len(t.tabs) > 1 {
 			hs = append(hs, hint{"tab", "next view"}, hint{"< >", "move the tab"})
 		}
-		return append(hs, hint{"q", "quit"}, hint{"?", "all keys"})
+		return append(hs, hint{"R", "refresh now"}, hint{"q", "quit"}, hint{"?", "all keys"})
 	}
 	atHome := tb.view != nil && t.lvl == tb.home()
 	var hs []hint
@@ -551,5 +554,5 @@ func (m Model) trackerHints() []hint {
 	if tb.view != nil {
 		hs = append(hs, hint{"< >", "move the tab"})
 	}
-	return append(hs, hint{"q", "quit"}, hint{"?", "all keys"})
+	return append(hs, hint{"R", "refresh now"}, hint{"q", "quit"}, hint{"?", "all keys"})
 }

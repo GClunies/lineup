@@ -16,6 +16,9 @@ type TaskClosed struct{}
 // Rerun is the Orchestrator's override that starts a fresh Worker for Stage.
 type Rerun struct{ Stage Stage }
 
+// Reopen starts the Task's Worker again in its Stage, in the same conversation.
+type Reopen struct{}
+
 // Worker signals.
 
 // WorkerDone means the Worker reported done. The Scheduler checks the Stage
@@ -52,10 +55,21 @@ type ReviewAdditionalAuthors struct{}
 type PRConflict struct{}
 type PRMerged struct{}
 
+// Review signals. Each is a level, not an edge: the Scheduler computes it from
+// the reviewed PR's current state on each full poll.
+
+// PRReviewed means the user submitted a review after the Task was added. A
+// pending review is not submitted.
+type PRReviewed struct{}
+
+// PRClosed means the PR closed without a merge.
+type PRClosed struct{}
+
 func (Start) Name() string                   { return "start" }
 func (PRMerge) Name() string                 { return "pr-merge" }
 func (TaskClosed) Name() string              { return "task-closed" }
 func (Rerun) Name() string                   { return "rerun" }
+func (Reopen) Name() string                  { return "reopen" }
 func (WorkerDone) Name() string              { return "done" }
 func (WorkerStatus) Name() string            { return "status" }
 func (WorkerExited) Name() string            { return "exited" }
@@ -71,11 +85,14 @@ func (ReviewChangesRequested) Name() string  { return "review-changes-requested"
 func (ReviewAdditionalAuthors) Name() string { return "review-additional-authors" }
 func (PRConflict) Name() string              { return "pr-conflict" }
 func (PRMerged) Name() string                { return "pr-merged" }
+func (PRReviewed) Name() string              { return "pr-reviewed" }
+func (PRClosed) Name() string                { return "pr-closed" }
 
 func (Start) signal()                   {}
 func (PRMerge) signal()                 {}
 func (TaskClosed) signal()              {}
 func (Rerun) signal()                   {}
+func (Reopen) signal()                  {}
 func (WorkerDone) signal()              {}
 func (WorkerStatus) signal()            {}
 func (WorkerExited) signal()            {}
@@ -91,6 +108,8 @@ func (ReviewChangesRequested) signal()  {}
 func (ReviewAdditionalAuthors) signal() {}
 func (PRConflict) signal()              {}
 func (PRMerged) signal()                {}
+func (PRReviewed) signal()              {}
+func (PRClosed) signal()                {}
 
 // Effect is work the Scheduler must do after a transition, in order.
 type Effect interface{ effect() }

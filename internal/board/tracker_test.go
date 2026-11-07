@@ -28,6 +28,8 @@ type fakeLinear struct {
 	viewIssues   map[string][]linear.Issue       // by View ID
 	viewProjects map[string][]linear.ProjectInfo // by View ID
 	projIssues   []string                        // the Project IDs read
+	teamReads    int
+	projectReads int
 }
 
 // wsLinear is fakeLinear as one workspace sees it.
@@ -55,9 +57,15 @@ func (f *fakeLinear) ProjectIssues(_ context.Context, id string) ([]linear.Issue
 	return f.issues, nil
 }
 func (f *fakeLinear) Teams(context.Context) ([]linear.Team, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.teamReads++
 	return []linear.Team{{ID: "t1", Key: "ENG", Name: "Engineering"}}, nil
 }
 func (f *fakeLinear) TeamProjects(_ context.Context, team string) ([]linear.ProjectInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.projectReads++
 	projects := map[string][]linear.ProjectInfo{
 		"t1": {{ID: "p1", Name: "Billing", Status: "Started"}},
 		"t2": {{ID: "p2", Name: "Web", Status: "Started"}},
@@ -617,5 +625,43 @@ func TestTrackerSkillStartOverCapUsesCapPrompt(t *testing.T) {
 	e.press("s", "down", "enter")
 	if e.m.mode != modeCap || e.m.pendingTask != "ENG-9" {
 		t.Fatalf("mode=%d pending=%q", e.m.mode, e.m.pendingTask)
+	}
+}
+
+func TestTrackerRReadsWhatIsOnScreenAgain(t *testing.T) {
+	e := newTrkEnv(t)
+	e.open()
+	e.press("j", "enter")
+	e.press("R")
+	if e.api.teamReads != 2 {
+		t.Fatalf("R on the teams read them %d times, want 2", e.api.teamReads)
+	}
+	e.press("enter", "R")
+	if e.api.projectReads != 2 {
+		t.Fatalf("R on the Projects read them %d times, want 2", e.api.projectReads)
+	}
+	e.press("enter")
+	e.api.issues = append(e.api.issues, lissue("ENG-700", "Add the invoice export", "Todo"))
+	e.press("R")
+	if v := e.m.View(); !strings.Contains(v, "Add the invoice export") {
+		t.Fatalf("R on the Issues did not read them again:\n%s", v)
+	}
+	e.press("enter")
+	for i := range e.api.issues {
+		e.api.issues[i].Title += " v2"
+	}
+	e.press("R")
+	if v := e.m.View(); !strings.Contains(v, " v2") {
+		t.Fatalf("R on the Issue did not read it again:\n%s", v)
+	}
+}
+
+func TestTrackerSearchTakesR(t *testing.T) {
+	e := newTrkEnv(t)
+	e.toIssues()
+	reads := len(e.api.projIssues)
+	e.press("/", "R")
+	if got := e.m.tr.filter.Value(); got != "R" || len(e.api.projIssues) != reads {
+		t.Fatalf("R in the search: search = %q, %d Issue reads, want R and %d", got, len(e.api.projIssues), reads)
 	}
 }

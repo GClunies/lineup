@@ -7,6 +7,7 @@ import (
 
 var (
 	ErrWIPCapFull  = errors.New("wip cap full")
+	ErrSlotsFull   = errors.New("review slots full")
 	ErrUnknownTask = errors.New("unknown task")
 )
 
@@ -32,7 +33,11 @@ type Policy struct {
 }
 
 type Task struct {
-	ID         string  `json:"id"`
+	ID string `json:"id"`
+	// Kind is build in a Task from before review Tasks.
+	Kind Kind `json:"kind,omitempty"`
+	// Queue is the review queue that added a review Task, or "".
+	Queue      string  `json:"queue,omitempty"`
 	Stage      Stage   `json:"stage"`
 	Flag       Reason  `json:"flag,omitempty"`
 	FlagDetail string  `json:"flag_detail,omitempty"`
@@ -54,34 +59,51 @@ func (t *Task) Group() Group {
 }
 
 type Board struct {
-	Cap   int
+	Cap int
+	// Slots is how many review Tasks of each queue can be started at one
+	// time. A queue that is missing has no slot.
+	Slots map[string]int
 	Tasks map[string]*Task
 }
 
-func NewBoard(cap int) *Board { return &Board{Cap: cap, Tasks: map[string]*Task{}} }
+func NewBoard(cap int) *Board {
+	return &Board{Cap: cap, Slots: map[string]int{}, Tasks: map[string]*Task{}}
+}
 
-// Add puts a Queued Task on the Board.
+// Add puts a Queued build Task on the Board.
 func (b *Board) Add(id string, p Policy) *Task {
 	t := &Task{ID: id, Stage: Queued, Policy: p, Left: p.Budgets}
 	b.Tasks[id] = t
 	return t
 }
 
-func (b *Board) Started() int {
-	n := 0
-	for _, t := range b.Tasks {
-		if t.Stage.Started() {
-			n++
-		}
-	}
-	return n
+// AddReview puts a Queued review Task on the Board. queue is "" for a review
+// that the user asked for.
+func (b *Board) AddReview(id, queue string, p Policy) *Task {
+	t := b.Add(id, p)
+	t.Kind, t.Queue = KindReview, queue
+	return t
 }
 
-// OverCap is how many started Tasks went over the cap with the user's yes.
+// Started counts the started build Tasks. Review Tasks never count toward the WIP cap.
+func (b *Board) Started() int {
+	return b.count(func(t *Task) bool { return t.Kind == KindBuild })
+}
+
+// OverCap is how many started build Tasks went over the cap with the user's yes.
 func (b *Board) OverCap() int {
+	return b.count(func(t *Task) bool { return t.Kind == KindBuild && t.OverCap })
+}
+
+// QueueStarted counts the started review Tasks of the queue.
+func (b *Board) QueueStarted(queue string) int {
+	return b.count(func(t *Task) bool { return t.Kind == KindReview && t.Queue == queue })
+}
+
+func (b *Board) count(match func(*Task) bool) int {
 	n := 0
 	for _, t := range b.Tasks {
-		if t.Stage.Started() && t.OverCap {
+		if t.Stage.Started() && match(t) {
 			n++
 		}
 	}
@@ -101,6 +123,12 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 	case Start:
 		if t.Stage != Queued {
 			return nil, notAllowed
+		}
+		if t.Kind == KindReview {
+			if t.Queue != "" && b.QueueStarted(t.Queue) >= b.Slots[t.Queue] {
+				return nil, ErrSlotsFull
+			}
+			return t.startAgent(Reviewing), nil
 		}
 		if b.Started() >= b.Cap && !s.OverCap {
 			return nil, ErrWIPCapFull
@@ -122,10 +150,17 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 		return t.finish(OutcomeClosed), nil
 
 	case Rerun:
-		if !s.Stage.Agent() || t.Stage == Queued || t.Stage == Done {
+		if !s.Stage.Agent() || !t.Kind.Has(s.Stage) || t.Stage == Queued || t.Stage == Done {
 			return nil, notAllowed
 		}
 		return t.startAgent(s.Stage), nil
+
+	case Reopen:
+		if !t.Stage.Resumable() {
+			return nil, notAllowed
+		}
+		t.flag("", "")
+		return []Effect{StartWorker{t.Stage}}, nil
 
 	case PRMerged:
 		if t.Stage == Done || t.Stage == Queued {
@@ -187,8 +222,8 @@ func (t *Task) observe(s Signal) []Effect {
 			t.flag(ReasonStopped, "")
 			return nil
 		}
-		if t.Stage == Working {
-			t.enter(CIRunning)
+		if next, ok := afterContract[t.Stage]; ok {
+			t.enter(next)
 		}
 
 	case PROpen:
@@ -234,8 +269,25 @@ func (t *Task) observe(s Signal) []Effect {
 		if t.Stage == InReview || t.Stage == ReadyToLand {
 			return t.spend(Responding, &t.Left.Responding)
 		}
+
+	case PRReviewed:
+		if t.Kind == KindReview {
+			return t.finish(OutcomeReviewed)
+		}
+
+	case PRClosed:
+		if t.Kind == KindReview {
+			return t.finish(OutcomeClosed)
+		}
 	}
 	return nil
+}
+
+// afterContract is the Stage that a met Stage contract leads to. The other
+// agent Stages move on when the poll sees their push.
+var afterContract = map[Stage]Stage{
+	Working:   CIRunning,
+	Reviewing: ReviewReady,
 }
 
 // spend enters an agent Stage that a Loop budget limits. With budget left it
@@ -263,9 +315,13 @@ func (t *Task) ready() []Effect {
 	return nil
 }
 
+// finish ends the Task. A review Task has no Tracker to tell.
 func (t *Task) finish(o Outcome) []Effect {
 	t.enter(Done)
 	t.Outcome = o
+	if t.Kind == KindReview {
+		return []Effect{Cleanup{}}
+	}
 	return []Effect{Cleanup{}, TrackerStatus{string(o)}}
 }
 

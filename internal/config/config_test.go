@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -58,12 +59,12 @@ func TestMissingFileMeansDefaults(t *testing.T) {
 		t.Errorf("budgets = %+v", r.Budgets)
 	}
 	want := StageConfig{Harness: "claude", Model: "claude-opus-5-5", Effort: "high"}
-	for _, st := range []lifecycle.Stage{lifecycle.Working, lifecycle.CIDebug, lifecycle.Responding} {
+	for _, st := range []lifecycle.Stage{lifecycle.Working, lifecycle.CIDebug, lifecycle.Responding, lifecycle.Reviewing} {
 		if r.Stages[st] != want {
 			t.Errorf("%s = %+v", st, r.Stages[st])
 		}
 	}
-	if len(r.Stages) != 3 || r.Harnesses["claude"] != bin {
+	if len(r.Stages) != 4 || r.Harnesses["claude"] != bin {
 		t.Errorf("stages %d harnesses %v", len(r.Stages), r.Harnesses)
 	}
 }
@@ -119,13 +120,14 @@ func TestLinearClientID(t *testing.T) {
 
 func TestInvalidValuesFailAtLoad(t *testing.T) {
 	for name, text := range map[string]string{
-		"cap":      "wip_cap = 0\n",
-		"interval": "poll_interval = \"soon\"\n",
-		"budget":   "[budgets]\nrestarts = -1\n",
-		"stage":    "[stage.queued]\nmodel = \"x\"\n",
-		"harness":  "[harness.claude]\npath = \"claude\"\n",
-		"event":    "[linear.w.status.ENG]\nbogus = \"x\"\n",
-		"match":    "[[repos]]\nmatch = \"[\"\n",
+		"cap":        "wip_cap = 0\n",
+		"interval":   "poll_interval = \"soon\"\n",
+		"budget":     "[budgets]\nrestarts = -1\n",
+		"stage":      "[stage.queued]\nmodel = \"x\"\n",
+		"user stage": "[stage.review_ready]\nmodel = \"x\"\n",
+		"harness":    "[harness.claude]\npath = \"claude\"\n",
+		"event":      "[linear.w.status.ENG]\nbogus = \"x\"\n",
+		"match":      "[[repos]]\nmatch = \"[\"\n",
 	} {
 		if _, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), text)); err == nil {
 			t.Errorf("%s: no error", name)
@@ -369,5 +371,95 @@ match = "`+root+`/code/acme/app"
 	}
 	if got := load(t, "wip_cap = 3\n").Checkouts(); len(got) != 0 {
 		t.Fatalf("no [[repos]] gave %q", got)
+	}
+}
+
+func TestReviewViewsAndQueues(t *testing.T) {
+	g := load(t, `
+[[review.views]]
+name = "My teammates"
+repos = ["umbrella/data"]
+author_teams = ["umbrella/platform"]
+
+[[review.views]]
+name = "Data team"
+requested_teams = ["umbrella/data"]
+labels = ["needs-review", "breaking change"]
+
+[[review.queues]]
+name = "platform"
+repos = ["umbrella/data"]
+authors = ["hopper", "noether"]
+
+[[review.queues]]
+name = "one at a time"
+authors = ["octo"]
+slots = 1
+`)
+	wantViews := []ReviewView{
+		{Name: "My teammates", PRFilter: PRFilter{Repos: []string{"umbrella/data"}, AuthorTeams: []string{"umbrella/platform"}}},
+		{Name: "Data team", PRFilter: PRFilter{RequestedTeams: []string{"umbrella/data"}, Labels: []string{"needs-review", "breaking change"}}},
+	}
+	if got := g.ReviewViews(); !reflect.DeepEqual(got, wantViews) {
+		t.Errorf("ReviewViews = %+v\nwant %+v", got, wantViews)
+	}
+	wantQueues := []ReviewQueue{
+		{Name: "platform", PRFilter: PRFilter{Repos: []string{"umbrella/data"}, Authors: []string{"hopper", "noether"}}, Slots: 3},
+		{Name: "one at a time", PRFilter: PRFilter{Authors: []string{"octo"}}, Slots: 1},
+	}
+	if got := g.ReviewQueues(); !reflect.DeepEqual(got, wantQueues) {
+		t.Errorf("ReviewQueues = %+v\nwant %+v", got, wantQueues)
+	}
+	if got := load(t, "wip_cap = 3\n"); len(got.ReviewViews())+len(got.ReviewQueues()) != 0 {
+		t.Errorf("no review config gave %+v %+v", got.ReviewViews(), got.ReviewQueues())
+	}
+}
+
+func TestBadReviewConfigFailsAtLoad(t *testing.T) {
+	for name, c := range map[string]struct{ text, want string }{
+		"unknown key":       {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\nauthor = [\"x\"]\n", "unknown keys"},
+		"unknown section":   {"[review.bogus]\nx = 1\n", "unknown keys"},
+		"no filter":         {"[[review.views]]\nname = \"a\"\n", "review.views[0]: needs at least one"},
+		"empty filter":      {"[[review.views]]\nname = \"a\"\nrepos = []\n", "review.views[0]: needs at least one"},
+		"no name":           {"[[review.views]]\nrepos = [\"o/r\"]\n", "review.views[0]: name is required"},
+		"team form":         {"[[review.views]]\nname = \"a\"\nauthor_teams = [\"platform\"]\n", `review.views[0]: author_teams[0] "platform" must be org/slug`},
+		"requested form":    {"[[review.views]]\nname = \"a\"\nrequested_teams = [\"umbrella/data/x\"]\n", "requested_teams[0]"},
+		"repo form":         {"[[review.views]]\nname = \"a\"\nrepos = [\"umbrella\"]\n", `repos[0] "umbrella" must be owner/name`},
+		"repo space":        {"[[review.views]]\nname = \"a\"\nrepos = [\"umbrella/da ta\"]\n", "repos[0]"},
+		"author space":      {"[[review.views]]\nname = \"a\"\nauthors = [\"a b\"]\n", "authors[0]"},
+		"label quote":       {"[[review.views]]\nname = \"a\"\nlabels = [\"a\\\"b\"]\n", "labels[0]"},
+		"duplicate view":    {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\n[[review.views]]\nname = \"a\"\nrepos = [\"o/s\"]\n", `review.views[1]: name "a" is used twice`},
+		"view and queue":    {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\n[[review.queues]]\nname = \"a\"\nrepos = [\"o/s\"]\n", `review.queues[0]: name "a" is used twice`},
+		"built-in name":     {"[[review.views]]\nname = \"My PRs\"\nrepos = [\"o/r\"]\n", "is used twice"},
+		"slots zero":        {"[[review.queues]]\nname = \"q\"\nrepos = [\"o/r\"]\nslots = 0\n", "review.queues[0]: slots must be at least 1"},
+		"queue no filter":   {"[[review.queues]]\nname = \"q\"\nslots = 2\n", "review.queues[0]: needs at least one"},
+		"queue unknown key": {"[[review.queues]]\nname = \"q\"\nrepos = [\"o/r\"]\nslot = 2\n", "unknown keys"},
+	} {
+		_, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), c.text))
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: err = %v, want %q", name, err, c.want)
+		}
+	}
+}
+
+func TestReviewInTheRepoFileIsAnError(t *testing.T) {
+	repo := t.TempDir()
+	write(t, filepath.Join(repo, ".lineup.toml"), "[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\n")
+	if _, err := load(t, "").Resolve(repo, nil); err == nil || !strings.Contains(err.Error(), "unknown keys") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestTheReviewingStageHasItsOwnSection(t *testing.T) {
+	g := load(t, "[stage.default]\nmodel = \"m\"\n[stage.reviewing]\neffort = \"max\"\n")
+	r, err := g.Resolve(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Stages[lifecycle.Reviewing]; got.Model != "m" || got.Effort != "max" {
+		t.Errorf("reviewing = %+v, want the default model and its own effort", got)
+	}
+	if got := r.Stages[lifecycle.Working]; got.Effort != "high" {
+		t.Errorf("[stage.reviewing] reached working: %+v", got)
 	}
 }

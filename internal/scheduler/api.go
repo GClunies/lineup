@@ -30,6 +30,8 @@ type Request struct {
 	Value   string `json:"value,omitempty"`
 	N       int    `json:"n,omitempty"`
 	OverCap bool   `json:"over_cap,omitempty"`
+	// URL is the PR that a review op names.
+	URL string `json:"url,omitempty"`
 }
 
 type Response struct {
@@ -121,6 +123,16 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 		return s.show(req.Task)
 	case "add":
 		return s.add(ctx, req)
+	case "review":
+		return s.review(ctx, req.URL)
+	case "reviews":
+		return s.reviews(ctx)
+	case "poll":
+		// The poll outlives the request, so it runs on the Scheduler's context.
+		s.call(func() { go s.poll(s.ctx, nil) })
+		return nil, nil
+	case "reviews-pause", "reviews-resume":
+		return nil, s.pauseReviews(req.Op == "reviews-pause")
 	case "cap":
 		if req.N < 1 {
 			return nil, errors.New("the cap must be at least 1")
@@ -265,12 +277,7 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 	var v TaskView
 	err = s.withLoop(func() error {
 		if r.ID == "" {
-			n := 1
-			if cur, _ := s.d.Store.Setting("next_id"); cur != "" {
-				n, _ = strconv.Atoi(cur)
-			}
-			s.d.Store.SetSetting("next_id", strconv.Itoa(n+1))
-			r.ID = fmt.Sprintf("B-%d", n)
+			r.ID = s.nextID("B")
 			slug := strings.Trim(notSlug.ReplaceAllString(strings.ToLower(r.Title), "-"), "-")
 			if len(slug) > 40 {
 				slug = strings.Trim(slug[:40], "-")
@@ -280,11 +287,7 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 		if old, ok := s.recs[r.ID]; ok && old.Stage != lifecycle.Done {
 			return fmt.Errorf("%s is already on the Board", r.ID)
 		}
-		var repos []string
-		for _, o := range s.recs {
-			repos = append(repos, o.Repo)
-		}
-		r.RepoLabel = sessionLabel(r.Repo, repos)
+		r.RepoLabel = sessionLabel(r.Repo, s.repos())
 		r.Session = r.RepoLabel
 		if r.Issue == nil {
 			r.Session = s.d.AdHocSession
@@ -303,4 +306,24 @@ func (s *Scheduler) withLoop(f func() error) error {
 	var err error
 	s.call(func() { err = f() })
 	return err
+}
+
+// nextID takes the next number of the counter that ad hoc and review Tasks
+// share. Only the loop calls it.
+func (s *Scheduler) nextID(prefix string) string {
+	n := 1
+	if cur, _ := s.d.Store.Setting("next_id"); cur != "" {
+		n, _ = strconv.Atoi(cur)
+	}
+	s.d.Store.SetSetting("next_id", strconv.Itoa(n+1))
+	return fmt.Sprintf("%s-%d", prefix, n)
+}
+
+// repos lists the Repo of every Task. Only the loop calls it.
+func (s *Scheduler) repos() []string {
+	var out []string
+	for _, o := range s.recs {
+		out = append(out, o.Repo)
+	}
+	return out
 }

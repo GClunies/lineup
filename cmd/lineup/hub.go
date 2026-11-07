@@ -25,6 +25,9 @@ var orchestratorRole []byte
 //go:embed planner/CLAUDE.md
 var plannerRole []byte
 
+//go:embed reviewer/CLAUDE.md
+var reviewerRole []byte
+
 //go:embed planner/linear.md
 var plannerLinear []byte
 
@@ -45,11 +48,15 @@ const (
 // it, because a Monitor does not survive a restart of Claude.
 const watchPrompt = "Start the lineup watch Monitor, as CLAUDE.md says under Alerts."
 
-// orchestratorSettings gives the Orchestrator its status line and lets it run
-// the lineup CLI without a permission prompt.
+// orchestratorSettings gives the Orchestrator its status line, lets it run
+// the lineup CLI without a permission prompt, and leaves reviews to the
+// Reviewer.
 const orchestratorSettings = `{
   "statusLine": {"type": "command", "command": "echo Orchestrator"},
-  "permissions": {"allow": ["Bash(lineup:*)"]}
+  "permissions": {
+    "allow": ["Bash(lineup:*)"],
+    "deny": ["Bash(lineup review:*)", "Bash(lineup reviews:*)"]
+  }
 }
 `
 
@@ -104,6 +111,40 @@ const plannerSettings = `{
 }
 `
 
+// reviewerSettings gives the Reviewer its status line, lets it run the review
+// commands, and keeps it from starting build Tasks or writing to GitHub.
+const reviewerSettings = `{
+  "statusLine": {"type": "command", "command": "echo Reviewer"},
+  "permissions": {
+    "allow": [
+      "Bash(lineup review:*)",
+      "Bash(lineup reviews:*)",
+      "Bash(lineup ls:*)",
+      "Bash(lineup show:*)",
+      "Bash(lineup steer:*)",
+      "Bash(lineup rerun:*)",
+      "Bash(lineup close:*)",
+      "Bash(lineup archive:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh search prs:*)"
+    ],
+    "deny": [
+      "Bash(lineup add:*)",
+      "Bash(lineup start:*)",
+      "Bash(lineup merge:*)",
+      "Bash(lineup watch:*)",
+      "Bash(gh pr review:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr close:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh api:*)"
+    ]
+  }
+}
+`
+
 // agentTab is one Hub tab: a Board view on top and a Claude agent below.
 type agentTab struct {
 	window, view, agent string // Rex window label, top block label, agent block label
@@ -118,8 +159,26 @@ type agentTab struct {
 
 // agentTabs are in Hub tab order. The first is the active tab of a new Hub.
 var agentTabs = []agentTab{
-	{"orchestrate", "BOARD", "ORCHESTRATOR", []string{"board"}, orchestratorRole, orchestratorSettings, "#1b2733", watchPrompt, nil},
+	{"work", "BOARD", "ORCHESTRATOR", []string{"board"}, orchestratorRole, orchestratorSettings, "#1b2733", watchPrompt, nil},
 	{"plan", "LINEAR", "PLANNER", []string{"board", "--linear"}, plannerRole, plannerSettings, "#2a2233", "", composePlanner},
+	{"review", "REVIEWS", "REVIEWER", []string{"board", "--review"}, reviewerRole, reviewerSettings, "#1f2b24", "", nil},
+}
+
+// formerLabels are the labels that a Hub tab had before a rename, by its
+// label now.
+var formerLabels = map[string]string{"work": "orchestrate"}
+
+// renamed is the Hub window to relabel as label: the one under the tab's
+// former label, when no window has the label yet. The rename keeps the agent
+// that runs there. openHub keeps a window that it does not know, so a new tab
+// beside the old one would run a second agent.
+func renamed(windows map[string]hubWindow, label string) (hubWindow, bool) {
+	old, ok := formerLabels[label]
+	if _, now := windows[label]; !ok || now {
+		return hubWindow{}, false
+	}
+	w, ok := windows[old]
+	return w, ok
 }
 
 func rexRun(args ...string) ([]byte, error) {
@@ -294,6 +353,16 @@ func openHub() error {
 	}
 
 	for i, t := range agentTabs {
+		if w, ok := renamed(windows, t.window); ok {
+			if _, err := rexRun("window", "rename", "-s", hubSession, w.ID, t.window); err != nil {
+				return err
+			}
+			// The agent reads its new role the next time it starts.
+			if _, err := prepareAgent(t); err != nil {
+				return err
+			}
+			windows[t.window] = w
+		}
 		if _, ok := windows[t.window]; ok {
 			continue
 		}
@@ -392,24 +461,27 @@ func firstBlock(out []byte) (string, error) {
 }
 
 func runBoard(args []string) error {
-	tracker := len(args) == 1 && args[0] == "--linear"
-	if len(args) > 0 && !tracker {
-		return fmt.Errorf("usage: lineup board [--linear]")
+	var flag string
+	if len(args) > 0 {
+		flag = args[0]
 	}
-	target := "ORCHESTRATOR"
-	if tracker {
-		target = "PLANNER"
+	if len(args) > 1 || (flag != "" && flag != "--linear" && flag != "--review") {
+		return fmt.Errorf("usage: lineup board [--linear | --review]")
 	}
+	target := map[string]string{"": "ORCHESTRATOR", "--linear": "PLANNER", "--review": "REVIEWER"}[flag]
 	opts := board.Options{
-		Linear: tracker,
+		Linear: flag == "--linear",
+		Review: flag == "--review",
 		Zoom:   func() { rexRun("zoom", "-s", hubSession, target) },
 	}
+	opts.Reviews = reviewStores(stateDir())
 	if g, err := config.Load(configPath()); err == nil { // a bad file only means defaults here
 		opts.StartSkills = g.StartSkills()
 		opts.Tracker.Repos = g.Checkouts
 		opts.Tracker.Sources = boardSources(g, stateDir())
+		opts.Reviews.Views = reviewViews(g)
 	}
-	if !tracker {
+	if flag != "--linear" {
 		opts.Notify = func(text string) { board.Toast(os.Stdout, text) }
 	}
 	return board.Run(socketPath(), filepath.Join(stateDir(), "board.json"), opts)
