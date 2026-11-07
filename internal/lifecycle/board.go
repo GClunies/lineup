@@ -67,7 +67,8 @@ type ReviewGate struct {
 // ScoreText names a score of the bot, for example "Greptile 4/5".
 func (g ReviewGate) ScoreText(n int) string { return fmt.Sprintf("%s %d/%d", g.Title, n, g.TopScore) }
 
-// ReviewCycle is a Responding round that a low review bot score started.
+// ReviewCycle is a Responding round that the review bot started: a low score,
+// or open bot threads on a score that passes.
 type ReviewCycle struct {
 	ReviewGate
 	Score int
