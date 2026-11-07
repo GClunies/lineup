@@ -1,0 +1,113 @@
+internal/lifecycle/bar.go
+  s_a0ff46300f71a7::t_9694a43f07c059 141
+internal/github/testdata/many.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/scheduler/scheduler.go
+  s_a0ff46300f71a7::t_472d9b45ce611d 201-202
+  s_a0ff46300f71a7::t_58b0ffbbaece4c 681
+  s_a0ff46300f71a7::t_17486ef662330d 679-680
+  s_a0ff46300f71a7::t_ba19f05260d60e 169
+internal/lifecycle/property_test.go
+  s_a0ff46300f71a7::t_6ac0150f30b7f1 320-323
+  s_a0ff46300f71a7::t_00fee5acd7f4cc 4
+  s_a0ff46300f71a7::t_f6dcd7d6fd8292 69,71
+  s_a0ff46300f71a7::t_b9d8dc4464c208 7
+  s_a0ff46300f71a7::t_74b9f8c838c828 116-119
+  s_a0ff46300f71a7::t_46245619669f6e 270-273,279-310,313-319,328,354-355
+  s_a0ff46300f71a7::t_5ceb3c7bdd5439 311-312,324-327,329-337,339-342
+  s_a0ff46300f71a7::t_2d32f172804b01 106-109,112-115,120
+  s_a0ff46300f71a7::t_4cf2ed80ee80c2 89-91
+  s_a0ff46300f71a7::t_8dabb8c1e7d792 14-16,22-31,39,41
+  s_a0ff46300f71a7::t_087635bdc53311 84-88,92-105,110-111
+internal/github/testdata/ci_passed_approved.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/github/testdata/pending.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/github/testdata/approved_review_requested.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/lifecycle/board.go
+  s_a0ff46300f71a7::t_e8c5202dd4e541 419-421,424-425
+  s_a0ff46300f71a7::t_0ddca75805d240 281-282,284,302-303,306-308,313,316,318,322-323
+  s_a0ff46300f71a7::t_4398e30da4ecbc 494,499,504
+  s_a0ff46300f71a7::t_32ed5f6dfc3de0 366
+  s_a0ff46300f71a7::t_3f8f0178f292e4 404
+  s_a0ff46300f71a7::t_6a191ba9675109 283
+  s_a0ff46300f71a7::t_6aacf668288c38 90-91,93-99
+  s_a0ff46300f71a7::t_226adfcb1bdcf2 371
+  s_a0ff46300f71a7::t_22c6279b2d4aa5 346-365,367-370,372-403,407-408,411-413,415-418,422-423,426-467
+internal/github/testdata/threads.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/github/testdata/multi_author.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/lifecycle/review_test.go
+  s_a0ff46300f71a7::t_77eac77cfccfc1 178-179
+internal/github/signals.go
+  s_a0ff46300f71a7::t_e1f5894360d109 10-13,28-35,37
+internal/scheduler/scheduler_test.go
+  s_a0ff46300f71a7::t_2e23d1a65205a0 918-920,929,932-936
+  s_a0ff46300f71a7::t_ad69c05f3556fa 205-207,210-219
+  s_a0ff46300f71a7::t_2d84ac5465046e 924
+  s_a0ff46300f71a7::t_28c5d1e0671b2c 153-154
+  s_a0ff46300f71a7::t_23de6e6e78f5b6 904
+  s_a0ff46300f71a7::t_d9c8a32ca5e272 265,270-277
+  s_a0ff46300f71a7::t_684682764df4c9 889
+  s_a0ff46300f71a7::t_9195297ec25c39 520,522-524
+  s_a0ff46300f71a7::t_ad8e0613ac8cd8 930-931
+  s_a0ff46300f71a7::t_b988372210a20f 220
+internal/github/testdata/merged.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/lifecycle/signal.go
+  s_a0ff46300f71a7::t_9e5f2f0a6efb4b 79
+  s_a0ff46300f71a7::t_2f7c71e128f580 44-46
+  s_a0ff46300f71a7::t_eb2f9c17233c05 100
+internal/lifecycle/board_test.go
+  s_a0ff46300f71a7::t_2e01d0ea0d7838 515-518,525
+  s_a0ff46300f71a7::t_3479204f3e9aaa 276,280,289,295-301,310,313-314,321,323,330-437
+  s_a0ff46300f71a7::t_955360381a7902 20-28
+  s_a0ff46300f71a7::t_6a64e98f4a4537 439,473-481,484,492-497
+  s_a0ff46300f71a7::t_c6990c178fb450 537,545,547
+  s_a0ff46300f71a7::t_3f190e34b92317 40-44,46,50,55-57
+  s_a0ff46300f71a7::t_c086bdd7cc9e85 182-183,185-188
+  s_a0ff46300f71a7::t_36ece4262b0564 438,565-566,571-575,581
+  s_a0ff46300f71a7::t_7d5922fa3e52b8 440
+internal/github/testdata/review_bot.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/scheduler/record.go
+  s_a0ff46300f71a7::t_e815165c3221a0 6
+  s_a0ff46300f71a7::t_48f6ab83af2896 173,175,177-183,185
+internal/github/testdata/draft.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/github/testdata/ci_failed.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/github/testdata/no_protection.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/github/testdata/pending_review_required.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/github/client.go
+  s_a0ff46300f71a7::t_781316fb769ac3 104
+  s_a0ff46300f71a7::t_d979a495f0d4c6 345
+internal/github/github_test.go
+  s_a0ff46300f71a7::t_a0b9342b2390a0 412-413,415-417,421-423,428-433,443,446
+  s_a0ff46300f71a7::t_29755e05204a9f 78-82,87-88,90-98,104,112-114,120-122,124,127-128,130,132,140,143,149-150,157-158,165,174-175,179,183
+  s_a0ff46300f71a7::t_b294b001bf43a7 341-348,350-357
+internal/github/testdata/classic_protection.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+internal/github/testdata/ruleset.json
+  s_a0ff46300f71a7::t_d39e889da3082e 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "91d3ea833dce0f642b62ec6644064d4ee87ea352",
+  "prompts": {},
+  "sessions": {
+    "s_a0ff46300f71a7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b29d1eb-9042-4b4d-b812-c1d45c33f8d3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
