@@ -170,8 +170,15 @@ func TestOpenHubRenamesTheOrchestrateTab(t *testing.T) {
 			t.Errorf("%s: renamed %q = %q, want %q", c.name, c.label, got, c.want)
 		}
 	}
-	if agentTabs[0].window != "work" || agentTabs[0].agent != "ORCHESTRATOR" {
-		t.Errorf("the first tab is %s with %s, want work with ORCHESTRATOR", agentTabs[0].window, agentTabs[0].agent)
+	var order []string
+	for _, tab := range agentTabs {
+		order = append(order, tab.window)
+	}
+	if !slices.Equal(order, []string{"assist", "plan", "work", "review"}) {
+		t.Errorf("tab order = %v, want assist, plan, work, review", order)
+	}
+	if i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == activeTab }); i < 0 || agentTabs[i].agent != "ORCHESTRATOR" {
+		t.Errorf("a new Hub opens on %q, want the work tab with the ORCHESTRATOR", activeTab)
 	}
 }
 

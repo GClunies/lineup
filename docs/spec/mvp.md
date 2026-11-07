@@ -144,17 +144,17 @@ People's reviews spend the Responding rounds, and a low review bot score spends 
 ```
 Rex server
 ├── session "lineup hub"        (the Hub session)
-│   ├── tab "work"                   (first tab, active when the Hub opens)
-│   │   ├── block "BOARD"             lineup board           (top, most of the height)
-│   │   └── block "ORCHESTRATOR"      claude --continue     (bottom, 25% of the height, own theme)
+│   ├── tab "assist"                 (first tab)
+│   │   └── block "ASSIST"            claude                 (the whole tab, in assist_dir, own theme)
 │   ├── tab "plan"
 │   │   ├── block "LINEAR"            lineup board --linear  (top, most of the height)
 │   │   └── block "PLANNER"           claude --continue     (bottom, 25% of the height, own theme)
-│   ├── tab "review"
-│   │   ├── block "REVIEWS"           lineup board --review  (top, most of the height)
-│   │   └── block "REVIEWER"          claude --continue     (bottom, 25% of the height, own theme)
-│   └── tab "assist"
-│       └── block "ASSIST"            claude                 (the whole tab, in assist_dir, own theme)
+│   ├── tab "work"                   (active when a new Hub opens)
+│   │   ├── block "BOARD"             lineup board           (top, most of the height)
+│   │   └── block "ORCHESTRATOR"      claude --continue     (bottom, 25% of the height, own theme)
+│   └── tab "review"
+│       ├── block "REVIEWS"           lineup board --review  (top, most of the height)
+│       └── block "REVIEWER"          claude --continue     (bottom, 25% of the height, own theme)
 ├── session "data"                    (one session for each Repo with an open Task)
 │   ├── tab "ENG-590 Add billing model"
 │   └── tab "ENG-592 Fix flaky test"
@@ -169,6 +169,7 @@ The Scheduler has no tab. launchd runs `lineup serve` as a user agent, and the l
 The rules for this layout:
 
 - `lineup` opens the Hub session. If the session does not exist, `lineup` creates it.
+- The Hub tabs are in the order assist, plan, work, review. Each run of `lineup` moves every Hub tab back to its place.
 - Each Hub tab owns one kind of work. The `plan` tab plans Issues, the `work` tab holds build Tasks, and the `review` tab holds review Tasks.
 - A Hub from before the `work` tab has a tab labeled `orchestrate`. `lineup` renames it to `work`, so the Orchestrator in it keeps running.
 - The Hub session is named `lineup hub`. A Repo session is named after its folder, and the Scheduler removes it after its last Task. The space keeps a Repo session from taking the Hub's name.
@@ -558,6 +559,7 @@ These facts come from probes on this machine: throwaway Rex sessions, and `gh ap
 | A running Claude keeps a project entry that another process added under the lock | A live `claude` with a throwaway profile exited and rewrote the file. The added entry stayed. |
 | `direnv exec <dir>` unloads the caller's own `.envrc` values and keeps exported values | `printenv CLAUDE_CONFIG_DIR` through `direnv exec` for two Repos |
 | Claude has no flag that skips the trust dialog in an interactive session | `claude --help`: only `-p` skips it |
+| A conversation that `--continue` resumes keeps its claude.ai title. `--name` and `--remote-control` set only the name in the prompt box. `/rename` sets the claude.ai title, and the title stays through later resumes | A probe session titled `old-title`, resumed with `--name new-title --remote-control new-title`, then `/rename new-title`, then resumed again, read on claude.ai after each step |
 | Greptile keeps one summary comment on a PR. The comment holds `<!-- greptile_confidence_score:N -->` and `Last reviewed commit: …/commit/<sha>`. | `gh api repos/better-auth/better-auth/issues/12303/comments`: the `greptile-apps[bot]` comment holds score 4 and the head commit. `internal/github/testdata/review_bot.json` is a trimmed copy. |
 | GraphQL names Greptile's author `greptile-apps`, with no `[bot]` suffix | `Client.Snapshot` against better-auth/better-auth#12303 |
 | The `Greptile Review` check run passes at a score below 5 | `gh api repos/better-auth/better-auth/commits/eb6b436/check-runs`: conclusion `success` at score 4/5 |
