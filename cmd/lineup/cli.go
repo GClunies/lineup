@@ -177,6 +177,9 @@ func cmdReviews(c scheduler.Client, args []string, out io.Writer) error {
 	if v.Paused {
 		fmt.Fprintln(out, "Reviews paused: no fill starts a review until lineup reviews resume.")
 	}
+	if v.Slots > 0 {
+		fmt.Fprintf(out, "Reviews: %d/%d started\n", v.Started, v.Slots)
+	}
 	for _, q := range v.Queues {
 		fmt.Fprintf(out, "Q: %s  %d/%d started\n", q.Name, len(q.Started), q.Slots)
 		tw := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)

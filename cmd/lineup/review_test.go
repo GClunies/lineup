@@ -259,7 +259,7 @@ func reviewsReply(t *testing.T, v scheduler.ReviewsView) scheduler.Response {
 
 func TestLineupReviewsListsEachQueue(t *testing.T) {
 	view := scheduler.ReviewsView{
-		Paused: true,
+		Paused: true, Slots: 5, Started: 1,
 		Queues: []scheduler.QueueView{{
 			Name: "platform", Slots: 3,
 			Started: []scheduler.TaskView{{ID: "R-12", Stage: "Review ready", Title: "data#4955 Pull the base images"}},
@@ -281,6 +281,7 @@ func TestLineupReviewsListsEachQueue(t *testing.T) {
 	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
 	want := [][]string{
 		{"Reviews paused"},
+		{"Reviews: 1/5 started"},
 		{"Q: platform", "1/3 started"},
 		{"R-12", "Review ready", "data#4955 Pull the base images"},
 		{"1", "re-review", "data#4960 Write the usage logs", "hopper"},
@@ -297,7 +298,7 @@ func TestLineupReviewsListsEachQueue(t *testing.T) {
 			}
 		}
 	}
-	if strings.Contains(lines[4], "re-review") {
+	if strings.Contains(lines[5], "re-review") {
 		t.Errorf("line 5 %q calls a first review a re-review", lines[4])
 	}
 

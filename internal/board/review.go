@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/cursor"
@@ -31,8 +32,9 @@ type ReviewAPI interface {
 
 // ReviewView is one tab of the review tab. Key names its cache file and its
 // place in the saved rank. A Queue tab lists only the PRs that the queue
-// reviews, in the order that its fills start them. The Tasks tab lists the
-// review Tasks on the Board instead of PRs, so it has no Filter.
+// reviews, in the order that its fills start them. It leaves out the PRs that
+// an earlier queue in the config owns. The Tasks tab lists the review Tasks
+// on the Board instead of PRs, so it has no Filter.
 type ReviewView struct {
 	Key, Name string
 	Filter    github.Filter
@@ -138,10 +140,22 @@ func (r *review) list(tb ReviewView) ([]github.PullRequest, bool) {
 	if !tb.Queue || !ok {
 		return prs, ok
 	}
-	cands := github.Candidates(prs, r.reviews)
-	out := make([]github.PullRequest, len(cands))
-	for i, c := range cands {
-		out[i] = c.PR
+	owned := map[string]bool{}
+	for _, v := range r.deps.Views {
+		if v.Key == tb.Key {
+			break
+		}
+		if v.Queue {
+			for _, c := range github.Candidates(r.lists[v.Key], r.reviews) {
+				owned[strings.ToLower(c.PR.URL)] = true
+			}
+		}
+	}
+	var out []github.PullRequest
+	for _, c := range github.Candidates(prs, r.reviews) {
+		if !owned[strings.ToLower(c.PR.URL)] {
+			out = append(out, c.PR)
+		}
 	}
 	return out, true
 }

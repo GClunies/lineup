@@ -116,6 +116,7 @@ type globalFile struct {
 	AssistDir      string `toml:"assist_dir"`
 	Review         struct {
 		Views  []ReviewView `toml:"views"`
+		Slots  *int         `toml:"slots"`
 		Queues []queueFile  `toml:"queues"`
 	} `toml:"review"`
 }
@@ -185,11 +186,21 @@ func (g *Global) GitHubLabels() map[string]string { return g.file.GitHub.Labels 
 // ReviewViews are the [[review.views]] entries, in config order.
 func (g *Global) ReviewViews() []ReviewView { return g.file.Review.Views }
 
-// ReviewQueues are the [[review.queues]] entries, in config order.
+// ReviewSlots is how many review Tasks of all queues together can be started
+// at one time, or 0 when review.slots is not set.
+func (g *Global) ReviewSlots() int {
+	if g.file.Review.Slots == nil {
+		return 0
+	}
+	return *g.file.Review.Slots
+}
+
+// ReviewQueues are the [[review.queues]] entries, in config order. A queue
+// with no slots of its own gets review.slots, else 3.
 func (g *Global) ReviewQueues() []ReviewQueue {
 	var out []ReviewQueue
 	for _, q := range g.file.Review.Queues {
-		slots := defaultSlots
+		slots := cmp.Or(g.ReviewSlots(), defaultSlots)
 		if q.Slots != nil {
 			slots = *q.Slots
 		}
@@ -277,7 +288,7 @@ func Load(globalPath string) (*Global, error) {
 			return nil, fmt.Errorf("%s: github.labels: unknown event %q", globalPath, ev)
 		}
 	}
-	if err := validateReview(g.file.Review.Views, g.file.Review.Queues); err != nil {
+	if err := validateReview(g.file.Review.Views, g.file.Review.Queues, g.file.Review.Slots); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	return g, nil
@@ -286,7 +297,10 @@ func Load(globalPath string) (*Global, error) {
 // reservedViews are the built-in tabs of the review tab.
 var reservedViews = []string{"My PRs", "Requested"}
 
-func validateReview(views []ReviewView, queues []queueFile) error {
+func validateReview(views []ReviewView, queues []queueFile, slots *int) error {
+	if slots != nil && *slots < 1 {
+		return errors.New("review.slots: slots must be at least 1")
+	}
 	names := map[string]bool{}
 	check := func(where, name string, f PRFilter) error {
 		name = strings.TrimSpace(name)

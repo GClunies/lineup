@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -121,7 +122,7 @@ func (s *Scheduler) teamMembers(ctx context.Context) (map[string][]string, error
 // fillInput is the state that planFill reads. A pause that lands while a
 // fill searches holds that fill too. Only the loop calls it.
 func (s *Scheduler) fillInput(rows queueRows) fillInput {
-	return fillInput{Paused: s.paused, Queues: s.d.Queues, Records: s.list(), Found: rows.Found, Repos: rows.Repos}
+	return fillInput{Paused: s.paused, Slots: s.d.Slots, Queues: s.d.Queues, Records: s.list(), Found: rows.Found, Repos: rows.Repos}
 }
 
 // pauseReviews stops or restarts every queue fill. A pause stops no review
@@ -137,10 +138,14 @@ func (s *Scheduler) pauseReviews(paused bool) error {
 	return err
 }
 
-// ReviewsView is the review queues as `lineup reviews` shows them. Skipped
-// says why the PRs of some repositories never start.
+// ReviewsView is the review queues as `lineup reviews` shows them. Slots is
+// review.slots, or 0 when it is not set. Started counts the started review
+// Tasks of all queues. Skipped says why the PRs of some repositories never
+// start.
 type ReviewsView struct {
 	Paused  bool        `json:"paused"`
+	Slots   int         `json:"slots,omitempty"`
+	Started int         `json:"started"`
 	Queues  []QueueView `json:"queues"`
 	Skipped []string    `json:"skipped,omitempty"`
 }
@@ -166,6 +171,7 @@ func (s *Scheduler) reviews(ctx context.Context) (ReviewsView, error) {
 		in := s.fillInput(rows)
 		ranked := planFill(in).Ranked
 		v.Paused = in.Paused
+		v.Slots, v.Started = in.Slots, queueStarted(in.Records)
 		for _, q := range s.d.Queues {
 			qv := QueueView{Name: q.Name, Slots: q.Slots, Started: []TaskView{}, Ranked: []github.Candidate{}}
 			qv.Ranked = append(qv.Ranked, ranked[q.Name]...)
@@ -178,6 +184,18 @@ func (s *Scheduler) reviews(ctx context.Context) (ReviewsView, error) {
 		}
 	})
 	return v, nil
+}
+
+// queueStarted counts the started review Tasks that a queue added, which is
+// what review.slots caps. A review that the user asked for has no queue.
+func queueStarted(records []*Record) int {
+	n := 0
+	for _, r := range records {
+		if r.Review != nil && r.Queue != "" && r.Stage.Started() {
+			n++
+		}
+	}
+	return n
 }
 
 // applyFill starts and adds what the plan names. Only the loop calls it.
@@ -200,7 +218,8 @@ func (s *Scheduler) applyFill(p fillPlan) {
 }
 
 // Queue is a [[review.queues]] entry: the filter of its search, and how many
-// of its review Tasks can be started at one time.
+// of its review Tasks can be started at one time. The queues of one Scheduler
+// share Deps.Slots on top of that.
 type Queue struct {
 	Name   string
 	Filter github.Filter
@@ -217,6 +236,9 @@ type queueRepo struct {
 // fillInput is everything that one fill decides from.
 type fillInput struct {
 	Paused bool
+	// Slots is how many review Tasks of all queues together can be started at
+	// one time, or 0 for no shared cap.
+	Slots int
 	// Queues are the configured queues, in config order.
 	Queues []Queue
 	// Records is every Task, oldest first.
@@ -243,11 +265,14 @@ type fillAdd struct {
 	Repo  queueRepo
 }
 
-// planFill decides what one fill starts. Each queue starts its Queued review
-// Tasks first, then its top-ranked candidates, until its started count
-// reaches its slots. A fill starts at most one review in each Repo, because
-// each start fetches into the Repo's main checkout. So a PR that two queues
-// find gets one review Task.
+// planFill decides what one fill starts. The first queue in config order
+// owns a PR that several queues find, so a later queue never ranks it. Each
+// queue starts its Queued review Tasks first, then its top-ranked
+// candidates, until its started count reaches its slots or the started
+// count of all queues reaches the shared slots. A queue that is full leaves
+// its PRs waiting, and the next fill gives them the first free slot before a
+// later queue's PRs. A fill starts at most one review in each Repo, because
+// each start fetches into the Repo's main checkout.
 func planFill(in fillInput) fillPlan {
 	var tasks []github.ReviewTask
 	for _, r := range in.Records {
@@ -256,15 +281,29 @@ func planFill(in fillInput) fillPlan {
 		}
 	}
 	p := fillPlan{Ranked: map[string][]github.Candidate{}}
+	owned := map[string]bool{}
 	for _, q := range in.Queues {
+		var urls []string
 		for _, c := range github.Candidates(in.Found[q.Name], tasks) {
+			u := strings.ToLower(c.PR.URL)
+			if owned[u] {
+				continue
+			}
+			urls = append(urls, u)
 			if _, ok := in.Repos[strings.ToLower(c.PR.Repo)]; ok {
 				p.Ranked[q.Name] = append(p.Ranked[q.Name], c)
 			}
 		}
+		for _, u := range urls {
+			owned[u] = true
+		}
 	}
 	if in.Paused {
 		return p
+	}
+	shared := math.MaxInt
+	if in.Slots > 0 {
+		shared = in.Slots - queueStarted(in.Records)
 	}
 	busy := map[string]bool{}
 	for _, q := range in.Queues {
@@ -280,17 +319,18 @@ func planFill(in fillInput) fillPlan {
 			}
 		}
 		for _, r := range queued {
-			if free <= 0 {
+			if free <= 0 || shared <= 0 {
 				break
 			}
 			if !busy[r.Repo] {
 				p.Start = append(p.Start, r.ID)
 				busy[r.Repo] = true
 				free--
+				shared--
 			}
 		}
 		for _, c := range p.Ranked[q.Name] {
-			if free <= 0 {
+			if free <= 0 || shared <= 0 {
 				break
 			}
 			repo := in.Repos[strings.ToLower(c.PR.Repo)]
@@ -300,6 +340,7 @@ func planFill(in fillInput) fillPlan {
 			p.Add = append(p.Add, fillAdd{Queue: q.Name, PR: c.PR, Repo: repo})
 			busy[repo.Repo] = true
 			free--
+			shared--
 		}
 	}
 	return p

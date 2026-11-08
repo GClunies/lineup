@@ -424,6 +424,39 @@ slots = 1
 	}
 }
 
+func TestReviewSlotsAreTheDefaultOfEveryQueue(t *testing.T) {
+	g := load(t, `
+[review]
+slots = 5
+
+[[review.queues]]
+name = "first"
+authors = ["a"]
+
+[[review.queues]]
+name = "second"
+repos = ["o/r"]
+
+[[review.queues]]
+name = "own"
+repos = ["o/s"]
+slots = 2
+`)
+	if g.ReviewSlots() != 5 {
+		t.Errorf("ReviewSlots = %d, want 5", g.ReviewSlots())
+	}
+	var got []int
+	for _, q := range g.ReviewQueues() {
+		got = append(got, q.Slots)
+	}
+	if !slices.Equal(got, []int{5, 5, 2}) {
+		t.Errorf("queue slots = %v, want [5 5 2]", got)
+	}
+	if got := load(t, "wip_cap = 3\n"); got.ReviewSlots() != 0 {
+		t.Errorf("unset review.slots = %d, want 0", got.ReviewSlots())
+	}
+}
+
 func TestBadReviewConfigFailsAtLoad(t *testing.T) {
 	for name, c := range map[string]struct{ text, want string }{
 		"unknown key":       {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\nauthor = [\"x\"]\n", "unknown keys"},
@@ -441,6 +474,7 @@ func TestBadReviewConfigFailsAtLoad(t *testing.T) {
 		"view and queue":    {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\n[[review.queues]]\nname = \"a\"\nrepos = [\"o/s\"]\n", `review.queues[0]: name "a" is used twice`},
 		"built-in name":     {"[[review.views]]\nname = \"My PRs\"\nrepos = [\"o/r\"]\n", "is used twice"},
 		"slots zero":        {"[[review.queues]]\nname = \"q\"\nrepos = [\"o/r\"]\nslots = 0\n", "review.queues[0]: slots must be at least 1"},
+		"shared slots zero": {"[review]\nslots = 0\n", "review.slots: slots must be at least 1"},
 		"queue no filter":   {"[[review.queues]]\nname = \"q\"\nslots = 2\n", "review.queues[0]: needs at least one"},
 		"queue unknown key": {"[[review.queues]]\nname = \"q\"\nrepos = [\"o/r\"]\nslot = 2\n", "unknown keys"},
 	} {

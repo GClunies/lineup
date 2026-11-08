@@ -87,6 +87,33 @@ func TestAReviewStartsOnlyWithAFreeSlot(t *testing.T) {
 	}
 }
 
+func TestAReviewStartsOnlyWithAFreeSharedSlot(t *testing.T) {
+	b := NewBoard(5)
+	b.Slots["first"], b.Slots["second"], b.SharedSlots = 3, 3, 2
+	a := b.AddReview("R-1", "first", policy)
+	c := b.AddReview("R-2", "second", policy)
+	full := b.AddReview("R-3", "first", policy)
+	asked := b.AddReview("R-4", "", policy)
+	for _, id := range []string{"R-1", "R-2"} {
+		if _, err := b.Apply(id, Start{}); err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+	}
+	if _, err := b.Apply("R-3", Start{}); !errors.Is(err, ErrSlotsFull) || full.Stage != Queued {
+		t.Fatalf("start past the shared slots: stage %s err %v, want ErrSlotsFull", full.Stage, err)
+	}
+	if _, err := b.Apply("R-4", Start{}); err != nil || asked.Stage != Reviewing {
+		t.Fatalf("a review with no queue: stage %s err %v", asked.Stage, err)
+	}
+	b.Apply("R-1", PRReviewed{})
+	if a.Stage != Done {
+		t.Fatalf("R-1 stage %s, want Done", a.Stage)
+	}
+	if _, err := b.Apply("R-3", Start{}); err != nil || full.Stage != Reviewing || c.Stage != Reviewing {
+		t.Fatalf("start after a shared slot freed: stage %s err %v", full.Stage, err)
+	}
+}
+
 // The user can reopen a closed Review ready Worker, so the Task keeps its
 // slot while it has no Worker.
 func TestAReviewReadyTaskKeepsItsSlotWithoutItsWorker(t *testing.T) {

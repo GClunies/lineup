@@ -129,6 +129,7 @@ func serve() error {
 		PollInterval: defaults.PollInterval,
 		AdHocSession: adHoc,
 		Queues:       reviewQueues(cfg),
+		Slots:        cfg.ReviewSlots(),
 		StateHome:    xdgStateHome(),
 		BoardCache:   filepath.Join(stateDir(), "board.json"),
 		Log:          log,
