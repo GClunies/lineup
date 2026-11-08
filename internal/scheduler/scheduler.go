@@ -32,8 +32,12 @@ type Deps struct {
 	PollInterval time.Duration
 	// AdHocSession is the Rex session for Tasks with no Issue.
 	AdHocSession string
-	// Queues are the review queues that each full poll fills.
+	// Queues are the review queues that each full poll fills, in the order
+	// that they pick PRs.
 	Queues []Queue
+	// Slots is how many review Tasks of all queues together can be started at
+	// one time. 0 sets no shared cap.
+	Slots int
 	// StateHome is the XDG state folder. A review Worker gets it as
 	// XDG_STATE_HOME, so the Scheduler finds pr-review's record where the
 	// Worker writes it.
@@ -101,6 +105,7 @@ func New(d Deps) (*Scheduler, error) {
 		watchers: map[chan BoardView]struct{}{}, orphans: map[string][]orphan{},
 		repoLocks: map[string]*sync.Mutex{},
 	}
+	s.board.SharedSlots = d.Slots
 	for _, q := range d.Queues {
 		s.board.Slots[q.Name] = q.Slots
 	}

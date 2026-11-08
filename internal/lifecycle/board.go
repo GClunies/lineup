@@ -100,7 +100,10 @@ type Board struct {
 	// Slots is how many review Tasks of each queue can be started at one
 	// time. A queue that is missing has no slot.
 	Slots map[string]int
-	Tasks map[string]*Task
+	// SharedSlots is how many review Tasks of all queues together can be
+	// started at one time. 0 sets no shared cap.
+	SharedSlots int
+	Tasks       map[string]*Task
 }
 
 func NewBoard(cap int) *Board {
@@ -137,6 +140,11 @@ func (b *Board) QueueStarted(queue string) int {
 	return b.count(func(t *Task) bool { return t.Kind == KindReview && t.Queue == queue })
 }
 
+// QueuesStarted counts the started review Tasks that any queue added.
+func (b *Board) QueuesStarted() int {
+	return b.count(func(t *Task) bool { return t.Kind == KindReview && t.Queue != "" })
+}
+
 func (b *Board) count(match func(*Task) bool) int {
 	n := 0
 	for _, t := range b.Tasks {
@@ -162,7 +170,8 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 			return nil, notAllowed
 		}
 		if t.Kind == KindReview {
-			if t.Queue != "" && b.QueueStarted(t.Queue) >= b.Slots[t.Queue] {
+			if t.Queue != "" && (b.QueueStarted(t.Queue) >= b.Slots[t.Queue] ||
+				b.SharedSlots > 0 && b.QueuesStarted() >= b.SharedSlots) {
 				return nil, ErrSlotsFull
 			}
 			return t.startAgent(Reviewing), nil

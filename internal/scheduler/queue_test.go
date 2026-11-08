@@ -47,6 +47,10 @@ func TestPlanFill(t *testing.T) {
 	repos := map[string]queueRepo{"acme/a": {Repo: "/repos/a"}, "acme/b": {Repo: "/repos/b"}, "acme/c": {Repo: "/repos/c"}}
 	q := func(slots int) []Queue { return []Queue{{Name: "q", Slots: slots}} }
 	two := []Queue{{Name: "q1", Slots: 1}, {Name: "q2", Slots: 1}}
+	roomy := []Queue{{Name: "q1", Slots: 5}, {Name: "q2", Slots: 5}}
+	rec := func(id, queue, repo string, st lifecycle.Stage, pr github.PullRequest) *Record {
+		return reviewRec(id, queue, repo, st, pr)
+	}
 
 	cases := []struct {
 		name      string
@@ -99,6 +103,32 @@ func TestPlanFill(t *testing.T) {
 		{"two queues share the limit of one start in each Repo",
 			fillInput{Queues: two, Found: map[string][]github.PullRequest{"q1": {a1}, "q2": {a2}}},
 			nil, []string{"q1 acme/a#1 in /repos/a"}},
+		{"a queue-1 PR is added above an older queue-2 PR",
+			fillInput{Queues: []Queue{{Name: "q1", Slots: 1}, {Name: "q2", Slots: 1}}, Slots: 1,
+				Found: map[string][]github.PullRequest{"q1": {c4}, "q2": {b3}}},
+			nil, []string{"q1 acme/c#4 in /repos/c"}},
+		{"a PR that both queues match ranks and is added in queue 1 only",
+			fillInput{Queues: roomy, Found: map[string][]github.PullRequest{"q1": {a1}, "q2": {a1, b3}}},
+			nil, []string{"q1 acme/a#1 in /repos/a", "q2 acme/b#3 in /repos/b"}},
+		{"the shared slots cap the started reviews of all queues",
+			fillInput{Queues: roomy, Slots: 2, Records: []*Record{rec("R-1", "q1", "/repos/a", lifecycle.Reviewing, a1)},
+				Found: map[string][]github.PullRequest{"q1": {b3}, "q2": {c4}}},
+			nil, []string{"q1 acme/b#3 in /repos/b"}},
+		{"a review that the user asked for takes no shared slot",
+			fillInput{Queues: roomy, Slots: 1, Records: []*Record{rec("R-1", "", "/repos/a", lifecycle.Reviewing, a1)},
+				Found: map[string][]github.PullRequest{"q1": {b3}}},
+			nil, []string{"q1 acme/b#3 in /repos/b"}},
+		{"the shared slots also cap the Queued review Tasks that start",
+			fillInput{Queues: roomy, Slots: 1, Records: []*Record{rec("R-1", "q1", "/repos/a", lifecycle.Queued, a1), rec("R-2", "q2", "/repos/b", lifecycle.Queued, b3)}},
+			[]string{"R-1"}, nil},
+		{"a full queue leaves a new queue-1 PR waiting",
+			fillInput{Queues: roomy, Slots: 2, Records: []*Record{rec("R-1", "q2", "/repos/a", lifecycle.Reviewing, a1), rec("R-2", "q2", "/repos/b", lifecycle.Reviewing, b3)},
+				Found: map[string][]github.PullRequest{"q1": {c4}, "q2": {x9}}},
+			nil, nil},
+		{"a freed shared slot goes to queue 1 before an older queue-2 PR",
+			fillInput{Queues: roomy, Slots: 2, Records: []*Record{rec("R-1", "q2", "/repos/a", lifecycle.Reviewing, a1), rec("R-2", "q2", "/repos/b", lifecycle.Done, b3)},
+				Found: map[string][]github.PullRequest{"q1": {c4}, "q2": {queuePR("acme/b", 7, 99)}}},
+			nil, []string{"q1 acme/c#4 in /repos/c"}},
 		{"a review that the user asked for keeps its PR out and takes no slot",
 			fillInput{Queues: q(1), Records: []*Record{reviewRec("R-1", "", "/repos/a", lifecycle.Reviewing, a1)},
 				Found: map[string][]github.PullRequest{"q": {a1, b3}}},
@@ -169,12 +199,12 @@ func TestRepeatedFillsInOneStateAddEachReviewOnce(t *testing.T) {
 	h := queueHarness(t, authorQueue("q1", 1, "hopper"), authorQueue("q2", 1, "ada"))
 	p7, p8 := queuePR("acme/data", 7, 30), queuePR("acme/data", 8, 20)
 	h.gh.found = map[string][]github.PullRequest{"q1": {p7, p8}, "q2": {p8, p7}}
-	// One Repo takes one start in each fill, so q2 waits for the second fill.
+	// q1 owns both PRs, so #8 waits for q1's one slot and never takes one of q2's.
 	want := [][]string{
 		{"pr-7 #7 Reviewing"},
-		{"pr-7 #7 Reviewing", "pr-8 #8 Reviewing"},
-		{"pr-7 #7 Reviewing", "pr-8 #8 Reviewing"},
-		{"pr-7 #7 Reviewing", "pr-8 #8 Reviewing"},
+		{"pr-7 #7 Reviewing"},
+		{"pr-7 #7 Reviewing"},
+		{"pr-7 #7 Reviewing"},
 	}
 	for i, w := range want {
 		h.s.fill(context.Background())

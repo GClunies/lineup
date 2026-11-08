@@ -49,6 +49,7 @@ func randomBoard(t *rapid.T) (*Board, []string) {
 	for _, q := range queues[1:] {
 		b.Slots[q] = rapid.IntRange(0, 2).Draw(t, "slots "+q)
 	}
+	b.SharedSlots = rapid.IntRange(0, 3).Draw(t, "shared slots")
 	var ids []string
 	for i := range rapid.IntRange(1, 8).Draw(t, "tasks") {
 		id := fmt.Sprintf("T%d", i)
@@ -155,6 +156,9 @@ func TestReviewStartNeverPassesItsQueueSlots(t *testing.T) {
 			s, _, err := step(t, b, task)
 			if _, ok := s.(Start); ok && err == nil && task.Kind == KindReview && task.Queue != "" && before >= b.Slots[task.Queue] {
 				t.Fatalf("%s started in %s with %d started and %d slots", task.ID, task.Queue, before, b.Slots[task.Queue])
+			}
+			if b.SharedSlots > 0 && b.QueuesStarted() > b.SharedSlots {
+				t.Fatalf("%d started queue reviews and %d shared slots", b.QueuesStarted(), b.SharedSlots)
 			}
 			for _, q := range queues[1:] {
 				if b.QueueStarted(q) > b.Slots[q] {
