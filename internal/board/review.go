@@ -32,9 +32,9 @@ type ReviewAPI interface {
 
 // ReviewView is one tab of the review tab. Key names its cache file and its
 // place in the saved rank. A Queue tab lists only the PRs that the queue
-// reviews, in the order that its fills start them. It leaves out the PRs of
-// the queues that come first in the config, because those queues own them. The Tasks tab lists the
-// review Tasks on the Board instead of PRs, so it has no Filter.
+// reviews, in the order that its fills start them. It leaves out the PRs that
+// an earlier queue in the config owns. The Tasks tab lists the review Tasks
+// on the Board instead of PRs, so it has no Filter.
 type ReviewView struct {
 	Key, Name string
 	Filter    github.Filter

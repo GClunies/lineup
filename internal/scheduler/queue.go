@@ -139,13 +139,13 @@ func (s *Scheduler) pauseReviews(paused bool) error {
 }
 
 // ReviewsView is the review queues as `lineup reviews` shows them. Slots is
-// the shared count of all queues and Started how many of its review Tasks
-// are started, both left out when review.slots is not set. Skipped says why
-// the PRs of some repositories never start.
+// review.slots, or 0 when it is not set. Started counts the started review
+// Tasks of all queues. Skipped says why the PRs of some repositories never
+// start.
 type ReviewsView struct {
 	Paused  bool        `json:"paused"`
 	Slots   int         `json:"slots,omitempty"`
-	Started int         `json:"started,omitempty"`
+	Started int         `json:"started"`
 	Queues  []QueueView `json:"queues"`
 	Skipped []string    `json:"skipped,omitempty"`
 }
@@ -171,9 +171,7 @@ func (s *Scheduler) reviews(ctx context.Context) (ReviewsView, error) {
 		in := s.fillInput(rows)
 		ranked := planFill(in).Ranked
 		v.Paused = in.Paused
-		if in.Slots > 0 {
-			v.Slots, v.Started = in.Slots, queueStarted(in.Records)
-		}
+		v.Slots, v.Started = in.Slots, queueStarted(in.Records)
 		for _, q := range s.d.Queues {
 			qv := QueueView{Name: q.Name, Slots: q.Slots, Started: []TaskView{}, Ranked: []github.Candidate{}}
 			qv.Ranked = append(qv.Ranked, ranked[q.Name]...)

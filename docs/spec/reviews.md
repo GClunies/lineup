@@ -331,7 +331,7 @@ The skills live in the dotfiles repository, `~/.agents/skills`.
 | Command | Effect |
 |---|---|
 | `lineup review <PR URL>` | Adds and starts a review Task with no queue, or reopens the closed Worker of an open review Task |
-| `lineup reviews` | Lists each queue with its slots, started reviews, and ranked PRs. When `review.slots` is set, it prints `Reviews: <started>/<slots> started` first, and `--json` adds `slots` and `started` |
+| `lineup reviews` | Lists each queue with its slots, started reviews, and ranked PRs. When `review.slots` is set, it prints `Reviews: <started>/<slots> started` first. `--json` has `slots` when it is set, and always has `started`, the started review Tasks of all queues |
 | `lineup reviews pause` / `resume` | Stops or restarts every queue fill |
 
 The Reviewer maps "review <url>" and `/pr-review <url>` to `lineup review <url>`. The Orchestrator sends these requests to the Reviewer and does not touch review Tasks. It keeps the `/pr-explain` row of its instructions. In a review Task's tab, the user asks the Worker for `/pr-explain` directly.
