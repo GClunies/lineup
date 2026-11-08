@@ -1,0 +1,21 @@
+docs/adr/0014-queues-share-review-slots.md
+  s_41401e89ed6bf0::t_dca46e5222015c 1-17
+docs/spec/reviews.md
+  s_41401e89ed6bf0::t_364471da8b580a 3,17,143-146,150-154,157-163,178-179,189-191,195-196,201,334,343,366,372
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "23e711ad482094bea80db6e5e8782e0a052c8ca8",
+  "prompts": {},
+  "sessions": {
+    "s_41401e89ed6bf0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e3fbe60f-e25e-454f-9ed4-827f5158d920",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
