@@ -1,6 +1,6 @@
 # Reviews: the review tab and review queues
 
-Status: built. This spec adds the `review` Hub tab, PR views, and review queues. The decision behind it is in `docs/adr/0012-a-review-is-a-task-kind.md`.
+Status: built. This spec adds the `review` Hub tab, PR views, and review queues. The decisions behind it are in `docs/adr/0012-a-review-is-a-task-kind.md` and `docs/adr/0014-queues-share-review-slots.md`.
 
 ## Goal
 
@@ -14,7 +14,7 @@ The user sees in one place which PRs need them: their own open PRs and the PRs t
 | The built-in tabs `Reviews`, `My PRs`, and `Requested` | GitLab and other forges |
 | Views and queues in the global config | A queue that runs a skill other than `pr-review` |
 | Review Tasks: a Task Kind with its own Stages | |
-| Review slots for each queue, apart from the WIP cap | |
+| Review slots for each queue and for all queues together, apart from the WIP cap | |
 | `lineup review <url>` and the `r` key | |
 | `pr-review` writes a summary and a findings JSON file. `pr-explain` reads that file. | |
 
@@ -140,14 +140,27 @@ On a PR tab:
 ## Queues
 
 ```toml
-[[review.queues]]
+[review]
+slots = 5             # at most 5 queue reviews run at once, across all queues
+
+[[review.queues]]     # queues fill in config order, so this one picks first
 name = "platform"
 repos = ["umbrella/data"]
 authors = ["hopper", "noether"]
-slots = 3
+
+[[review.queues]]
+name = "umbrella/data"
+repos = ["umbrella/data"]
+slots = 2             # at most 2 of this queue's reviews, so 3 stay free for "platform"
 ```
 
-A queue is a view whose PRs lineup reviews without being asked. `slots` is how many of the queue's review Tasks can be started at one time. The default is 3. Review Tasks never count toward the WIP cap.
+A queue is a view whose PRs lineup reviews without being asked. Review Tasks never count toward the WIP cap.
+
+- `review.slots` is optional, an integer of at least 1. It is how many review Tasks that queues added can be started at one time, across all queues. A review that the user starts with `r` or `lineup review` has no queue and does not count.
+- A queue's own `slots` is how many of that queue's review Tasks can be started at one time. Its default is `review.slots` when that is set, else 3. Without `review.slots`, each queue has its own count and no shared count applies.
+- The queues fill in config order. An earlier queue picks first, so its PRs rank ahead of every later queue's PRs.
+- A PR that several queues match belongs to the first of them in config order. No later queue lists, ranks, or starts it.
+- To keep slots free for an earlier queue, give each later queue a `slots` that is lower than `review.slots`.
 
 ### Which PRs enter a queue
 
@@ -162,6 +175,8 @@ These rules are the rules of the Herdr `review-queue` plugin, which this queue r
 
 ### Ranking
 
+Ranking is inside one queue. A queue's PRs always rank behind the PRs of the queues before it, because those queues fill first.
+
 1. Re-reviews first: PRs that the user reviewed before and that request the user again.
 2. Then PRs that request the user by name.
 3. Then the oldest PR first.
@@ -171,16 +186,19 @@ These rules are the rules of the Herdr `review-queue` plugin, which this queue r
 On every full poll, after it reads Task PRs, the Scheduler fills each queue that is not paused. A poll for a few Tasks, for example after a Worker reports `done`, fills nothing.
 
 1. Search every queue in one GraphQL call. Only one fill runs at a time. A fill that is due while another runs is skipped.
-2. In one call on the loop goroutine, for each queue: start its Queued review Tasks first, then add and start a review Task for each top-ranked candidate, until the queue's started count reaches `slots`.
-3. Start at most one review Task in each Repo per fill, because each start fetches into the Repo's main checkout.
+2. In one call on the loop goroutine, rank each queue's candidates in config order. Drop from a queue each PR that an earlier queue ranked, so each PR has one owner.
+3. In the same call, for each queue in config order: start its Queued review Tasks first, then add and start a review Task for each top-ranked candidate. Stop when the queue's started count reaches its `slots`, or when the started count of all queues reaches `review.slots`.
+4. Start at most one review Task in each Repo per fill, because each start fetches into the Repo's main checkout.
 
 Each fill is idempotent. The candidate check, the count, the add, and the start happen in one loop call, so a second fill in the same state starts nothing.
+
+A full queue makes its PRs wait. No fill stops a started review to make room. When a slot frees, the next fill gives it to the first queue that has a candidate, so a PR of an earlier queue starts before a PR of a later queue.
 
 If a queue leaves the config, its started review Tasks go on, and no fill starts another one for it. If `slots` drops, no review stops. Fills start nothing new until the count is below `slots`.
 
 `lineup reviews pause` stops every fill, and `lineup reviews resume` starts them again. A pause stops no review that already started. The pause holds across a restart of the Scheduler. The review tab's header shows `reviews paused` while the pause holds.
 
-When a review Task of a queue ends, its slot is free, and the next fill starts the next ranked PR. To stop the queue, pause it.
+When a review Task of a queue ends, its slot is free, and the next fill starts the next PR in queue order and rank. To stop the queue, pause it.
 
 The Scheduler reads the queues and their slots when it starts. After a change to `[[review.queues]]`, run `lineup restart`.
 
@@ -313,7 +331,7 @@ The skills live in the dotfiles repository, `~/.agents/skills`.
 | Command | Effect |
 |---|---|
 | `lineup review <PR URL>` | Adds and starts a review Task with no queue, or reopens the closed Worker of an open review Task |
-| `lineup reviews` | Lists each queue with its slots, started reviews, and ranked PRs |
+| `lineup reviews` | Lists each queue with its slots, started reviews, and ranked PRs. When `review.slots` is set, it prints `Reviews: <started>/<slots> started` first, and `--json` adds `slots` and `started` |
 | `lineup reviews pause` / `resume` | Stops or restarts every queue fill |
 
 The Reviewer maps "review <url>" and `/pr-review <url>` to `lineup review <url>`. The Orchestrator sends these requests to the Reviewer and does not touch review Tasks. It keeps the `/pr-explain` row of its instructions. In a review Task's tab, the user asks the Worker for `/pr-explain` directly.
@@ -322,7 +340,7 @@ The Reviewer maps "review <url>" and `/pr-review <url>` to `lineup review <url>`
 
 | Area | Change |
 |---|---|
-| `internal/lifecycle` | `Kind` and `Queue` on Task, and `Slots` on Board. The Stages Reviewing and Review ready. `Board.Started()` and `Board.OverCap()` count only build Tasks. `Stage.Started()` stays as it is. `Start` and `Rerun` check the Task's Kind. The Signals `pr-reviewed` and `pr-closed`. |
+| `internal/lifecycle` | `Kind` and `Queue` on Task, and `Slots` and `SharedSlots` on Board. The Stages Reviewing and Review ready. `Board.Started()` and `Board.OverCap()` count only build Tasks. `Stage.Started()` stays as it is. `Start` and `Rerun` check the Task's Kind. The Signals `pr-reviewed` and `pr-closed`. |
 | `internal/scheduler` | The review PR, head, and review worktree on Record, and the Worker's last program status. The review add path with its dedupe. Review setup and cleanup. The review poll, apart from the branch poll. The contract check by findings file. The single-flight queue fill. The `reviews` settings and ops. |
 | `internal/github` | `SearchPRs`: one GraphQL call with one aliased search per view. `TeamMembers`. The review poll by number. |
 | `internal/config` | `[[review.views]]` and `[[review.queues]]` in the global file only, with validation at load. `[stage.reviewing]`, and the Stage loop of `Resolve` covers the new Stages. |
@@ -345,12 +363,13 @@ The Reviewer's settings deny `lineup add`, `lineup start`, `lineup merge`, and e
 2. **Search.** Against a recorded GraphQL response with three aliased searches, each view gets its own PRs, with author, CI, review decision, and requested reviewers.
 3. **Lifecycle.** Table tests for every transition above. Property tests with `rapid`:
    - `start` never succeeds for a queue whose started count is at or above its slots.
+   - `start` never succeeds when the started count of all queues is at or above `review.slots`.
    - No review Task ever enters a build Stage, and no build Task ever enters a review Stage.
    - Review Tasks never change `Started()`, so the WIP cap property holds unchanged.
    - Every started review Task ends in Done or in the Needs you group.
    - A review Task never receives an Effect that writes to GitHub.
 4. **Queue rules.** Table tests over draft, fork, bot, own PR, open review Task, approved, reviewed, and re-requested PRs, and the ranking order.
-5. **Fill.** Two fills in the same state start the same Tasks once. A paused queue starts nothing.
+5. **Fill.** Two fills in the same state start the same Tasks once. A paused queue starts nothing. Table tests for the shared slots: an earlier queue's PR is added above an older later-queue PR, a PR that two queues match is added once in the first queue, the shared count caps the started reviews of all queues, and a full queue leaves a new PR of the first queue waiting until a slot frees.
 6. **Review poll.** Against recorded responses, `pr-reviewed`, `pr-merged`, and `pr-closed` fire as the table says, wait while the Worker works, and fire on the next poll after the Worker stops. A pending review does not fire `pr-reviewed`.
 7. **Setup and cleanup.** Two review starts in one Repo fetch one after the other. Cleanup removes a clean review worktree and keeps one with an unpushed commit. A review Task never calls `wt remove`.
 8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then reopens the Worker in the same conversation. A closed tab in Reviewing starts a fresh Worker. Recovery with no tab in Review ready leaves the Task as it is. The events of the hunk pane leave the Task as it is. A closed Worker block closes the hunk pane with its tab.
