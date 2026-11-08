@@ -637,3 +637,23 @@ func TestTheReviewBoardToastsOnlyReviewTasks(t *testing.T) {
 		t.Fatalf("toasts %q, want %q", toasts, want)
 	}
 }
+
+func TestAQueueTabLeavesOutThePRsOfAnEarlierQueueInTheConfig(t *testing.T) {
+	first := ReviewView{Key: "queue:first", Name: "Q: first", Queue: true}
+	second := ReviewView{Key: "queue:second", Name: "Q: second", Queue: true}
+	r := newReview(Reviews{Views: []ReviewView{first, second}})
+	pr := func(n int, age time.Duration) github.PullRequest {
+		return github.PullRequest{Repo: "umbrella/data", Number: n, Author: "hopper", CreatedAt: epoch.Add(-age),
+			URL: fmt.Sprintf("https://github.com/umbrella/data/pull/%d", n), Head: fmt.Sprintf("h%d", n)}
+	}
+	shared, only, older := pr(1, time.Hour), pr(2, 2*time.Hour), pr(3, 90*time.Hour)
+	r.lists = map[string][]github.PullRequest{"queue:first": {shared}, "queue:second": {shared, only, older}}
+	r.tabs = []ReviewView{second, first}
+	got, _ := r.list(second)
+	if len(got) != 2 || got[0].Number != 3 || got[1].Number != 2 {
+		t.Errorf("second queue lists %v, want #3 then #2", got)
+	}
+	if got, _ := r.list(first); len(got) != 1 || got[0].Number != 1 {
+		t.Errorf("first queue lists %v, want #1", got)
+	}
+}
