@@ -1,0 +1,21 @@
+internal/board/review.go
+  s_41401e89ed6bf0::t_c87d94dabb2959 8,35-36,143-158
+internal/board/review_test.go
+  s_41401e89ed6bf0::t_b8c97e25bbea73 640-659
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d74bfd32919644ede9465352ff04db1069c892a6",
+  "prompts": {},
+  "sessions": {
+    "s_41401e89ed6bf0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e3fbe60f-e25e-454f-9ed4-827f5158d920",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
