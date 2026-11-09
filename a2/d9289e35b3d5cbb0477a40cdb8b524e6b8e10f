@@ -1,0 +1,36 @@
+internal/lifecycle/board.go
+  s_a0ff46300f71a7::t_47b4d1efc6ea6f 404-405,407,435
+internal/lifecycle/bar.go
+  s_a0ff46300f71a7::t_47b4d1efc6ea6f 89-91,159-162,167-168,202,244,262-264,269-271
+internal/lifecycle/board_test.go
+  s_a0ff46300f71a7::t_e835213fdac114 415-431
+internal/harness/claude/claude.go
+  s_a0ff46300f71a7::t_47b4d1efc6ea6f 288,290
+internal/lifecycle/bar_test.go
+  s_a0ff46300f71a7::t_e835213fdac114 53-54,106,213-224
+  s_a0ff46300f71a7::t_789ca60237304a 225-226
+internal/github/facts_test.go
+  s_a0ff46300f71a7::t_78719a7542977c 157-158,160
+internal/github/facts.go
+  s_a0ff46300f71a7::t_47b4d1efc6ea6f 42
+docs/adr/0015-a-landing-bar-decides-ready-to-land.md
+  s_a0ff46300f71a7::t_20e584472d9346 25
+docs/spec/mvp.md
+  s_a0ff46300f71a7::t_11b6ea7a7e9a65 130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a2d9289e35b3d5cbb0477a40cdb8b524e6b8e10f",
+  "prompts": {},
+  "sessions": {
+    "s_a0ff46300f71a7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b29d1eb-9042-4b4d-b812-c1d45c33f8d3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
