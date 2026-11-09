@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,12 @@ const (
 	ViewPRs      = newestFirst
 	QueuePRs     = openPRs + " sort:created-asc draft:false -author:@me"
 )
+
+// MyMergedPRs is the search for the user's PRs merged at since or later.
+// GitHub compares merged: to the second.
+func MyMergedPRs(since time.Time) string {
+	return "is:pr is:merged archived:false sort:updated-desc author:@me merged:>=" + since.UTC().Format(time.RFC3339)
+}
 
 // Filter picks open PRs. Base is one of the searches above. The items of one
 // list combine with OR, and two lists combine with AND. Authors and the
@@ -92,6 +99,7 @@ type PullRequest struct {
 	// Head is the head commit, and Base is the base branch.
 	Head, Base     string
 	CreatedAt      time.Time
+	MergedAt       time.Time // zero for an open PR
 	Checks         CheckState
 	ReviewDecision string // APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, or ""
 	Labels         []string
@@ -118,7 +126,7 @@ type ViewerState struct {
 // the reviews that the user submitted.
 const searchFields = `
 fragment R on PullRequest {
-  number title url isDraft createdAt isCrossRepository reviewDecision headRefOid baseRefName viewerDidAuthor
+  number title url isDraft createdAt mergedAt isCrossRepository reviewDecision headRefOid baseRefName viewerDidAuthor
   author { __typename login }
   repository { nameWithOwner }
   labels(first: 20) { nodes { name } }
@@ -129,75 +137,67 @@ fragment R on PullRequest {
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
 }`
 
-func searchQuery(n int) string {
-	var decl, body strings.Builder
-	decl.WriteString("$viewer: String!")
-	for i := range n {
-		fmt.Fprintf(&decl, ", $q%d: String!", i)
-		fmt.Fprintf(&body, "s%[1]d: search(type: ISSUE, query: $q%[1]d, first: 100) { nodes { ...R } }\n", i)
-	}
-	return "query(" + decl.String() + ") {\n" + body.String() + "}\n" + searchFields
-}
+const searchQuery = "query($viewer: String!, $q: String!) {\n" +
+	"s: search(type: ISSUE, query: $q, first: 100) { nodes { ...R } }\n}\n" + searchFields
 
-// SearchPRs runs every search in one GraphQL call and returns each Key's PRs.
-// viewer is the user's login. A search that matches nothing maps to an empty
-// list.
+// SearchPRs runs every search and returns each Key's PRs. viewer is the
+// user's login. A search that matches nothing maps to an empty list. Each
+// search is its own GraphQL call, and the calls run at the same time: GitHub
+// stops a call at about 10 seconds, and one call that holds every search of a
+// typical config takes longer. A failed search fails them all, and the error
+// names the first one in order.
 func (c *Client) SearchPRs(ctx context.Context, viewer string, searches []Search) (map[string][]PullRequest, error) {
+	lists := make([][]PullRequest, len(searches))
+	errs := make([]error, len(searches))
+	var wg sync.WaitGroup
+	for i, s := range searches {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			lists[i], errs[i] = c.searchOne(ctx, viewer, s)
+		}()
+	}
+	wg.Wait()
 	out := map[string][]PullRequest{}
-	if len(searches) == 0 {
-		return out, nil
-	}
-	args := []string{"api", "graphql", "-f", "query=" + searchQuery(len(searches)), "-f", "viewer=" + viewer}
 	for i, s := range searches {
-		args = append(args, "-f", fmt.Sprintf("q%d=%s", i, s.Query))
-	}
-	raw, runErr := c.run(ctx, args...)
-	var resp struct {
-		Data map[string]*struct {
-			Nodes []gqlSearchPR `json:"nodes"`
-		} `json:"data"`
-		Errors []struct {
-			Message string   `json:"message"`
-			Path    []string `json:"path"`
-		} `json:"errors"`
-	}
-	parseErr := json.Unmarshal(raw, &resp)
-	if len(resp.Errors) > 0 {
-		e := resp.Errors[0]
-		names := searchNames(searches)
-		if len(e.Path) > 0 {
-			if i, err := strconv.Atoi(strings.TrimPrefix(e.Path[0], "s")); err == nil && i < len(searches) {
-				names = searches[i].Name
-			}
+		if errs[i] != nil {
+			return nil, errs[i]
 		}
-		return nil, fmt.Errorf("search %s: %s", names, e.Message)
-	}
-	if runErr != nil {
-		return nil, fmt.Errorf("search %s: %w", searchNames(searches), runErr)
-	}
-	if parseErr != nil {
-		return nil, fmt.Errorf("search %s: parse GraphQL response: %w", searchNames(searches), parseErr)
-	}
-	for i, s := range searches {
-		prs := []PullRequest{}
-		if r := resp.Data["s"+strconv.Itoa(i)]; r != nil {
-			for _, n := range r.Nodes {
-				if n.Number != 0 { // an Issue that matched is an empty node
-					prs = append(prs, n.toPullRequest())
-				}
-			}
-		}
-		out[s.Key] = prs
+		out[s.Key] = lists[i]
 	}
 	return out, nil
 }
 
-func searchNames(searches []Search) string {
-	names := make([]string, len(searches))
-	for i, s := range searches {
-		names[i] = s.Name
+func (c *Client) searchOne(ctx context.Context, viewer string, s Search) ([]PullRequest, error) {
+	raw, runErr := c.run(ctx, "api", "graphql", "-f", "query="+searchQuery, "-f", "viewer="+viewer, "-f", "q="+s.Query)
+	var resp struct {
+		Data struct {
+			S *struct {
+				Nodes []gqlSearchPR `json:"nodes"`
+			} `json:"s"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
 	}
-	return strings.Join(names, ", ")
+	parseErr := json.Unmarshal(raw, &resp)
+	switch {
+	case len(resp.Errors) > 0:
+		return nil, fmt.Errorf("search %s: %s", s.Name, resp.Errors[0].Message)
+	case runErr != nil:
+		return nil, fmt.Errorf("search %s: %w", s.Name, runErr)
+	case parseErr != nil:
+		return nil, fmt.Errorf("search %s: parse GraphQL response: %w", s.Name, parseErr)
+	}
+	prs := []PullRequest{}
+	if r := resp.Data.S; r != nil {
+		for _, n := range r.Nodes {
+			if n.Number != 0 { // an Issue that matched is an empty node
+				prs = append(prs, n.toPullRequest())
+			}
+		}
+	}
+	return prs, nil
 }
 
 type gqlSearchPR struct {
@@ -206,6 +206,7 @@ type gqlSearchPR struct {
 	URL               string    `json:"url"`
 	IsDraft           bool      `json:"isDraft"`
 	CreatedAt         time.Time `json:"createdAt"`
+	MergedAt          time.Time `json:"mergedAt"`
 	IsCrossRepository bool      `json:"isCrossRepository"`
 	ReviewDecision    string    `json:"reviewDecision"`
 	HeadRefOid        string    `json:"headRefOid"`
@@ -256,7 +257,7 @@ func (g gqlSearchPR) toPullRequest() PullRequest {
 	pr := PullRequest{
 		Repo: g.Repository.NameWithOwner, Number: g.Number, Title: g.Title, URL: g.URL,
 		Draft: g.IsDraft, Fork: g.IsCrossRepository, Head: g.HeadRefOid, Base: g.BaseRefName, CreatedAt: g.CreatedAt,
-		ReviewDecision: g.ReviewDecision, Checks: ChecksNone,
+		MergedAt: g.MergedAt, ReviewDecision: g.ReviewDecision, Checks: ChecksNone,
 		Viewer: ViewerState{Author: g.ViewerDidAuthor, Requested: g.ViewerLatestReviewRequest != nil, Reviewed: g.ViewerReviews.TotalCount > 0},
 	}
 	if g.Author != nil {

@@ -2,7 +2,6 @@ package github
 
 import (
 	"context"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -109,7 +108,7 @@ func TestCandidateRanking(t *testing.T) {
 // The fixture is a recorded search: s0 is a queue on umbrella/data for two
 // authors, s1 holds Dependabot PRs, and s2 holds one of the user's own PRs.
 func TestCandidatesOfARecordedQueueSearch(t *testing.T) {
-	bin, log := fakeGH(t, filepath.Join("testdata", "queue_search.json"), "")
+	bin, log := fakeSearchGH(t, splitReply(t, "queue_search.json", "q-queue", "q-bots", "q-mine"))
 	got, err := (&Client{Bin: bin}).SearchPRs(context.Background(), "octocat", []Search{
 		{"queue", "platform", "q-queue"}, {"bots", "bots", "q-bots"}, {"mine", "mine", "q-mine"},
 	})

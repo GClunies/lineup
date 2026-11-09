@@ -124,7 +124,7 @@ func (m Model) prRows(rows []github.PullRequest) []string {
 			ss = append(ss, seg{colGap, plain})
 			ss = append(ss, padSegs(truncSegs(all[i][j], widths[j]), widths[j])...)
 		}
-		out = append(out, m.richRow(i == sel, pr.Draft, ss))
+		out = append(out, m.richRow(i == sel, pr.Draft || !pr.MergedAt.IsZero(), ss))
 	}
 	return out
 }
@@ -134,9 +134,11 @@ func prRef(pr github.PullRequest) string {
 	return pr.Repo[strings.LastIndex(pr.Repo, "/")+1:] + fmt.Sprintf("#%d", pr.Number)
 }
 
-// prCI is the CI state, or draft.
+// prCI is the CI state, draft, or merged.
 func prCI(pr github.PullRequest) []seg {
 	switch {
+	case !pr.MergedAt.IsZero():
+		return []seg{{"merged", dim}}
 	case pr.Draft:
 		return []seg{{"draft", dim}}
 	case pr.Checks == github.ChecksPassed:
