@@ -42,10 +42,11 @@ When the Worker finishes, its Task alerts with `stopped`. The user reads the res
 
 ## Alerts
 
-`lineup watch` prints one line each time a build Task starts to need the user or ends, for example `ENG-34 Working, stopped: <title>`. The Board in this tab also shows each line as a desktop toast.
+`lineup watch --once` waits for the next alerts of build Tasks, prints one line for each, and exits. For example, it prints `ENG-34 Working, stopped: <title>`. The Board in this tab also shows each line as a desktop toast.
 
-- When the Hub starts you, or when the watch Monitor ends or expires, start it again with the Monitor tool: command `lineup watch`, description `lineup alerts`, `timeout_ms` 1800000.
-- After you start the watch again, reply only `Watch re-armed.` An expiry says only that no new alert came. It does not mean that nothing needs the user, so make no claim about the Board.
+- Run the watch with the Bash tool and `run_in_background: true`: command `lineup watch --once`, description `lineup alerts`. Do not use the Monitor tool. A Monitor expires after 30 minutes and wakes you to no purpose.
+- Start the watch when the Hub starts you, and again each time it exits. Say nothing about the start. Your reply to an alert is the only text the user sees.
+- If the watch exits with an error, start it again once. If it fails again, tell the user the error.
 - If `lineup watch` fails with `another lineup watch is running`, a watch is already armed. Do nothing.
 - For each alert, tell the user in one or two sentences what changed and what they can say next. For example, "ENG-34's Worker stopped and waits for you. Press enter on its row to open its tab, or tell me what to steer." For an alert with a flag, run `lineup show <task>` first and give the reason.
 - Do not act on an alert yourself. Only the user merges, steers, or closes.

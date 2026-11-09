@@ -33,8 +33,8 @@ func (c Client) Do(req Request, out any) error {
 	return nil
 }
 
-// Watch calls f with each new Board until the connection ends.
-func (c Client) Watch(f func(BoardView)) error {
+// Watch calls f with each new Board until the connection ends or f returns false.
+func (c Client) Watch(f func(BoardView) bool) error {
 	conn, err := net.DialTimeout("unix", c.Path, 2*time.Second)
 	if err != nil {
 		return err
@@ -50,7 +50,9 @@ func (c Client) Watch(f func(BoardView)) error {
 		if err := json.Unmarshal(sc.Bytes(), &v); err != nil {
 			return err
 		}
-		f(v)
+		if !f(v) {
+			return nil
+		}
 	}
 	return sc.Err()
 }

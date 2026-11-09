@@ -16,7 +16,7 @@ import (
 // Client is the part of scheduler.Client that the Board uses.
 type Client interface {
 	Do(req scheduler.Request, out any) error
-	Watch(f func(scheduler.BoardView)) error
+	Watch(f func(scheduler.BoardView) bool) error
 }
 
 // Options are the hooks that the caller wires in.

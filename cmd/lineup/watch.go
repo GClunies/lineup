@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -15,15 +16,20 @@ import (
 )
 
 type watcher interface {
-	Watch(f func(scheduler.BoardView)) error
+	Watch(f func(scheduler.BoardView) bool) error
 }
 
 // cmdWatch prints one line each time a build Task starts to need the user or
-// ends. The review tab's board toasts the review Tasks' alerts.
-// The Orchestrator runs it under Claude's Monitor tool, which wakes the
-// Orchestrator for each line. It reconnects when the Scheduler restarts.
+// ends. The review tab's board toasts the review Tasks' alerts. With --once,
+// it exits after the first Board that has new alerts. The Orchestrator runs
+// it that way as a background command, which wakes the Orchestrator only when
+// it exits. A Monitor would wake it each time the Monitor expires, to no
+// purpose. It reconnects when the Scheduler restarts.
 func cmdWatch(c scheduler.Client, args []string, out io.Writer) error {
-	if _, err := parse("watch", "", args, nil); err != nil {
+	var once bool
+	if _, err := parse("watch", "[--once]", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&once, "once", false, "exit after the first new alerts")
+	}); err != nil {
 		return err
 	}
 	release, err := lockOne(stateDir(), "watch.lock", "lineup watch")
@@ -33,7 +39,8 @@ func cmdWatch(c scheduler.Client, args []string, out io.Writer) error {
 	defer release()
 	path := filepath.Join(stateDir(), "alerted.json")
 	for {
-		if err := watchOnce(c, path, out); err != nil {
+		printed, err := watchOnce(c, path, once, out)
+		if err != nil || printed && once {
 			return err
 		}
 		time.Sleep(2 * time.Second)
@@ -44,13 +51,16 @@ func cmdWatch(c scheduler.Client, args []string, out io.Writer) error {
 // the alerts file, because the caller retries a lost connection. path keeps
 // the alerts already printed, so a restart of the watch repeats none of them.
 // With no file yet, Tasks that are already Done are old news and print nothing.
-func watchOnce(w watcher, path string, out io.Writer) error {
+// With once, it ends the connection after the first Board that prints. It
+// reports whether it printed.
+func watchOnce(w watcher, path string, once bool, out io.Writer) (bool, error) {
 	seen, err := loadAlerted(path)
 	if err != nil {
-		return err
+		return false, err
 	}
+	var printed bool
 	var saveErr error
-	w.Watch(func(v scheduler.BoardView) {
+	w.Watch(func(v scheduler.BoardView) bool {
 		v = v.OfKind(lifecycle.KindBuild)
 		if seen == nil {
 			seen = map[string]string{}
@@ -62,12 +72,14 @@ func watchOnce(w watcher, path string, out io.Writer) error {
 		}
 		for _, t := range scheduler.Alerts(seen, v) {
 			fmt.Fprintln(out, t.AlertText())
+			printed = true
 		}
 		if err := saveAlerted(path, seen); err != nil {
 			saveErr = err
 		}
+		return !(once && printed)
 	})
-	return saveErr
+	return printed, saveErr
 }
 
 func loadAlerted(path string) (map[string]string, error) {

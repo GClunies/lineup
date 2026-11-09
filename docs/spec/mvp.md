@@ -572,10 +572,10 @@ A Task alerts when it enters the Needs you group or Done. It alerts again only a
 
 | Part | What it does |
 |---|---|
-| `lineup watch` | Prints one line for each alert of a build Task, for example `ENG-34 Working, stopped: <title>`. It keeps the alerts it printed in `alerted.json` in the state directory, so a restart repeats none of them. On its first run, Tasks that are already Done print nothing. A lock on `watch.lock` allows one watch at a time. |
+| `lineup watch` | Prints one line for each alert of a build Task, for example `ENG-34 Working, stopped: <title>`. It keeps the alerts it printed in `alerted.json` in the state directory, so a restart repeats none of them. On its first run, Tasks that are already Done print nothing. A lock on `watch.lock` allows one watch at a time. With `--once`, it exits after the first Board that has new alerts. |
 | The boards in the `work` and `review` tabs | Each prints an OSC 777 notification for each alert of its own Tasks: build Tasks in `work`, review Tasks in `review`. Rex shows it as a desktop toast for that board's pane. A click on the toast opens that pane. The view that a board opens on makes no toast. |
 
-The Hub starts the Orchestrator with a first message that tells it to run `lineup watch` under Claude's Monitor tool. Each line wakes the Orchestrator, and it tells the user what changed and what the user can say next. A Monitor stops after 30 minutes, so the Orchestrator starts it again each time it stops.
+The Hub starts the Orchestrator with a first message that tells it to run `lineup watch --once` as a background Bash command. The command exits at the next alerts, and the exit wakes the Orchestrator. The Orchestrator tells the user what changed and what the user can say next, then starts the command again. An idle Orchestrator writes nothing to its chat.
 
 ## Planner
 
