@@ -104,7 +104,7 @@ The Worker opens the PR ready for review, so GitHub requests the CODEOWNERS revi
 
 ### Landing bar
 
-The Landing bar is what a PR must meet for its build Task to be in Ready to land. At each poll, the reducer measures the PR against the Task's bar. The result is the Task's Standing. A Task is in Ready to land only while its Standing has no gap. A PR that stops meeting the bar takes its Task out of Ready to land. See [ADR 0014](../adr/0014-a-landing-bar-decides-ready-to-land.md).
+The Landing bar is what a PR must meet for its build Task to be in Ready to land. At each poll, the reducer measures the PR against the Task's bar. The result is the Task's Standing. A Task is in Ready to land only while its Standing has no gap. A PR that stops meeting the bar takes its Task out of Ready to land. See [ADR 0015](../adr/0015-a-landing-bar-decides-ready-to-land.md).
 
 The reducer takes the first gap in this order. The order is one table in `internal/lifecycle/bar.go`.
 
