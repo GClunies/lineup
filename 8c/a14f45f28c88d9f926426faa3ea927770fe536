@@ -1,0 +1,21 @@
+docs/spec/mvp.md
+  s_a0ff46300f71a7::t_074dd2a08a0c55 107
+docs/adr/0013-a-review-bot-gates-ci-passed.md
+  s_a0ff46300f71a7::t_074dd2a08a0c55 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8ca14f45f28c88d9f926426faa3ea927770fe536",
+  "prompts": {},
+  "sessions": {
+    "s_a0ff46300f71a7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b29d1eb-9042-4b4d-b812-c1d45c33f8d3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
