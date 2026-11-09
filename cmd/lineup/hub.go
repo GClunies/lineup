@@ -45,8 +45,8 @@ const (
 )
 
 // watchPrompt is the Orchestrator's first message each time the Hub starts
-// it, because a Monitor does not survive a restart of Claude.
-const watchPrompt = "Start the lineup watch Monitor, as CLAUDE.md says under Alerts."
+// it, because a background command does not survive a restart of Claude.
+const watchPrompt = "Start the lineup watch, as CLAUDE.md says under Alerts."
 
 // orchestratorSettings gives the Orchestrator its status line, lets it run
 // the lineup CLI without a permission prompt, and leaves reviews to the

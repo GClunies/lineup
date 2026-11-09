@@ -49,7 +49,7 @@ func (f *fakeClient) Do(req scheduler.Request, out any) error {
 	}
 	return nil
 }
-func (f *fakeClient) Watch(func(scheduler.BoardView)) error { return nil }
+func (f *fakeClient) Watch(func(scheduler.BoardView) bool) error { return nil }
 
 func (f *fakeClient) ops() []string {
 	f.mu.Lock()

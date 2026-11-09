@@ -36,7 +36,7 @@ const usage = `usage: lineup [command]
                                stop or restart every review queue fill
   lineup ls [--json]           list the Tasks
   lineup show [--json] <task>
-  lineup watch                 print a line each time a build Task needs you or ends
+  lineup watch [--once]        print a line each time a build Task needs you or ends
   lineup steer <task> "<text>" type text into the Task's Worker
   lineup set <task> key=value  override configuration, for example harness=pi
   lineup cap <n>               set the WIP cap

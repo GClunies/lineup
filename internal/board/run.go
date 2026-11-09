@@ -34,7 +34,7 @@ func Run(socketPath, cachePath string, opts Options) error {
 	defer close(done)
 	go func() {
 		for {
-			err := opts.Client.Watch(func(v scheduler.BoardView) { p.Send(boardMsg(v)) })
+			err := opts.Client.Watch(func(v scheduler.BoardView) bool { p.Send(boardMsg(v)); return true })
 			_ = err
 			p.Send(onlineMsg(false))
 			select {
