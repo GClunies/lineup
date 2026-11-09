@@ -1,0 +1,38 @@
+internal/board/review.go
+  s_a0ff46300f71a7::t_f71d7c6e62af5a 290
+  s_a0ff46300f71a7::t_4f9de04976e1fc 234
+  s_a0ff46300f71a7::t_c8c4a4ff4d25ad 24-26,46-48,68,279-281,287-289,291-293,302-304
+  s_a0ff46300f71a7::t_7b7cf80975385c 305
+internal/github/review_test.go
+  s_a0ff46300f71a7::t_d5a1418dbf2aac 5-6,10,57-100,102,110-111,113-115,162-165,168-169,172-174
+internal/github/review.go
+  s_a0ff46300f71a7::t_c8c4a4ff4d25ad 28-33,102,129,209,260
+  s_a0ff46300f71a7::t_bf42eb200521ef 10,140-141,143-148,150-158,160-161,163-166,168-172,174-177,180,184-190,192-196,200
+internal/board/review_view.go
+  s_a0ff46300f71a7::t_c8c4a4ff4d25ad 127,137,140-141
+docs/adr/0014-queues-share-review-slots.md
+  s_a0ff46300f71a7::t_4f9de04976e1fc 17
+internal/github/queue_test.go
+  s_a0ff46300f71a7::t_2d20195e68c4fc 111
+internal/board/review_test.go
+  s_a0ff46300f71a7::t_2381e826f2483e 215-241,395,398-400
+docs/spec/reviews.md
+  s_a0ff46300f71a7::t_4f9de04976e1fc 28,136,188,345
+  s_a0ff46300f71a7::t_24f06ba75b899a 80,105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e700002d567fc518c05eaa034c3e2c9e38c83f8b",
+  "prompts": {},
+  "sessions": {
+    "s_a0ff46300f71a7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b29d1eb-9042-4b4d-b812-c1d45c33f8d3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
