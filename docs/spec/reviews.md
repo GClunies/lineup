@@ -25,7 +25,7 @@ The user sees in one place which PRs need them: their own open PRs and the PRs t
  │ [Reviews]  My PRs  Requested  My teammates  Q: platform  │  tab / shift+tab, ranked with < >
  │ ▸ data#4945  Write the usage logs   pr-4945 Reviewing       │  a PR row joins its review Task by PR URL
  └──────────────┬───────────────────────────────────────────┘
-                │ lineup board --review: one GraphQL search per refresh, cached on disk
+                │ lineup board --review: every search on each refresh, cached on disk
                 │
  config ─ [[review.views]]   filters ─┐
         └ [[review.queues]]  filters + slots
@@ -77,7 +77,7 @@ labels = ["needs-review"]
 The review tab shows these tabs, in this order before the user ranks them:
 
 1. `Reviews`: the review Tasks, in the Board's groups and with the Board's rows. A review whose PR is on no other tab, for example a Done review of a merged PR, shows here.
-2. `My PRs`: the user's open PRs in every repository (`author:@me`). Drafts show.
+2. `My PRs`: the user's open PRs in every repository (`author:@me`). Drafts show. After them come the user's PRs that merged in the last 24 hours, newest merge first, so that a PR that auto-merge closed minutes after it opened still shows. A second search finds them: `is:pr is:merged author:@me merged:>=<24 hours ago>`. GitHub search returns nothing for `OR`, so one search cannot find both.
 3. `Requested`: the open PRs that request the user, by name or through a team (`review-requested:@me draft:false`).
 4. Each `[[review.views]]` entry, in config order.
 5. Each `[[review.queues]]` entry, named `Q: <name>`. It lists the queue's ranked PRs. See [Queues](#queues).
@@ -102,7 +102,7 @@ A header row names the columns. A row shows these columns, in this order, with 3
 | `PR` | The short repository name and the number |
 | `TITLE` | The title |
 | `AUTHOR` | The author, in every view |
-| `CI` | The CI state, or `draft` |
+| `CI` | The CI state, `draft`, or `merged`. A merged row is dim, as a draft row is. |
 | `REVIEW` | `✗ changes` when changes are requested, or the count of approvals |
 | `TASK` | The joined review Task, if one exists |
 | `AGE` | The age of the PR |
@@ -133,7 +133,7 @@ On a PR tab:
 ### Refresh and cache
 
 - The tab paints first from the disk cache, `cache/github/<view key>.json` in the state directory.
-- It searches every PR tab in one GraphQL call when it starts, on `R`, and every 2 minutes. The Reviews tab has no search. Each search reads the first 100 PRs, newest first.
+- It searches every PR tab when it starts, on `R`, and every 2 minutes. Each search is its own GraphQL call, and the calls run at the same time. GitHub stops a call at about 10 seconds. In a probe of a config with 6 views and queues, one call that held every search failed with HTTP 502 or 504 in 6 of 8 runs. As separate calls, all of them passed in 5 of 5 runs, in 7 seconds or less. The Reviews tab has no search. Each search reads the first 100 PRs, newest first. The merged PRs of `My PRs` go in the `mine` cache file with its open PRs.
 - A cached list never replaces a live one. An empty live list is a result, not a load in progress.
 - If a search fails, the tab keeps the last list and shows the error in the status line.
 
@@ -185,7 +185,7 @@ Ranking is inside one queue. A queue's PRs always rank behind the PRs of the que
 
 On every full poll, after it reads Task PRs, the Scheduler fills each queue that is not paused. A poll for a few Tasks, for example after a Worker reports `done`, fills nothing.
 
-1. Search every queue in one GraphQL call. Only one fill runs at a time. A fill that is due while another runs is skipped.
+1. Search every queue, each in its own GraphQL call, at the same time. Only one fill runs at a time. A fill that is due while another runs is skipped.
 2. In one call on the loop goroutine, rank each queue's candidates in config order. Drop from a queue each PR that an earlier queue ranked, so each PR has one owner.
 3. In the same call, for each queue in config order: start its Queued review Tasks first, then add and start a review Task for each top-ranked candidate. Stop when the queue's started count reaches its `slots`, or when the started count of all queues reaches `review.slots`.
 4. Start at most one review Task in each Repo per fill, because each start fetches into the Repo's main checkout.
@@ -342,7 +342,7 @@ The Reviewer maps "review <url>" and `/pr-review <url>` to `lineup review <url>`
 |---|---|
 | `internal/lifecycle` | `Kind` and `Queue` on Task, and `Slots` and `SharedSlots` on Board. The Stages Reviewing and Review ready. `Board.Started()` and `Board.OverCap()` count only build Tasks. `Stage.Started()` stays as it is. `Start` and `Rerun` check the Task's Kind. The Signals `pr-reviewed` and `pr-closed`. |
 | `internal/scheduler` | The review PR, head, and review worktree on Record, and the Worker's last program status. The review add path with its dedupe. Review setup and cleanup. The review poll, apart from the branch poll. The contract check by findings file. The single-flight queue fill. The `reviews` settings and ops. |
-| `internal/github` | `SearchPRs`: one GraphQL call with one aliased search per view. `TeamMembers`. The review poll by number. |
+| `internal/github` | `SearchPRs`: one GraphQL call for each view, run at the same time. `TeamMembers`. The review poll by number. |
 | `internal/config` | `[[review.views]]` and `[[review.queues]]` in the global file only, with validation at load. `[stage.reviewing]`, and the Stage loop of `Resolve` covers the new Stages. |
 | `internal/harness/claude` | The review intro, prompt, and contract. The `pr` override does not apply to a review Task. `--add-dir` for the review worktree. |
 | `internal/board` | The review view: a PR list model, its cache, its keys, and the Task join |

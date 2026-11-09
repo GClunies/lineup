@@ -21,6 +21,9 @@ const (
 	reviewEvery  = 2 * time.Minute
 	membersEvery = time.Hour
 	keyMine      = "mine"
+	// mergedFor is how long a merged PR stays on a tab that lists merged PRs.
+	// Auto-merge can close a PR minutes after it opens.
+	mergedFor = 24 * time.Hour
 )
 
 // ReviewAPI is the part of github.Client that the review tab uses.
@@ -40,6 +43,9 @@ type ReviewView struct {
 	Filter    github.Filter
 	Queue     bool
 	Tasks     bool
+	// Merged lists the user's PRs that merged in the last mergedFor after
+	// the open PRs, newest merge first.
+	Merged bool
 }
 
 // Reviews holds the review tab's outside world. Tests replace it.
@@ -59,7 +65,7 @@ type Reviews struct {
 
 var builtinReviewViews = []ReviewView{
 	{Key: "tasks", Name: "Reviews", Tasks: true},
-	{Key: keyMine, Name: "My PRs", Filter: github.Filter{Base: github.MyPRs}},
+	{Key: keyMine, Name: "My PRs", Filter: github.Filter{Base: github.MyPRs}, Merged: true},
 	{Key: "requested", Name: "Requested", Filter: github.Filter{Base: github.RequestedPRs}},
 }
 
@@ -225,7 +231,7 @@ func (m Model) reviewTick() tea.Cmd {
 	return m.rv.deps.Tick(reviewEvery, func(time.Time) tea.Msg { return rvTickMsg{} })
 }
 
-// refreshReviews searches every tab in one GraphQL call. It reads the members
+// refreshReviews searches every tab in one SearchPRs pass. It reads the members
 // of the author teams first when they are an hour old. Only the newest
 // refresh lands, so a slow answer never replaces a newer one.
 func (m Model) refreshReviews() tea.Cmd {
@@ -270,10 +276,20 @@ func (m Model) refreshReviews() tea.Cmd {
 				continue
 			}
 			searches = append(searches, github.Search{Key: tb.Key, Name: tb.Name, Query: q})
+			if tb.Merged {
+				searches = append(searches, github.Search{Key: mergedKey(tb), Name: tb.Name, Query: github.MyMergedPRs(now.Add(-mergedFor))})
+			}
 		}
 		found, err := api.SearchPRs(ctx, viewer, searches)
 		if err != nil {
 			return rvLiveMsg{gen: gen, err: err}
+		}
+		for _, tb := range tabs {
+			if merged, ok := found[mergedKey(tb)]; ok {
+				delete(found, mergedKey(tb))
+				slices.SortStableFunc(merged, func(a, b github.PullRequest) int { return b.MergedAt.Compare(a.MergedAt) })
+				found[tb.Key] = append(found[tb.Key], merged...)
+			}
 		}
 		maps.Copy(lists, found)
 		for k, prs := range lists {
@@ -282,6 +298,10 @@ func (m Model) refreshReviews() tea.Cmd {
 		return rvLiveMsg{gen: gen, lists: lists, members: members, membersAt: at, viewer: viewer}
 	}
 }
+
+// mergedKey names a tab's search for merged PRs. Its PRs join the tab's list,
+// so it has no cache file.
+func mergedKey(tb ReviewView) string { return tb.Key + ":merged" }
 
 // rankTabs puts the tabs in the saved rank first, in that order, then the
 // rest in the default order.

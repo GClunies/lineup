@@ -212,6 +212,33 @@ func TestReviewRowsShowTheJoinedTask(t *testing.T) {
 	}
 }
 
+// Auto-merge can close a PR minutes after it opens, so My PRs keeps the
+// user's PRs that merged in the last day, after the open ones.
+func TestMyPRsListsTheMergedPRsAfterTheOpenOnes(t *testing.T) {
+	e := newRvEnv(t)
+	e.api.lists["mine:merged"] = []github.PullRequest{
+		{Repo: "umbrella/lineup", Number: 12, Title: "Gate Ready to land", URL: "https://github.com/umbrella/lineup/pull/12", Author: "octocat",
+			CreatedAt: epoch.Add(-3 * time.Hour), MergedAt: epoch.Add(-2 * time.Hour), Checks: github.ChecksPassed},
+		{Repo: "umbrella/lineup", Number: 13, Title: "Drop two fail files", URL: "https://github.com/umbrella/lineup/pull/13", Author: "octocat",
+			CreatedAt: epoch.Add(-time.Hour), MergedAt: epoch.Add(-30 * time.Minute), Checks: github.ChecksPassed},
+	}
+	e.open()
+	e.press("tab")
+	var refs []string
+	for _, pr := range e.m.rv.rows() {
+		refs = append(refs, prRef(pr))
+	}
+	if want := []string{"data#4945", "data#4919", "backend#25144", "lineup#13", "lineup#12"}; !slices.Equal(refs, want) {
+		t.Fatalf("rows = %v, want %v", refs, want)
+	}
+	if row := line(e.m.View(), "lineup#13"); !strings.Contains(row, "merged") || strings.Contains(row, "✓ CI") {
+		t.Errorf("merged row = %q, want merged in place of the CI state", row)
+	}
+	if _, ok := e.wrote["mine:merged"]; ok || len(e.wrote["mine"]) != 5 {
+		t.Errorf("cache writes = %v, want the merged PRs in the mine file", e.wrote)
+	}
+}
+
 // The CSV PR has a build Task, which belongs to the work board, so the row
 // joins no Task.
 func TestReviewEnterFocusesTheJoinedTaskOrOpensThePR(t *testing.T) {
@@ -365,8 +392,11 @@ func TestReviewSearchesEveryViewInOneCall(t *testing.T) {
 	if !strings.Contains(queries["queue:platform"], "draft:false -author:@me") {
 		t.Errorf("the queue query lacks the queue qualifiers: %q", queries["queue:platform"])
 	}
-	if len(queries) != 4 || !strings.Contains(queries["mine"], "author:@me") || !strings.Contains(queries["requested"], "review-requested:@me") {
+	if len(queries) != 5 || !strings.Contains(queries["mine"], "author:@me") || !strings.Contains(queries["requested"], "review-requested:@me") {
 		t.Errorf("queries = %v", queries)
+	}
+	if q := queries["mine:merged"]; !strings.Contains(q, "is:merged") || !strings.Contains(q, "author:@me merged:>="+epoch.Add(-24*time.Hour).UTC().Format(time.RFC3339)) {
+		t.Errorf("the merged query = %q, want the user's PRs merged in the last day", q)
 	}
 	if len(e.wrote) != 4 || len(e.wrote["mine"]) != 3 {
 		t.Errorf("cache writes = %v", e.wrote)

@@ -2,9 +2,12 @@ package github
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -51,8 +54,52 @@ func TestQuery(t *testing.T) {
 	}
 }
 
+// fakeSearchGH is a gh that answers each search with the reply for its query.
+// A query with no reply fails, as gh does on an HTTP error.
+func fakeSearchGH(t *testing.T, replies map[string]string) (bin, log string) {
+	t.Helper()
+	dir := t.TempDir()
+	for q, reply := range replies {
+		if err := os.WriteFile(filepath.Join(dir, q+".json"), []byte(reply), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bin, log = filepath.Join(dir, "gh"), filepath.Join(dir, "calls.log")
+	script := `#!/bin/sh
+printf '%s\n' "$(IFS='|'; echo "$*" | tr '\n' ' ')" >> "` + log + `"
+for a in "$@"; do
+  case "$a" in q=*) f="` + dir + `/${a#q=}.json" ;; esac
+done
+if [ -f "$f" ]; then cat "$f"; else echo 'HTTP 502' >&2; exit 1; fi
+`
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin, log
+}
+
+// splitReply turns a recorded reply for searches s0, s1, ... into one reply
+// for each search, keyed by the query that the test gives it.
+func splitReply(t *testing.T, fixture string, queries ...string) map[string]string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", fixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec struct{ Data map[string]json.RawMessage }
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]string{}
+	for i, q := range queries {
+		out[q] = `{"data":{"s":` + string(rec.Data[fmt.Sprintf("s%d", i)]) + `}}`
+	}
+	return out
+}
+
+// GitHub stops a GraphQL call at about 10 seconds, so each search is its own call.
 func TestSearchPRsSplitsEachView(t *testing.T) {
-	bin, log := fakeGH(t, filepath.Join("testdata", "search_three_views.json"), "")
+	bin, log := fakeSearchGH(t, splitReply(t, "search_three_views.json", "q-mine", "q-req", "q-team"))
 	got, err := (&Client{Bin: bin}).SearchPRs(context.Background(), "octocat", []Search{
 		{"mine", "My PRs", "q-mine"}, {"requested", "Requested", "q-req"}, {"view:team", "My teammates", "q-team"},
 	})
@@ -60,12 +107,12 @@ func TestSearchPRsSplitsEachView(t *testing.T) {
 		t.Fatal(err)
 	}
 	lines := calls(t, log)
-	if len(lines) != 1 {
-		t.Fatalf("want one gh call for three views, got %d", len(lines))
+	if len(lines) != 3 {
+		t.Fatalf("want one gh call for each of three views, got %d", len(lines))
 	}
-	for _, v := range []string{"q0=q-mine", "q1=q-req", "q2=q-team"} {
-		if !strings.Contains(lines[0], "|"+v) {
-			t.Errorf("call %q lacks the variable %s", lines[0], v)
+	for _, v := range []string{"q=q-mine", "q=q-req", "q=q-team"} {
+		if !slices.ContainsFunc(lines, func(l string) bool { return strings.Contains(l, "|"+v) && strings.Contains(l, "|viewer=octocat") }) {
+			t.Errorf("no call has the variables %s and viewer=octocat: %q", v, lines)
 		}
 	}
 	numbers := map[string][]int{}
@@ -112,19 +159,19 @@ func TestSearchPRsSplitsEachView(t *testing.T) {
 }
 
 func TestSearchErrorNamesTheView(t *testing.T) {
-	reply := filepath.Join(t.TempDir(), "err.json")
-	os.WriteFile(reply, []byte(`{"errors":[{"type":"EXCESSIVE_PAGINATION","path":["s1"],"message":"too many records"}]}`), 0o644)
-	bin, _ := fakeGH(t, reply, "")
+	bin, _ := fakeSearchGH(t, map[string]string{
+		"a": `{"data":{"s":{"nodes":[]}}}`,
+		"b": `{"errors":[{"type":"EXCESSIVE_PAGINATION","path":["s"],"message":"too many records"}]}`,
+	})
 	searches := []Search{{"mine", "My PRs", "a"}, {"view:team", "My teammates", "b"}}
 	_, err := (&Client{Bin: bin}).SearchPRs(context.Background(), "octocat", searches)
-	if err == nil || !strings.Contains(err.Error(), "My teammates") || strings.Contains(err.Error(), "My PRs") {
-		t.Errorf("a GraphQL error on s1: err = %v", err)
+	if err == nil || !strings.Contains(err.Error(), "search My teammates: too many records") {
+		t.Errorf("a GraphQL error on My teammates: err = %v", err)
 	}
 
-	broken := filepath.Join(t.TempDir(), "gh")
-	os.WriteFile(broken, []byte("#!/bin/sh\necho 'HTTP 502' >&2\nexit 1\n"), 0o755)
-	_, err = (&Client{Bin: broken}).SearchPRs(context.Background(), "octocat", searches)
-	if err == nil || !strings.Contains(err.Error(), "My PRs, My teammates") || !strings.Contains(err.Error(), "HTTP 502") {
+	searches = []Search{{"mine", "My PRs", "a"}, {"view:team", "My teammates", "missing"}}
+	_, err = (&Client{Bin: bin}).SearchPRs(context.Background(), "octocat", searches)
+	if err == nil || !strings.Contains(err.Error(), "search My teammates") || !strings.Contains(err.Error(), "HTTP 502") {
 		t.Errorf("a failed call: err = %v", err)
 	}
 }

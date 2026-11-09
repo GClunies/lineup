@@ -14,4 +14,4 @@
 - A PR that two queues match is dropped from every later queue's ranked list, in the Scheduler and in the Board's queue tab. The Board uses the config order of the queues, not the order of the tabs, which the user can change.
 - Rank inside a queue is unchanged: re-reviews, then PRs that request the user by name, then the oldest.
 - The reducer checks the shared count in `Start`, so a Queued review Task that the user starts cannot pass it. A review with no queue never counts.
-- A fill still starts at most one review in each Repo, and still searches in one GraphQL call.
+- A fill still starts at most one review in each Repo, and still searches every queue in one `SearchPRs` pass.
