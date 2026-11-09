@@ -285,9 +285,9 @@ func intro(stage lifecycle.Stage, task TaskInfo) string {
 		if s.Conflict {
 			text = append(text, "The pull request for this Task has a conflict with its base branch. Resolve it.")
 		}
-		if n := s.Threads.Total(); n > 0 || !s.Conflict {
+		if open := s.Threads.Open(); open || !s.Conflict {
 			text = append(text, intros[stage])
-			if n > 0 {
+			if open {
 				text = append(text, "It has "+s.Threads.String()+".")
 			}
 		}

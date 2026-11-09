@@ -154,10 +154,10 @@ func TestAThreadPastTheReadWindowIsOpen(t *testing.T) {
 	})
 	bar := userBar
 	bar.Threads = lifecycle.IgnoredThreads
-	if got := userBar.Measure(pr.Facts("maxbeizer")).Threads; got != (lifecycle.OpenThreads{Bot: 3, People: 5}) {
-		t.Errorf("open %+v, want one more open thread", got)
+	if got := userBar.Measure(pr.Facts("maxbeizer")).Threads; got != (lifecycle.OpenThreads{Bot: 3, People: 4, Unread: true}) {
+		t.Errorf("open %+v, want the read threads and unread ones", got)
 	}
-	if got := bar.Measure(pr.Facts("maxbeizer")).Threads; got.Total() != 0 {
+	if got := bar.Measure(pr.Facts("maxbeizer")).Threads; got != (lifecycle.OpenThreads{}) {
 		t.Errorf("ignored: open %+v, want none", got)
 	}
 }

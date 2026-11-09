@@ -86,6 +86,9 @@ type PRFacts struct {
 	// Head, and for a PR that no bot gates.
 	Score   *int
 	Threads []Thread
+	// ThreadsOver is true when the PR has more review threads than the poll
+	// reads.
+	ThreadsOver bool
 	// Decision is GitHub's reviewDecision. It counts only the reviews that
 	// the base branch requires.
 	Decision Decision
@@ -153,9 +156,15 @@ type Standing struct {
 type OpenThreads struct {
 	Bot    int `json:"bot,omitempty"`
 	People int `json:"people,omitempty"`
+	// Unread is true when the PR has threads past the ones that the poll
+	// reads. lineup cannot tell who opened them or whether they are done, so
+	// they keep the bar unmet.
+	Unread bool `json:"unread,omitempty"`
 }
 
 func (o OpenThreads) Total() int { return o.Bot + o.People }
+
+func (o OpenThreads) Open() bool { return o.Total() > 0 || o.Unread }
 
 // Measure applies the bar to one poll's facts.
 func (b LandingBar) Measure(f PRFacts) Standing {
@@ -190,6 +199,7 @@ func (b LandingBar) Measure(f PRFacts) Standing {
 			s.Threads.People++
 		}
 	}
+	s.Threads.Unread = f.ThreadsOver && b.Threads != IgnoredThreads
 	required := f.Decision == DecisionRequired || f.Decision == DecisionChanges
 	s.Unapproved = required || b.Approvals == RequestedApprovals && f.Decision != DecisionApproved && f.Requested > 0
 	return s
@@ -231,7 +241,7 @@ var gaps = []struct {
 	{GapDraft, func(s Standing) bool { return s.Draft }, func(LandingBar, Standing) string { return "draft" }},
 	{GapScoreDue, func(s Standing) bool { return s.ScoreDue }, func(b LandingBar, _ Standing) string { return "waiting for " + b.Bot.Title }},
 	{GapScoreLow, func(s Standing) bool { return s.ScoreLow }, func(b LandingBar, s Standing) string { return b.Bot.ScoreText(*s.Score) }},
-	{GapThreads, func(s Standing) bool { return s.Threads.Total() > 0 }, func(_ LandingBar, s Standing) string { return s.Threads.String() }},
+	{GapThreads, func(s Standing) bool { return s.Threads.Open() }, func(_ LandingBar, s Standing) string { return s.Threads.String() }},
 	{GapApproval, func(s Standing) bool { return s.Unapproved }, func(_ LandingBar, s Standing) string {
 		if s.Review == DecisionChanges {
 			return "changes requested"
@@ -249,9 +259,15 @@ func count(n int, noun string) string {
 
 // String counts the threads for people, for example "2 open threads (1 bot)".
 func (o OpenThreads) String() string {
+	if o.Unread && o.Total() == 0 {
+		return "more threads than lineup reads"
+	}
 	text := count(o.Total(), "open thread")
 	if o.Bot > 0 {
 		text += fmt.Sprintf(" (%d bot)", o.Bot)
+	}
+	if o.Unread {
+		text += ", and more threads than lineup reads"
 	}
 	return text
 }

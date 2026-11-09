@@ -22,5 +22,5 @@ The bar rests on three choices:
 - A merge conflict is the first gap, so a conflict in CI running starts Responding.
 - A Responding round that pushes nothing meets its contract when every thread is done. A Worker can answer "won't fix" and resolve the thread.
 - A budget that a gap spent clears at the next poll after the gap closes.
-- The poll reads the first 100 check contexts and the first 50 review threads of each PR. A thread past the read window counts as open.
+- The poll reads the first 100 check contexts and the first 50 review threads of each PR. A PR with threads past the read window does not meet the bar, and its Standing says so.
 - A Task stored before the Landing bar keeps the old rules: every check gates, threads never gate, and every requested reviewer must approve.

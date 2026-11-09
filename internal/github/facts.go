@@ -39,11 +39,7 @@ func (pr *PR) Facts(viewer string) lifecycle.PRFacts {
 			Replied:  viewer != "" && slices.Contains(t.Commenters, viewer),
 		})
 	}
-	// A thread past the read window counts as open, so a partial read never
-	// meets the bar.
-	if pr.ThreadsOver {
-		f.Threads = append(f.Threads, lifecycle.Thread{})
-	}
+	f.ThreadsOver = pr.ThreadsOver
 	return f
 }
 
