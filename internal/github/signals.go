@@ -7,19 +7,10 @@ import (
 	"github.com/gclunies/lineup/internal/lifecycle"
 )
 
-// ci collapses the check state to what the lifecycle needs. A repo with no
-// checks counts as passed.
-func ci(c CheckState) CheckState {
-	if c == ChecksNone {
-		return ChecksPassed
-	}
-	return c
-}
-
-// Signals turns two consecutive snapshots of one PR into the Signals for the
-// edges between them, in the order the reducer should see them. A nil prev
-// means the PR was not seen before. viewer is the user's own login, whose
-// reviews and commits are not news.
+// Signals turns two consecutive snapshots of one PR into Signals: the edges
+// between them, in the order the reducer should see them, then one pr-seen
+// with the PR's current facts. A nil prev means the PR was not seen before.
+// viewer is the user's own login, whose reviews and commits are not news.
 func Signals(prev, cur *PR, viewer string) []lifecycle.Signal {
 	if cur == nil {
 		return nil
@@ -32,44 +23,18 @@ func Signals(prev, cur *PR, viewer string) []lifecycle.Signal {
 	}
 
 	var out []lifecycle.Signal
-	headChanged := prev != nil && prev.HeadSHA != cur.HeadSHA
 	if prev == nil {
 		out = append(out, lifecycle.PROpen{})
+	} else {
+		if prev.HeadSHA != cur.HeadSHA {
+			out = append(out, lifecycle.Pushed{})
+		}
+		out = append(out, newReviews(prev, cur, viewer)...)
+		if hasNewAuthor(prev, cur, viewer) {
+			out = append(out, lifecycle.ReviewAdditionalAuthors{})
+		}
 	}
-	if headChanged {
-		out = append(out, lifecycle.Pushed{})
-	}
-
-	was := ChecksPending
-	if prev != nil {
-		was = ci(prev.Checks)
-	}
-	now := ci(cur.Checks)
-	// A Task can wait in CI running for a draft to be marked ready, or for
-	// the review bot to score the head, so either change is news.
-	news := prev != nil && (prev.IsDraft != cur.IsDraft || botScore(prev) != botScore(cur))
-	switch {
-	case now == ChecksFailed && (was != ChecksFailed || headChanged):
-		out = append(out, lifecycle.CIFailed{})
-	case now == ChecksPassed && (was != ChecksPassed || headChanged || news):
-		out = append(out, lifecycle.CIPassed{Draft: cur.IsDraft, NeedsReview: needsReview(cur), Bot: headScore(cur)})
-	}
-
-	if prev == nil {
-		return out
-	}
-
-	if cur.ReviewDecision == "APPROVED" && prev.ReviewDecision != "APPROVED" {
-		out = append(out, lifecycle.ReviewApproved{})
-	}
-	out = append(out, newReviews(prev, cur, viewer)...)
-	if hasNewAuthor(prev, cur, viewer) {
-		out = append(out, lifecycle.ReviewAdditionalAuthors{})
-	}
-	if cur.MergeStateStatus == "DIRTY" && prev.MergeStateStatus != "DIRTY" {
-		out = append(out, lifecycle.PRConflict{})
-	}
-	return out
+	return append(out, lifecycle.PRSeen{Facts: cur.Facts(viewer)})
 }
 
 // botScore is the review bot's score for the head commit, or -1 when no bot
@@ -79,24 +44,6 @@ func botScore(pr *PR) int {
 		return -1
 	}
 	return pr.BotSummary.Score
-}
-
-func headScore(pr *PR) *lifecycle.HeadScore {
-	if pr.Bot == "" {
-		return nil
-	}
-	h := &lifecycle.HeadScore{Head: pr.HeadSHA}
-	if n := botScore(pr); n >= 0 {
-		h.Score = &n
-	}
-	return h
-}
-
-func needsReview(pr *PR) bool {
-	if pr.ReviewDecision == "APPROVED" {
-		return false
-	}
-	return pr.ReviewRequests > 0 || pr.ReviewDecision == "REVIEW_REQUIRED" || pr.ReviewDecision == "CHANGES_REQUESTED"
 }
 
 // newReviews returns one Signal per kind, in the order the reviews arrived.

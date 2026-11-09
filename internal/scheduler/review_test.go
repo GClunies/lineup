@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -758,7 +759,7 @@ func TestHunkPaneEventsLeaveTheReviewAsItWas(t *testing.T) {
 		h.rex.events <- ev
 	}
 	h.still("pr-7", lifecycle.Reviewing)
-	if v := h.task("pr-7"); v != before {
+	if v := h.task("pr-7"); !reflect.DeepEqual(v, before) {
 		t.Fatalf("task = %+v after hunk pane events, want it as it was: %+v", v, before)
 	}
 	if tabs := h.rex.open("claude reviewing"); len(tabs) != 1 || tabs[0].BlockID != worker.BlockID {

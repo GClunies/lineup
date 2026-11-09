@@ -113,9 +113,12 @@ type WorkerSpec struct {
 	Conversation string
 	// Name is the Worker's session name, the same as its Rex tab label.
 	Name string
-	// ReviewCycle is the review bot's low score that started a Responding
-	// round, or nil.
+	// ReviewCycle is the review bot's score that started a Responding round,
+	// or nil.
 	ReviewCycle *lifecycle.ReviewCycle
+	// Bar is the Task's Landing bar, and Standing is its PR at the latest poll.
+	Bar      lifecycle.LandingBar
+	Standing lifecycle.Standing
 }
 
 type Harness interface {

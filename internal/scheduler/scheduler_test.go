@@ -150,8 +150,8 @@ func (f *fakeRex) open(word string) []tab {
 	return out
 }
 
-// fakeGitHub keeps one PR per key. A snapshot's Raw is the list of Signal
-// names that GitHub would report for it.
+// fakeGitHub keeps one PR per key. A snapshot's Raw is a list of names: the
+// edges that GitHub would report for it, and the facts of its pr-seen.
 type fakeGitHub struct {
 	mu     sync.Mutex
 	prs    map[PRKey]PRSnapshot
@@ -202,13 +202,21 @@ func (g *fakeGitHub) searchCalls() [][]github.Search {
 	return slices.Clone(g.searches)
 }
 
-var signalsByName = map[string]lifecycle.Signal{
-	"pr-open": lifecycle.PROpen{}, "pushed": lifecycle.Pushed{}, "ci-failed": lifecycle.CIFailed{},
-	"ci-passed": lifecycle.CIPassed{}, "ci-passed-review": lifecycle.CIPassed{NeedsReview: true},
-	"review-approved": lifecycle.ReviewApproved{}, "pr-merged": lifecycle.PRMerged{},
-	"ci-passed-unscored": lifecycle.CIPassed{NeedsReview: true, Bot: &lifecycle.HeadScore{Head: "c0ffee1234"}},
-	"ci-passed-low":      lifecycle.CIPassed{NeedsReview: true, Bot: &lifecycle.HeadScore{Head: "c0ffee1234", Score: &four}},
+// edgesByName are the edge Signals, which come when the snapshot changes.
+var edgesByName = map[string]lifecycle.Signal{
+	"pr-open": lifecycle.PROpen{}, "pushed": lifecycle.Pushed{}, "pr-merged": lifecycle.PRMerged{},
 }
+
+// factsByName are the facts of the pr-seen that each poll ends with.
+var factsByName = map[string]lifecycle.PRFacts{
+	"ci-failed":       {Head: testHead, Checks: []lifecycle.Check{{Name: "test", State: lifecycle.CheckFailed}}},
+	"ci-passed":       {Head: testHead},
+	"review-required": {Head: testHead, Decision: lifecycle.DecisionRequired},
+	"review-approved": {Head: testHead, Decision: lifecycle.DecisionApproved},
+	"scored-low":      {Head: testHead, Decision: lifecycle.DecisionRequired, Score: &four},
+}
+
+const testHead = "c0ffee1234"
 
 var four = 4
 
@@ -254,14 +262,19 @@ func (g *fakeGitHub) ReviewPRs(_ context.Context, keys []ReviewKey) (map[ReviewK
 }
 
 func (g *fakeGitHub) Signals(prev, cur *PRSnapshot) []lifecycle.Signal {
-	if prev != nil && string(prev.Raw) == string(cur.Raw) {
-		return nil
-	}
+	changed := prev == nil || string(prev.Raw) != string(cur.Raw)
 	var names []string
 	json.Unmarshal(cur.Raw, &names)
 	var out []lifecycle.Signal
 	for _, n := range names {
-		out = append(out, signalsByName[n])
+		if e, ok := edgesByName[n]; ok && changed {
+			out = append(out, e)
+		}
+	}
+	for _, n := range names {
+		if f, ok := factsByName[n]; ok {
+			out = append(out, lifecycle.PRSeen{Facts: f})
+		}
 	}
 	return out
 }
@@ -504,8 +517,11 @@ func TestTaskFromStartToMerged(t *testing.T) {
 	h.waitStage("ENG-1", lifecycle.CIRunning)
 	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: debugger.BlockID, Status: Status{State: "done"}}
 
-	h.gh.set(key, 42, "ci-passed-review")
+	h.gh.set(key, 42, "review-required")
 	h.waitStage("ENG-1", lifecycle.InReview)
+	if v := h.task("ENG-1"); v.Note != "#42 needs approval" {
+		t.Fatalf("In review note = %q", v.Note)
+	}
 	h.gh.set(key, 42, "review-approved")
 	h.waitStage("ENG-1", lifecycle.ReadyToLand)
 
@@ -674,6 +690,32 @@ func TestViewCarriesTheSkillOverride(t *testing.T) {
 	}
 }
 
+func TestTheViewShowsTheLandingBar(t *testing.T) {
+	five := 5
+	bar := lifecycle.LandingBar{Checks: lifecycle.RequiredChecks, Threads: lifecycle.RepliedThreads, Approvals: lifecycle.RequiredApprovals,
+		Bot: &lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 4, TopScore: 5}}
+	r := &Record{Task: lifecycle.Task{ID: "ENG-590", Stage: lifecycle.ReadyToLand, Policy: lifecycle.Policy{Bar: bar}}, PR: &PRSnapshot{Number: 42}}
+	r.Standing = bar.Measure(lifecycle.PRFacts{Head: testHead, Score: &five, Decision: lifecycle.DecisionApproved,
+		Checks: []lifecycle.Check{{Name: "test", State: lifecycle.CheckPassed, Required: true}, {Name: "lint", State: lifecycle.CheckFailed}}})
+	v := r.view()
+	if v.Note != "#42 · optional failed: lint" || !slices.Equal(v.Optional, []string{"lint"}) {
+		t.Errorf("note %q optional %q", v.Note, v.Optional)
+	}
+	want := []string{"✓ required checks passed", "✓ Greptile 5/5", "✓ review threads done", "✓ required reviews approved", "! optional checks failed: lint"}
+	if got := r.checklist(); !slices.Equal(got, want) {
+		t.Errorf("checklist %q, want %q", got, want)
+	}
+
+	r.Stage = lifecycle.InReview
+	r.Standing = bar.Measure(lifecycle.PRFacts{Head: testHead, Score: &five, Decision: lifecycle.DecisionRequired})
+	if v := r.view(); v.Note != "#42 needs approval" || r.checklist()[3] != "✗ needs approval" {
+		t.Errorf("In review: note %q checklist %q", v.Note, r.checklist())
+	}
+	if got := (&Record{Task: lifecycle.Task{ID: "ENG-591", Stage: lifecycle.Working}}).checklist(); got != nil {
+		t.Errorf("a Task with no measured PR: checklist %q", got)
+	}
+}
+
 func boardIDs(v BoardView) []string {
 	var ids []string
 	for _, t := range v.Tasks {
@@ -827,7 +869,7 @@ type gatedConfig struct{ fakeConfig }
 func (gatedConfig) Policy(string, map[string]string) (lifecycle.Policy, error) {
 	p := testPolicy
 	p.Budgets.ReviewCycles = 2
-	p.Gate = &lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5}
+	p.Bar.Bot = &lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5}
 	return p, nil
 }
 
@@ -870,7 +912,7 @@ func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
 	h.gh.set(key, 42, "pr-open")
 	h.waitStage("ENG-1", lifecycle.CIRunning)
 
-	h.gh.set(key, 42, "ci-passed-unscored")
+	h.gh.set(key, 42, "review-required")
 	eventually(t, "the wait note", func() bool { return h.task("ENG-1").Note == "#42 waiting for Greptile" })
 	c.add(14 * time.Minute)
 	for n := h.polls(); h.polls() < n+3; {
@@ -885,7 +927,7 @@ func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
 		return v.Stage == "CI running" && v.Note == "no bot review: Greptile did not score c0ffee1"
 	})
 
-	h.gh.set(key, 42, "ci-passed-low")
+	h.gh.set(key, 42, "scored-low")
 	h.waitStage("ENG-1", lifecycle.Responding)
 	h.waitTab("claude responding")
 	if v := h.task("ENG-1"); v.Note != "Greptile 4/5, cycle 1/2" {
@@ -894,30 +936,29 @@ func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
 	h.hn.mu.Lock()
 	spec := h.hn.specs[len(h.hn.specs)-1]
 	h.hn.mu.Unlock()
-	if spec.Stage != lifecycle.Responding || spec.ReviewCycle == nil || spec.ReviewCycle.Score != 4 || spec.ReviewCycle.MinScore != 5 {
+	if spec.Stage != lifecycle.Responding || spec.ReviewCycle == nil || spec.ReviewCycle.Score != 4 || spec.ReviewCycle.MinScore != 5 ||
+		spec.Bar.Bot == nil || !spec.Standing.ScoreLow {
 		t.Fatalf("worker spec %+v, want a Responding round for Greptile 4 of 5", spec)
 	}
 }
 
-// A gated Task saves its wait for the bot at once. A wait that is lost in a
-// restart never flags the Task, because the poll sees no new edge.
-func TestAGatedTaskSavesItsWaitForTheBot(t *testing.T) {
+// A pr-seen can change the Standing and nothing else. The poll saves it
+// anyway, so the Board shows it and a restart keeps it.
+func TestAPollSavesTheStanding(t *testing.T) {
 	gated, _ := gatedConfig{}.Policy("", nil)
 	seed := func(st *store.Store) {
 		r := Record{Task: lifecycle.Task{ID: "ENG-7", Stage: lifecycle.CIRunning, Policy: gated, Left: gated.Budgets},
-			Title: "Backfill events", RepoSlug: "acme/data", Branch: "ada/eng-7"}
+			Title: "Backfill events", RepoSlug: "acme/data", Branch: "ada/eng-7", StageSince: time.Now()}
 		data, _ := json.Marshal(r)
 		st.Save(r.ID, data, nil)
 	}
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, func(d *Deps) { d.PollInterval = time.Hour })
-	const head = "c0ffee1c0ffee1c0ffee1c0ffee1c0ffee1c0ff"
-	h.s.call(func() { h.s.apply(h.s.recs["ENG-7"], lifecycle.CIPassed{Bot: &lifecycle.HeadScore{Head: head}}, "") })
-	raw, err := h.st.Tasks()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var saved Record
-	if err := json.Unmarshal(raw["ENG-7"], &saved); err != nil || saved.BotWait != head {
-		t.Fatalf("saved bot wait = %q, %v, want %s", saved.BotWait, err, head)
-	}
+	h.gh.set(PRKey{Repo: "acme/data", Branch: "ada/eng-7", Bot: "greptile"}, 42, "review-required")
+	h.do(Request{Op: "poll"})
+	eventually(t, "the Standing saved by one poll", func() bool {
+		raw, err := h.st.Tasks()
+		var saved Record
+		return err == nil && json.Unmarshal(raw["ENG-7"], &saved) == nil &&
+			saved.Stage == lifecycle.CIRunning && saved.Standing.ScoreDue && saved.Standing.Head == testHead
+	})
 }

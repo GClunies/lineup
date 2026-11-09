@@ -171,15 +171,12 @@ func (s *Scheduler) now() time.Time { return s.d.Now() }
 // apply runs one Signal through the reducer, records the change, and queues
 // the Effects on the Task's lane.
 func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error {
-	from, flag, outcome, wait := r.Stage, r.Flag, r.Outcome, r.BotWait
+	from, flag, outcome := r.Stage, r.Flag, r.Outcome
 	effects, err := s.board.Apply(r.ID, sig)
 	if err != nil {
 		return err
 	}
 	if r.Stage == from && r.Flag == flag && r.Outcome == outcome && len(effects) == 0 {
-		if r.BotWait != wait {
-			s.save(r)
-		}
 		return nil
 	}
 	if r.Stage != from {
@@ -206,9 +203,8 @@ func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error 
 	return nil
 }
 
-// replayPR applies the stored PR's current state as if it were new. GitHub
-// Signals are edges, so checks that finished while the Task was in an earlier
-// Stage, or while the Scheduler was down, produced their edge too early.
+// replayPR applies the stored PR's pr-seen, so a Task that enters CI running
+// moves on now and not at the next poll.
 func (s *Scheduler) replayPR(r *Record) {
 	if r.PR == nil {
 		return
@@ -414,6 +410,7 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 		Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
 		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
 		Conversation: r.Conversation, Name: r.tabLabel(), ReviewCycle: r.ReviewCycle(),
+		Bar: r.Policy.Bar, Standing: r.Standing,
 	}
 	folder := r.Worktree
 	if r.Review != nil {
@@ -657,7 +654,7 @@ func (s *Scheduler) pollTasks(ctx context.Context, ids []string) {
 				reviews[r.Review.key()] = r.ID
 			case r.RepoSlug != "":
 				key := PRKey{Repo: r.RepoSlug, Branch: r.Branch}
-				if g := r.Policy.Gate; g != nil {
+				if g := r.Policy.Bar.Bot; g != nil {
 					key.Bot = g.Bot
 				}
 				keys[key] = r.ID
@@ -682,11 +679,12 @@ func (s *Scheduler) pollTasks(ctx context.Context, ids []string) {
 			}
 			sigs := s.d.GitHub.Signals(r.PR, &cur)
 			r.PR = &cur
-			s.save(r)
 			for _, sig := range sigs {
 				s.apply(r, sig, "")
 			}
-			if r.BotWait != "" && s.now().Sub(r.StageSince) >= botReviewWait {
+			// pr-seen can change the Standing alone, with no transition to save.
+			s.save(r)
+			if r.Stage == lifecycle.CIRunning && s.now().Sub(r.StageSince) >= botReviewWait {
 				s.apply(r, lifecycle.ReviewBotLate{}, "")
 			}
 		}
@@ -722,9 +720,6 @@ func prURL(p *PRSnapshot) string {
 func (s *Scheduler) recover(ctx context.Context) {
 	live := map[string]map[string]bool{}
 	for _, r := range s.list() {
-		if r.Stage == lifecycle.CIRunning {
-			s.replayPR(r)
-		}
 		if !r.Stage.Started() || r.SessionID == "" && r.Job == JobNone && !r.Stage.Agent() {
 			continue
 		}

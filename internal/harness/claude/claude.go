@@ -210,15 +210,36 @@ type TaskInfo struct {
 	PR bool
 	// ReviewWorktree is where a review Task's Worker reads the PR's code.
 	ReviewWorktree string
-	// ReviewCycle is the review bot's low score that started a Responding
-	// round, or nil for a round that people's reviews started.
+	// ReviewCycle is the review bot's score that started a Responding round,
+	// or nil for a round that people started.
 	ReviewCycle *lifecycle.ReviewCycle
+	// Bar is the Task's Landing bar, and Standing is its PR measured against
+	// the bar at the latest poll.
+	Bar      lifecycle.LandingBar
+	Standing lifecycle.Standing
 }
 
 var contracts = map[lifecycle.Stage]string{
-	lifecycle.Working:    "Push the branch and open a PR that is ready for review, not a draft.",
-	lifecycle.CIDebug:    "Push a commit that targets the failed check.",
-	lifecycle.Responding: "Push the changes and reply to each open review thread. If the PR has a conflict, push a merge of the base branch that resolves it.",
+	lifecycle.Working: "Push the branch and open a PR that is ready for review, not a draft.",
+	lifecycle.CIDebug: "Push a commit that targets the failed checks that keep the PR from landing.",
+}
+
+// threadContracts is the Responding contract for each thread rule. A Worker
+// posts as the user, so a thread that the user opened needs no reply.
+var threadContracts = map[lifecycle.ThreadRule]string{
+	lifecycle.IgnoredThreads:  "Push the changes and reply to each open review thread.",
+	lifecycle.ResolvedThreads: "Resolve each open review thread after you address it. Push the changes that the threads ask for.",
+	lifecycle.RepliedThreads:  "Reply to each open review thread, then resolve it. A thread that the user opened needs no reply. Push the changes that your replies promise.",
+}
+
+const conflictContract = " If the PR has a conflict, push a merge of the base branch that resolves it."
+
+func stageContract(stage lifecycle.Stage, bar lifecycle.LandingBar) (string, bool) {
+	if stage == lifecycle.Responding {
+		return threadContracts[bar.Threads] + conflictContract, true
+	}
+	c, ok := contracts[stage]
+	return c, ok
 }
 
 const noPRContract = "Do not push a branch or open a pull request. Say what you produced, then stop."
@@ -242,13 +263,46 @@ var intros = map[lifecycle.Stage]string{
 const cycleIntro = "%[1]s scored the pull request for this Task %[2]d/%[3]d, below the minimum of %[4]d. " +
 	"Address %[1]s's unresolved review comments and the suggestions in its summary comment. Resolve each review thread that you addressed."
 
+// intro opens the Stage prompt. It names what the latest poll saw, so that a
+// CI debug Worker leaves the optional checks alone.
+func intro(stage lifecycle.Stage, task TaskInfo) string {
+	s := task.Standing
+	switch stage {
+	case lifecycle.CIDebug:
+		if len(s.Failed) == 0 {
+			break
+		}
+		text := "These checks failed on the pull request for this Task, and they keep it from landing: " + strings.Join(s.Failed, ", ") + ". Fix them."
+		if len(s.Optional) > 0 {
+			text += " These optional checks failed too: " + strings.Join(s.Optional, ", ") + ". They do not keep the PR from landing. Leave them."
+		}
+		return text
+	case lifecycle.Responding:
+		if r := task.ReviewCycle; r != nil && r.Score < r.MinScore {
+			return fmt.Sprintf(cycleIntro, r.Title, r.Score, r.TopScore, r.MinScore)
+		}
+		var text []string
+		if s.Conflict {
+			text = append(text, "The pull request for this Task has a conflict with its base branch. Resolve it.")
+		}
+		if n := s.Threads.Total(); n > 0 || !s.Conflict {
+			text = append(text, intros[stage])
+			if n > 0 {
+				text = append(text, "It has "+s.Threads.String()+".")
+			}
+		}
+		return strings.Join(text, " ")
+	}
+	return intros[stage]
+}
+
 // Prompt returns the Stage prompt with the Stage contract appended. extra is
 // free text from configuration, for example a command to run first.
 func Prompt(stage lifecycle.Stage, task TaskInfo, skill, extra string) string {
 	if stage == lifecycle.Reviewing {
 		return reviewPrompt(task, extra)
 	}
-	contract, ok := contracts[stage]
+	contract, ok := stageContract(stage, task.Bar)
 	if !ok {
 		return ""
 	}
@@ -264,11 +318,7 @@ func Prompt(stage lifecycle.Stage, task TaskInfo, skill, extra string) string {
 		// The user's words come first, so that they are the skill's arguments.
 		b.WriteString(task.Ask + "\n\n")
 	}
-	intro := intros[stage]
-	if r := task.ReviewCycle; r != nil && stage == lifecycle.Responding {
-		intro = fmt.Sprintf(cycleIntro, r.Title, r.Score, r.TopScore, r.MinScore)
-	}
-	b.WriteString(intro + "\n\n")
+	b.WriteString(intro(stage, task) + "\n\n")
 	tracker := cmp.Or(task.Tracker, "Linear")
 	if task.IssueID != "" {
 		fmt.Fprintf(&b, "%s Issue: %s %s\nURL: %s\n", tracker, task.IssueID, task.IssueTitle, task.IssueURL)

@@ -202,8 +202,8 @@ func TestEachKindRerunsOnlyItsOwnStages(t *testing.T) {
 
 func TestReviewTasksIgnoreBuildSignals(t *testing.T) {
 	for _, stage := range []Stage{Reviewing, ReviewReady} {
-		for _, s := range []Signal{PROpen{}, Pushed{}, CIFailed{}, CIPassed{}, CIPassed{Draft: true}, ReviewApproved{},
-			ReviewCommented{}, ReviewChangesRequested{}, ReviewAdditionalAuthors{}, PRConflict{}} {
+		for _, s := range []Signal{PROpen{}, Pushed{}, failedCI, approved, needsReview, conflict, PRSeen{PRFacts{Draft: true}},
+			ReviewCommented{}, ReviewChangesRequested{}, ReviewAdditionalAuthors{}} {
 			b, task := reviewIn(stage, "")
 			effects, err := b.Apply("R", s)
 			if err != nil || effects != nil || task.Stage != stage {

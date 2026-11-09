@@ -15,3 +15,4 @@ A Repo can name a review bot, Greptile, in a `[review_bot]` table. For a Task in
 - A gated Task in CI running whose checks passed with no head score for 15 minutes gets the flag `no bot review`, so a Repo where the bot does not review never holds a Task forever.
 - Greptile's own PR reviews do not send `review-commented` for a gated Task.
 - A Task keeps the gate that it had at Intake. A change to the configuration reaches only the Tasks that come on the Board later.
+- [ADR 0015](0015-a-landing-bar-decides-ready-to-land.md) makes the score one item of the Landing bar, in place of `ci-passed`. Open threads that only bots opened, on a score that passes, also spend a review cycle.

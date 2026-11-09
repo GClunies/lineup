@@ -40,33 +40,18 @@ type SetupFailed struct{ Detail string }
 
 type PROpen struct{}
 type Pushed struct{}
-type CIFailed struct{}
 
-// CIPassed carries the review facts that decide where a passing PR goes next.
-type CIPassed struct {
-	Draft       bool
-	NeedsReview bool // reviewers exist and have not approved
-	// Bot is the review bot's view of the head, for a Task that a bot
-	// gates. It is nil for a Task with no gate.
-	Bot *HeadScore
-}
-
-// HeadScore is the review bot's score for the PR's head commit. Score is
-// nil until the bot reviews Head.
-type HeadScore struct {
-	Head  string
-	Score *int
-}
+// PRSeen is a level, not an edge. Each poll of an open PR sends it with the
+// PR's current facts, after the poll's edge Signals. A repeat changes nothing.
+type PRSeen struct{ Facts PRFacts }
 
 // ReviewBotLate is the Scheduler's timer: the Task has been in CI running
 // long enough that a review bot that reviews the head would have scored it.
 type ReviewBotLate struct{}
 
-type ReviewApproved struct{}
 type ReviewCommented struct{}
 type ReviewChangesRequested struct{}
 type ReviewAdditionalAuthors struct{}
-type PRConflict struct{}
 type PRMerged struct{}
 
 // Review signals. Each is a level, not an edge: the Scheduler computes it from
@@ -91,13 +76,10 @@ func (WorkerLost) Name() string              { return "worker-lost" }
 func (SetupFailed) Name() string             { return "setup-failed" }
 func (PROpen) Name() string                  { return "pr-open" }
 func (Pushed) Name() string                  { return "pushed" }
-func (CIFailed) Name() string                { return "ci-failed" }
-func (CIPassed) Name() string                { return "ci-passed" }
-func (ReviewApproved) Name() string          { return "review-approved" }
+func (PRSeen) Name() string                  { return "pr-seen" }
 func (ReviewCommented) Name() string         { return "review-commented" }
 func (ReviewChangesRequested) Name() string  { return "review-changes-requested" }
 func (ReviewAdditionalAuthors) Name() string { return "review-additional-authors" }
-func (PRConflict) Name() string              { return "pr-conflict" }
 func (PRMerged) Name() string                { return "pr-merged" }
 func (ReviewBotLate) Name() string           { return "review-bot-late" }
 func (PRReviewed) Name() string              { return "pr-reviewed" }
@@ -115,13 +97,10 @@ func (WorkerLost) signal()              {}
 func (SetupFailed) signal()             {}
 func (PROpen) signal()                  {}
 func (Pushed) signal()                  {}
-func (CIFailed) signal()                {}
-func (CIPassed) signal()                {}
-func (ReviewApproved) signal()          {}
+func (PRSeen) signal()                  {}
 func (ReviewCommented) signal()         {}
 func (ReviewChangesRequested) signal()  {}
 func (ReviewAdditionalAuthors) signal() {}
-func (PRConflict) signal()              {}
 func (PRMerged) signal()                {}
 func (ReviewBotLate) signal()           {}
 func (PRReviewed) signal()              {}

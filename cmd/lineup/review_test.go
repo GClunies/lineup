@@ -88,6 +88,25 @@ func TestAReviewedPRMapsToTheCheckoutWhoseOriginIsItsRepository(t *testing.T) {
 	}
 }
 
+// The CI debug Worker reads the Standing, so it leaves the optional checks alone.
+func TestACIDebugWorkerSeesWhichChecksGate(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin:/bin") // no direnv: the default Claude profile
+	claudeBin := filepath.Join(t.TempDir(), "claude")
+	os.WriteFile(claudeBin, []byte("#!/bin/sh\n"), 0o755)
+	p := harnessPort{cfg: loadConfig(t, "[harness.claude]\npath = \""+claudeBin+"\"\n")}
+	spec := scheduler.WorkerSpec{
+		Stage: lifecycle.CIDebug, Repo: t.TempDir(), Branch: "ada/eng-1", Name: "ENG-1 Fix the tooltip",
+		PRURL: "https://github.com/umbrella/data/pull/7", Standing: lifecycle.Standing{Failed: []string{"test"}, Optional: []string{"lint"}},
+	}
+	argv, _, err := p.Command(context.Background(), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prompt := argv[len(argv)-1]; !strings.Contains(prompt, "keep it from landing: test.") || !strings.Contains(prompt, "optional checks failed too: lint.") {
+		t.Fatalf("prompt = %s", prompt)
+	}
+}
+
 func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin:/bin") // no direnv: the default Claude profile
 	claudeBin := filepath.Join(t.TempDir(), "claude")
@@ -245,6 +264,23 @@ func TestLineupShowOfAReviewPrintsNoBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	if want := "R-1  data#4955 Pull the base images\nReviewing in data\n"; out.String() != want {
+		t.Fatalf("out = %q, want %q", out.String(), want)
+	}
+}
+
+func TestLineupShowPrintsTheLandingBar(t *testing.T) {
+	data, err := json.Marshal(scheduler.TaskDetail{TaskView: scheduler.TaskView{ID: "ENG-590", Repo: "data", Stage: "Ready to land", Title: "Add billing model"},
+		Branch: "ada/eng-590-billing", Bar: []string{"✓ required checks passed", "! optional checks failed: lint"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, _ := fakeScheduler(t, map[string]scheduler.Response{"show": {OK: true, Data: data}})
+	var out bytes.Buffer
+	if err := cmdShow(c, []string{"ENG-590"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	want := "ENG-590  Add billing model\nReady to land in data (ada/eng-590-billing)\nLanding bar\n  ✓ required checks passed\n  ! optional checks failed: lint\n"
+	if out.String() != want {
 		t.Fatalf("out = %q, want %q", out.String(), want)
 	}
 }

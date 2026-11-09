@@ -70,10 +70,16 @@ lineup has no planning Stage. If the work needs a plan or the user's approval fi
 | Stage | Contract |
 |---|---|
 | Working | Push the branch and open a PR that is ready for review, not a draft. |
-| CI debug | Push a commit that targets the failed check. |
-| Responding | Push the changes and reply to each open review thread. If the PR has a conflict, push a merge of the base branch that resolves it. |
+| CI debug | Push a commit that targets the failed checks that keep the PR from landing. |
+| Responding, `threads = "replied"` | Reply to each open review thread, then resolve it. A thread that the user opened needs no reply. Push the changes that your replies promise. If the PR has a conflict, push a merge of the base branch that resolves it. |
+| Responding, `threads = "resolved"` | Resolve each open review thread after you address it. Push the changes that the threads ask for. If the PR has a conflict, push a merge of the base branch that resolves it. |
+| Responding, `threads = "ignored"` | Push the changes and reply to each open review thread. If the PR has a conflict, push a merge of the base branch that resolves it. |
+
+The `threads` key of the [Landing bar](#landing-bar) picks the Responding contract. The CI debug prompt names the gating checks that failed and the optional checks that failed. It tells the Worker to leave the optional checks.
 
 If a Worker reports `done` and the contract output is missing, the Task gets the Needs you flag with the reason `stopped`. A Worker often stops to show the user a plan or to ask a question. The flag clears when the Worker starts working again, for example after the user replies. The Scheduler does not retry the Stage.
+
+A Responding round that pushes nothing meets its contract when the latest poll saw every review thread done, no conflict, and no review bot score below the minimum. Then the Task goes to CI running, and the poll settles it on its Landing bar. For example, a Worker can reply "won't fix" and resolve each thread. This rule needs a bar that holds threads. With `threads = "ignored"`, a round with no push gets `stopped`.
 
 ### Transitions
 
@@ -81,35 +87,74 @@ If a Worker reports `done` and the contract output is missing, the Task gets the
 |---|---|---|
 | Queued | `start`, and the WIP cap allows it or the user confirms | Working |
 | Working | `done`, and a PR exists (`pr-open`) | CI running |
-| CI running | `ci-failed` | CI debug |
-| CI running | `ci-passed`, and the PR is a draft | CI running, with the Needs you flag `draft` |
-| CI running | `ci-passed`, and the review bot has not scored the head commit | CI running, waiting for the bot |
-| CI running | `ci-passed`, and the review bot's score for the head commit is below the minimum | Responding, for one review cycle |
-| CI running | `review-bot-late` | CI running, with the Needs you flag `no bot review` |
-| CI running | `ci-passed`, and reviewers exist and have not approved | In review |
-| CI running | `ci-passed`, and the PR is approved or needs no reviewer | Ready to land |
-| CI debug | `pushed` (a new head commit) | CI running |
-| In review | `review-approved` | Ready to land |
-| In review | `review-commented`, `review-changes-requested`, `review-additional-authors`, or `pr-conflict` | Responding |
-| Responding | `pushed` | CI running |
+| CI running, In review, Ready to land | `pr-seen` | The Stage that the first gap of the Landing bar leads to. See [Landing bar](#landing-bar). |
+| CI debug, Responding | `pushed` (a new head commit) | CI running |
+| Responding | `done` with no push, and every review thread done | CI running |
+| CI running | `review-bot-late`, and the review bot has not scored the head commit | CI running, with the Needs you flag `no bot review` |
+| In review | `review-commented`, `review-changes-requested`, or `review-additional-authors` | Responding |
+| Ready to land | `review-commented` or `review-changes-requested` | Responding |
+| CI debug, Responding, with a `budget spent` flag that `pr-seen` set | `pr-seen` | The Stage that the first gap leads to |
 | Ready to land | `pr-merge` (user key `m`) | Done, marked merged |
-| Ready to land | `review-commented`, `review-changes-requested`, or `pr-conflict` | Responding |
 | Any Stage | `pr-merged` outside lineup, for example by a person or by GitHub auto-merge | Done, marked merged |
 | Any Stage | `task-closed` (user key `x`, confirmed) | Done, marked closed |
 
-The Worker opens the PR ready for review, so GitHub requests the CODEOWNERS reviewers when the PR opens. lineup never changes the draft state of a PR. A draft PR means that a person wants to hold it, for example the user who made it a draft. When the user marks the PR ready, the poll sees the change and sends `ci-passed` again.
+`pr-seen` is a level Signal. The poll sends it for each open build PR at each poll, after the other GitHub Signals. It carries the PR's current facts. A second `pr-seen` with the same facts changes nothing. A Task that is already where its first gap leads stays there.
+
+The Worker opens the PR ready for review, so GitHub requests the CODEOWNERS reviewers when the PR opens. lineup never changes the draft state of a PR. A draft PR means that a person wants to hold it, for example the user who made it a draft. When the user marks the PR ready, the next `pr-seen` sees the change.
+
+### Landing bar
+
+The Landing bar is what a PR must meet for its build Task to be in Ready to land. At each poll, the reducer measures the PR against the Task's bar. The result is the Task's Standing. A Task is in Ready to land only while its Standing has no gap. A PR that stops meeting the bar takes its Task out of Ready to land. See [ADR 0015](../adr/0015-a-landing-bar-decides-ready-to-land.md).
+
+The reducer takes the first gap in this order. The order is one table in `internal/lifecycle/bar.go`.
+
+| Order | Gap | Board text | The Task goes to |
+|---|---|---|---|
+| 1 | The PR has a merge conflict | `conflict` | Responding, for one Responding round |
+| 2 | A gating check failed | `test failed` | CI debug, for one CI debug attempt |
+| 3 | A gating check runs, or GitHub has not made it yet | `2 checks pending` | CI running |
+| 4 | The PR is a draft | `draft` | CI running, with the Needs you flag `draft` |
+| 5 | The review bot has not scored the head commit | `waiting for Greptile` | CI running |
+| 6 | The review bot's score is below the minimum | `Greptile 4/5` | Responding, for one review cycle |
+| 7 | A review thread is not done | `2 open threads (1 bot)` | Responding. If only bots opened the open threads and the review bot's score passes, the round is a review cycle. Otherwise it is a Responding round. |
+| 8 | The reviews that the bar asks for have not approved | `needs approval`, `changes requested` | In review |
+| | No gap | | Ready to land |
+
+The rules for each item:
+
+- A gating check with `checks = "required"` is a check that the base branch's rules require. If the base branch requires no check, every check gates. With `checks = "all"`, every check gates.
+- The required checks are the union of two lists on the base branch: the classic branch protection's `requiredStatusCheckContexts`, and the checks of each active ruleset rule of type `REQUIRED_STATUS_CHECKS`. The poll reads both by branch name, with no PR number, so the first poll of a PR has them.
+- A required check that GitHub has not made on the head commit yet counts as pending.
+- An optional check that failed is no gap. It never starts CI debug. The Board note, the detail pane, and `lineup ls --json` (the `optional` field) name it.
+- A review thread with `threads = "replied"` is done when it is resolved and the user wrote one of its last 5 comments. A thread that the user opened needs only the resolve. Workers post as the user. With `threads = "resolved"`, a thread is done when it is resolved. With `threads = "ignored"`, threads never gate.
+- The poll reads the first 50 review threads. A PR with more threads has an open thread, so a partial read never meets the bar.
+- With `approvals = "required"`, GitHub's `reviewDecision` must not be `REVIEW_REQUIRED` or `CHANGES_REQUESTED`. With `approvals = "requested"`, the PR also must have no open review request, unless the decision is `APPROVED`.
+- The review bot items apply only to a Task with a [review bot gate](#review-bot-gate).
+
+The detail pane and `lineup show` print the bar as a checklist, for example:
+
+```
+Landing bar
+  ✓ required checks passed
+  ✗ 1 open thread (1 bot)
+  ✓ required reviews approved
+  ! optional checks failed: govulncheck
+```
+
+A Task keeps the Landing bar that it had at Intake. A Task stored before the Landing bar keeps the rules that lineup had then: every check gates, threads never gate, and every requested reviewer must approve.
 
 ### Review bot gate
 
-A Repo can have a review bot gate, which keeps a passing PR in CI running until a review bot scores it. The gate applies only to the Tasks whose Repo configuration has a `[review_bot]` table. lineup knows one bot, Greptile. Greptile reviews each push by itself and keeps one summary comment on the PR. lineup reads the confidence score and the reviewed commit from that comment. See [ADR 0013](../adr/0013-a-review-bot-gates-ci-passed.md).
+A Repo can have a review bot gate, which adds the review bot's score to the Landing bar. The gate applies only to the Tasks whose Repo configuration has a `[review_bot]` table. lineup knows one bot, Greptile. Greptile reviews each push by itself and keeps one summary comment on the PR. lineup reads the confidence score and the reviewed commit from that comment. See [ADR 0013](../adr/0013-a-review-bot-gates-ci-passed.md).
 
 - A score counts only when its reviewed commit is the head commit of the PR.
 - Only a comment by Greptile's GitHub App counts. The PR body and comments by other authors never give a score.
-- Greptile's check run passes at a low score too, so the gate acts on `ci-passed`.
-- With a score at or above the minimum, `ci-passed` goes on to In review or Ready to land, as with no gate.
-- A score below the minimum starts a Responding round, which spends one review cycle. The Worker prompt names the score and the minimum. It tells the Worker to address Greptile's unresolved review comments and the suggestions in its summary, and to resolve each thread that it addressed. The Responding contract stays the same.
-- With no review cycle left, the Task gets the flag `budget spent`, with a detail such as `Greptile 4/5 after 5 cycles`.
-- Greptile's own PR reviews do not send `review-commented`. The score decides each round.
+- Greptile's check run passes at a low score too, so the score is an item of the Landing bar and not a check.
+- A PR whose gating checks passed stays in CI running until the bot scores its head commit.
+- A score below the minimum starts a Responding round, which spends one review cycle. The Worker prompt names the score and the minimum. It tells the Worker to address Greptile's unresolved review comments and the suggestions in its summary, and to resolve each thread that it addressed.
+- If only bots opened the open threads and the score passes, the Responding round is a review cycle too. Then the bot's threads do not spend the Responding rounds that people's reviews need.
+- With no review cycle left, the Task gets the flag `budget spent`, with a detail such as `Greptile 4/5 after 5 cycles` or `1 open thread (1 bot) after 3 cycles`.
+- Greptile's own PR reviews do not send `review-commented`. The Landing bar decides each round.
 
 A Repo where the bot does not review must not hold a Task forever. If a gated Task is in CI running for 15 minutes, and its checks passed with no score for the head commit, the Scheduler sends `review-bot-late`. The Task then gets the flag `no bot review`, with a detail such as `Greptile did not score 3591eba`. Greptile's check run keeps CI pending while it reviews, and in the probes Greptile scored a push within 4 minutes. The flag clears when Greptile scores the head commit.
 
@@ -122,11 +167,13 @@ A Repo where the bot does not review must not hold a Task forever. If a gated Ta
 | `setup failed` | A worktrunk hook exits with a code other than 0 |
 | `stopped` | `done` without the contract output |
 | `budget spent` | A Loop budget reaches 0 |
-| `draft` | `ci-passed` on a draft PR |
+| `draft` | `pr-seen` on a draft PR with no earlier gap |
 | `no bot review` | `review-bot-late`: the review bot did not score the head commit of a passing PR |
 | `worker lost` | The tab or block is gone, and the restart budget is spent |
 
 When the cause clears, for example when program status goes back to `working`, the Scheduler removes the flag.
+
+A gap of the Landing bar that finds its Loop budget spent sets `budget spent`, starts no Worker, and names the gap in the detail. Examples are `2 open threads (1 bot) after 3 rounds` and `test failed after 3 attempts`. The flag clears at the next poll after the gap closes, and the Task goes where its new first gap leads. A `budget spent` flag that a review Signal set stays until the user acts, for example with `lineup rerun`.
 
 ### Loop budgets
 
@@ -137,7 +184,13 @@ When the cause clears, for example when program status goes back to `working`, t
 | Worker restarts | 2 | per Stage |
 | Review cycles | 3 | per Task, only with a review bot gate |
 
-People's reviews spend the Responding rounds, and a low review bot score spends a review cycle.
+These spend the Responding rounds:
+
+- people's reviews
+- open threads, when a person opened one of them
+- a merge conflict
+
+A low review bot score spends a review cycle. Open threads that only bots opened, on a score that passes, spend a review cycle too. A PR with no review bot gate has no score, so its bot threads spend Responding rounds.
 
 ## Rex layout
 
@@ -210,13 +263,20 @@ Rex has no key/value metadata on its objects. The store keeps the session, windo
 | Source | Signals |
 |---|---|
 | Rex events: `terminal.program_status_changed`, `terminal.child_exited`, `block_closed` | `done`, `blocked`, `error`, worker lost. `child_exited` comes for every exit. `block_closed` does not come when Rex keeps the tab open. |
-| GitHub, one batched GraphQL query for all open Task PRs every 30 s, and one query right after a Worker reports `done` | `pr-open`, `pushed`, `ci-passed`, `ci-failed`, `review-*`, `pr-conflict` (`mergeStateStatus: DIRTY`), `pr-merged` |
+| GitHub, one batched GraphQL query for all open Task PRs every 30 s, and one query right after a Worker reports `done` | `pr-open`, `pushed`, `review-*`, `pr-merged`, and `pr-seen` with the PR's facts at each poll |
 | The user, through Board keys or the CLI | `start`, `pr-merge`, `task-closed` |
 | The Scheduler's clock, at each poll | `review-bot-late` |
 
-The GraphQL query reads `statusCheckRollup`, `reviewDecision`, `latestReviews`, `reviewRequests`, `commits`, `mergeStateStatus`, and `isDraft`. For a Task with a review bot gate, it also reads the author and body of the first 20 PR comments.
+The GraphQL query reads these fields of each PR:
 
-A PR whose head commit has no checks counts as `ci-passed`, so a Repo with no CI goes on to review. The exception is a Repo whose base branch has checks. GitHub creates a push's checks a few seconds after the push, so there a PR with no checks yet stays in CI running. Without this rule, the Task could reach Ready to land, and the user could merge the PR, before its CI starts.
+- the first 100 contexts of the head commit's `statusCheckRollup`
+- `reviewDecision`, `latestReviews`, `reviewRequests`, `commits`, `mergeStateStatus`, and `isDraft`
+- the base branch's `refUpdateRule.requiredStatusCheckContexts` and its `rules`
+- the first 50 `reviewThreads`, with the author of each thread's first comment and of its last 5 comments
+
+For a Task with a review bot gate, it also reads the author and body of the first 20 PR comments.
+
+A PR whose head commit has no checks meets the check items of the Landing bar, so a Repo with no CI goes on to review. The exception is a Repo whose base branch has checks. GitHub creates a push's checks a few seconds after the push, so there a PR with no checks yet stays in CI running. Without this rule, the Task could reach Ready to land, and the user could merge the PR, before its CI starts.
 
 ### Recovery
 
@@ -306,6 +366,23 @@ An entry with only a glob, such as `match = "~/code/*/*"` above, lists every che
 
 A higher layer can set one key and keep the others from a lower layer, as in `[budgets]`. lineup checks each `[review_bot]` table when it loads the configuration. A Task keeps the gate that it had at Intake.
 
+`[landing_bar]` sets the [Landing bar](#landing-bar) of build Tasks. It can go in each layer: the global file, a `[[repos]]` entry as `[repos.landing_bar]`, and a Repo's `.lineup.toml`. With no `[landing_bar]` table, each key has its default.
+
+| Key | Values | Default |
+|---|---|---|
+| `checks` | `required`: the base branch's required checks gate. If the base branch requires no check, every check gates. `all`: every check gates. | `required` |
+| `threads` | `replied`: each review thread is resolved, and the user replied in each thread that someone else opened. `resolved`: each thread is resolved. `ignored`: threads never gate. | `replied` |
+| `approvals` | `required`: the reviews that the base branch requires approve. `requested`: also every open review request, unless the decision is `APPROVED`. | `required` |
+
+```toml
+# .lineup.toml in a Repo where every requested reviewer must approve
+[landing_bar]
+approvals = "requested"
+checks = "all"
+```
+
+Each key layers on its own, as in `[budgets]`. A value that is not in the table stops the load with an error that names the key, for example `landing_bar.threads: "any" is not one of ignored, resolved, replied`. A Task keeps the Landing bar that it had at Intake.
+
 `start_skills` is a top-level key in the global file. It lists the skills that the tracker browser offers when the user starts a Task. A chosen skill is stored as the Task override `skill`.
 
 `ad_hoc_session` is a top-level key in the global file. It names the Rex session for ad hoc Tasks. The default is `ad hoc`.
@@ -371,7 +448,7 @@ The Board shows the build Tasks. Review Tasks show on the Reviews tab of the `re
    WEB-12  Responding      web    Fix map tooltip           round 1/3    5m
    ENG-592 CI debug        data   Fix flaky test            attempt 2/3  1m
  WAITING
-   ENG-571 In review       data   Rate limit login          #4636 2 reviewers  1d
+   ENG-571 In review       data   Rate limit login          #4636 needs approval · optional failed: lint  1d
  QUEUED
    ENG-601                 data   Drop old API keys
  DONE
@@ -536,6 +613,8 @@ The Board shows cached data and refreshes it in the background.
 | The Scheduler reads program status correctly | An integration test that runs `claude` in a throwaway Rex session and reads `working`, `done`, and `blocked` (`kind: permission`) |
 | Recovery restarts a lost Worker | An integration test that kills a Task tab and restarts `lineup serve` |
 | The GitHub Signals are correct | Tests against recorded GraphQL responses for each PR state |
+| The poll reads the required checks, the optional checks, and the review threads correctly | Tests against recorded GraphQL responses of public repos: classic protection, a ruleset, no protection, a required check that is not reported yet, and open, replied, and resolved threads |
+| No build Task is in Ready to land while its Standing has a gap. An optional check never starts CI debug. A second `pr-seen` with the same facts changes nothing. | Property-based tests with `pgregory.net/rapid` |
 | A gated Task never reaches Ready to land with a head score below the minimum, and its review cycles never pass the budget | Property-based tests with `pgregory.net/rapid` |
 | The speed budget holds | A benchmark of the Board's first paint and of its keypress render, run in CI |
 | End to end | One real Linear Issue in a sandbox repo goes from start to Done |
@@ -565,3 +644,6 @@ These facts come from probes on this machine: throwaway Rex sessions, and `gh ap
 | The `Greptile Review` check run passes at a score below 5 | `gh api repos/better-auth/better-auth/commits/eb6b436/check-runs`: conclusion `success` at score 4/5 |
 | Greptile edits its summary about 2 s after its check run completes | The same PR: the check run completed at 18:00:46Z, and the comment changed at 18:00:48Z |
 | Some Greptile installs write the summary into the PR body, which the PR author can edit | `gh api repos/synnaxlabs/synnax/pulls/4881`: the body holds the score, and Greptile wrote no comment |
+| A viewer with read access can read the required checks of classic branch protection in `refUpdateRule` | The poll's GraphQL query against cli/cli#13013: `requiredStatusCheckContexts` names the three `build (…)` checks. `internal/github/testdata/classic_protection.json` is a trimmed copy. |
+| `refUpdateRule` does not show a ruleset's required checks. `rules` does, by branch name, with no PR number. | The poll's GraphQL query against GClunies/lineup#9: `refUpdateRule` is `null`, and an `ACTIVE` `REQUIRED_STATUS_CHECKS` rule names `test`. `internal/github/testdata/ruleset.json`. |
+| A review thread's first comment tells a bot from a person: its author's `__typename` is `Bot` or `User` | The poll's GraphQL query against cli/cli#12942: 7 threads that bots opened and 4 that users opened. `internal/github/testdata/threads.json`. |

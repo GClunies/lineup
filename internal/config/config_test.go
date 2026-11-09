@@ -523,21 +523,21 @@ max_review_cycles = 5
 		t.Fatal(err)
 	}
 	want := &lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5}
-	if p := r.Policy(); !reflect.DeepEqual(p.Gate, want) || p.Budgets.ReviewCycles != 5 {
-		t.Errorf("gate %+v cycles %d, want %+v and 5", p.Gate, p.Budgets.ReviewCycles, want)
+	if p := r.Policy(); !reflect.DeepEqual(p.Bar.Bot, want) || p.Budgets.ReviewCycles != 5 {
+		t.Errorf("gate %+v cycles %d, want %+v and 5", p.Bar.Bot, p.Budgets.ReviewCycles, want)
 	}
-	if r, err := g.Resolve(other, nil); err != nil || r.Gate != nil || r.Budgets.ReviewCycles != 0 {
-		t.Errorf("a Repo with no table: gate %+v cycles %d err %v", r.Gate, r.Budgets.ReviewCycles, err)
+	if r, err := g.Resolve(other, nil); err != nil || r.Bar.Bot != nil || r.Budgets.ReviewCycles != 0 {
+		t.Errorf("a Repo with no table: gate %+v cycles %d err %v", r.Bar.Bot, r.Budgets.ReviewCycles, err)
 	}
 
 	write(t, filepath.Join(crexi, ".lineup.toml"), "[review_bot]\nmin_review_score = 4\n")
-	if r, err := g.Resolve(crexi, nil); err != nil || r.Gate.MinScore != 4 || r.Gate.Bot != "greptile" || r.Budgets.ReviewCycles != 5 {
-		t.Errorf("the Repo file must override one key and keep the rest: %+v %+v %v", r.Gate, r.Budgets, err)
+	if r, err := g.Resolve(crexi, nil); err != nil || r.Bar.Bot.MinScore != 4 || r.Bar.Bot.Bot != "greptile" || r.Budgets.ReviewCycles != 5 {
+		t.Errorf("the Repo file must override one key and keep the rest: %+v %+v %v", r.Bar.Bot, r.Budgets, err)
 	}
 
 	r, err = load(t, "[review_bot]\nname = \"greptile\"\n").Resolve(other, nil)
-	if err != nil || r.Gate.MinScore != 5 || r.Budgets.ReviewCycles != 3 {
-		t.Errorf("defaults: gate %+v cycles %d err %v, want the top score and 3 cycles", r.Gate, r.Budgets.ReviewCycles, err)
+	if err != nil || r.Bar.Bot.MinScore != 5 || r.Budgets.ReviewCycles != 3 {
+		t.Errorf("defaults: gate %+v cycles %d err %v, want the top score and 3 cycles", r.Bar.Bot, r.Budgets.ReviewCycles, err)
 	}
 }
 
@@ -567,5 +567,63 @@ func TestTheMergedReviewBotMustBeWhole(t *testing.T) {
 	write(t, filepath.Join(repo, ".lineup.toml"), "[review_bot]\nmin_review_score = 7\n")
 	if _, err := load(t, "[review_bot]\nname = \"greptile\"\n").Resolve(repo, nil); err == nil {
 		t.Error("a score above the bot's top score passed")
+	}
+}
+
+func TestTheLandingBarDefaultsToTheUsersBar(t *testing.T) {
+	r, err := load(t, "").Resolve(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := lifecycle.LandingBar{Checks: lifecycle.RequiredChecks, Threads: lifecycle.RepliedThreads, Approvals: lifecycle.RequiredApprovals}
+	if r.Bar != want || r.Policy().Bar != want {
+		t.Errorf("bar %+v, policy bar %+v, want %+v", r.Bar, r.Policy().Bar, want)
+	}
+}
+
+func TestALandingBarLayerSetsOneKeyAndKeepsTheRest(t *testing.T) {
+	oss, other := t.TempDir(), t.TempDir()
+	g := load(t, `
+[landing_bar]
+checks = "all"
+
+[[repos]]
+match = "`+oss+`"
+
+[repos.landing_bar]
+threads = "resolved"
+`)
+	r, err := g.Resolve(oss, nil)
+	if want := (lifecycle.LandingBar{Checks: lifecycle.AllChecks, Threads: lifecycle.ResolvedThreads, Approvals: lifecycle.RequiredApprovals}); err != nil || r.Bar != want {
+		t.Errorf("the repos entry: %+v %v, want %+v", r.Bar, err, want)
+	}
+	if r, err := g.Resolve(other, nil); err != nil || r.Bar.Threads != lifecycle.RepliedThreads || r.Bar.Checks != lifecycle.AllChecks {
+		t.Errorf("a Repo that the entry does not match: %+v %v", r.Bar, err)
+	}
+
+	write(t, filepath.Join(oss, ".lineup.toml"), "[landing_bar]\napprovals = \"requested\"\nthreads = \"ignored\"\n")
+	r, err = g.Resolve(oss, nil)
+	if want := (lifecycle.LandingBar{Checks: lifecycle.AllChecks, Threads: lifecycle.IgnoredThreads, Approvals: lifecycle.RequestedApprovals}); err != nil || r.Bar != want {
+		t.Errorf("the Repo file: %+v %v, want %+v", r.Bar, err, want)
+	}
+}
+
+func TestBadLandingBarFailsAtLoad(t *testing.T) {
+	for text, want := range map[string]string{
+		"[landing_bar]\nchecks = \"some\"\n":                               `global: landing_bar.checks: "some" is not one of all, required`,
+		"[landing_bar]\nthreads = \"any\"\n":                               `global: landing_bar.threads: "any" is not one of ignored, resolved, replied`,
+		"[landing_bar]\napprovals = \"all\"\n":                             `global: landing_bar.approvals: "all" is not one of requested, required`,
+		"[landing_bar]\nreviews = \"required\"\n":                          "unknown keys: landing_bar.reviews",
+		"[[repos]]\nmatch = \"/a\"\n[repos.landing_bar]\nchecks = \"x\"\n": `repos[0]: landing_bar.checks: "x" is not one of all, required`,
+	} {
+		_, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), text))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err = %v, want %q", text, err, want)
+		}
+	}
+	repo := t.TempDir()
+	write(t, filepath.Join(repo, ".lineup.toml"), "[landing_bar]\nthreads = \"open\"\n")
+	if _, err := load(t, "").Resolve(repo, nil); err == nil || !strings.Contains(err.Error(), `.lineup.toml: landing_bar.threads: "open" is not one of`) {
+		t.Errorf("the Repo file: err = %v", err)
 	}
 }

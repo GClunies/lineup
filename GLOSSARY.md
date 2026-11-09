@@ -85,7 +85,7 @@ The output that an agent Stage must leave for the Scheduler to observe, for exam
 _Avoid_: Definition of done, exit criteria, skill
 
 **Signal**:
-An observed event that moves a Task from one Stage to another, for example `pr-open`, `ci-failed`, `review-approved`, `review-commented`, `review-changes-requested`, or `review-additional-authors`.
+An observed event that moves a Task from one Stage to another, for example `pr-open`, `pushed`, `pr-seen`, `review-commented`, `review-changes-requested`, or `review-additional-authors`. `pr-seen` is a level: each poll sends it with the PR's current facts.
 _Avoid_: Trigger, transition, state
 
 **Needs you**:
@@ -93,8 +93,24 @@ A flag on a Task, in any Stage, that says the user must act and gives the reason
 _Avoid_: Blocked, waiting, attention state
 
 **Ready to land**:
-The Stage where an approved PR with passing CI waits for the user to merge it.
+The Stage where a PR that meets its Landing bar waits for the user to merge it. The Task leaves it when the PR stops meeting the bar.
 _Avoid_: Mergeable, approved
+
+**Landing bar**:
+What a PR must meet for its build Task to be in Ready to land: the required checks pass, the review bot's score meets the minimum, every review thread is done, and the required reviews approve. A Repo's `[landing_bar]` table can change each item. A Task keeps the Landing bar that it had at Intake.
+_Avoid_: Definition of done, merge criteria, readiness
+
+**Standing**:
+A PR measured against its Task's Landing bar at the latest poll. Its first gap decides where the Task goes, for example CI debug for a required check that failed.
+_Avoid_: PR status, readiness
+
+**Required check**:
+A check that the base branch's rules require. If the base branch requires no check, every check is a required check. Every other check is optional: the Board shows an optional check that failed, and lineup does not act on it.
+_Avoid_: Blocking check, mandatory check
+
+**Review thread**:
+A thread of review comments on a line of a PR. Under the default Landing bar, a thread is done when it is resolved and the user replied in it. A thread that the user opened needs only the resolve.
+_Avoid_: Conversation, comment
 
 **Loop budget**:
 The most automatic attempts that a Stage gets before the Task gets the Needs you flag, for example 3 CI debug attempts.
@@ -105,7 +121,7 @@ A code review bot, for example Greptile, that scores each push to a PR. A Repo's
 _Avoid_: Reviewer, AI reviewer
 
 **Review cycle**:
-A Responding round that a review bot score below the minimum starts. Review cycles have their own Loop budget, apart from the Responding rounds that people's reviews start.
+A Responding round that the review bot starts: a score below the minimum, or open threads that only bots opened on a score that passes. Review cycles have their own Loop budget, apart from the Responding rounds that people's reviews start.
 _Avoid_: Bot round, greploop, review round
 
 ### Capacity

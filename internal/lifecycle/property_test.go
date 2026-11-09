@@ -1,26 +1,34 @@
 package lifecycle
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
 
 	"pgregory.net/rapid"
 )
 
-var anySignal = rapid.SampledFrom([]Signal{
+func seen(f PRFacts) Signal { return PRSeen{f} }
+
+var anySignal = rapid.OneOf(rapid.SampledFrom([]Signal{
 	Start{}, Start{OverCap: true}, PRMerge{}, TaskClosed{},
 	Rerun{Working}, Rerun{CIDebug}, Rerun{Responding}, Rerun{Reviewing}, Reopen{},
 	WorkerDone{ContractMet: true}, WorkerDone{ContractMet: false},
 	WorkerStatus{State: "working"}, WorkerStatus{State: "blocked", Kind: "permission"}, WorkerStatus{State: "error"},
 	WorkerExited{Code: 0}, WorkerExited{Code: 1}, WorkerLost{}, SetupFailed{},
-	PROpen{}, Pushed{}, CIFailed{}, CIPassed{}, CIPassed{Draft: true}, CIPassed{NeedsReview: true},
-	ReviewApproved{}, ReviewCommented{}, ReviewChangesRequested{}, ReviewAdditionalAuthors{}, PRConflict{}, PRMerged{},
-	PRReviewed{}, PRClosed{},
-	CIPassed{Bot: &HeadScore{Head: "h"}}, CIPassed{Bot: scored("h", 3)}, CIPassed{NeedsReview: true, Bot: scored("h", 4)},
-	CIPassed{Bot: scored("h", 5)}, CIPassed{NeedsReview: true, Bot: scored("h", 5)}, ReviewBotLate{},
-})
+	PROpen{}, Pushed{}, ReviewCommented{}, ReviewChangesRequested{}, ReviewAdditionalAuthors{}, PRMerged{},
+	PRReviewed{}, PRClosed{}, ReviewBotLate{},
+}), rapid.Map(anyFacts, seen))
+
+// spending are the facts of a PR whose first gap spends a Loop budget under
+// every bar: a conflict, and a required check that failed.
+var spending = []Signal{
+	PRSeen{PRFacts{Head: "h", Conflict: true}},
+	PRSeen{PRFacts{Head: "h", Checks: []Check{{Name: "test", State: CheckFailed, Required: true}}}},
+}
 
 // failure is what a Worker that never succeeds, and a world that keeps
 // rejecting its work, sends for a Task in each Stage. It leaves out the
@@ -28,9 +36,9 @@ var anySignal = rapid.SampledFrom([]Signal{
 func failure(t *rapid.T, s Stage, pushes bool) Signal {
 	switch s {
 	case CIRunning:
-		return rapid.SampledFrom([]Signal{CIFailed{}, CIPassed{Bot: scored("h", 0)}}).Draw(t, "ci")
+		return rapid.SampledFrom(spending).Draw(t, "ci")
 	case InReview:
-		return rapid.SampledFrom([]Signal{ReviewCommented{}, ReviewChangesRequested{}, ReviewAdditionalAuthors{}, PRConflict{}}).Draw(t, "review")
+		return rapid.SampledFrom(append([]Signal{ReviewCommented{}, ReviewChangesRequested{}, ReviewAdditionalAuthors{}}, spending...)).Draw(t, "review")
 	case CIDebug, Responding:
 		if pushes {
 			return Pushed{}
@@ -59,9 +67,9 @@ func randomBoard(t *rapid.T) (*Board, []string) {
 				Responding: rapid.IntRange(0, 3).Draw(t, "resp"),
 				Restarts:   rapid.IntRange(0, 2).Draw(t, "restarts"),
 			},
+			Bar: anyBar.Draw(t, "bar"),
 		}
-		if rapid.Bool().Draw(t, "gated") {
-			p.Gate = &ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: rapid.IntRange(1, 5).Draw(t, "min score"), TopScore: 5}
+		if p.Bar.Bot != nil {
 			p.Budgets.ReviewCycles = rapid.IntRange(0, 3).Draw(t, "cycles")
 		}
 		if rapid.Bool().Draw(t, "review") {
@@ -74,13 +82,43 @@ func randomBoard(t *rapid.T) (*Board, []string) {
 	return b, ids
 }
 
-// gateSignal favors the Signals that carry a Task to CI running and through
-// the review gate. With anySignal alone, a run reaches the gate rarely.
-var gateSignal = rapid.OneOf(anySignal, rapid.SampledFrom([]Signal{
-	Start{OverCap: true}, WorkerDone{ContractMet: true}, Pushed{}, ReviewApproved{},
-	CIPassed{Bot: &HeadScore{Head: "h"}}, CIPassed{Bot: scored("h", 0)}, CIPassed{Bot: scored("h", 3)},
-	CIPassed{NeedsReview: true, Bot: scored("h", 4)}, CIPassed{Bot: scored("h", 5)},
-}))
+// gapsOn each add one gap to a PR that meets every bar. A bar with no bot
+// ignores the score gaps, and a bar that ignores threads ignores the thread gaps.
+var gapsOn = []func(*PRFacts){
+	func(f *PRFacts) { f.Conflict = true },
+	func(f *PRFacts) { f.Checks = append(f.Checks, Check{Name: "enable", State: CheckFailed}) },
+	func(f *PRFacts) {
+		f.Checks = append(f.Checks, Check{Name: "enable", State: CheckPending, Required: true})
+	},
+	func(f *PRFacts) { f.Draft = true },
+	func(f *PRFacts) { f.Score = nil },
+	func(f *PRFacts) { low := 0; f.Score = &low },
+	func(f *PRFacts) { f.Threads = append(f.Threads, Thread{Bot: true}) },
+	func(f *PRFacts) { f.Threads = append(f.Threads, Thread{}) },
+	func(f *PRFacts) { f.Decision = DecisionRequired },
+}
+
+func withGap(f PRFacts, add func(*PRFacts)) PRFacts {
+	f.Checks, f.Threads = slices.Clone(f.Checks), slices.Clone(f.Threads)
+	add(&f)
+	return f
+}
+
+// nearFacts draws a PR that meets every bar but for a few gaps, so that each
+// gap is often the first one.
+var nearFacts = rapid.Custom(func(t *rapid.T) PRFacts {
+	f := passingFacts.Draw(t, "passing")
+	for range rapid.IntRange(0, 2).Draw(t, "gaps") {
+		f = withGap(f, rapid.SampledFrom(gapsOn).Draw(t, "gap"))
+	}
+	return f
+})
+
+// barSignal favors the Signals that carry a Task to CI running and past its
+// Landing bar. With anySignal alone, a run reaches Ready to land rarely.
+var barSignal = rapid.OneOf(anySignal, rapid.SampledFrom([]Signal{
+	Start{OverCap: true}, WorkerDone{ContractMet: true}, Pushed{},
+}), rapid.Map(passingFacts, seen), rapid.Map(nearFacts, seen))
 
 // step applies one random Signal to the Task and fails on an error that no
 // caller expects.
@@ -233,24 +271,79 @@ func TestAReviewReadyTaskLeavesOnlyByThePROrTheUser(t *testing.T) {
 	})
 }
 
-// A gated Task reaches Ready to land only after a head score at or above its
-// minimum. No path skips the gate, and no override enters Ready to land.
-func TestAGatedTaskLandsOnlyWithAPassingHeadScore(t *testing.T) {
+// A build Task is in Ready to land only while its Standing has no gap. Only a
+// pr-seen whose facts meet the Task's bar moves it there, so no override and
+// no Worker skips the bar.
+func TestOnlyAPRThatMeetsTheBarIsReadyToLand(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		b, ids := randomBoard(t)
-		// passed is whether the last ci-passed that the Task got in CI
-		// running had a head score at or above its minimum.
-		passed := map[string]bool{}
 		for range rapid.IntRange(0, 200).Draw(t, "steps") {
 			task := anyTask(t, b, ids)
 			from := task.Stage
-			s, _, _ := stepFrom(t, b, task, gateSignal)
-			g := task.Policy.Gate
-			if c, ok := s.(CIPassed); ok && from == CIRunning && g != nil {
-				passed[task.ID] = c.Bot != nil && c.Bot.Score != nil && *c.Bot.Score >= g.MinScore
+			s, _, _ := stepFrom(t, b, task, barSignal)
+			if task.Stage != ReadyToLand {
+				continue
 			}
-			if g != nil && from != ReadyToLand && task.Stage == ReadyToLand && !passed[task.ID] {
-				t.Fatalf("%s entered Ready to land from %s on %s with no passing head score", task.ID, from, s.Name())
+			if !task.Standing.Met() {
+				t.Fatalf("%s is in Ready to land with %q", task.ID, task.Policy.Bar.Explain(task.Standing))
+			}
+			seen, ok := s.(PRSeen)
+			if !ok && from != ReadyToLand {
+				t.Fatalf("%s entered Ready to land from %s on %s", task.ID, from, s.Name())
+			}
+			if ok && !meets(task.Policy.Bar, seen.Facts) {
+				t.Fatalf("%s is in Ready to land after facts %+v that miss bar %+v", task.ID, seen.Facts, task.Policy.Bar)
+			}
+		}
+	})
+}
+
+func TestAnOptionalCheckNeverStartsCIDebug(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b, ids := randomBoard(t)
+		for range rapid.IntRange(0, 200).Draw(t, "steps") {
+			task := anyTask(t, b, ids)
+			s, effects, _ := stepFrom(t, b, task, barSignal)
+			seen, ok := s.(PRSeen)
+			if ok && slices.Contains(effects, Effect(StartWorker{CIDebug})) && !plainGaps(task.Policy.Bar, seen.Facts)[GapFailed] {
+				t.Fatalf("%s started CI debug on facts %+v with no gating check failed under %+v", task.ID, seen.Facts, task.Policy.Bar)
+			}
+		}
+	})
+}
+
+// Each poll repeats pr-seen, so a repeat must change nothing. Each reachable
+// Task gets a PR with each single gap, and one random PR.
+func TestASecondPRSeenChangesNothing(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b, ids := randomBoard(t)
+		for range rapid.IntRange(0, 100).Draw(t, "steps") {
+			stepFrom(t, b, anyTask(t, b, ids), barSignal)
+		}
+		task := anyTask(t, b, ids)
+		if rapid.Bool().Draw(t, "to CI running") {
+			b.Apply(task.ID, Start{OverCap: true})
+			b.Apply(task.ID, WorkerDone{ContractMet: true})
+		}
+		passing := passingFacts.Draw(t, "passing")
+		facts := []PRFacts{passing, anyFacts.Draw(t, "facts")}
+		for _, add := range gapsOn {
+			facts = append(facts, withGap(passing, add))
+		}
+		saved, _ := json.Marshal(task)
+		for _, f := range facts {
+			var c Task
+			if err := json.Unmarshal(saved, &c); err != nil {
+				t.Fatal(err)
+			}
+			one := &Board{Cap: 1, Slots: map[string]int{}, Tasks: map[string]*Task{c.ID: &c}}
+			if _, err := one.Apply(c.ID, PRSeen{f}); err != nil {
+				t.Fatal(err)
+			}
+			before := c
+			effects, err := one.Apply(c.ID, PRSeen{f})
+			if err != nil || effects != nil || !reflect.DeepEqual(c, before) {
+				t.Fatalf("second pr-seen of %+v: effects %v err %v\nbefore %+v\nafter  %+v", f, effects, err, before, c)
 			}
 		}
 	})
@@ -262,8 +355,8 @@ func TestReviewCyclesNeverPassTheirBudget(t *testing.T) {
 		rounds := map[string]int{}
 		for range rapid.IntRange(0, 200).Draw(t, "steps") {
 			task := anyTask(t, b, ids)
-			s, effects, _ := stepFrom(t, b, task, gateSignal)
-			if _, ok := s.(CIPassed); ok && slices.Contains(effects, Effect(StartWorker{Responding})) {
+			s, effects, _ := stepFrom(t, b, task, barSignal)
+			if _, ok := s.(PRSeen); ok && slices.Contains(effects, Effect(StartWorker{Responding})) && task.BotScore != nil {
 				rounds[task.ID]++
 			}
 			if rounds[task.ID] > task.Policy.Budgets.ReviewCycles || task.Left.ReviewCycles < 0 {
