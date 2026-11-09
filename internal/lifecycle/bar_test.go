@@ -50,6 +50,8 @@ var anyFacts = rapid.Custom(func(t *rapid.T) PRFacts {
 		Threads:   rapid.SliceOfN(anyThread, 0, 3).Draw(t, "threads"),
 		Decision:  rapid.SampledFrom([]Decision{DecisionNone, DecisionRequired, DecisionApproved, DecisionChanges}).Draw(t, "decision"),
 		Requested: rapid.IntRange(0, 2).Draw(t, "requested"),
+		// Drawn last, so that older fail files still replay.
+		ThreadsOver: rapid.Bool().Draw(t, "threads over"),
 	}
 })
 
@@ -101,6 +103,7 @@ func plainGaps(b LandingBar, f PRFacts) map[Gap]bool {
 		g[GapScoreDue] = f.Score == nil
 		g[GapScoreLow] = f.Score != nil && *f.Score < b.Bot.MinScore
 	}
+	g[GapThreads] = f.ThreadsOver && b.Threads != IgnoredThreads
 	for _, t := range f.Threads {
 		open := b.Threads == ResolvedThreads && !t.Resolved || b.Threads == RepliedThreads && (!t.Resolved || !t.Mine && !t.Replied)
 		g[GapThreads] = g[GapThreads] || open
@@ -204,6 +207,20 @@ func TestEachThreadRule(t *testing.T) {
 		if got := (LandingBar{Threads: rule}).Measure(f).Threads; got != want {
 			t.Errorf("%s: open %+v, want %+v", rule, got, want)
 		}
+	}
+}
+
+func TestUnreadThreadsKeepTheBarUnmet(t *testing.T) {
+	over := PRFacts{Threads: []Thread{{Bot: true}}, ThreadsOver: true}
+	if s := userBar.Measure(over); s.Next() != GapThreads || userBar.Explain(s) != "1 open thread (1 bot), and more threads than lineup reads" {
+		t.Errorf("open and unread: next %d %q", s.Next(), userBar.Explain(s))
+	}
+	over.Threads = nil
+	if s := userBar.Measure(over); s.Next() != GapThreads || userBar.Explain(s) != "more threads than lineup reads" {
+		t.Errorf("unread only: next %d %q", s.Next(), userBar.Explain(s))
+	}
+	if s := (LandingBar{}).Measure(over); !s.Met() {
+		t.Errorf("ignored threads: %+v, want the bar met", s)
 	}
 }
 

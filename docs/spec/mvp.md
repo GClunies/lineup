@@ -127,7 +127,7 @@ The rules for each item:
 - A required check that GitHub has not made on the head commit yet counts as pending.
 - An optional check that failed is no gap. It never starts CI debug. The Board note, the detail pane, and `lineup ls --json` (the `optional` field) name it.
 - A review thread with `threads = "replied"` is done when it is resolved and the user wrote one of its last 5 comments. A thread that the user opened needs only the resolve. Workers post as the user. With `threads = "resolved"`, a thread is done when it is resolved. With `threads = "ignored"`, threads never gate.
-- The poll reads the first 50 review threads. A PR with more threads has an open thread, so a partial read never meets the bar.
+- The poll reads the first 50 review threads. A PR with more threads does not meet the bar while the bar holds threads. The Board shows "more threads than lineup reads", and the unread threads start a Responding round, because people can have opened them.
 - With `approvals = "required"`, GitHub's `reviewDecision` must not be `REVIEW_REQUIRED` or `CHANGES_REQUESTED`. With `approvals = "requested"`, the PR also must have no open review request, unless the decision is `APPROVED`.
 - The review bot items apply only to a Task with a [review bot gate](#review-bot-gate).
 

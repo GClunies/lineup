@@ -401,9 +401,10 @@ func (t *Task) hold(keep Reason) []Effect {
 }
 
 // answer starts a Responding round for the open review threads. A round for
-// bot threads alone, on a score that passes, is a review cycle.
+// bot threads alone, on a score that passes, is a review cycle. Unread
+// threads can be people's, so they start a Responding round.
 func (t *Task) answer() []Effect {
-	if t.Standing.Threads.People == 0 && t.Standing.Score != nil {
+	if o := t.Standing.Threads; o.People == 0 && !o.Unread && t.Standing.Score != nil {
 		return t.reviewCycle()
 	}
 	return t.spend(respondingLoop, t.why())
@@ -431,7 +432,7 @@ func (t *Task) land() []Effect {
 func (t *Task) answered() bool {
 	s := t.Standing
 	return t.Stage == Responding && s.Head != "" && t.Policy.Bar.Threads != IgnoredThreads &&
-		s.Threads.Total() == 0 && !s.Conflict && !s.ScoreLow
+		!s.Threads.Open() && !s.Conflict && !s.ScoreLow
 }
 
 // loop is a Loop budget and the agent Stage that spends it.

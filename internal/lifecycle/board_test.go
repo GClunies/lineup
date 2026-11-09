@@ -412,6 +412,23 @@ func TestBotThreadsOnAPassingScoreSpendAReviewCycle(t *testing.T) {
 	}
 }
 
+// Unread threads can be people's, so they start a Responding round, also on a
+// passing score.
+func TestUnreadThreadsStartARespondingRound(t *testing.T) {
+	five := 5
+	p := userPolicy
+	p.Bar.Bot = greptile(4)
+	b := NewBoard(5)
+	task := b.Add("T", p)
+	task.Stage = CIRunning
+	over := threads(&five, Thread{Bot: true})
+	over.Facts.ThreadsOver = true
+	b.Apply("T", over)
+	if task.Stage != Responding || task.Left.Responding != 2 || task.ReviewCycle() != nil {
+		t.Fatalf("stage %s left %+v cycle %+v, want one Responding round spent", task.Stage, task.Left, task.ReviewCycle())
+	}
+}
+
 // A Worker can answer each thread with no code change, for example "won't fix".
 func TestARoundThatAnswersEveryThreadNeedsNoPush(t *testing.T) {
 	b, task := userTaskIn(CIRunning)
