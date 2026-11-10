@@ -253,13 +253,33 @@ func TestWorkingStatusClearsOnlyWorkerFlags(t *testing.T) {
 func TestAStopKeepsTheQuestion(t *testing.T) {
 	b, task := taskIn(Working)
 	b.Apply("T", WorkerStatus{State: "blocked", Kind: "question", Detail: "dual write first?"})
-	b.Apply("T", WorkerDone{ContractMet: false})
+	b.Apply("T", WorkerDone{ContractMet: false, Detail: "Done for now."})
 	if task.Flag != ReasonQuestion || task.FlagDetail != "dual write first?" {
 		t.Fatalf("flag %q detail %q, want the question kept", task.Flag, task.FlagDetail)
 	}
 	b.Apply("T", WorkerStatus{State: "working"})
 	if task.Flag != "" || task.FlagDetail != "" {
 		t.Fatalf("the user's reply left flag %q detail %q", task.Flag, task.FlagDetail)
+	}
+}
+
+func TestAStopCarriesTheWorkerLastLine(t *testing.T) {
+	b, task := taskIn(Working)
+	b.Apply("T", WorkerDone{ContractMet: false, Detail: `schema_version: "1.0" or "1.0.0"?`})
+	if task.Flag != ReasonStopped || task.FlagDetail != `schema_version: "1.0" or "1.0.0"?` {
+		t.Fatalf("flag %q detail %q, want stopped with the last line", task.Flag, task.FlagDetail)
+	}
+	b.Apply("T", WorkerStatus{State: "working"})
+	if task.Flag != "" || task.FlagDetail != "" {
+		t.Fatalf("the user's reply left flag %q detail %q", task.Flag, task.FlagDetail)
+	}
+}
+
+func TestAStopWithNoMessageIsBareStopped(t *testing.T) {
+	b, task := taskIn(Working)
+	b.Apply("T", WorkerDone{ContractMet: false})
+	if task.Flag != ReasonStopped || task.FlagDetail != "" {
+		t.Fatalf("flag %q detail %q, want a bare stopped", task.Flag, task.FlagDetail)
 	}
 }
 

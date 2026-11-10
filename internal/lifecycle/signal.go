@@ -22,8 +22,12 @@ type Reopen struct{}
 // Worker signals.
 
 // WorkerDone means the Worker reported done. The Scheduler checks the Stage
-// contract first and sets ContractMet.
-type WorkerDone struct{ ContractMet bool }
+// contract first and sets ContractMet. Detail is the Worker's last line, which
+// a stop shows as its flag detail.
+type WorkerDone struct {
+	ContractMet bool
+	Detail      string
+}
 
 // WorkerStatus is a program status other than done: working, blocked, or error.
 type WorkerStatus struct {

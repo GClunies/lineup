@@ -678,10 +678,24 @@ func (s *Scheduler) checkContract(r *Record, question bool) {
 				if met && reviewed != "" {
 					r.ReviewedHead = reviewed
 				}
-				s.apply(r, lifecycle.WorkerDone{ContractMet: met}, "")
+				var detail string
+				if r.WorkerState == "done" {
+					detail = lastLine(r.Status)
+				}
+				s.apply(r, lifecycle.WorkerDone{ContractMet: met, Detail: detail}, "")
 			}
 		})
 	})
+}
+
+// lastLine is the first line of a Worker's final message, cut like a question.
+func lastLine(msg string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(msg), "\n")
+	line = strings.TrimSpace(line)
+	if rs := []rune(line); len(rs) > maxQuestion {
+		line = string(rs[:maxQuestion])
+	}
+	return line
 }
 
 // contractOutput reports whether the Task's Stage contract output exists, as
