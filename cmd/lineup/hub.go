@@ -166,7 +166,10 @@ func rexRun(args ...string) ([]byte, error) {
 }
 
 // prepareAgent writes the agent's folder and trusts it for Claude. An agent
-// with no role works in assist_dir and writes nothing there.
+// with no role works in assist_dir and writes nothing there. openHub calls it
+// on every run, so a new lineup binary or prompt reaches the files at once.
+// Claude reads CLAUDE.md and the settings when a session starts, so a running
+// agent picks them up at its next start.
 func prepareAgent(t agentTab) (string, error) {
 	if t.role == nil {
 		cfg, err := config.Load(configPath())
@@ -187,13 +190,23 @@ func prepareAgent(t agentTab) (string, error) {
 			return "", err
 		}
 	}
-	if err := os.WriteFile(filepath.Join(dir, "CLAUDE.md"), role, 0o600); err != nil {
+	if err := writeReplacing(filepath.Join(dir, "CLAUDE.md"), role); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".claude", "settings.json"), []byte(settings), 0o600); err != nil {
+	if err := writeReplacing(filepath.Join(dir, ".claude", "settings.json"), []byte(settings)); err != nil {
 		return "", err
 	}
 	return dir, claude.Trust(os.Getenv("CLAUDE_CONFIG_DIR"), dir)
+}
+
+// writeReplacing swaps the file in by rename. Claude Code watches its
+// settings file, and a write in place would show it an empty file.
+func writeReplacing(path string, data []byte) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // trackersOn is which Trackers are on.
@@ -344,12 +357,16 @@ func openHub() error {
 		}
 	}
 	for i, t := range agentTabs {
-		if w, ok := renamed(windows, t.window); ok {
-			if _, err := rexRun("window", "rename", "-s", hubSession, w.ID, t.window); err != nil {
+		// The files are written on every run, as the agent reads them only
+		// when it starts.
+		var dir string
+		if t.role != nil {
+			if dir, err = prepareAgent(t); err != nil {
 				return err
 			}
-			// The agent reads its new role the next time it starts.
-			if _, err := prepareAgent(t); err != nil {
+		}
+		if w, ok := renamed(windows, t.window); ok {
+			if _, err := rexRun("window", "rename", "-s", hubSession, w.ID, t.window); err != nil {
 				return err
 			}
 			windows[t.window] = w
@@ -361,7 +378,7 @@ func openHub() error {
 			delete(windows, t.window)
 		}
 		if _, ok := windows[t.window]; !ok {
-			if err := openAgentTab(t, self, claudeBin, t.window == activeTab); err != nil {
+			if err := openAgentTab(t, dir, self, claudeBin, t.window == activeTab); err != nil {
 				return err
 			}
 		}
@@ -378,13 +395,16 @@ func openHub() error {
 	return nil
 }
 
-func openAgentTab(t agentTab, self, claudeBin string, focus bool) error {
-	var dir string
+// openAgentTab opens the tab. dir is the agent's folder when openHub has
+// prepared it, and empty for an agent with no role.
+func openAgentTab(t agentTab, dir, self, claudeBin string, focus bool) error {
 	var cmd []string
 	if t.agent != "" {
-		var err error
-		if dir, err = prepareAgent(t); err != nil {
-			return err
+		if dir == "" {
+			var err error
+			if dir, err = prepareAgent(t); err != nil {
+				return err
+			}
 		}
 		cmd = agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, "lineup-"+t.window)
 		// The assist folder holds the user's own conversations, so the assist
