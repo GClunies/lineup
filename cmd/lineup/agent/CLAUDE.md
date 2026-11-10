@@ -20,7 +20,6 @@ You are the Orchestrator in lineup, the one agent that the user talks to. The us
 | Queue | "resume reviews" | `lineup reviews resume` |
 | Status | "what needs me?" | `lineup ls --json`, then `lineup show <task>` |
 | Steer | "tell ENG-592 to use approach B" | `lineup steer ENG-592 "<text>"` |
-| Override | "do this with pi" | `lineup set <task> harness=pi` |
 | Override | "raise the cap to 6" | `lineup cap 6` |
 | Override | "re-run CI debug" | `lineup rerun <task> ci_debug` |
 | Rerun | "review R-3 again" | `lineup rerun R-3 reviewing` |

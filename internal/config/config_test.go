@@ -58,14 +58,14 @@ func TestMissingFileMeansDefaults(t *testing.T) {
 	if r.Budgets != (lifecycle.Budgets{CIDebug: 3, Responding: 3, Restarts: 2}) {
 		t.Errorf("budgets = %+v", r.Budgets)
 	}
-	want := StageConfig{Harness: "claude", Model: "claude-opus-5-5", Effort: "high"}
+	want := StageConfig{Model: "claude-opus-5-5", Effort: "high"}
 	for _, st := range []lifecycle.Stage{lifecycle.Working, lifecycle.CIDebug, lifecycle.Responding, lifecycle.Reviewing} {
 		if r.Stages[st] != want {
 			t.Errorf("%s = %+v", st, r.Stages[st])
 		}
 	}
-	if len(r.Stages) != 4 || r.Harnesses["claude"] != bin {
-		t.Errorf("stages %d harnesses %v", len(r.Stages), r.Harnesses)
+	if len(r.Stages) != 4 || r.Claude != bin {
+		t.Errorf("stages %d claude %v", len(r.Stages), r.Claude)
 	}
 }
 
@@ -134,7 +134,6 @@ func TestInvalidValuesFailAtLoad(t *testing.T) {
 		"budget":     "[budgets]\nrestarts = -1\n",
 		"stage":      "[stage.queued]\nmodel = \"x\"\n",
 		"user stage": "[stage.review_ready]\nmodel = \"x\"\n",
-		"harness":    "[harness.claude]\npath = \"claude\"\n",
 		"event":      "[linear.w.status.ENG]\nbogus = \"x\"\n",
 		"match":      "[[repos]]\nmatch = \"[\"\n",
 	} {
@@ -195,29 +194,22 @@ poll_interval = "20s"
 
 func TestOverridesApplyLast(t *testing.T) {
 	g := load(t, "[stage.working]\nmodel = \"m\"\n")
-	bin := fakeBin(t, t.TempDir(), "pi")
-	g.lookPath = func(n string) (string, error) {
-		if n != "pi" {
-			t.Errorf("looked up %q", n)
-		}
-		return bin, nil
-	}
-	r, err := g.Resolve(t.TempDir(), map[string]string{"harness": "pi", "model": "x"})
+	r, err := g.Resolve(t.TempDir(), map[string]string{"model": "x"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for st, sc := range r.Stages {
-		if sc.Harness != "pi" || sc.Model != "x" {
+		if sc.Model != "x" {
 			t.Errorf("%s = %+v", st, sc)
 		}
 	}
-	if !r.PR || r.Harnesses["pi"] != bin || len(r.Harnesses) != 1 {
+	if !r.PR {
 		t.Errorf("%+v", r)
 	}
-	if r, err := g.Resolve(t.TempDir(), map[string]string{"harness": "pi", "pr": "false"}); err != nil || r.PR {
+	if r, err := g.Resolve(t.TempDir(), map[string]string{"pr": "false"}); err != nil || r.PR {
 		t.Errorf("pr=false: PR %v, err %v", r.PR, err)
 	}
-	if _, err := g.Resolve(t.TempDir(), map[string]string{"harness": "pi", "pr": "no"}); err == nil {
+	if _, err := g.Resolve(t.TempDir(), map[string]string{"pr": "no"}); err == nil {
 		t.Error("pr=no accepted")
 	}
 	if _, err := g.Resolve(t.TempDir(), map[string]string{"nope": "1"}); err == nil {
@@ -225,17 +217,35 @@ func TestOverridesApplyLast(t *testing.T) {
 	}
 }
 
-func TestHarnessPathFromConfigBeatsPATH(t *testing.T) {
-	bin := fakeBin(t, t.TempDir(), "claude")
-	g := load(t, "[harness.claude]\npath = \""+bin+"\"\n")
-	g.lookPath = func(string) (string, error) { t.Fatal("PATH consulted"); return "", nil }
-	r, err := g.Resolve(t.TempDir(), nil)
-	if err != nil || r.Harnesses["claude"] != bin {
-		t.Fatalf("%v %v", r.Harnesses, err)
+func TestHarnessKeyIsRejected(t *testing.T) {
+	const msg = "harness is no longer a setting, lineup runs claude"
+	for name, text := range map[string]string{
+		"table":     "[harness.claude]\npath = \"/bin/claude\"\n",
+		"stage key": "[stage.default]\nharness = \"pi\"\n",
+		"repos key": "[[repos]]\nmatch = \"/r\"\n[repos.stage.working]\nharness = \"pi\"\n",
+	} {
+		global := write(t, filepath.Join(t.TempDir(), "config.toml"), text)
+		if _, err := Load(global); err == nil || err.Error() != global+": "+msg {
+			t.Errorf("global %s: err = %v", name, err)
+		}
+	}
+	for name, text := range map[string]string{
+		"table":     "[harness.claude]\npath = \"/bin/claude\"\n",
+		"stage key": "[stage.working]\nharness = \"pi\"\n",
+	} {
+		repo := t.TempDir()
+		write(t, filepath.Join(repo, ".lineup.toml"), text)
+		_, err := load(t, "").Resolve(repo, nil)
+		if want := filepath.Join(repo, ".lineup.toml") + ": " + msg; err == nil || err.Error() != want {
+			t.Errorf("repo %s: err = %v", name, err)
+		}
+	}
+	if _, err := load(t, "").Resolve(t.TempDir(), map[string]string{"harness": "pi"}); err == nil || err.Error() != msg {
+		t.Errorf("override: err = %v", err)
 	}
 }
 
-func TestMissingHarnessIsAnError(t *testing.T) {
+func TestMissingClaudeIsAnError(t *testing.T) {
 	g := load(t, "")
 	g.lookPath = func(string) (string, error) { return "", os.ErrNotExist }
 	if _, err := g.Resolve(t.TempDir(), nil); err == nil {

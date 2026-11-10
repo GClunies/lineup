@@ -175,7 +175,7 @@ func TestConfigDir(t *testing.T) {
 }
 
 func TestCommand(t *testing.T) {
-	st := config.StageConfig{Harness: "claude", Model: "claude-opus-5-5", Effort: "high"}
+	st := config.StageConfig{Model: "claude-opus-5-5", Effort: "high"}
 	argv, env := Command("/bin/claude", "/profiles/work", st, "", "", "do it")
 	want := []string{"/bin/claude", "--model", "claude-opus-5-5", "--effort", "high", "do it"}
 	if !reflect.DeepEqual(argv, want) || !reflect.DeepEqual(env, map[string]string{"CLAUDE_CONFIG_DIR": "/profiles/work"}) {

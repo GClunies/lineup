@@ -36,7 +36,7 @@ const usage = `usage: lineup [command]
   lineup show [--json] <task>
   lineup watch [--once]        print a line each time a build Task needs you or ends
   lineup steer <task> "<text>" type text into the Task's Worker
-  lineup set <task> key=value  override configuration, for example harness=pi
+  lineup set <task> key=value  override configuration, for example model=claude-opus-5-5
   lineup cap <n>               set the WIP cap
   lineup rerun <task> <stage>  start a fresh Worker, for example for ci_debug
   lineup merge <task>

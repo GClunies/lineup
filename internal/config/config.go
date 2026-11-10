@@ -27,7 +27,6 @@ const (
 	defaultPollInterval = 30 * time.Second
 	defaultModel        = "claude-opus-5-5"
 	defaultEffort       = "high"
-	defaultHarness      = "claude"
 	repoFileName        = ".lineup.toml"
 	defaultAdHocSession = "ad hoc"
 	defaultReviewCycles = 3
@@ -46,11 +45,11 @@ type Resolved struct {
 	// applies to the Repo.
 	Bar    lifecycle.LandingBar
 	Stages map[lifecycle.Stage]StageConfig
-	// Harnesses maps each Harness name in use to its absolute path.
-	Harnesses map[string]string
+	// Claude is the absolute path of the claude binary.
+	Claude string
 }
 
-type StageConfig struct{ Harness, Model, Effort, Skill, Command string }
+type StageConfig struct{ Model, Effort, Skill, Command string }
 
 func (r Resolved) Policy() lifecycle.Policy {
 	return lifecycle.Policy{Budgets: r.Budgets, Bar: r.Bar}
@@ -101,7 +100,6 @@ func (f *landingBarFile) apply(b *lifecycle.LandingBar) error {
 }
 
 type stageFile struct {
-	Harness *string `toml:"harness"`
 	Model   *string `toml:"model"`
 	Effort  *string `toml:"effort"`
 	Skill   *string `toml:"skill"`
@@ -124,10 +122,6 @@ type repoEntry struct {
 	Teams []string `toml:"teams"`
 }
 
-type harnessFile struct {
-	Path string `toml:"path"`
-}
-
 type linearWorkspace struct {
 	ClientID string                       `toml:"client_id"`
 	Status   map[string]map[string]string `toml:"status"`
@@ -139,7 +133,6 @@ type globalFile struct {
 	LinearClientID string                     `toml:"linear_client_id"`
 	AdHocSession   string                     `toml:"ad_hoc_session"`
 	Repos          []repoEntry                `toml:"repos"`
-	Harness        map[string]harnessFile     `toml:"harness"`
 	Linear         map[string]linearWorkspace `toml:"linear"`
 	GitHub         struct {
 		Labels map[string]string `toml:"labels"`
@@ -189,7 +182,6 @@ const defaultSlots = 3
 type Global struct {
 	file     globalFile
 	home     string
-	harness  map[string]string
 	lookPath func(string) (string, error)
 }
 
@@ -270,7 +262,7 @@ func Load(globalPath string) (*Global, error) {
 	if err != nil {
 		return nil, fmt.Errorf("find home folder: %w", err)
 	}
-	g := &Global{home: home, harness: map[string]string{}, lookPath: exec.LookPath}
+	g := &Global{home: home, lookPath: exec.LookPath}
 	data, err := os.ReadFile(globalPath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -299,13 +291,6 @@ func Load(globalPath string) (*Global, error) {
 		if err := g.validate(&r.layer, fmt.Sprintf("repos[%d]", i)); err != nil {
 			return nil, fmt.Errorf("%s: %w", globalPath, err)
 		}
-	}
-	for name, h := range g.file.Harness {
-		p := g.expand(h.Path)
-		if !filepath.IsAbs(p) {
-			return nil, fmt.Errorf("%s: harness.%s.path must be absolute, got %q", globalPath, name, h.Path)
-		}
-		g.harness[name] = p
 	}
 	for ws, w := range g.file.Linear {
 		for team, events := range w.Status {
@@ -402,12 +387,19 @@ func isPair(s string) bool {
 	return ok && isWord(a) && isWord(b) && !strings.Contains(b, "/")
 }
 
+var errHarnessGone = errors.New("harness is no longer a setting, lineup runs claude")
+
 func decodeStrict(text string, v any) error {
 	md, err := toml.Decode(text, v)
 	if err != nil {
 		return err
 	}
 	if keys := md.Undecoded(); len(keys) > 0 {
+		for _, k := range keys {
+			if k[0] == "harness" || k[len(k)-1] == "harness" {
+				return errHarnessGone
+			}
+		}
 		names := make([]string, len(keys))
 		for i, k := range keys {
 			names[i] = k.String()
@@ -606,7 +598,7 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 		return Resolved{}, err
 	}
 
-	base := StageConfig{Harness: defaultHarness, Model: defaultModel, Effort: defaultEffort}
+	base := StageConfig{Model: defaultModel, Effort: defaultEffort}
 	for _, l := range layers {
 		if s, ok := l.Stage["default"]; ok {
 			apply(&base, s)
@@ -630,22 +622,14 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 		return Resolved{}, err
 	}
 
-	res.Harnesses = map[string]string{}
-	for _, sc := range res.Stages {
-		if _, done := res.Harnesses[sc.Harness]; done {
-			continue
-		}
-		p, err := g.harnessPath(sc.Harness)
-		if err != nil {
-			return Resolved{}, err
-		}
-		res.Harnesses[sc.Harness] = p
+	if res.Claude, err = g.claudePath(); err != nil {
+		return Resolved{}, err
 	}
 	return res, nil
 }
 
 func apply(sc *StageConfig, s stageFile) {
-	for dst, src := range map[*string]*string{&sc.Harness: s.Harness, &sc.Model: s.Model, &sc.Effort: s.Effort, &sc.Skill: s.Skill, &sc.Command: s.Command} {
+	for dst, src := range map[*string]*string{&sc.Model: s.Model, &sc.Effort: s.Effort, &sc.Skill: s.Skill, &sc.Command: s.Command} {
 		if src != nil {
 			*dst = *src
 		}
@@ -666,11 +650,11 @@ func applyOverrides(res *Resolved, overrides map[string]string) error {
 				return fmt.Errorf("override pr must be true or false, got %q", v)
 			}
 			res.PR = v == "true"
-		case "harness", "model", "effort", "skill", "command":
+		case "harness":
+			return errHarnessGone
+		case "model", "effort", "skill", "command":
 			for st, sc := range res.Stages {
 				switch k {
-				case "harness":
-					sc.Harness = v
 				case "model":
 					sc.Model = v
 				case "effort":
@@ -689,21 +673,18 @@ func applyOverrides(res *Resolved, overrides map[string]string) error {
 	return nil
 }
 
-// harnessPath never asks a login shell: on this machine the login shell finds a broken codex.
-func (g *Global) harnessPath(name string) (string, error) {
-	p, ok := g.harness[name]
-	if !ok {
-		found, err := g.lookPath(name)
-		if err != nil {
-			return "", fmt.Errorf("harness %q: no [harness.%s] path and not on PATH: %w", name, name, err)
-		}
-		p, err = filepath.Abs(found)
-		if err != nil {
-			return "", err
-		}
+// claudePath never asks a login shell: on this machine the login shell finds a broken codex.
+func (g *Global) claudePath() (string, error) {
+	found, err := g.lookPath("claude")
+	if err != nil {
+		return "", fmt.Errorf("claude is not on PATH: %w", err)
+	}
+	p, err := filepath.Abs(found)
+	if err != nil {
+		return "", err
 	}
 	if _, err := os.Stat(p); err != nil {
-		return "", fmt.Errorf("harness %q: %w", name, err)
+		return "", fmt.Errorf("claude: %w", err)
 	}
 	return p, nil
 }
