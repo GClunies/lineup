@@ -4,10 +4,11 @@ name: Auto-merge
 # base with no required `test` check would merge at once, so the job arms
 # auto-merge only for a base that requires it. GitHub has no auto-merge for
 # a PR in a stack, so `gh stack merge` lands each one. A PR from a fork never
-# gets auto-merge.
+# gets auto-merge. GitHub's delete-branch-on-merge setting skips a merge that
+# the workflow performs, so the delete-branch job removes the head branch.
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, closed]
 
 permissions:
   contents: write
@@ -15,7 +16,7 @@ permissions:
 
 jobs:
   enable:
-    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event.action != 'closed' && !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -39,3 +40,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           BASE: ${{ github.event.pull_request.base.ref }}
+  delete-branch:
+    if: ${{ github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          if ! out=$(gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$HEAD" 2>&1); then
+            case "$out" in
+              *"Reference does not exist"*)
+                echo "::notice::$HEAD is already gone."
+                exit 0 ;;
+            esac
+            echo "$out" >&2
+            exit 1
+          fi
+          echo "::notice::Deleted $HEAD after #$PR merged."
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.event.pull_request.head.ref }}
