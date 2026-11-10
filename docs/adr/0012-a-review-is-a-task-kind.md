@@ -4,7 +4,7 @@ A review of someone else's PR is a Task with Kind `review`. It has its own Stage
 
 ## Considered Options
 
-- **An ad hoc Task with `skill=pr-review` and `pr=false`.** This is what the Orchestrator does today. Rejected: the Task never learns the PR it reviews, so it never ends when the PR merges or the user posts the review. It ends with the transient flag `stopped`, so recovery runs a finished review again.
+- **An ad hoc Task with `skill=pr-review` and `pr=false`.** Rejected: the Task never learns the PR it reviews, so it never ends when the PR merges or the user posts the review. It ends with the transient flag `stopped`, so recovery runs a finished review again.
 - **A build Task whose branch is the PR's head branch.** Rejected: the branch poll treats the other author's PR as the Task's own. lineup would mark it ready for review, start CI debug Workers on it, and offer to merge it.
 - **A separate review queue outside the Scheduler**, as the Herdr `review-queue` plugin is. Rejected: it builds tabs, Workers, recovery, and alerts a second time, and its reviews do not show on the Board or reach the Orchestrator.
 

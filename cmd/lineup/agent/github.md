@@ -15,4 +15,3 @@ Use the `gh` CLI. Pass each body on stdin with `--body-file -` and a quoted here
 
 - Read the body with `gh issue view` before you edit it. `--body-file` replaces the whole body.
 - Do not close, reopen, or delete Issues. If an Issue must go, tell the user to close it on GitHub.
-- Do not run `gh pr` commands.

@@ -127,7 +127,7 @@ On a PR tab:
 | `o` | Open the PR in the browser |
 | `r` | Start a review Task for this PR now, outside every queue's slots. If the PR has an open review Task, start it if it is Queued, reopen its Worker if the Worker closed in Review ready, or run it again if it stopped for good. Else focus its tab. |
 | `R` | Refresh now: search every PR tab again, and ask the Scheduler to poll every started Task |
-| `z` | Zoom the Reviewer pane to full height, and back |
+| `z` | Go to the Orchestrator in the `work` tab |
 | `?` | Show all keys |
 
 ### Refresh and cache
@@ -334,7 +334,7 @@ The skills live in the dotfiles repository, `~/.agents/skills`.
 | `lineup reviews` | Lists each queue with its slots, started reviews, and ranked PRs. When `review.slots` is set, it prints `Reviews: <started>/<slots> started` first. `--json` has `slots` when it is set, and always has `started`, the started review Tasks of all queues |
 | `lineup reviews pause` / `resume` | Stops or restarts every queue fill |
 
-The Reviewer maps "review <url>" and `/pr-review <url>` to `lineup review <url>`. The Orchestrator sends these requests to the Reviewer and does not touch review Tasks. It keeps the `/pr-explain` row of its instructions. In a review Task's tab, the user asks the Worker for `/pr-explain` directly.
+The Orchestrator maps "review <url>" and `/pr-review <url>` to `lineup review <url>`. It keeps the `/pr-explain` row of its instructions. In a review Task's tab, the user asks the Worker for `/pr-explain` directly.
 
 ## Code changes
 
@@ -347,15 +347,9 @@ The Reviewer maps "review <url>" and `/pr-review <url>` to `lineup review <url>`
 | `internal/harness/claude` | The review intro, prompt, and contract. The `pr` override does not apply to a review Task. `--add-dir` for the review worktree. |
 | `internal/board` | The review view: a PR list model, its cache, its keys, and the Task join |
 | `cmd/lineup` | The `review` Hub tab, `lineup board --review`, `lineup review`, `lineup reviews` |
-| Orchestrator instructions | A rule that sends each review request to the Reviewer |
-| Reviewer instructions | `cmd/lineup/reviewer/CLAUDE.md` |
+| Orchestrator instructions | The review jobs in `cmd/lineup/agent/CLAUDE.md` |
 
-The `review` Hub tab has two panes, as the `work` and `plan` tabs do:
-
-- `REVIEWS` on top runs `lineup board --review`.
-- `REVIEWER` below runs Claude with the Reviewer role. It adds, steers, reruns, and closes review Tasks, and it pauses and resumes the queues, all through the `lineup` CLI.
-
-The Reviewer's settings deny `lineup add`, `lineup start`, `lineup merge`, and every GitHub write. The reviews run in their own tabs. Only the Reviewer takes a review request. The Orchestrator's settings deny `lineup review` and `lineup reviews`.
+The `review` Hub tab holds one pane, `REVIEWS`, which runs `lineup board --review`. The Orchestrator in the `work` tab adds, steers, reruns, and closes review Tasks, and it pauses and resumes the queues, all through the `lineup` CLI. Its settings deny every GitHub write to a PR. The reviews run in their own tabs.
 
 ## Success criteria and tests
 
