@@ -250,7 +250,7 @@ const reviewHelp = `
             slots, or reopen its closed Worker in Review ready
    R        refresh now: search GitHub again and poll every started
             Task; lineup also refreshes every 2 minutes
-   z        zoom the Reviewer below to full height, and back
+   z        go to the agent in the work tab
    ?        this help      q  quit
 
  press any key to go back
@@ -274,7 +274,7 @@ const reviewTasksHelp = `
    o        open the PR
    R        refresh now: search GitHub again and poll every started
             Task; lineup also refreshes every 2 minutes
-   z        zoom the Reviewer below to full height, and back
+   z        go to the agent in the work tab
    ?        this help      q  quit
 
  press any key to go back

@@ -19,23 +19,17 @@ import (
 	"github.com/gclunies/lineup/internal/linear"
 )
 
-//go:embed orchestrator/CLAUDE.md
-var orchestratorRole []byte
+//go:embed agent/CLAUDE.md
+var agentRole []byte
 
-//go:embed planner/CLAUDE.md
-var plannerRole []byte
+//go:embed agent/linear.md
+var linearSection []byte
 
-//go:embed reviewer/CLAUDE.md
-var reviewerRole []byte
+//go:embed agent/github.md
+var githubSection []byte
 
-//go:embed planner/linear.md
-var plannerLinear []byte
-
-//go:embed planner/github.md
-var plannerGitHub []byte
-
-//go:embed planner/local.md
-var plannerLocal []byte
+//go:embed agent/local.md
+var localSection []byte
 
 const (
 	// hubSession has a space, so no Repo session can take it. A Repo session
@@ -48,24 +42,14 @@ const (
 // it, because a background command does not survive a restart of Claude.
 const watchPrompt = "Start the lineup watch, as CLAUDE.md says under Alerts."
 
-// orchestratorSettings gives the Orchestrator its status line, lets it run
-// the lineup CLI without a permission prompt, and leaves reviews to the
-// Reviewer.
-const orchestratorSettings = `{
-  "statusLine": {"type": "command", "command": "echo Orchestrator"},
-  "permissions": {
-    "allow": ["Bash(lineup:*)"],
-    "deny": ["Bash(lineup review:*)", "Bash(lineup reviews:*)"]
-  }
-}
-`
-
-// plannerSettings gives the Planner its status line, lets it edit Linear, and
-// keeps it from starting Tasks.
-const plannerSettings = `{
-  "statusLine": {"type": "command", "command": "echo Planner"},
+// agentSettings gives the Orchestrator its status line, lets it run lineup
+// and edit the Trackers without a permission prompt, and keeps it from
+// writing to a PR. Only the user posts a review or merges outside lineup.
+const agentSettings = `{
+  "statusLine": {"type": "command", "command": "echo Lineup"},
   "permissions": {
     "allow": [
+      "Bash(lineup:*)",
       "Bash(linear issue view:*)",
       "Bash(linear issue query:*)",
       "Bash(linear issue mine:*)",
@@ -86,14 +70,13 @@ const plannerSettings = `{
       "Bash(gh issue edit:*)",
       "Bash(gh issue comment:*)",
       "Bash(gh search issues:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh search prs:*)",
       "Read(/{{issues}}/**)",
-      "Edit(/{{issues}}/**)",
-      "Bash(lineup ls:*)",
-      "Bash(lineup show:*)"
+      "Edit(/{{issues}}/**)"
     ],
     "deny": [
-      "Bash(lineup add:*)",
-      "Bash(lineup start:*)",
       "Bash(linear issue start:*)",
       "Bash(linear issue pull-request:*)",
       "Bash(linear issue pr:*)",
@@ -101,7 +84,12 @@ const plannerSettings = `{
       "Bash(gh issue close:*)",
       "Bash(gh issue reopen:*)",
       "Bash(gh issue delete:*)",
-      "Bash(gh pr:*)"
+      "Bash(gh pr review:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr close:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh api:*)"
     ],
     "additionalDirectories": ["{{issues}}"]
   },
@@ -111,43 +99,10 @@ const plannerSettings = `{
 }
 `
 
-// reviewerSettings gives the Reviewer its status line, lets it run the review
-// commands, and keeps it from starting build Tasks or writing to GitHub.
-const reviewerSettings = `{
-  "statusLine": {"type": "command", "command": "echo Reviewer"},
-  "permissions": {
-    "allow": [
-      "Bash(lineup review:*)",
-      "Bash(lineup reviews:*)",
-      "Bash(lineup ls:*)",
-      "Bash(lineup show:*)",
-      "Bash(lineup steer:*)",
-      "Bash(lineup rerun:*)",
-      "Bash(lineup close:*)",
-      "Bash(lineup archive:*)",
-      "Bash(gh pr view:*)",
-      "Bash(gh pr list:*)",
-      "Bash(gh search prs:*)"
-    ],
-    "deny": [
-      "Bash(lineup add:*)",
-      "Bash(lineup start:*)",
-      "Bash(lineup merge:*)",
-      "Bash(lineup watch:*)",
-      "Bash(gh pr review:*)",
-      "Bash(gh pr comment:*)",
-      "Bash(gh pr merge:*)",
-      "Bash(gh pr close:*)",
-      "Bash(gh pr edit:*)",
-      "Bash(gh api:*)"
-    ]
-  }
-}
-`
-
 // agentTab is one Hub tab: a Board view on top and a Claude agent below. A
-// tab with no Board and no role holds only a general agent, in the folder
-// that assist_dir names.
+// tab with no agent holds the Board view alone, at full height. A tab with no
+// Board and no role holds only a general agent, in the folder that assist_dir
+// names.
 type agentTab struct {
 	window, view, agent string // Rex window label, top block label, agent block label
 	boardArgs           []string
@@ -162,9 +117,9 @@ type agentTab struct {
 // agentTabs are in Hub tab order.
 var agentTabs = []agentTab{
 	{"assist", "", "ASSIST", nil, nil, "", "#262626", "", nil},
-	{"plan", "LINEAR", "PLANNER", []string{"board", "--linear"}, plannerRole, plannerSettings, "#2a2233", "", composePlanner},
-	{"work", "BOARD", "ORCHESTRATOR", []string{"board"}, orchestratorRole, orchestratorSettings, "#1b2733", watchPrompt, nil},
-	{"review", "REVIEWS", "REVIEWER", []string{"board", "--review"}, reviewerRole, reviewerSettings, "#1f2b24", "", nil},
+	{"plan", "LINEAR", "", []string{"board", "--linear"}, nil, "", "", "", nil},
+	{"work", "BOARD", "LINEUP", []string{"board"}, agentRole, agentSettings, "#1b2733", watchPrompt, composeAgent},
+	{"review", "REVIEWS", "", []string{"board", "--review"}, nil, "", "", "", nil},
 }
 
 // activeTab is the tab that a new Hub opens on.
@@ -185,6 +140,16 @@ func renamed(windows map[string]hubWindow, label string) (hubWindow, bool) {
 	}
 	w, ok := windows[old]
 	return w, ok
+}
+
+// retiredAgents are the agent blocks of a Hub from before the one agent.
+var retiredAgents = []string{"ORCHESTRATOR", "PLANNER", "REVIEWER"}
+
+// retired reports whether w still runs a retired agent. openHub closes such a
+// window and opens the tab again, because it adds no block to a window that
+// exists.
+func retired(w hubWindow) bool {
+	return slices.ContainsFunc(w.Blocks, func(b string) bool { return slices.Contains(retiredAgents, b) })
 }
 
 func rexRun(args ...string) ([]byte, error) {
@@ -244,8 +209,8 @@ func currentTrackers() (trackersOn, error) {
 	return on, nil
 }
 
-// trackersLine is what lineup trackers prints. The Planner's hook runs it on
-// each prompt, as Claude Code reads CLAUDE.md only when the session starts,
+// trackersLine is what lineup trackers prints. The Orchestrator's hook runs it
+// on each prompt, as Claude Code reads CLAUDE.md only when the session starts,
 // and a sign-in can come later.
 func trackersLine(on trackersOn) string {
 	var names []string
@@ -260,8 +225,9 @@ func trackersLine(on trackersOn) string {
 	return "Trackers on now: " + strings.Join(names, ", ") + ". Work only in these Trackers' sections of your instructions."
 }
 
-// composePlanner fills in the Local Tracker's folder and the path of lineup.
-func composePlanner(role []byte, settings string) ([]byte, string, error) {
+// composeAgent adds the Tracker sections, and fills in the Local Tracker's
+// folder and the path of lineup.
+func composeAgent(role []byte, settings string) ([]byte, string, error) {
 	cfg, err := config.Load(configPath())
 	if err != nil {
 		return nil, "", err
@@ -270,11 +236,11 @@ func composePlanner(role []byte, settings string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	return plannerFiles(role, settings, cfg.LocalIssuesDir(), self)
+	return agentFiles(role, settings, cfg.LocalIssuesDir(), self)
 }
 
-func plannerFiles(role []byte, settings, issuesDir, self string) ([]byte, string, error) {
-	out := slices.Concat(role, plannerLinear, plannerGitHub, plannerLocal)
+func agentFiles(role []byte, settings, issuesDir, self string) ([]byte, string, error) {
+	out := slices.Concat(role, linearSection, githubSection, localSection)
 	out = bytes.ReplaceAll(out, []byte("{{issues}}"), []byte(issuesDir))
 	// The rules write /{{issues}}, as a rule path that starts with // is
 	// absolute in Claude Code settings.
@@ -291,7 +257,7 @@ func plannerFiles(role []byte, settings, issuesDir, self string) ([]byte, string
 type hubWindow struct {
 	ID     string
 	Label  string
-	Blocks []string
+	Blocks []string // block labels
 }
 
 func hubWindows() (map[string]hubWindow, bool, error) {
@@ -308,7 +274,7 @@ func hubWindows() (map[string]hubWindow, bool, error) {
 			Label  string `json:"label"`
 			Layers []struct {
 				Blocks []struct {
-					ID string `json:"block_id"`
+					Label string `json:"label"`
 				} `json:"blocks"`
 			} `json:"layers"`
 		} `json:"windows"`
@@ -321,7 +287,7 @@ func hubWindows() (map[string]hubWindow, bool, error) {
 		hw := hubWindow{ID: w.ID, Label: w.Label}
 		for _, l := range w.Layers {
 			for _, b := range l.Blocks {
-				hw.Blocks = append(hw.Blocks, b.ID)
+				hw.Blocks = append(hw.Blocks, b.Label)
 			}
 		}
 		ws[w.Label] = hw
@@ -378,6 +344,12 @@ func openHub() error {
 			}
 			windows[t.window] = w
 		}
+		if w, ok := windows[t.window]; ok && retired(w) {
+			if _, err := rexRun("window", "close", "-s", hubSession, w.ID); err != nil {
+				return err
+			}
+			delete(windows, t.window)
+		}
 		if _, ok := windows[t.window]; !ok {
 			if err := openAgentTab(t, self, claudeBin, t.window == activeTab); err != nil {
 				return err
@@ -397,18 +369,22 @@ func openHub() error {
 }
 
 func openAgentTab(t agentTab, self, claudeBin string, focus bool) error {
-	dir, err := prepareAgent(t)
-	if err != nil {
-		return err
-	}
-	cmd := agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, "lineup-"+t.window)
-	// The assist folder holds the user's own conversations, so the assist
-	// agent never continues one.
-	if t.role != nil && hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {
-		cmd = append(cmd, "--continue")
-	}
-	if t.prompt != "" {
-		cmd = append(cmd, t.prompt)
+	var dir string
+	var cmd []string
+	if t.agent != "" {
+		var err error
+		if dir, err = prepareAgent(t); err != nil {
+			return err
+		}
+		cmd = agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, "lineup-"+t.window)
+		// The assist folder holds the user's own conversations, so the assist
+		// agent never continues one.
+		if t.role != nil && hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {
+			cmd = append(cmd, "--continue")
+		}
+		if t.prompt != "" {
+			cmd = append(cmd, t.prompt)
+		}
 	}
 	newWindow := []string{"window", "new", "-s", hubSession, t.window, "--focus=" + strconv.FormatBool(focus), "--json"}
 	var agent string
@@ -432,6 +408,9 @@ func openAgentTab(t agentTab, self, claudeBin string, focus bool) error {
 		if _, err := rexRun("block", "rename", "-s", hubSession, top, t.view); err != nil {
 			return err
 		}
+		if t.agent == "" {
+			return nil
+		}
 		split, err := rexRun(slices.Concat([]string{"split", "-s", hubSession, "-b", top, "--split", "below",
 			"--ratio", fmt.Sprint(agentRows), "--focus=false", "--json", "-c", dir, "--"}, cmd)...)
 		if err != nil {
@@ -445,7 +424,7 @@ func openAgentTab(t agentTab, self, claudeBin string, focus bool) error {
 		return err
 	}
 	theme, _ := json.Marshal(map[string]string{"background": t.bg, "scheme": "dark"})
-	_, err = rexRun("block", "call", "-s", hubSession, "-b", agent, "set_theme", string(theme))
+	_, err := rexRun("block", "call", "-s", hubSession, "-b", agent, "set_theme", string(theme))
 	return err
 }
 
@@ -497,11 +476,14 @@ func runBoard(args []string) error {
 	if len(args) > 1 || (flag != "" && flag != "--linear" && flag != "--review") {
 		return fmt.Errorf("usage: lineup board [--linear | --review]")
 	}
-	target := map[string]string{"": "ORCHESTRATOR", "--linear": "PLANNER", "--review": "REVIEWER"}[flag]
 	opts := board.Options{
 		Linear: flag == "--linear",
 		Review: flag == "--review",
-		Zoom:   func() { rexRun("zoom", "-s", hubSession, target) },
+		Zoom:   func() { rexRun("zoom", "-s", hubSession, "LINEUP") },
+	}
+	// The plan and review tabs have no agent pane, so z goes to the work tab.
+	if flag != "" {
+		opts.Zoom = func() { rexRun("window", "focus", "-s", hubSession, "work") }
 	}
 	opts.Reviews = reviewStores(stateDir())
 	if g, err := config.Load(configPath()); err == nil { // a bad file only means defaults here

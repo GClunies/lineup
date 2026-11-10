@@ -45,7 +45,7 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The view of the build Tasks in the `work` tab, grouped as Needs you, Working, Waiting, Queued, and Done. The review tab's Reviews tab shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived or 7 days after it ends.
+The view of the build Tasks in the `work` tab, above the Orchestrator, grouped as Needs you, Working, Waiting, Queued, and Done. The review tab's Reviews tab shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived or 7 days after it ends.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:
@@ -53,7 +53,7 @@ A Done Task that the user hid from the Board. Its record and events stay in the 
 _Avoid_: Deleted, removed
 
 **Hub**:
-The Rex session of lineup's own tabs. Each tab owns one kind of work: `plan` holds the tracker browser and the Planner, `work` holds the Board and the Orchestrator, and `review` holds the review board and the Reviewer.
+The Rex session of lineup's own tabs. `plan` holds the tracker browser, `work` holds the Board and the Orchestrator in the `LINEUP` pane, and `review` holds the review board. The Orchestrator is the one agent for these three tabs.
 _Avoid_: Home, control tab
 
 ### Actors
@@ -63,7 +63,7 @@ The deterministic part of lineup that owns the queue, the WIP cap, Worker startu
 _Avoid_: Coordinator, daemon, engine
 
 **Orchestrator**:
-The long-lived agent that the user talks to in the Hub's `work` tab. It does Intake, reports status, passes the user's words to Workers, and applies overrides for build Tasks, always through the Scheduler. It does not plan Projects or touch review Tasks.
+The long-lived agent that the user talks to in the `LINEUP` pane of the Hub's `work` tab. It plans Issues in the Trackers, does Intake, starts reviews, reports status and alerts, passes the user's words to Workers, and applies overrides, for build Tasks and review Tasks alike, always through the Scheduler.
 _Avoid_: Coordinator, manager agent
 
 **Worker**:

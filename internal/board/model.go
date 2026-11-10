@@ -24,7 +24,8 @@ type Options struct {
 	// StartSkills are the skills that the Linear browser offers when it starts
 	// a Task. Empty means it starts at once with no skill.
 	StartSkills []string
-	// Zoom zooms the agent pane in this tab, and back. The Hub provides it.
+	// Zoom zooms the agent pane in this tab, and back, or goes to the tab that
+	// has the agent. The Hub provides it.
 	Zoom func()
 	// Linear opens on the Linear browser instead of the Board.
 	Linear bool

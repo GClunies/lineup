@@ -14,7 +14,7 @@ The user can plan and start work from Linear, from GitHub Issues, or with no hos
 | GitHub Issues: browse, start, create, lifecycle labels | Auto-intake from any Tracker |
 | The Local Tracker: Markdown Issues in one folder | Sync between the Local Tracker and a hosted one |
 | One Tracker browser with tabs from every Tracker | |
-| Planner instructions for each Tracker | |
+| Orchestrator instructions for each Tracker | |
 
 ## Shape
 
@@ -127,7 +127,7 @@ The description, in Markdown.
 
 - The next ID is one more than the highest ID in the folder. The adapter creates the file with `O_EXCL`, so two writers can't take one ID.
 - The branch name is `local-<n>-<title slug>`, for example `local-7-retry-failed-loads-before-alerting`. A GitHub Issue's branch is `gh-<n>-<title slug>`.
-- The adapter reads files that the Planner or the user wrote. A file that it can't parse shows in the Local tab as an error row with the file name.
+- The adapter reads files that the Orchestrator or the user wrote. A file that it can't parse shows in the Local tab as an error row with the file name.
 
 ## Tracker browser
 
@@ -149,9 +149,9 @@ The user ranks the tabs with `<` and `>`, as in the MVP.
 | `o` open | In the browser | In the browser | In `$EDITOR` |
 | Detail pane | Markdown | Markdown | Markdown |
 
-## Planner
+## Planning
 
-The Planner's instructions hold one section for each Tracker. Claude Code reads them only when the session starts, so a hook runs `lineup trackers` on each prompt. Its line names the Trackers that are on now, and the Planner works only in those. The Planner never starts Tasks, for every Tracker.
+The Orchestrator's instructions hold one section for each Tracker. Claude Code reads them only when the session starts, so a hook runs `lineup trackers` on each prompt. Its line names the Trackers that are on now, and the Orchestrator plans only in those. A plan starts no Task, in every Tracker.
 
 | Job | Linear | GitHub | Local |
 |---|---|---|---|
@@ -171,7 +171,7 @@ The Planner's instructions hold one section for each Tracker. Claude Code reads 
 | `internal/board` | The `Source` interface for the GitHub and Local tabs. The Linear tabs keep their own code in `tracker.go`. |
 | `internal/config` | `local_tracker`, `local_issues_dir`, `[github.labels]` |
 | `cmd/lineup` | `lineup login [linear [workspace] \| github]`, `lineup logout linear \| github`, `lineup trackers`, ID parsing for `lineup add` |
-| Planner and Orchestrator instructions | The tables above |
+| Orchestrator instructions | The tables above |
 
 ## Success criteria and tests
 

@@ -30,7 +30,7 @@ The MVP is complete when this sequence works with no manual step other than the 
 
 The design for the phase 2 Trackers is in `docs/spec/trackers.md`.
 
-A one-off skill run, for example `/pr-explain <url>`, is a Task with the override `pr=false`. Debug sessions are outside lineup. The user does them in a separate agent session. If one of them finds work, the Orchestrator can make that work a Task. Project planning happens in the Planner tab. The Planner edits Linear and never starts Tasks.
+A one-off skill run, for example `/pr-explain <url>`, is a Task with the override `pr=false`. Debug sessions are outside lineup. The user does them in a separate agent session. If one of them finds work, the Orchestrator can make that work a Task. The Orchestrator also plans Projects in the Trackers. A plan starts no Task.
 
 ## Dependencies
 
@@ -200,14 +200,12 @@ Rex server
 │   ├── tab "assist"                 (first tab)
 │   │   └── block "ASSIST"            claude                 (the whole tab, in assist_dir, own theme)
 │   ├── tab "plan"
-│   │   ├── block "LINEAR"            lineup board --linear  (top, most of the height)
-│   │   └── block "PLANNER"           claude --continue     (bottom, 25% of the height, own theme)
+│   │   └── block "LINEAR"            lineup board --linear  (the whole tab)
 │   ├── tab "work"                   (active when a new Hub opens)
 │   │   ├── block "BOARD"             lineup board           (top, most of the height)
-│   │   └── block "ORCHESTRATOR"      claude --continue     (bottom, 25% of the height, own theme)
+│   │   └── block "LINEUP"            claude --continue     (bottom, 25% of the height, own theme)
 │   └── tab "review"
-│       ├── block "REVIEWS"           lineup board --review  (top, most of the height)
-│       └── block "REVIEWER"          claude --continue     (bottom, 25% of the height, own theme)
+│       └── block "REVIEWS"           lineup board --review  (the whole tab)
 ├── session "data"                    (one session for each Repo with an open Task)
 │   ├── tab "ENG-590 Add billing model"
 │   └── tab "ENG-592 Fix flaky test"
@@ -224,7 +222,8 @@ The rules for this layout:
 - `lineup` opens the Hub session. If the session does not exist, `lineup` creates it.
 - The Hub tabs are in the order assist, plan, work, review. Each run of `lineup` moves every Hub tab back to its place.
 - Each Hub tab owns one kind of work. The `plan` tab plans Issues, the `work` tab holds build Tasks, and the `review` tab holds review Tasks.
-- A Hub from before the `work` tab has a tab labeled `orchestrate`. `lineup` renames it to `work`, so the Orchestrator in it keeps running.
+- A Hub from before the `work` tab has a tab labeled `orchestrate`. `lineup` renames it to `work`.
+- A Hub from before the one agent has tabs with an `ORCHESTRATOR`, `PLANNER`, or `REVIEWER` block. `lineup` closes each such tab and opens it again.
 - The Hub session is named `lineup hub`. A Repo session is named after its folder, and the Scheduler removes it after its last Task. The space keeps a Repo session from taking the Hub's name.
 - The Scheduler creates each Task tab with `rex window new -s <session> <label> --focus=false -- <command>`. The user stays on the Hub.
 - The label is the Task ID, or the Issue identifier, and the title. Rex refuses a label longer than 128 characters, so a longer label stops at 127 characters and ends in `…`.
@@ -234,7 +233,7 @@ The rules for this layout:
 - If two Repos have the same folder name, the session label adds the parent folder, for example `acme-data`.
 - An ad hoc Task opens in the session `ad hoc`, or in the session that `ad_hoc_session` names. The Board still shows its Repo. The Scheduler removes this session after its last Task, as with a Repo session, so `ad_hoc_session` can't be `lineup hub`.
 - The Scheduler passes `-s <session>` on every block call. Without it, Rex resolves the block only inside the caller's own session and returns `block target ... not found`.
-- Each agent block uses a terminal `theme` with its own background color. The labels are `ORCHESTRATOR`, `PLANNER`, and `REVIEWER`, and each Claude status line starts with the agent's name.
+- Each agent block uses a terminal `theme` with its own background color. The Orchestrator's block is `LINEUP`, and its Claude status line reads `Lineup`.
 
 Rex has no key/value metadata on its objects. The store keeps the session, window, and block IDs of each Task.
 
@@ -256,7 +255,7 @@ Rex has no key/value metadata on its objects. The store keeps the session, windo
 | SQLite store | `~/.local/state/lineup/state.db`. One table holds Tasks. An append-only table holds the events of each Task. |
 | `lineup board` | The Board and the tracker browser. It reads state from the Scheduler and never writes the store. |
 | `lineup` CLI | The commands that the Orchestrator uses. Each command calls the Scheduler. |
-| Orchestrator folder | `~/.local/state/lineup/orchestrator/`, with a `CLAUDE.md` that defines the Orchestrator's role and the `lineup` commands. |
+| Orchestrator folder | `~/.local/state/lineup/lineup/`, with a `CLAUDE.md` that defines the Orchestrator's role and the `lineup` commands. |
 | Harness adapter | Launches a Harness, trusts the worktree for it, and supplies its status. The MVP has the Claude adapter only. |
 
 ### Signal sources
@@ -563,7 +562,7 @@ The Orchestrator has four jobs:
 | Steer | "tell ENG-592 to use approach B" | `lineup steer <task> "<text>"` |
 | Override | "do this with pi", "raise the cap to 6", "re-run CI debug" | `lineup set <task> harness=pi`, `lineup cap 6`, `lineup rerun <task> ci_debug` |
 
-The Orchestrator handles only build Tasks. It sends each review request, `/pr-review` included, to the Reviewer in the `review` tab. Its settings deny `lineup review` and `lineup reviews`.
+The Orchestrator handles build Tasks and review Tasks. It maps each review request, `/pr-review` included, to `lineup review`. Its settings deny every GitHub write to a PR.
 
 If `lineup add` or `lineup start` meets a full WIP cap, the command fails with `wip cap full`. The Orchestrator must then ask the user in chat. It must not use `--over-cap` without the user's yes.
 
@@ -573,14 +572,14 @@ A Task alerts when it enters the Needs you group or Done. It alerts again only a
 
 | Part | What it does |
 |---|---|
-| `lineup watch` | Prints one line for each alert of a build Task, for example `ENG-34 Working, stopped: <title>`. It keeps the alerts it printed in `alerted.json` in the state directory, so a restart repeats none of them. On its first run, Tasks that are already Done print nothing. A lock on `watch.lock` allows one watch at a time. With `--once`, it exits after the first Board that has new alerts. |
+| `lineup watch` | Prints one line for each alert of a Task of either Kind, for example `ENG-34 Working, stopped: <title>`. It keeps the alerts it printed in `alerted.json` in the state directory, so a restart repeats none of them. On its first run, Tasks that are already Done print nothing. A lock on `watch.lock` allows one watch at a time. With `--once`, it exits after the first Board that has new alerts. |
 | The boards in the `work` and `review` tabs | Each prints an OSC 777 notification for each alert of its own Tasks: build Tasks in `work`, review Tasks in `review`. Rex shows it as a desktop toast for that board's pane. A click on the toast opens that pane. The view that a board opens on makes no toast. |
 
 The Hub starts the Orchestrator with a first message that tells it to run `lineup watch --once` as a background Bash command. The command exits at the next alerts, and the exit wakes the Orchestrator. The Orchestrator tells the user what changed and what the user can say next, then starts the command again. An idle Orchestrator writes nothing to its chat.
 
-## Planner
+## Planning
 
-The Planner is a Claude agent in the bottom bar of the `plan` tab, below the Linear browser. That browser opens on the user's favorite Linear views, in the user's rank (see Tracker browser). The Planner shapes the backlog in Linear with the `linear` CLI. It has four jobs:
+The Orchestrator shapes the backlog in Linear with the `linear` CLI. The Linear browser in the `plan` tab opens on the user's favorite Linear views, in the user's rank (see Tracker browser). Planning has four jobs:
 
 | Job | Example | `linear` command |
 |---|---|---|
@@ -589,7 +588,7 @@ The Planner is a Claude agent in the bottom bar of the `plan` tab, below the Lin
 | Criteria | "write acceptance criteria for ENG-614" | `linear issue update` |
 | Order | "ENG-615 needs ENG-614 first" | `linear issue relation add ENG-614 blocks ENG-615` |
 
-The Planner never starts Tasks. It must not run `lineup add`, `lineup start`, `linear issue start`, or `linear issue pull-request`. Its settings deny these commands. To start work, the user presses `s` in the Linear browser, or asks the Orchestrator in the `work` tab. The Planner can read `lineup ls --json` to see what is in flight.
+A plan starts no Task. The Orchestrator must not run `linear issue start` or `linear issue pull-request`, because lineup moves each Issue through its lifecycle. Its settings deny these commands. To start work, the user presses `s` in the Linear browser, or asks the Orchestrator.
 
 ## Speed budget
 
