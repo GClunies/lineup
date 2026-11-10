@@ -1,0 +1,29 @@
+internal/scheduler/scheduler_test.go
+  s_7461ef14310cce::t_f0f97c1ccbac39 1080
+  s_7461ef14310cce::t_b7d230dc500a9a 1094-1096,1099-1108
+  s_7461ef14310cce::t_1c1bcb81882b9b 18,1056-1057,1072,1074,1098
+  s_7461ef14310cce::t_23ecb6c1860c93 51-52,145-149,1055,1058-1071,1073,1075-1079,1081-1093,1097,1109
+  s_7461ef14310cce::t_a42110070f4a04 144
+internal/harness/claude/claude.go
+  s_7461ef14310cce::t_182124b7773b03 155-158
+internal/scheduler/scheduler.go
+  s_7461ef14310cce::t_23ecb6c1860c93 14,20
+  s_7461ef14310cce::t_182124b7773b03 588-589,609-630
+  s_7461ef14310cce::t_a7c88885680de5 631-632
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f2b675b2b5e9527257a2af63f4941b30d7f24530",
+  "prompts": {},
+  "sessions": {
+    "s_7461ef14310cce": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4e686ce2-f537-4fcd-8efa-d8b8c22efb7e",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
