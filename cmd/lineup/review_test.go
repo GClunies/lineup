@@ -90,10 +90,8 @@ func TestAReviewedPRMapsToTheCheckoutWhoseOriginIsItsRepository(t *testing.T) {
 
 // The CI debug Worker reads the Standing, so it leaves the optional checks alone.
 func TestACIDebugWorkerSeesWhichChecksGate(t *testing.T) {
-	t.Setenv("PATH", "/usr/bin:/bin") // no direnv: the default Claude profile
-	claudeBin := filepath.Join(t.TempDir(), "claude")
-	os.WriteFile(claudeBin, []byte("#!/bin/sh\n"), 0o755)
-	p := harnessPort{cfg: loadConfig(t, "[harness.claude]\npath = \""+claudeBin+"\"\n")}
+	claudeOnPath(t)
+	p := harnessPort{cfg: loadConfig(t, "")}
 	spec := scheduler.WorkerSpec{
 		Stage: lifecycle.CIDebug, Repo: t.TempDir(), Branch: "ada/eng-1", Name: "ENG-1 Fix the tooltip",
 		PRURL: "https://github.com/umbrella/data/pull/7", Standing: lifecycle.Standing{Failed: []string{"test"}, Optional: []string{"lint"}},
@@ -108,10 +106,8 @@ func TestACIDebugWorkerSeesWhichChecksGate(t *testing.T) {
 }
 
 func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
-	t.Setenv("PATH", "/usr/bin:/bin") // no direnv: the default Claude profile
-	claudeBin := filepath.Join(t.TempDir(), "claude")
-	os.WriteFile(claudeBin, []byte("#!/bin/sh\n"), 0o755)
-	cfg := loadConfig(t, "[harness.claude]\npath = \""+claudeBin+"\"\n[stage.reviewing]\neffort = \"max\"\n")
+	claudeBin := claudeOnPath(t)
+	cfg := loadConfig(t, "[stage.reviewing]\neffort = \"max\"\n")
 	p := harnessPort{cfg: cfg}
 	spec := scheduler.WorkerSpec{
 		Stage: lifecycle.Reviewing, Repo: t.TempDir(), Worktree: "/repos/umbrella/data.review-pr-4955",

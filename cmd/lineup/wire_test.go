@@ -164,6 +164,16 @@ func gitCheckout(t *testing.T, dir, origin string) string {
 	return dir
 }
 
+// claudeOnPath puts a fake claude first on PATH, with no direnv behind it, so that the default Claude profile applies.
+func claudeOnPath(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "claude")
+	os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755)
+	t.Setenv("PATH", dir+":/usr/bin:/bin")
+	return bin
+}
+
 func loadConfig(t *testing.T, text string) *config.Global {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.toml")

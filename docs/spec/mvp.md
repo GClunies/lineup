@@ -324,11 +324,7 @@ ci_debug = 3
 responding = 3
 restarts = 2
 
-[harness.claude]
-path = "~/.local/bin/claude"
-
 [stage.default]
-harness = "claude"
 model = "claude-opus-5-5"
 effort = "high"
 
@@ -406,7 +402,7 @@ skill = "diagnosing-bugs"
 min_review_score = 4
 ```
 
-The Scheduler finds each Harness path when it loads the configuration. Rex starts commands through the login shell, which can resolve a name to a different binary than the Scheduler sees.
+The Scheduler finds the `claude` path on PATH when it resolves the configuration. A `harness` key is an error until a second Harness exists. Rex starts commands through the login shell, which can resolve a name to a different binary than the Scheduler sees.
 
 ### Linear status map
 
@@ -560,7 +556,7 @@ The Orchestrator has four jobs:
 | Intake | "start ENG-123", "fix the flaky test in data" | `lineup add ENG-123`, `lineup add --repo data "<text>"` |
 | Status | "what needs me?" | `lineup ls --json`, `lineup show <task>` |
 | Steer | "tell ENG-592 to use approach B" | `lineup steer <task> "<text>"` |
-| Override | "do this with pi", "raise the cap to 6", "re-run CI debug" | `lineup set <task> harness=pi`, `lineup cap 6`, `lineup rerun <task> ci_debug` |
+| Override | "raise the cap to 6", "re-run CI debug" | `lineup cap 6`, `lineup rerun <task> ci_debug` |
 
 The Orchestrator handles build Tasks and review Tasks. It maps each review request, `/pr-review` included, to `lineup review`. Its settings deny every GitHub write to a PR.
 

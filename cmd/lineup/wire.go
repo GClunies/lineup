@@ -262,9 +262,6 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 		stage = lifecycle.Reviewing
 	}
 	st := res.Stages[stage]
-	if st.Harness != "claude" {
-		return nil, nil, fmt.Errorf("harness %q is not in the MVP: only claude", st.Harness)
-	}
 	dir, err := claude.ConfigDir(ctx, w.Repo)
 	if err != nil {
 		return nil, nil, err
@@ -293,7 +290,7 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 	if prompt == "" && w.Conversation == "" {
 		return nil, nil, fmt.Errorf("%s has no prompt and no conversation to resume", w.Stage)
 	}
-	argv, env := claude.Command(res.Harnesses[st.Harness], dir, st, w.Conversation, w.Name, prompt, addDirs...)
+	argv, env := claude.Command(res.Claude, dir, st, w.Conversation, w.Name, prompt, addDirs...)
 	return argv, env, nil
 }
 
