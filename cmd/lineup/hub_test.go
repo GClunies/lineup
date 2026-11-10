@@ -78,24 +78,20 @@ func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 	}
 }
 
-func TestAgentTabsHaveOneAgent(t *testing.T) {
-	var agents []string
+func TestHubHasTwoTabsAndTheHubTabCarriesTheAgent(t *testing.T) {
+	var tabs, agents []string
 	for _, tab := range agentTabs {
+		tabs = append(tabs, tab.window)
 		if tab.agent != "" {
 			agents = append(agents, tab.window)
 		}
 	}
-	if !slices.Equal(agents, []string{"assist", "work"}) {
-		t.Errorf("tabs with an agent = %v, want assist and work", agents)
+	if !slices.Equal(tabs, []string{"assist", "hub"}) || !slices.Equal(agents, []string{"assist", "hub"}) {
+		t.Errorf("tabs %v with agents %v, want assist and hub, both with an agent", tabs, agents)
 	}
-	for _, c := range []struct {
-		window string
-		board  []string
-	}{{"plan", []string{"board", "--linear"}}, {"review", []string{"board", "--review"}}} {
-		i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == c.window })
-		if i < 0 || !slices.Equal(agentTabs[i].boardArgs, c.board) {
-			t.Errorf("the %s tab does not run lineup %v", c.window, c.board)
-		}
+	i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == "hub" })
+	if got := agentTabs[i]; got.agent != "LINEUP" || !slices.Equal(got.boardArgs, []string{"board"}) {
+		t.Errorf("the hub tab runs %v over %q, want board over LINEUP", got.boardArgs, got.agent)
 	}
 }
 
@@ -149,26 +145,26 @@ func TestAgentSettingsDenyKeepsGitHubWrites(t *testing.T) {
 	}
 }
 
-func TestRunBoardRefusesAnUnknownFlag(t *testing.T) {
-	for _, args := range [][]string{{"--bogus"}, {"--linear", "--review"}} {
-		if err := runBoard(args); err == nil || !strings.Contains(err.Error(), "--review") {
+func TestRunBoardRefusesAnArgument(t *testing.T) {
+	for _, args := range [][]string{{"--bogus"}, {"--linear"}, {"--review"}} {
+		if err := runBoard(args); err == nil || !strings.Contains(err.Error(), "usage: lineup board") {
 			t.Errorf("runBoard(%q) = %v", args, err)
 		}
 	}
 }
 
-func TestOpenHubRenamesTheOrchestrateTab(t *testing.T) {
-	old := hubWindow{ID: "w7", Label: "orchestrate"}
+func TestOpenHubRenamesTheWorkTab(t *testing.T) {
+	old := hubWindow{ID: "w7", Label: "work"}
 	cases := []struct {
 		name    string
 		windows map[string]hubWindow
 		label   string
 		want    string // the ID of the window to rename, or ""
 	}{
-		{"an old Hub", map[string]hubWindow{"orchestrate": old, "plan": {ID: "w8"}}, "work", "w7"},
-		{"a Hub with both", map[string]hubWindow{"orchestrate": old, "work": {ID: "w9"}}, "work", ""},
-		{"a new Hub", map[string]hubWindow{}, "work", ""},
-		{"a tab that kept its label", map[string]hubWindow{"orchestrate": old}, "plan", ""},
+		{"an old Hub", map[string]hubWindow{"work": old, "plan": {ID: "w8"}}, "hub", "w7"},
+		{"a Hub with both", map[string]hubWindow{"work": old, "hub": {ID: "w9"}}, "hub", ""},
+		{"a new Hub", map[string]hubWindow{}, "hub", ""},
+		{"a tab that kept its label", map[string]hubWindow{"work": old}, "assist", ""},
 	}
 	for _, c := range cases {
 		got := ""
@@ -179,15 +175,11 @@ func TestOpenHubRenamesTheOrchestrateTab(t *testing.T) {
 			t.Errorf("%s: renamed %q = %q, want %q", c.name, c.label, got, c.want)
 		}
 	}
-	var order []string
-	for _, tab := range agentTabs {
-		order = append(order, tab.window)
+	if !slices.Equal(retiredTabs, []string{"orchestrate", "plan", "review"}) {
+		t.Errorf("retired tabs = %v, want orchestrate, plan, review", retiredTabs)
 	}
-	if !slices.Equal(order, []string{"assist", "plan", "work", "review"}) {
-		t.Errorf("tab order = %v, want assist, plan, work, review", order)
-	}
-	if i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == activeTab }); i < 0 || agentTabs[i].agent != "LINEUP" {
-		t.Errorf("a new Hub opens on %q, want the work tab with LINEUP", activeTab)
+	if activeTab != "hub" {
+		t.Errorf("a new Hub opens on %q, want hub", activeTab)
 	}
 }
 

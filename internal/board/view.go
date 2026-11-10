@@ -80,7 +80,7 @@ func (m Model) header() string {
 	for _, t := range m.tasks {
 		count[t.Group]++
 	}
-	s := " " + bold.Render("lineup")
+	s := " " + bold.Render("lineup") + "  " + m.viewNames()
 	if m.kind == lifecycle.KindBuild {
 		s += fmt.Sprintf("  WIP %d/%d", m.board.Started, m.board.Cap)
 		if m.board.OverCap > 0 {
@@ -96,6 +96,23 @@ func (m Model) header() string {
 		s += "   " + bad.Render("scheduler offline, showing cache: run lineup restart")
 	}
 	return ansi.Truncate(s, m.width, "…")
+}
+
+// viewNames lists the three views with the one on screen bright.
+func (m Model) viewNames() string {
+	names := [...]struct {
+		id   viewID
+		name string
+	}{{viewTracker, "1 plan"}, {viewBoard, "2 work"}, {viewReview, "3 review"}}
+	var parts []string
+	for _, n := range names {
+		if n.id == m.view {
+			parts = append(parts, headRow.Render(n.name))
+		} else {
+			parts = append(parts, dim.Render(n.name))
+		}
+	}
+	return strings.Join(parts, "  ")
 }
 
 func (m Model) footer() string {
@@ -156,7 +173,7 @@ func (m Model) boardHints() []hint {
 		return append([]hint{{"tab", "find a PR to review"}}, tail...)
 	}
 	if !ok {
-		return append([]hint{{"plan tab", "start an Issue"}}, tail...)
+		return append([]hint{{"1", "plan: start an Issue"}}, tail...)
 	}
 	var hs []hint
 	if t.StageKey == lifecycle.ReadyToLand.Key() {
@@ -308,6 +325,7 @@ const boardHelp = `
    o        open the PR or the Issue
    R        refresh now: poll GitHub for every started Task
    z        zoom the agent pane
+   1 2 3    show the plan, work, or review view
    ?        this help      q  quit
 
  press any key to go back
@@ -333,6 +351,8 @@ const trackerHelp = `
    n        add an Issue to this Project or team view
    o        open the Issue in the browser
    R        refresh what is on screen now
+   z        zoom the agent pane
+   1 2 3    show the plan, work, or review view
    ?        this help      q  quit
 
  press any key to go back

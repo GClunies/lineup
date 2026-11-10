@@ -27,14 +27,11 @@ type Options struct {
 	// Zoom zooms the agent pane in this tab, and back, or goes to the tab that
 	// has the agent. The Hub provides it.
 	Zoom func()
-	// Linear opens on the Linear browser instead of the Board.
-	Linear bool
-	// Review opens on the review tab instead of the Board. Its Reviews tab
-	// lists the review Tasks, and its other tabs list PRs.
-	Review  bool
+	// Reviews holds the PR views of the review view. Its Reviews tab lists
+	// the review Tasks, and its other tabs list PRs.
 	Reviews Reviews
-	// Notify shows one alert line as a desktop toast. The Hub sets it for the
-	// work and review boards, and each toasts only its own Kind's alerts.
+	// Notify shows one alert line as a desktop toast. It fires for every
+	// Kind, whichever view is up.
 	Notify func(text string)
 	// Open opens a URL. The default runs `open`.
 	Open func(url string) error
@@ -104,6 +101,7 @@ type Model struct {
 	statusE bool
 
 	view          viewID
+	loaded        [3]bool // the views whose first load ran
 	mode          mode
 	pendingTask   string // Task the current prompt is about
 	pendingOp     string // close or archive, for the y/n prompt
@@ -135,15 +133,9 @@ func New(v scheduler.BoardView, opts Options) Model {
 	m := Model{opts: opts, client: opts.Client, width: 100, height: 30, vp: viewport.New(100, 28)}
 	m.tr = newTracker(opts.Tracker)
 	m.rv = newReview(opts.Reviews)
-	switch {
-	case opts.Linear:
-		m.view = viewTracker
-	case opts.Review:
-		m.view, m.kind = viewReview, lifecycle.KindReview
-	}
 	m.setBoard(v)
 	m.alerted = map[string]string{}
-	scheduler.Alerts(m.alerted, v.OfKind(m.kind)) // the view it opens on is not news
+	scheduler.Alerts(m.alerted, v) // what is on the Board now is not news
 	return m
 }
 
@@ -180,15 +172,7 @@ func (m Model) current() (scheduler.TaskView, bool) {
 	return scheduler.TaskView{}, false
 }
 
-func (m Model) Init() tea.Cmd {
-	switch {
-	case m.opts.Linear:
-		return m.loadWorkspaces()
-	case m.opts.Review:
-		return m.loadReviews()
-	}
-	return nil
-}
+func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -268,6 +252,12 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "?":
 		m.mode = modeHelp
 		return m, nil
+	case "1":
+		return m.show(viewTracker, m.kind)
+	case "2":
+		return m.show(viewBoard, lifecycle.KindBuild)
+	case "3":
+		return m.show(viewReview, lifecycle.KindReview)
 	}
 	switch m.view {
 	case viewTracker:
@@ -276,6 +266,26 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.reviewKey(msg)
 	}
 	return m.boardKey(msg)
+}
+
+// show switches to a view. The Linear browser and the PR search load on the
+// first visit, so a Hub that never opens them makes no call.
+func (m Model) show(v viewID, kind lifecycle.Kind) (tea.Model, tea.Cmd) {
+	m.view, m.kind = v, kind
+	m.detail, m.preview = false, false
+	m.previewGen++
+	m.setBoard(m.board)
+	if m.loaded[v] {
+		return m, nil
+	}
+	m.loaded[v] = true
+	switch v {
+	case viewTracker:
+		return m, m.loadWorkspaces()
+	case viewReview:
+		return m, m.loadReviews()
+	}
+	return m, nil
 }
 
 // boardKey handles the keys of the Task rows. The work board and the review
@@ -449,7 +459,7 @@ func firstNonEmpty(ss ...string) string {
 }
 
 func (m Model) toasts(v scheduler.BoardView) tea.Cmd {
-	alerts := scheduler.Alerts(m.alerted, v.OfKind(m.kind))
+	alerts := scheduler.Alerts(m.alerted, v)
 	if m.opts.Notify == nil || len(alerts) == 0 {
 		return nil
 	}

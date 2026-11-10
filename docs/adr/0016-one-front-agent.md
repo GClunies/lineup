@@ -1,6 +1,6 @@
 # One front agent over a board for each Kind
 
-The Hub has one agent that the user talks to, the Orchestrator, in the `LINEUP` pane of the `work` tab. It plans Issues, takes build Tasks and review Tasks, and reports the alerts of every Task. The `plan` and `review` tabs keep their boards, at full height, with no agent pane. We chose this because the user wants every alert to reach one chat and every answer to leave from it. With one agent for each tab, a review alert reached no chat, and "what needs me?" left out the other Kind.
+The Hub has one agent that the user talks to, the Orchestrator, in the `LINEUP` pane of the `hub` tab. It plans Issues, takes build Tasks and review Tasks, and reports the alerts of every Task. We chose this because the user wants every alert to reach one chat and every answer to leave from it. With one agent for each tab, a review alert reached no chat, and "what needs me?" left out the other Kind.
 
 ## Considered Options
 
@@ -12,5 +12,5 @@ The Hub has one agent that the user talks to, the Orchestrator, in the `LINEUP` 
 - The agent's settings allow every `lineup` command, the Tracker reads and writes, and `gh pr view`. They deny each GitHub write to a PR, `gh api`, and each Issue delete. Only the user posts a review.
 - The agent works in a new folder, `lineup` in the state folder, so the Hub starts it with no conversation from the old Orchestrator.
 - `openHub` closes a tab that still runs `ORCHESTRATOR`, `PLANNER`, or `REVIEWER`, and opens it again in the new form.
-- `z` on the `plan` and `review` boards goes to the `work` tab, where the agent is.
+- The `hub` tab replaces the `plan`, `work`, and `review` tabs, so the Hub has two tabs, `assist` and `hub`. One Board process shows the three views over the one agent pane. The keys `1`, `2`, and `3` pick the plan, work, and review view, and the header names them with the active one bright. A digit stays text in a filter or a capture. The Board loads the Linear browser and the PR search on the first visit to their views, and it toasts the alerts of both Kinds in every view. `openHub` renames a running `work` tab to `hub` and closes the `plan` and `review` tabs. `z` zooms the agent pane from every view.
 - The Tracker sections and the `lineup trackers` hook move from the Planner to this agent.

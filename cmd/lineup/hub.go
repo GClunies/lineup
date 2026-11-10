@@ -117,17 +117,19 @@ type agentTab struct {
 // agentTabs are in Hub tab order.
 var agentTabs = []agentTab{
 	{"assist", "", "ASSIST", nil, nil, "", "#262626", "", nil},
-	{"plan", "LINEAR", "", []string{"board", "--linear"}, nil, "", "", "", nil},
-	{"work", "BOARD", "LINEUP", []string{"board"}, agentRole, agentSettings, "#1b2733", watchPrompt, composeAgent},
-	{"review", "REVIEWS", "", []string{"board", "--review"}, nil, "", "", "", nil},
+	{"hub", "BOARD", "LINEUP", []string{"board"}, agentRole, agentSettings, "#1b2733", watchPrompt, composeAgent},
 }
 
 // activeTab is the tab that a new Hub opens on.
-const activeTab = "work"
+const activeTab = "hub"
 
 // formerLabels are the labels that a Hub tab had before a rename, by its
 // label now.
-var formerLabels = map[string]string{"work": "orchestrate"}
+var formerLabels = map[string]string{"hub": "work"}
+
+// retiredTabs are the labels of tabs that no longer exist. Their windows hold
+// a board with no agent, or a former agent, so openHub closes them.
+var retiredTabs = []string{"orchestrate", "plan", "review"}
 
 // renamed is the Hub window to relabel as label: the one under the tab's
 // former label, when no window has the label yet. The rename keeps the agent
@@ -333,6 +335,14 @@ func openHub() error {
 		}
 	}
 
+	for _, label := range retiredTabs {
+		if w, ok := windows[label]; ok {
+			if _, err := rexRun("window", "close", "-s", hubSession, w.ID); err != nil {
+				return err
+			}
+			delete(windows, label)
+		}
+	}
 	for i, t := range agentTabs {
 		if w, ok := renamed(windows, t.window); ok {
 			if _, err := rexRun("window", "rename", "-s", hubSession, w.ID, t.window); err != nil {
@@ -469,22 +479,10 @@ func firstBlock(out []byte) (string, error) {
 }
 
 func runBoard(args []string) error {
-	var flag string
 	if len(args) > 0 {
-		flag = args[0]
+		return fmt.Errorf("usage: lineup board")
 	}
-	if len(args) > 1 || (flag != "" && flag != "--linear" && flag != "--review") {
-		return fmt.Errorf("usage: lineup board [--linear | --review]")
-	}
-	opts := board.Options{
-		Linear: flag == "--linear",
-		Review: flag == "--review",
-		Zoom:   func() { rexRun("zoom", "-s", hubSession, "LINEUP") },
-	}
-	// The plan and review tabs have no agent pane, so z goes to the work tab.
-	if flag != "" {
-		opts.Zoom = func() { rexRun("window", "focus", "-s", hubSession, "work") }
-	}
+	opts := board.Options{Zoom: func() { rexRun("zoom", "-s", hubSession, "LINEUP") }}
 	opts.Reviews = reviewStores(stateDir())
 	if g, err := config.Load(configPath()); err == nil { // a bad file only means defaults here
 		opts.StartSkills = g.StartSkills()
@@ -492,8 +490,6 @@ func runBoard(args []string) error {
 		opts.Tracker.Sources = boardSources(g, stateDir())
 		opts.Reviews.Views = reviewViews(g)
 	}
-	if flag != "--linear" {
-		opts.Notify = func(text string) { board.Toast(os.Stdout, text) }
-	}
+	opts.Notify = func(text string) { board.Toast(os.Stdout, text) }
 	return board.Run(socketPath(), filepath.Join(stateDir(), "board.json"), opts)
 }

@@ -310,6 +310,7 @@ func TestOverCapHeaderAndOffline(t *testing.T) {
 	v := fixture()
 	v.OverCap = 1
 	m := newModel(&fakeClient{}, v)
+	m.width = 160
 	h := m.header()
 	for _, w := range []string{"WIP 4/5", "+1 over", "●2 need you", "◐2 working", "◷1 waiting", "1 queued"} {
 		if !strings.Contains(h, w) {
@@ -322,7 +323,7 @@ func TestOverCapHeaderAndOffline(t *testing.T) {
 	}
 }
 
-func TestOnlyTheReviewBoardShowsThatReviewsArePaused(t *testing.T) {
+func TestOnlyTheReviewViewShowsThatReviewsArePaused(t *testing.T) {
 	for _, paused := range []bool{false, true} {
 		v := fixture()
 		v.ReviewsPaused = paused
@@ -330,7 +331,7 @@ func TestOnlyTheReviewBoardShowsThatReviewsArePaused(t *testing.T) {
 		if strings.Contains(m.header(), "reviews paused") {
 			t.Errorf("paused %v: the work board shows reviews paused", paused)
 		}
-		rm := New(v, Options{Review: true, Client: &fakeClient{}})
+		rm, _ := press(New(v, Options{Client: &fakeClient{}}), "3")
 		rm.width = 200
 		if got := strings.Contains(ansi.Strip(rm.header()), "reviews paused"); got != paused {
 			t.Errorf("paused %v: the review board shows reviews paused: %v", paused, got)
@@ -341,8 +342,8 @@ func TestOnlyTheReviewBoardShowsThatReviewsArePaused(t *testing.T) {
 	}
 }
 
-// The work board lists, counts, and toasts only build Tasks.
-func TestTheWorkBoardHoldsOnlyBuildTasks(t *testing.T) {
+// The work view lists and counts only build Tasks. Every view toasts both Kinds.
+func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 	var toasts []string
 	v := fixture()
 	v.Tasks = append(v.Tasks, rtv("R-3", lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour))
@@ -363,7 +364,7 @@ func TestTheWorkBoardHoldsOnlyBuildTasks(t *testing.T) {
 	if cmd != nil {
 		cmd()
 	}
-	if want := []string{"ENG-571 Ready to land, #4636: Rate limit login"}; !slices.Equal(toasts, want) {
+	if want := []string{"ENG-571 Ready to land, #4636: Rate limit login", "R-3 Review ready: data#7 Fix the tooltip"}; !slices.Equal(toasts, want) {
 		t.Fatalf("toasts %q, want %q", toasts, want)
 	}
 }
@@ -378,19 +379,46 @@ func TestAgeAndRows(t *testing.T) {
 	}
 }
 
-func TestTheBoardStaysOnTheBoard(t *testing.T) {
-	m, _ := press(newModel(&fakeClient{}, fixture()), "2")
-	if !strings.Contains(m.View(), "NEEDS YOU") {
-		t.Fatalf("2 left the Board:\n%s", m.View())
+func TestDigitKeysCycleViews(t *testing.T) {
+	m := newModel(&fakeClient{}, fixture())
+	for _, c := range []struct {
+		key  string
+		view viewID
+		kind lifecycle.Kind
+	}{{"1", viewTracker, lifecycle.KindBuild}, {"3", viewReview, lifecycle.KindReview}, {"2", viewBoard, lifecycle.KindBuild}, {"3", viewReview, lifecycle.KindReview}, {"1", viewTracker, lifecycle.KindReview}} {
+		m, _ = press(m, c.key)
+		if m.view != c.view || m.kind != c.kind {
+			t.Fatalf("after %s: view %d kind %v, want view %d kind %v", c.key, m.view, m.kind, c.view, c.kind)
+		}
 	}
 }
 
-func TestTheLinearBrowserStaysOnLinear(t *testing.T) {
+func TestDigitKeysShowEachViewAndLoadItOnce(t *testing.T) {
 	e := newTrkEnv(t)
-	e.open()
-	e.press("1", "esc", "esc")
-	if v := e.m.View(); strings.Contains(v, "NEEDS YOU") || !strings.Contains(v, "My Issues (all workspaces)") {
-		t.Fatalf("the Linear browser left Linear:\n%s", v)
+	e.press("1")
+	if v := e.m.View(); !strings.Contains(v, "My Issues (all workspaces)") {
+		t.Fatalf("1 did not show the Linear browser:\n%s", v)
+	}
+	e.press("esc")
+	e.press("2", "1")
+	if v := e.m.View(); strings.Contains(v, "NEEDS YOU") || !strings.Contains(ansi.Strip(e.m.header()), "1 plan  2 work  3 review") {
+		t.Fatalf("1 after 2 did not return to the Linear browser:\n%s", v)
+	}
+	if !e.m.loaded[viewTracker] || e.m.loaded[viewReview] {
+		t.Fatalf("loaded %v, want the plan view and not the review view", e.m.loaded)
+	}
+}
+
+func TestDigitInFilterStaysText(t *testing.T) {
+	e := newTrkEnv(t)
+	e.press("1", "/", "1", "2")
+	if e.m.view != viewTracker || e.m.tr.filter.Value() != "12" {
+		t.Fatalf("view %d, filter %q, want the plan view and 12", e.m.view, e.m.tr.filter.Value())
+	}
+	r := newRvEnv(t)
+	r.press("3", "tab", "/", "3", "1")
+	if r.m.view != viewReview || r.m.rv.filter.Value() != "31" {
+		t.Fatalf("view %d, filter %q, want the review view and 31", r.m.view, r.m.rv.filter.Value())
 	}
 }
 

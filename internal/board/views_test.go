@@ -258,7 +258,7 @@ func TestIssueRowChipsGiveWayToTheTitle(t *testing.T) {
 
 func TestTrackerWaitsForTheViewsBeforeTheFirstTab(t *testing.T) {
 	e := newViewsEnv(t)
-	m, cmd := e.m, e.m.Init()
+	m, cmd := press(e.m, "1")
 	next, views := m.Update(cmd())
 	m = next.(Model)
 	if v := m.View(); !strings.Contains(v, "loading your Linear views") {

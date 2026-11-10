@@ -126,7 +126,6 @@ func newRvEnv(t *testing.T) *rvEnv {
 		api:   &fakeReviewAPI{lists: reviewFixture(), members: map[string][]string{"umbrella/platform": {"hopper", "kernighan"}}},
 		cache: map[string][]github.PullRequest{}, wrote: map[string][]github.PullRequest{}}
 	e.m = New(reviewBoard(), Options{
-		Review: true,
 		Client: e.sched,
 		Now:    func() time.Time { return epoch },
 		Open:   func(u string) error { e.opened = append(e.opened, u); return nil },
@@ -154,7 +153,11 @@ func newRvEnv(t *testing.T) *rvEnv {
 	return e
 }
 
-func (e *rvEnv) open() { e.m = drain(e.m, e.m.Init()) }
+func (e *rvEnv) open() {
+	var cmd tea.Cmd
+	e.m, cmd = press(e.m, "3")
+	e.m = drain(e.m, cmd)
+}
 
 func (e *rvEnv) press(keys ...string) tea.Cmd {
 	var cmd tea.Cmd
@@ -352,9 +355,11 @@ func TestReviewSearchTakesQ(t *testing.T) {
 func TestReviewPaintsFromCacheFirst(t *testing.T) {
 	e := newRvEnv(t)
 	e.cache["mine"] = []github.PullRequest{{Repo: "umbrella/data", Number: 1, Title: "Cached row", URL: "u1"}}
-	batch, ok := e.m.Init()().(tea.BatchMsg)
+	var first tea.Cmd
+	e.m, first = press(e.m, "3")
+	batch, ok := first().(tea.BatchMsg)
 	if !ok {
-		t.Fatal("Init is not a batch")
+		t.Fatal("the first visit is not a batch")
 	}
 	var cached, live tea.Msg
 	for _, c := range batch {
@@ -693,16 +698,16 @@ func TestTheReviewsTabReopensAClosedReviewWorker(t *testing.T) {
 	}
 }
 
-func TestTheReviewBoardToastsOnlyReviewTasks(t *testing.T) {
+func TestTheReviewViewToastsBothKinds(t *testing.T) {
 	var toasts []string
-	m := New(reviewBoard(), Options{Review: true, Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
+	m, _ := press(New(reviewBoard(), Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }}), "3")
 	v := reviewBoard()
 	v.Tasks[0] = rtv("R-14", lifecycle.ReviewReady, "data#4945 Write the usage logs again", urlLogs, 0)
 	v.Tasks[2] = tv("ENG-622", lifecycle.ReadyToLand, "data", "Move the CSV coverage readers", "#4919", 0)
 	if _, cmd := m.Update(boardMsg(v)); cmd != nil {
 		cmd()
 	}
-	if want := []string{"R-14 Review ready: data#4945 Write the usage logs again"}; !slices.Equal(toasts, want) {
+	if want := []string{"R-14 Review ready: data#4945 Write the usage logs again", "ENG-622 Ready to land, #4919: Move the CSV coverage readers"}; !slices.Equal(toasts, want) {
 		t.Fatalf("toasts %q, want %q", toasts, want)
 	}
 }
