@@ -1,0 +1,51 @@
+cmd/lineup/agent/CLAUDE.md
+  s_7c98bf6e7e832d::t_90472f4ef6d83c 3
+cmd/lineup/hub_test.go
+  s_7c98bf6e7e832d::t_40519f94555e6b 81-82,84,89-90,92-94,148-150,156-157,164-167,178-179,181-182
+internal/board/review_view.go
+  s_7c98bf6e7e832d::t_4796c17f685510 253-254,278-279
+internal/board/review_test.go
+  s_7c98bf6e7e832d::t_0813922a20f8ef 156-160,358-360,362
+  s_7c98bf6e7e832d::t_063f33537fa0f3 701,703
+  s_7c98bf6e7e832d::t_5da3cfe651ddd3 710
+cmd/lineup/main.go
+  s_7c98bf6e7e832d::t_48b06cbe940f7a 20
+internal/board/views_test.go
+  s_7c98bf6e7e832d::t_0813922a20f8ef 261
+docs/adr/0016-one-front-agent.md
+  s_7c98bf6e7e832d::t_90472f4ef6d83c 3,15
+cmd/lineup/hub.go
+  s_7c98bf6e7e832d::t_48b06cbe940f7a 483,485,493
+  s_7c98bf6e7e832d::t_e1a7789f92b49f 120,124,128-132,338-345
+GLOSSARY.md
+  s_7c98bf6e7e832d::t_90472f4ef6d83c 48,56
+internal/board/board_test.go
+  s_7c98bf6e7e832d::t_5da3cfe651ddd3 313,407-408,419
+  s_7c98bf6e7e832d::t_26fcf23994f4d7 383,389-391
+  s_7c98bf6e7e832d::t_063f33537fa0f3 326,334,345-346,367,382,384-388,392-406,412,414-418,420-421
+internal/board/tracker.go
+  s_7c98bf6e7e832d::t_16357357d61ecb 1115-1118
+internal/board/model.go
+  s_7c98bf6e7e832d::t_4796c17f685510 30-31,33-34,104,138,175,255-260,271-290,462
+internal/board/tracker_test.go
+  s_7c98bf6e7e832d::t_0813922a20f8ef 203-208,215,217
+internal/board/view.go
+  s_7c98bf6e7e832d::t_16357357d61ecb 354-355
+  s_7c98bf6e7e832d::t_4796c17f685510 83,101-117,176,328
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5583fc7a897f2f87ad4a77e0301afb31b91ade4e",
+  "prompts": {},
+  "sessions": {
+    "s_7c98bf6e7e832d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b6e3b191-3411-4797-9253-67ee9603b33e",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
