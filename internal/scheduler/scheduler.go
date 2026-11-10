@@ -11,11 +11,13 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 	"uuid"
 
+	"github.com/gclunies/lineup/internal/harness/claude"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/store"
 )
@@ -583,6 +585,8 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		case job == JobSetup:
 			id := r.ID
 			s.enqueue(id, func(ctx context.Context) { s.finishSetup(ctx, id) })
+		case job == JobWorker && ev.ExitCode != 0 && r.Review != nil && r.WorkerStage == lifecycle.ReviewReady:
+			s.resumeFallback(r, ev.ExitCode)
 		case job == JobWorker && ev.ExitCode != 0:
 			s.apply(r, lifecycle.WorkerExited{Code: ev.ExitCode}, "")
 		case job == JobWorker:
@@ -600,6 +604,30 @@ func (s *Scheduler) onRex(ev RexEvent) {
 			s.apply(r, lifecycle.WorkerLost{}, "")
 		}
 	}
+}
+
+// resumeFallback handles a review Worker that exited non-zero. Only a Review
+// ready Worker starts with --resume. If its conversation file is gone, the
+// Task reviews afresh, and the new Worker's --session-id creates the
+// conversation for later reopens. The fresh start is Reviewing, so a second
+// failure takes the normal path.
+func (s *Scheduler) resumeFallback(r *Record, code int) {
+	id, session, block, conversation := r.ID, r.SessionID, r.BlockID, r.Conversation
+	s.enqueue(id, func(ctx context.Context) {
+		out, err := s.d.Rex.Capture(ctx, session, block)
+		s.call(func() {
+			r, ok := s.recs[id]
+			if !ok || r.Stage != lifecycle.ReviewReady {
+				return
+			}
+			if err == nil && strings.Contains(out, claude.NoConversation) {
+				s.save(r, store.Event{TaskID: id, At: s.now(), Signal: "resume-fallback", From: r.Stage.String(), To: r.Stage.String(), Detail: conversation})
+				s.apply(r, lifecycle.Rerun{Stage: lifecycle.Reviewing}, "")
+				return
+			}
+			s.apply(r, lifecycle.WorkerExited{Code: code}, "")
+		})
+	})
 }
 
 // forgetTab drops the Task's tab after its block is gone. The hunk pane
