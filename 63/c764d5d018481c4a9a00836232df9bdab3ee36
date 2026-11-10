@@ -1,0 +1,19 @@
+.github/workflows/auto-merge.yml
+  s_d255b991d2b598::t_b8334d08d0a5e0 7-11,14-17,25,49-50,55-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "63c764d5d018481c4a9a00836232df9bdab3ee36",
+  "prompts": {},
+  "sessions": {
+    "s_d255b991d2b598": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0d293f2f-77eb-4787-b664-536e2aee915e",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
