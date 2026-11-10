@@ -27,6 +27,7 @@ var clientCommands = map[string]func(c scheduler.Client, args []string, out io.W
 	"watch":   cmdWatch,
 	"show":    cmdShow,
 	"steer":   cmdSteer,
+	"ask":     cmdAsk,
 	"set":     cmdSet,
 	"cap":     cmdCap,
 	"rerun":   cmdRerun,
@@ -281,6 +282,14 @@ func cmdSteer(c scheduler.Client, args []string, out io.Writer) error {
 		return fmt.Errorf("%w: lineup steer <task> \"<text>\"", errUsage)
 	}
 	return c.Do(scheduler.Request{Op: "steer", Task: args[0], Text: args[1]}, nil)
+}
+
+// cmdAsk is the Worker's own command. It puts its question on the Task's row.
+func cmdAsk(c scheduler.Client, args []string, out io.Writer) error {
+	if len(args) != 2 {
+		return fmt.Errorf("%w: lineup ask <task> \"<question>\"", errUsage)
+	}
+	return c.Do(scheduler.Request{Op: "ask", Task: args[0], Text: args[1]}, nil)
 }
 
 func cmdSet(c scheduler.Client, args []string, out io.Writer) error {

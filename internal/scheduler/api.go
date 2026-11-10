@@ -50,6 +50,9 @@ type TaskDetail struct {
 
 var ErrNoRepo = errors.New("no Repo mapping")
 
+// maxQuestion is the most characters of a Worker's question that the Task keeps.
+const maxQuestion = 300
+
 // Serve accepts connections on the socket until ctx ends.
 func (s *Scheduler) Serve(ctx context.Context, path string) error {
 	os.Remove(path)
@@ -177,6 +180,23 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 			r.Overrides[req.Key] = req.Value
 			s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: "set", From: r.Stage.String(), To: r.Stage.String(), Detail: req.Key + "=" + req.Value})
 			return nil
+		})
+	case "ask":
+		return nil, s.with(req.Task, func(r *Record) error {
+			if r.Job != JobWorker {
+				return fmt.Errorf("%s has no live Worker", r.ID)
+			}
+			if _, met := s.contractOutput(r); met {
+				return fmt.Errorf("%s: contract output exists", r.ID)
+			}
+			if r.Flag != "" && !r.Flag.Transient() {
+				return fmt.Errorf("%s is flagged %s", r.ID, r.Flag)
+			}
+			q := req.Text
+			if rs := []rune(q); len(rs) > maxQuestion {
+				q = string(rs[:maxQuestion])
+			}
+			return s.apply(r, lifecycle.WorkerStatus{State: "blocked", Kind: string(lifecycle.ReasonQuestion), Detail: q}, "")
 		})
 	case "steer", "focus", "capture":
 		return s.toWorker(ctx, req)

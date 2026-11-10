@@ -159,6 +159,8 @@ func SessionFlags(name string) []string {
 // Claude's session list. Rex starts it through a login shell that
 // runs no direnv, so the command sets CLAUDE_CONFIG_DIR itself. addDirs are
 // folders outside the Worker's own that it reads with no permission prompt.
+// Every Worker can run `lineup ask` with no prompt, because the user's own
+// allow list can be empty.
 func Command(bin, configDir string, st config.StageConfig, conversation, name, prompt string, addDirs ...string) ([]string, map[string]string) {
 	argv := []string{bin}
 	if st.Model != "" {
@@ -176,8 +178,9 @@ func Command(bin, configDir string, st config.StageConfig, conversation, name, p
 	if name != "" {
 		argv = append(argv, SessionFlags(name)...)
 	}
+	// --allowedTools and --add-dir take many values, so a separate value would also take the prompt.
+	argv = append(argv, "--allowedTools=Bash(lineup ask:*)")
 	for _, d := range addDirs {
-		// --add-dir takes many values, so a separate value would also take the prompt.
 		argv = append(argv, "--add-dir="+d)
 	}
 	if prompt != "" {
@@ -191,6 +194,8 @@ func Command(bin, configDir string, st config.StageConfig, conversation, name, p
 }
 
 type TaskInfo struct {
+	// ID is the Task's ID on the Board.
+	ID string
 	// Ask is the user's own words for a Task without an Issue.
 	Ask              string
 	IssueID          string
@@ -241,6 +246,9 @@ func stageContract(stage lifecycle.Stage, bar lifecycle.LandingBar) (string, boo
 	c, ok := contracts[stage]
 	return c, ok
 }
+
+// askContract opens every Stage contract. %[1]s is the Task's ID.
+const askContract = "If you must stop for the user, run `lineup ask %[1]s \"<one question>\"` first, then stop. "
 
 const noPRContract = "Do not push a branch or open a pull request. Say what you produced, then stop."
 
@@ -339,7 +347,7 @@ func Prompt(stage lifecycle.Stage, task TaskInfo, skill, extra string) string {
 	if task.Fixes != "" && task.PR && stage == lifecycle.Working {
 		contract += " The PR body must contain the line `" + task.Fixes + "`, so that the merge closes the Issue."
 	}
-	b.WriteString("\nContract. When you finish, leave this behind: " + contract + "\n")
+	b.WriteString("\nContract. " + fmt.Sprintf(askContract, task.ID) + "When you finish, leave this behind: " + contract + "\n")
 	return b.String()
 }
 
@@ -350,6 +358,6 @@ func reviewPrompt(task TaskInfo, extra string) string {
 	if extra != "" {
 		b.WriteString("\n" + extra + "\n")
 	}
-	b.WriteString("\nContract. " + fmt.Sprintf(reviewContract, task.ReviewWorktree) + "\n")
+	b.WriteString("\nContract. " + fmt.Sprintf(askContract, task.ID) + fmt.Sprintf(reviewContract, task.ReviewWorktree) + "\n")
 	return b.String()
 }

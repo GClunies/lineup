@@ -93,14 +93,14 @@ func TestACIDebugWorkerSeesWhichChecksGate(t *testing.T) {
 	claudeOnPath(t)
 	p := harnessPort{cfg: loadConfig(t, "")}
 	spec := scheduler.WorkerSpec{
-		Stage: lifecycle.CIDebug, Repo: t.TempDir(), Branch: "ada/eng-1", Name: "ENG-1 Fix the tooltip",
+		Task: "ENG-1", Stage: lifecycle.CIDebug, Repo: t.TempDir(), Branch: "ada/eng-1", Name: "ENG-1 Fix the tooltip",
 		PRURL: "https://github.com/umbrella/data/pull/7", Standing: lifecycle.Standing{Failed: []string{"test"}, Optional: []string{"lint"}},
 	}
 	argv, _, err := p.Command(context.Background(), spec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prompt := argv[len(argv)-1]; !strings.Contains(prompt, "keep it from landing: test.") || !strings.Contains(prompt, "optional checks failed too: lint.") {
+	if prompt := argv[len(argv)-1]; !strings.Contains(prompt, "keep it from landing: test.") || !strings.Contains(prompt, "optional checks failed too: lint.") || !strings.Contains(prompt, "`lineup ask ENG-1 ") {
 		t.Fatalf("prompt = %s", prompt)
 	}
 }
@@ -136,7 +136,7 @@ func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{claudeBin, "--model", model, "--effort", "max", "--resume", spec.Conversation, "--name", spec.Name, "--remote-control", spec.Name, "--add-dir=/repos/umbrella/data.review-pr-4955"}
+	want := []string{claudeBin, "--model", model, "--effort", "max", "--resume", spec.Conversation, "--name", spec.Name, "--remote-control", spec.Name, "--allowedTools=Bash(lineup ask:*)", "--add-dir=/repos/umbrella/data.review-pr-4955"}
 	if !slices.Equal(argv, want) {
 		t.Fatalf("reopen argv = %q, want %q", argv, want)
 	}
