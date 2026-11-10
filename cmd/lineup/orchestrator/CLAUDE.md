@@ -42,7 +42,7 @@ When the Worker finishes, its Task alerts with `stopped`. The user reads the res
 
 ## Alerts
 
-`lineup watch --once` waits for the next alerts of build Tasks, prints one line for each, and exits. For example, it prints `ENG-34 Working, stopped: <title>`. The Board in this tab also shows each line as a desktop toast.
+`lineup watch --once` waits for the next alerts of every Task, build or review, prints one line for each, and exits. For example, it prints `ENG-34 Working, stopped: <title>`. The Board in this tab also shows each line as a desktop toast.
 
 - Run the watch with the Bash tool and `run_in_background: true`: command `lineup watch --once`, description `lineup alerts`. Do not use the Monitor tool. A Monitor expires after 30 minutes and wakes you to no purpose.
 - Start the watch when the Hub starts you, and again each time it exits. Say nothing about the start. Your reply to an alert is the only text the user sees.

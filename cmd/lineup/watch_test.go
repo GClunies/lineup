@@ -47,9 +47,9 @@ func TestWatchPrintsEachAlertOnceAcrossRestarts(t *testing.T) {
 	}
 }
 
-// The review tab's board toasts review alerts, so the Orchestrator never
-// hears of them.
-func TestWatchSkipsReviewTasks(t *testing.T) {
+// Review Tasks alert through the same watch as build Tasks, so one agent
+// hears of every Kind.
+func TestWatchPrintsReviewTasks(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "alerted.json")
 	reviewing := scheduler.TaskView{ID: "R-1", Kind: lifecycle.KindReview, Title: "data#7", Stage: "Reviewing", StageKey: "reviewing", Group: "Working"}
 	ready := scheduler.TaskView{ID: "R-1", Kind: lifecycle.KindReview, Title: "data#7", Stage: "Review ready", StageKey: "review_ready", Group: "Needs you"}
@@ -60,8 +60,8 @@ func TestWatchSkipsReviewTasks(t *testing.T) {
 	if _, err := watchOnce(feed{view(reviewing, working), view(ready, asked)}, path, false, &out); err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); got != "ENG-1 Working, question: billing\n" {
-		t.Fatalf("printed %q, want the build alert alone", got)
+	if got := out.String(); got != "R-1 Review ready: data#7\nENG-1 Working, question: billing\n" {
+		t.Fatalf("printed %q, want the review and the build alert", got)
 	}
 }
 

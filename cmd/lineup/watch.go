@@ -19,9 +19,9 @@ type watcher interface {
 	Watch(f func(scheduler.BoardView) bool) error
 }
 
-// cmdWatch prints one line each time a build Task starts to need the user or
-// ends. The review tab's board toasts the review Tasks' alerts. With --once,
-// it exits after the first Board that has new alerts. The Orchestrator runs
+// cmdWatch prints one line each time a Task of either Kind starts to need the
+// user or ends. With --once, it exits after the first Board that has new
+// alerts. The Orchestrator runs
 // it that way as a background command, which wakes the Orchestrator only when
 // it exits. A Monitor would wake it each time the Monitor expires, to no
 // purpose. It reconnects when the Scheduler restarts.
@@ -61,7 +61,6 @@ func watchOnce(w watcher, path string, once bool, out io.Writer) (bool, error) {
 	var printed bool
 	var saveErr error
 	w.Watch(func(v scheduler.BoardView) bool {
-		v = v.OfKind(lifecycle.KindBuild)
 		if seen == nil {
 			seen = map[string]string{}
 			for _, t := range v.Tasks {
