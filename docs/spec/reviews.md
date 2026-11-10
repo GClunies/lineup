@@ -135,7 +135,7 @@ On a PR tab:
 - The tab paints first from the disk cache, `cache/github/<view key>.json` in the state directory.
 - It searches every PR tab when it starts, on `R`, and every 2 minutes. Each search is its own GraphQL call, and the calls run at the same time. GitHub stops a call at about 10 seconds. In a probe of a config with 6 views and queues, one call that held every search failed with HTTP 502 or 504 in 6 of 8 runs. As separate calls, all of them passed in 5 of 5 runs, in 7 seconds or less. The Reviews tab has no search. Each search reads the first 100 PRs, newest first. The merged PRs of `My PRs` go in the `mine` cache file with its open PRs.
 - A cached list never replaces a live one. An empty live list is a result, not a load in progress.
-- If a search fails, the tab keeps the last list and shows the error in the status line.
+- If the search of one tab fails, that tab keeps its last list and shows the error in the status line. The other tabs take their new lists. If the read of the user's login or of the team members fails, every tab keeps its last list.
 
 ## Queues
 
@@ -185,7 +185,7 @@ Ranking is inside one queue. A queue's PRs always rank behind the PRs of the que
 
 On every full poll, after it reads Task PRs, the Scheduler fills each queue that is not paused. A poll for a few Tasks, for example after a Worker reports `done`, fills nothing.
 
-1. Search every queue, each in its own GraphQL call, at the same time. Only one fill runs at a time. A fill that is due while another runs is skipped.
+1. Search every queue, each in its own GraphQL call, at the same time. Only one fill runs at a time. A fill that is due while another runs is skipped. If a search fails, the fill logs the error and starts nothing. Without the PRs of an earlier queue, a later queue can take a PR that the earlier queue owns.
 2. In one call on the loop goroutine, rank each queue's candidates in config order. Drop from a queue each PR that an earlier queue ranked, so each PR has one owner.
 3. In the same call, for each queue in config order: start its Queued review Tasks first, then add and start a review Task for each top-ranked candidate. Stop when the queue's started count reaches its `slots`, or when the started count of all queues reaches `review.slots`.
 4. Start at most one review Task in each Repo per fill, because each start fetches into the Repo's main checkout.

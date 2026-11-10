@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -144,8 +145,8 @@ const searchQuery = "query($viewer: String!, $q: String!) {\n" +
 // user's login. A search that matches nothing maps to an empty list. Each
 // search is its own GraphQL call, and the calls run at the same time: GitHub
 // stops a call at about 10 seconds, and one call that holds every search of a
-// typical config takes longer. A failed search fails them all, and the error
-// names the first one in order.
+// typical config takes longer. If a search fails, SearchPRs returns the lists
+// of the other searches and a SearchErrors.
 func (c *Client) SearchPRs(ctx context.Context, viewer string, searches []Search) (map[string][]PullRequest, error) {
 	lists := make([][]PullRequest, len(searches))
 	errs := make([]error, len(searches))
@@ -158,14 +159,30 @@ func (c *Client) SearchPRs(ctx context.Context, viewer string, searches []Search
 		}()
 	}
 	wg.Wait()
-	out := map[string][]PullRequest{}
+	out, failed := map[string][]PullRequest{}, SearchErrors{}
 	for i, s := range searches {
 		if errs[i] != nil {
-			return nil, errs[i]
+			failed[s.Key] = errs[i]
+		} else {
+			out[s.Key] = lists[i]
 		}
-		out[s.Key] = lists[i]
+	}
+	if len(failed) > 0 {
+		return out, failed
 	}
 	return out, nil
+}
+
+// SearchErrors holds the error of each failed search by its Key. Each error
+// names its search.
+type SearchErrors map[string]error
+
+func (e SearchErrors) Error() string {
+	var msgs []string
+	for _, k := range slices.Sorted(maps.Keys(e)) {
+		msgs = append(msgs, e[k].Error())
+	}
+	return strings.Join(msgs, "; ")
 }
 
 func (c *Client) searchOne(ctx context.Context, viewer string, s Search) ([]PullRequest, error) {

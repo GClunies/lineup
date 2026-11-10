@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -164,9 +165,19 @@ func TestSearchErrorNamesTheView(t *testing.T) {
 		"b": `{"errors":[{"type":"EXCESSIVE_PAGINATION","path":["s"],"message":"too many records"}]}`,
 	})
 	searches := []Search{{"mine", "My PRs", "a"}, {"view:team", "My teammates", "b"}}
-	_, err := (&Client{Bin: bin}).SearchPRs(context.Background(), "octocat", searches)
+	got, err := (&Client{Bin: bin}).SearchPRs(context.Background(), "octocat", searches)
 	if err == nil || !strings.Contains(err.Error(), "search My teammates: too many records") {
 		t.Errorf("a GraphQL error on My teammates: err = %v", err)
+	}
+	var errs SearchErrors
+	if !errors.As(err, &errs) || len(errs) != 1 || errs["view:team"] == nil {
+		t.Errorf("SearchErrors = %v, want only view:team", errs)
+	}
+	if prs, ok := got["mine"]; !ok || prs == nil {
+		t.Errorf("the passed search has no list: %v", got)
+	}
+	if _, ok := got["view:team"]; ok {
+		t.Errorf("the failed search has a list: %v", got)
 	}
 
 	searches = []Search{{"mine", "My PRs", "a"}, {"view:team", "My teammates", "missing"}}

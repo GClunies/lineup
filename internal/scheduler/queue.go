@@ -52,9 +52,10 @@ type queueRows struct {
 	Skipped []string
 }
 
-// readQueues searches every queue in one GraphQL call, then finds the Repo of
-// each repository that has a candidate. It reads GitHub and files, so only
-// lanes and API handlers call it, never the loop.
+// readQueues searches every queue in one SearchPRs pass, then finds the Repo
+// of each repository that has a candidate. A failed search fails the fill.
+// It reads GitHub and files, so only lanes and API handlers call it, never the
+// loop.
 func (s *Scheduler) readQueues(ctx context.Context) (queueRows, error) {
 	members, err := s.teamMembers(ctx)
 	if err != nil {
