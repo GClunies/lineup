@@ -227,6 +227,7 @@ The rules for this layout:
 - A Hub from before the `work` tab has a tab labeled `orchestrate`. `lineup` renames it to `work`, so the Orchestrator in it keeps running.
 - The Hub session is named `lineup hub`. A Repo session is named after its folder, and the Scheduler removes it after its last Task. The space keeps a Repo session from taking the Hub's name.
 - The Scheduler creates each Task tab with `rex window new -s <session> <label> --focus=false -- <command>`. The user stays on the Hub.
+- The label is the Task ID, or the Issue identifier, and the title. Rex refuses a label longer than 128 characters, so a longer label stops at 127 characters and ends in `…`.
 - Each Task tab names its command. A tab without a command reports exit code 0 when its shell exits, whatever the real code is.
 - If a Worker exits within about 1 s, Rex keeps its tab open so that the user can read the error. Before the Scheduler restarts that Worker, it closes the tab.
 - The Scheduler creates a Repo session with the first Task in that Repo. It removes the session when the last Task tab in it closes and the session holds no other tab. A tab that the user or another Scheduler opened keeps the session.

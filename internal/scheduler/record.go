@@ -76,11 +76,20 @@ type Record struct {
 	StageSince time.Time `json:"stage_since"`
 }
 
+// maxTabLabel is the longest window label, in characters, that Rex accepts.
+const maxTabLabel = 128
+
+// tabLabel names the Task's tab and its Worker's conversation. A label past
+// maxTabLabel ends in "…".
 func (r *Record) tabLabel() string {
+	label := r.ID + " " + r.Title
 	if r.Issue != nil {
-		return r.Issue.Identifier + " " + r.Title
+		label = r.Issue.Identifier + " " + r.Title
 	}
-	return r.ID + " " + r.Title
+	if rs := []rune(label); len(rs) > maxTabLabel {
+		return string(rs[:maxTabLabel-1]) + "…"
+	}
+	return label
 }
 
 // sessionLabel is the Repo's folder name, with its parent folder added when

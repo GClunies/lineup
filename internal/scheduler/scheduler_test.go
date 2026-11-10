@@ -1,8 +1,10 @@
 package scheduler
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -10,6 +12,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -51,6 +54,9 @@ func (f *fakeRex) EnsureSession(_ context.Context, label string) (string, error)
 }
 
 func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, env map[string]string, argv []string) (Window, error) {
+	if utf8.RuneCountInString(label) > 128 {
+		return Window{}, errors.New("label must be at most 128 characters")
+	}
 	f.mu.Lock()
 	f.n++
 	w := Window{session, fmt.Sprintf("window:%d", f.n), fmt.Sprintf("block:%d", f.n)}
@@ -363,13 +369,15 @@ type fakeTracker struct {
 	mu     sync.Mutex
 	status []string
 	kinds  []string // the Kind of each Lookup
+	title  string   // the Issue's title, and "Add billing model" when empty
 }
 
 func (t *fakeTracker) Lookup(_ context.Context, kind, id string) (Issue, error) {
 	t.mu.Lock()
 	t.kinds = append(t.kinds, kind)
+	title := cmp.Or(t.title, "Add billing model")
 	t.mu.Unlock()
-	return Issue{Identifier: id, Title: "Add billing model", BranchName: "ada/eng-1-billing", TeamKey: "ENG"}, nil
+	return Issue{Identifier: id, Title: title, BranchName: "ada/eng-1-billing", TeamKey: "ENG"}, nil
 }
 func (t *fakeTracker) Begin(context.Context, Issue) error { return nil }
 func (t *fakeTracker) SetStatus(_ context.Context, _ Issue, event string) error {
@@ -479,6 +487,28 @@ func (h *harness) waitTab(cmd string) tab {
 	var tabs []tab
 	eventually(h.t, "a tab running "+cmd, func() bool { tabs = h.rex.open(cmd); return len(tabs) == 1 })
 	return tabs[0]
+}
+
+func TestALongTitleCutsTheTabLabel(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.tr.title = strings.Repeat("é", 200)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+
+	setup := h.waitTab("wt ada/eng-1-billing")
+	want := "ENG-1 " + strings.Repeat("é", 121) + "…"
+	if setup.label != want {
+		t.Fatalf("setup tab label = %q (%d characters), want %q", setup.label, utf8.RuneCountInString(setup.label), want)
+	}
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: setup.BlockID}
+	if worker := h.waitTab("claude working"); worker.label != want {
+		t.Fatalf("worker tab label = %q", worker.label)
+	}
+	h.hn.mu.Lock()
+	defer h.hn.mu.Unlock()
+	if n := h.hn.specs[len(h.hn.specs)-1].Name; n != want {
+		t.Fatalf("worker name = %q", n)
+	}
 }
 
 func TestTaskFromStartToMerged(t *testing.T) {
