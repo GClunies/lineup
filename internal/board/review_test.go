@@ -26,6 +26,7 @@ type fakeReviewAPI struct {
 	memberCalls int
 	viewerCalls int
 	err         error
+	fail        map[string]error // a failed search by Key
 }
 
 func (f *fakeReviewAPI) Viewer(context.Context) (string, error) {
@@ -45,9 +46,16 @@ func (f *fakeReviewAPI) SearchPRs(_ context.Context, viewer string, ss []github.
 	if f.err != nil {
 		return nil, f.err
 	}
-	out := map[string][]github.PullRequest{}
+	out, failed := map[string][]github.PullRequest{}, github.SearchErrors{}
 	for _, s := range ss {
-		out[s.Key] = f.lists[s.Key]
+		if err := f.fail[s.Key]; err != nil {
+			failed[s.Key] = err
+		} else {
+			out[s.Key] = f.lists[s.Key]
+		}
+	}
+	if len(failed) > 0 {
+		return out, failed
 	}
 	return out, nil
 }
@@ -434,6 +442,37 @@ func TestReviewErrorKeepsTheLastList(t *testing.T) {
 	}
 	if !strings.Contains(line(v, "HTTP 502"), "My PRs, Requested") {
 		t.Fatalf("the status line does not name the views:\n%s", v)
+	}
+}
+
+func TestAFailedSearchFailsOnlyItsTab(t *testing.T) {
+	e := newRvEnv(t)
+	e.open()
+	e.api.lists["requested"] = append(e.api.lists["requested"], github.PullRequest{Repo: "umbrella/data", Number: 4960,
+		Title: "Read the new feed", URL: "https://github.com/umbrella/data/pull/4960", Author: "goldberg", CreatedAt: epoch})
+	e.api.lists["mine"] = nil
+	e.api.fail = map[string]error{"mine": errors.New("search My PRs: HTTP 502")}
+	clear(e.wrote)
+	e.press("tab", "R")
+	v := e.m.View()
+	if !strings.Contains(v, "data#4945") || !strings.Contains(v, "HTTP 502") {
+		t.Fatalf("My PRs lost its last list or its error:\n%s", v)
+	}
+	if _, ok := e.wrote["mine"]; ok {
+		t.Errorf("the failed search replaced the cache: %v", e.wrote["mine"])
+	}
+	e.press("tab")
+	v = e.m.View()
+	if !strings.Contains(v, "data#4960") {
+		t.Fatalf("Requested did not get its new list:\n%s", v)
+	}
+	if strings.Contains(v, "HTTP 502") {
+		t.Fatalf("Requested shows the error of My PRs:\n%s", v)
+	}
+	e.api.fail = nil
+	e.press("shift+tab", "R")
+	if v = e.m.View(); strings.Contains(v, "HTTP 502") || strings.Contains(v, "data#4945") {
+		t.Fatalf("a passed search left the old error or list:\n%s", v)
 	}
 }
 

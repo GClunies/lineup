@@ -1,7 +1,9 @@
 package board
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"maps"
 	"slices"
 	"sort"
@@ -79,7 +81,8 @@ type review struct {
 	fresh   map[string]bool // keys with a live list, which a cached list never replaces
 	gen     int
 	loading bool
-	err     string
+	err     string            // why the whole refresh failed
+	failed  map[string]string // why each tab's search failed, by Key
 
 	members   map[string][]string
 	membersAt time.Time
@@ -125,6 +128,7 @@ type (
 	rvLiveMsg struct {
 		gen       int
 		lists     map[string][]github.PullRequest
+		failed    map[string]string
 		members   map[string][]string
 		membersAt time.Time
 		viewer    string
@@ -139,6 +143,9 @@ type (
 )
 
 func (r *review) curTab() ReviewView { return r.tabs[r.tab] }
+
+// tabErr is why the open tab has no fresh list, or "".
+func (r *review) tabErr() string { return cmp.Or(r.err, r.failed[r.curTab().Key]) }
 
 // list is the tab's PRs, and false before the first list arrives.
 func (r *review) list(tb ReviewView) ([]github.PullRequest, bool) {
@@ -233,7 +240,8 @@ func (m Model) reviewTick() tea.Cmd {
 
 // refreshReviews searches every tab in one SearchPRs pass. It reads the members
 // of the author teams first when they are an hour old. Only the newest
-// refresh lands, so a slow answer never replaces a newer one.
+// refresh lands, so a slow answer never replaces a newer one. A tab whose
+// search fails keeps its last list.
 func (m Model) refreshReviews() tea.Cmd {
 	r := m.rv
 	r.gen++
@@ -281,10 +289,18 @@ func (m Model) refreshReviews() tea.Cmd {
 			}
 		}
 		found, err := api.SearchPRs(ctx, viewer, searches)
-		if err != nil {
+		var errs github.SearchErrors
+		if err != nil && !errors.As(err, &errs) {
 			return rvLiveMsg{gen: gen, err: err}
 		}
+		failed := map[string]string{}
 		for _, tb := range tabs {
+			if e := cmp.Or(errs[tb.Key], errs[mergedKey(tb)]); e != nil {
+				failed[tb.Key] = errText(e)
+				delete(found, tb.Key)
+				delete(found, mergedKey(tb))
+				continue
+			}
 			if merged, ok := found[mergedKey(tb)]; ok {
 				delete(found, mergedKey(tb))
 				slices.SortStableFunc(merged, func(a, b github.PullRequest) int { return b.MergedAt.Compare(a.MergedAt) })
@@ -295,7 +311,7 @@ func (m Model) refreshReviews() tea.Cmd {
 		for k, prs := range lists {
 			write(k, prs)
 		}
-		return rvLiveMsg{gen: gen, lists: lists, members: members, membersAt: at, viewer: viewer}
+		return rvLiveMsg{gen: gen, lists: lists, failed: failed, members: members, membersAt: at, viewer: viewer}
 	}
 }
 
@@ -358,7 +374,7 @@ func (m Model) reviewMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 			r.err = errText(msg.err)
 			return m, nil, true
 		}
-		r.err = ""
+		r.err, r.failed = "", msg.failed
 		r.members, r.membersAt, r.viewer = msg.members, msg.membersAt, msg.viewer
 		for k, prs := range msg.lists {
 			r.lists[k], r.fresh[k] = prs, true

@@ -208,8 +208,8 @@ func (m Model) reviewFooter() string {
 		return bad.Render(" " + m.status)
 	case m.status != "":
 		return good.Render(" " + m.status)
-	case m.rv.err != "":
-		return bad.Render(" " + m.rv.err)
+	case m.rv.tabErr() != "":
+		return bad.Render(" " + m.rv.tabErr())
 	case m.rv.filtering:
 		return hintBar(m.width, []hint{{"enter", "keep the search"}, {"esc", "clear"}, {"?", "all keys"}})
 	case m.rv.curTab().Tasks:
