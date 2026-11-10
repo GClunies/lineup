@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -198,5 +201,49 @@ func TestOpenHubReopensATabWithARetiredAgent(t *testing.T) {
 		if got := retired(hubWindow{Blocks: c.blocks}); got != c.want {
 			t.Errorf("retired(%v) = %v, want %v", c.blocks, got, c.want)
 		}
+	}
+}
+
+func TestOpenHubRewritesTheAgentFilesWhenTheTabExists(t *testing.T) {
+	bin := t.TempDir()
+	for name, body := range map[string]string{
+		"rex": `case "$1 $2" in
+"session inspect") echo '{"windows":[
+{"window_id":"w1","label":"assist","layers":[{"blocks":[{"label":"ASSIST"}]}]},
+{"window_id":"w2","label":"hub","layers":[{"blocks":[{"label":"BOARD"},{"label":"LINEUP"}]}]}]}';;
+esac`,
+		"launchctl": "",
+		"gh":        "",
+		"wt":        "",
+		"claude":    "",
+	} {
+		os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755)
+	}
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LINEUP_STATE_DIR", t.TempDir())
+	t.Setenv("LINEUP_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	hub := agentTabs[1]
+	dir := filepath.Join(stateDir(), strings.ToLower(hub.agent))
+	os.MkdirAll(filepath.Join(dir, ".claude"), 0o700)
+	settings := filepath.Join(dir, ".claude", "settings.json")
+	os.WriteFile(settings, []byte(`{"hooks":{"UserPromptSubmit":[{"hooks":[{"command":"/tmp/lineup-s1 trackers"}]}]}}`), 0o600)
+	os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("an old prompt"), 0o600)
+
+	if err := openHub(); err != nil {
+		t.Fatal(err)
+	}
+	role, want, err := composeAgent(hub.role, hub.settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(settings)
+	if string(got) != want || strings.Contains(string(got), "/tmp/lineup-s1") {
+		t.Errorf("settings = %s, want %s", got, want)
+	}
+	if prompt, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md")); !bytes.Equal(prompt, role) {
+		t.Errorf("CLAUDE.md is not the current prompt")
 	}
 }
