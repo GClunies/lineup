@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gclunies/lineup/internal/github"
+	"github.com/gclunies/lineup/internal/harness/claude"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/store"
 )
@@ -47,6 +48,8 @@ type fakeRex struct {
 	// exitFast makes a tab whose argv starts with this word exit with 0
 	// before NewWindow returns.
 	exitFast string
+	// capture is what Capture returns.
+	capture string
 }
 
 func (f *fakeRex) EnsureSession(_ context.Context, label string) (string, error) {
@@ -138,8 +141,12 @@ func (f *fakeRex) Blocks(_ context.Context, session string) (map[string]bool, er
 func (f *fakeRex) ProgramStatus(context.Context, string, string) (Status, error) {
 	return Status{}, nil
 }
-func (f *fakeRex) Focus(context.Context, string, string, string) error     { return nil }
-func (f *fakeRex) Capture(context.Context, string, string) (string, error) { return "", nil }
+func (f *fakeRex) Focus(context.Context, string, string, string) error { return nil }
+func (f *fakeRex) Capture(context.Context, string, string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.capture, nil
+}
 
 func (f *fakeRex) Type(context.Context, string, string, string) error { return nil }
 
@@ -1043,5 +1050,60 @@ func TestFreshStageHasNoRestartNote(t *testing.T) {
 	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: debugger.BlockID}
 	if spec := h.waitSpecs(3); !spec.Restart || len(spec.Steers) != 0 {
 		t.Fatalf("CI debug restart spec = restart %v, steers %q, want a restart with no Working steers", spec.Restart, spec.Steers)
+	}
+}
+
+// reopenAndExit reopens a closed Review ready Worker and exits it with code 1,
+// with the given text on its screen. It returns the exited Worker's tab.
+func (h *harness) reopenAndExit(capture string) tab {
+	h.t.Helper()
+	h.readyReview()
+	h.rex.mu.Lock()
+	h.rex.capture = capture
+	h.rex.mu.Unlock()
+	h.review(prURL7)
+	worker := h.waitTab("claude review_ready")
+	h.rex.events <- RexEvent{Kind: EvExited, ExitCode: 1, BlockID: worker.BlockID}
+	return worker
+}
+
+func TestResumeFallsBackToSessionID(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.reopenAndExit("Error: " + claude.NoConversation + " with session ID: x")
+
+	h.waitNewTab("claude reviewing", worker.BlockID)
+	spec := h.lastSpec()
+	if spec.Stage != lifecycle.Reviewing || spec.Conversation == "" {
+		t.Fatalf("fallback spec = %+v, want a Reviewing start with a conversation, so Command passes --session-id and a prompt", spec)
+	}
+	d, _ := h.s.show("pr-7")
+	if d.Stage != lifecycle.Reviewing.String() || d.Note != "" {
+		t.Fatalf("task = %+v, want Reviewing with no flag", d.TaskView)
+	}
+	var fallbacks int
+	for _, e := range d.Events {
+		if e.Signal == "resume-fallback" {
+			fallbacks++
+		}
+	}
+	if fallbacks != 1 {
+		t.Fatalf("resume-fallback events = %d, want 1: %+v", fallbacks, d.Events)
+	}
+}
+
+// Review ready is not an agent Stage, so a failed reopen raises no flag. The
+// fallback must still not fire for another failure.
+func TestOtherExitDoesNotFallBack(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.reopenAndExit("Error: session ID is already in use")
+	h.still("pr-7", lifecycle.ReviewReady)
+	d, _ := h.s.show("pr-7")
+	for _, e := range d.Events {
+		if e.Signal == "resume-fallback" {
+			t.Fatalf("resume-fallback event for another failure: %+v", d.Events)
+		}
+	}
+	if tabs := h.rex.open("claude reviewing"); len(tabs) != 0 {
+		t.Fatalf("open Reviewing tabs = %d, want none", len(tabs))
 	}
 }

@@ -152,6 +152,10 @@ func SessionFlags(name string) []string {
 	return []string{"--name", name, "--remote-control", name}
 }
 
+// NoConversation is what `claude --resume` prints, and exits 1, when the
+// conversation file is gone.
+const NoConversation = "No conversation found"
+
 // Command builds the argv and environment for an interactive Worker. A
 // Worker with a prompt starts a new conversation, with the prompt as its first
 // message and conversation as its ID when that is not "". A Worker with no
