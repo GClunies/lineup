@@ -4,11 +4,17 @@ name: Auto-merge
 # base with no required `test` check would merge at once, so the job arms
 # auto-merge only for a base that requires it. GitHub has no auto-merge for
 # a PR in a stack, so `gh stack merge` lands each one. A PR from a fork never
-# gets auto-merge. GitHub's delete-branch-on-merge setting skips a merge that
-# the workflow performs, so the delete-branch job removes the head branch.
+# gets auto-merge.
+#
+# The merge runs as github-actions[bot], and GitHub neither applies the
+# delete-branch-on-merge setting to that merge nor starts a workflow from it.
+# The sweep job deletes the head branch of each merged PR on a schedule.
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review, closed]
+    types: [opened, reopened, ready_for_review]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,7 +22,7 @@ permissions:
 
 jobs:
   enable:
-    if: ${{ github.event.action != 'closed' && !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -40,23 +46,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           BASE: ${{ github.event.pull_request.base.ref }}
-  delete-branch:
-    if: ${{ github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.head.repo.full_name == github.repository }}
+  sweep:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - run: |
-          if ! out=$(gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$HEAD" 2>&1); then
-            case "$out" in
-              *"Reference does not exist"*)
-                echo "::notice::$HEAD is already gone."
-                exit 0 ;;
-            esac
-            echo "$out" >&2
-            exit 1
-          fi
-          echo "::notice::Deleted $HEAD after #$PR merged."
+          default=$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)
+          gh api "repos/$GITHUB_REPOSITORY/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
+            --jq ".[] | select(.merged_at != null and .head.repo.full_name == \"$GITHUB_REPOSITORY\") | .head.ref" \
+          | sort -u | while read -r head; do
+            [ "$head" = "$default" ] && continue
+            gh api "repos/$GITHUB_REPOSITORY/branches/$head" --silent 2>/dev/null || continue
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$head" --silent
+            echo "::notice::Deleted $head, merged."
+          done
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-          HEAD: ${{ github.event.pull_request.head.ref }}
