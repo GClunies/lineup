@@ -148,7 +148,6 @@ func newTrkEnv(t *testing.T, workspaces ...linear.Workspace) *trkEnv {
 		workspaces = []linear.Workspace{{ID: "w1", Name: "acme", URLKey: "acme"}, {ID: "w2", Name: "Globex", URLKey: "globex"}}
 	}
 	e.m = New(scheduler.BoardView{Cap: 5}, Options{
-		Linear: true,
 		Client: e.sched,
 		Open:   func(u string) error { e.opened = append(e.opened, u); return nil },
 		Tracker: Tracker{
@@ -201,23 +200,21 @@ func (e *trkEnv) press(keys ...string) {
 	}
 }
 
-// open starts the Linear browser, as `lineup board --linear` does.
-func (e *trkEnv) open() { e.m = drain(e.m, e.m.Init()) }
+// open shows the Linear browser, as the 1 key does.
+func (e *trkEnv) open() {
+	var cmd tea.Cmd
+	e.m, cmd = press(e.m, "1")
+	e.m = drain(e.m, cmd)
+}
 
 func (e *trkEnv) toIssues() {
 	e.open()
 	e.press("j", "enter", "enter", "enter")
 }
 
-func TestLinearOptionOpensTheBrowser(t *testing.T) {
+func TestKey1OpensTheBrowser(t *testing.T) {
 	e := newTrkEnv(t)
-	opts := e.m.opts
-	opts.Linear = true
-	e.m = New(scheduler.BoardView{Cap: 5}, opts)
-	e.m.online = true
-	e.m.width, e.m.height = 100, 30
-	e.m.layout()
-	e.m = drain(e.m, e.m.Init())
+	e.open()
 	if v := e.m.View(); !strings.Contains(v, "My Issues (all workspaces)") || !strings.Contains(v, "Globex (globex)") {
 		t.Fatalf("switcher:\n%s", v)
 	}

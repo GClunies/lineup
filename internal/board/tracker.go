@@ -1112,6 +1112,10 @@ func (m Model) trackerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.moveTab(1)
 	case "R":
 		return m, m.reload()
+	case "z":
+		if m.opts.Zoom != nil {
+			m.opts.Zoom()
+		}
 	case "/":
 		if t.lvl != lvlDetail {
 			t.filtering = true
