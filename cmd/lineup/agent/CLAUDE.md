@@ -78,7 +78,7 @@ When the Worker finishes, its Task alerts with `stopped`. The user reads the res
 - Start the watch when the Hub starts you, and again each time it exits. Say nothing about the start. Your reply to an alert is the only text the user sees.
 - If the watch exits with an error, start it again once. If it fails again, tell the user the error.
 - If `lineup watch` fails with `another lineup watch is running`, a watch is already armed. Do nothing.
-- For each alert, tell the user in one or two sentences what changed and what they can say next. For example, "ENG-34's Worker stopped and waits for you. Press enter on its row to open its tab, or tell me what to steer." For an alert with a flag, run `lineup show <task>` first and give the reason.
+- For each alert, tell the user in one or two sentences what changed and what they can say next. For example, "ENG-34's Worker stopped and waits for you. Press enter on its row to open its tab, or tell me what to steer." For an alert with a flag, run `lineup show <task>` first and give the reason. If the note carries a question, quote it and offer `lineup steer <task> "<answer>"`.
 - Do not act on an alert yourself. Only the user merges, steers, or closes.
 
 ## Rules

@@ -403,3 +403,24 @@ func TestTheIntroNamesWhatThePollSaw(t *testing.T) {
 		t.Errorf("Responding for a conflict alone:\n%s", p)
 	}
 }
+
+func TestPromptNamesRestart(t *testing.T) {
+	restart := task
+	restart.Restart, restart.Steers = true, []string{"use a dual write", "skip the backfill\nkeep the index"}
+	p := Prompt(lifecycle.Working, restart, "", "")
+	want := "This is a restart. Inspect the worktree, git log, and the PR before you repeat any outside action.\n" +
+		"The user told you, in order:\n> use a dual write\n> skip the backfill\n> keep the index\n"
+	if !strings.HasSuffix(p, want) {
+		t.Errorf("restart note missing at the end:\n%s", p)
+	}
+	if strings.Index(p, "Contract.") > strings.Index(p, "This is a restart.") {
+		t.Errorf("the restart note must follow the Contract:\n%s", p)
+	}
+	restart.Steers = nil
+	if p := Prompt(lifecycle.Working, restart, "", ""); !strings.HasSuffix(p, "any outside action.\n") || strings.Contains(p, "told you") {
+		t.Errorf("a restart with no steers:\n%s", p)
+	}
+	if p := Prompt(lifecycle.Working, task, "", ""); strings.Contains(p, "restart") {
+		t.Errorf("a fresh Stage names a restart:\n%s", p)
+	}
+}

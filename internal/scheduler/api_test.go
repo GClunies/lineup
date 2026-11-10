@@ -132,3 +132,17 @@ func TestAQuestionClearsWhenTheWorkerWorksAgain(t *testing.T) {
 	})
 	h.still("ENG-1", lifecycle.Working)
 }
+
+func TestSteerIsRecordedAsAnEvent(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.working()
+	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
+	d, err := h.s.show("ENG-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := d.Events[len(d.Events)-1]
+	if last.Signal != "steer" || last.Detail != "use a dual write" || last.From != "Working" || last.To != "Working" {
+		t.Fatalf("last event = %+v, want a steer in Working", last)
+	}
+}
