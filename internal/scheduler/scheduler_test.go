@@ -695,6 +695,20 @@ func TestChecksThatPassedBeforeCIRunningStillCount(t *testing.T) {
 	h.waitStage("ENG-1", lifecycle.ReadyToLand)
 }
 
+func TestAStopShowsTheWorkerLastLine(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	worker := h.waitTab("claude working")
+
+	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "done", Msg: "  PR #5042: \"1.0\" or \"1.0.0\"?\nsecond line"}}
+	eventually(h.t, "ENG-1 stopped with the last line", func() bool {
+		v := h.task("ENG-1")
+		return v.Flag == "stopped" && v.FlagDetail == `PR #5042: "1.0" or "1.0.0"?`
+	})
+}
+
 func TestRecoveryLeavesAFlaggedSetupForTheUser(t *testing.T) {
 	db := filepath.Join(t.TempDir(), "state.db")
 	seed := func(st *store.Store) {

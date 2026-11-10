@@ -293,7 +293,7 @@ func (t *Task) observe(s Signal) []Effect {
 				return nil
 			}
 			if t.Flag != ReasonQuestion {
-				t.flag(ReasonStopped, "")
+				t.flag(ReasonStopped, s.Detail)
 			}
 			return nil
 		}
