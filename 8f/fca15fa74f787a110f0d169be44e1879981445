@@ -1,0 +1,51 @@
+cmd/lineup/hub.go
+  s_86cefe61e60d1a::t_3ecaab8c60f2ba 145-154
+  s_86cefe61e60d1a::t_7db0d593d78b2b 22-23,25-26,28-29,31-32,45-49,52,73-75,77,93-97,103-105,120-122,228-230,239,242-243
+  s_86cefe61e60d1a::t_a410cb40f5854a 212-213,260,277,290,347-352,372-387,411-413,427,482-485
+  s_86cefe61e60d1a::t_746bfef05852c6 486
+docs/spec/mvp.md
+  s_86cefe61e60d1a::t_a6f4b608ee098b 33,203,206,208,225-226,236,258,565,575,580,582,591
+docs/adr/0004-fresh-worker-per-stage.md
+  s_86cefe61e60d1a::t_23e9e0c4ae8032 3
+cmd/lineup/agent/CLAUDE.md
+  s_86cefe61e60d1a::t_d2ce8e8b18c280 3-91
+cmd/lineup/agent/github.md
+  s_86cefe61e60d1a::t_5f01337e46ac53 1-17
+internal/board/review_view.go
+  s_86cefe61e60d1a::t_1c3d317cb4db41 253,277
+docs/adr/0009-orchestrator-alerts-come-from-a-monitor.md
+  s_86cefe61e60d1a::t_23e9e0c4ae8032 3
+GLOSSARY.md
+  s_86cefe61e60d1a::t_c75e8562582304 56
+  s_86cefe61e60d1a::t_95ff62f33a9697 48,66
+docs/adr/0012-a-review-is-a-task-kind.md
+  s_86cefe61e60d1a::t_23e9e0c4ae8032 7
+docs/spec/trackers.md
+  s_86cefe61e60d1a::t_a6f4b608ee098b 17,130,152,154,174
+cmd/lineup/hub_test.go
+  s_86cefe61e60d1a::t_c84253494fcc5f 5,15-17,44-45,71,81-86,88-89,91-98,100-101,105,112-118,121-134,136,139-145,189-190,194-207
+  s_86cefe61e60d1a::t_d38ce121645c1b 102-104,120,135,146-147
+docs/spec/reviews.md
+  s_86cefe61e60d1a::t_a6f4b608ee098b 130,337,350,352
+internal/board/model.go
+  s_86cefe61e60d1a::t_1c3d317cb4db41 27-28
+docs/adr/0016-one-front-agent.md
+  s_86cefe61e60d1a::t_23e9e0c4ae8032 7
+  s_86cefe61e60d1a::t_6b05f5879658f0 1-6,8-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8ffca15fa74f787a110f0d169be44e1879981445",
+  "prompts": {},
+  "sessions": {
+    "s_86cefe61e60d1a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00359de8-f1b3-4701-bd87-452592101472",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
