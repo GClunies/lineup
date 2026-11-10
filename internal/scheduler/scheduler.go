@@ -171,12 +171,12 @@ func (s *Scheduler) now() time.Time { return s.d.Now() }
 // apply runs one Signal through the reducer, records the change, and queues
 // the Effects on the Task's lane.
 func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error {
-	from, flag, outcome := r.Stage, r.Flag, r.Outcome
+	from, flag, flagDetail, outcome := r.Stage, r.Flag, r.FlagDetail, r.Outcome
 	effects, err := s.board.Apply(r.ID, sig)
 	if err != nil {
 		return err
 	}
-	if r.Stage == from && r.Flag == flag && r.Outcome == outcome && len(effects) == 0 {
+	if r.Stage == from && r.Flag == flag && r.FlagDetail == flagDetail && r.Outcome == outcome && len(effects) == 0 {
 		return nil
 	}
 	if r.Stage != from {
@@ -407,7 +407,7 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 		s.update(id, func(rec *Record) { rec.Conversation = r.Conversation })
 	}
 	spec := WorkerSpec{
-		Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
+		Task: r.ID, Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
 		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
 		Conversation: r.Conversation, Name: r.tabLabel(), ReviewCycle: r.ReviewCycle(),
 		Bar: r.Policy.Bar, Standing: r.Standing,
@@ -529,13 +529,18 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		if r.Job != JobWorker {
 			return
 		}
+		was := r.WorkerState
 		r.Status, r.WorkerState = ev.Status.Msg, ev.Status.State
 		if ev.Status.State == "done" {
 			s.checkContract(r, false)
 			s.save(r)
 			return
 		}
-		s.apply(r, lifecycle.WorkerStatus{State: ev.Status.State, Kind: ev.Status.Kind, Detail: ev.Status.Msg}, "")
+		// A working Worker reports each new step as working again. Only a
+		// return to working clears a flag, such as the question it asked.
+		if ev.Status.State != "working" || was != "working" {
+			s.apply(r, lifecycle.WorkerStatus{State: ev.Status.State, Kind: ev.Status.Kind, Detail: ev.Status.Msg}, "")
+		}
 		if r.asksForDecisions(ev.Status) {
 			s.checkContract(r, true)
 		}
@@ -600,28 +605,21 @@ func (s *Scheduler) keepOrphan(ev RexEvent) {
 // with the result. An unmet contract after a question applies nothing, so the
 // Task keeps the question flag.
 func (s *Scheduler) checkContract(r *Record, question bool) {
-	id, stage, block, review, since := r.ID, r.Stage, r.BlockID, r.Review, r.StageSince
+	id, stage, block := r.ID, r.Stage, r.BlockID
 	if !stage.Agent() {
 		return
 	}
 	s.enqueue(id, func(ctx context.Context) {
-		met := false
-		var reviewed string
-		switch stage {
-		case lifecycle.Reviewing:
-			reviewed, met = s.findings(*review, since)
-		case lifecycle.Working:
-			s.poll(ctx, []string{id})
-			r, _ := s.snapshot(id)
-			met = r.PR != nil
-		default:
-			// CI debug and Responding meet the contract with a push, which the
-			// poll turns into pushed. Still being here after it means no push.
+		if stage != lifecycle.Reviewing {
 			s.poll(ctx, []string{id})
 		}
 		s.call(func() {
 			r, ok := s.recs[id]
-			if ok && r.Stage == stage && (r.BlockID == block || r.BlockID == "") && (met || !question) {
+			if !ok || r.Stage != stage || (r.BlockID != block && r.BlockID != "") {
+				return
+			}
+			reviewed, met := s.contractOutput(r)
+			if met || !question {
 				if met && reviewed != "" {
 					r.ReviewedHead = reviewed
 				}
@@ -629,6 +627,20 @@ func (s *Scheduler) checkContract(r *Record, question bool) {
 			}
 		})
 	})
+}
+
+// contractOutput reports whether the Task's Stage contract output exists, as
+// the latest poll saw it. reviewed is the head that a review's findings name.
+func (s *Scheduler) contractOutput(r *Record) (reviewed string, met bool) {
+	switch r.Stage {
+	case lifecycle.Reviewing:
+		return s.findings(*r.Review, r.StageSince)
+	case lifecycle.Working:
+		return "", r.PR != nil
+	}
+	// CI debug and Responding meet the contract with a push, which the poll
+	// turns into pushed. Still being here after it means no push.
+	return "", !r.Stage.Agent()
 }
 
 // poll reads GitHub for the given Tasks, or for every started Task when ids

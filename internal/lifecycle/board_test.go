@@ -249,6 +249,20 @@ func TestWorkingStatusClearsOnlyWorkerFlags(t *testing.T) {
 	}
 }
 
+// A Worker that asked the user a question and then stopped still asks it.
+func TestAStopKeepsTheQuestion(t *testing.T) {
+	b, task := taskIn(Working)
+	b.Apply("T", WorkerStatus{State: "blocked", Kind: "question", Detail: "dual write first?"})
+	b.Apply("T", WorkerDone{ContractMet: false})
+	if task.Flag != ReasonQuestion || task.FlagDetail != "dual write first?" {
+		t.Fatalf("flag %q detail %q, want the question kept", task.Flag, task.FlagDetail)
+	}
+	b.Apply("T", WorkerStatus{State: "working"})
+	if task.Flag != "" || task.FlagDetail != "" {
+		t.Fatalf("the user's reply left flag %q detail %q", task.Flag, task.FlagDetail)
+	}
+}
+
 func TestExitZeroIsNotAnError(t *testing.T) {
 	b, task := taskIn(Working)
 	b.Apply("T", WorkerExited{Code: 0})

@@ -292,7 +292,9 @@ func (t *Task) observe(s Signal) []Effect {
 				t.enter(CIRunning)
 				return nil
 			}
-			t.flag(ReasonStopped, "")
+			if t.Flag != ReasonQuestion {
+				t.flag(ReasonStopped, "")
+			}
 			return nil
 		}
 		if next, ok := afterContract[t.Stage]; ok {

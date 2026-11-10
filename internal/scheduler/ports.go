@@ -100,6 +100,7 @@ type Worktrees interface {
 
 // WorkerSpec is what a Harness needs to start a Worker.
 type WorkerSpec struct {
+	Task      string
 	Stage     lifecycle.Stage
 	Repo      string
 	Worktree  string
