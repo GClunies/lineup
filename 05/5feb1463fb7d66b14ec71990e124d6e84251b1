@@ -1,0 +1,53 @@
+internal/lifecycle/board.go
+  s_3df1fc42e2f590::t_7c33c2eed964d8 295
+  s_3df1fc42e2f590::t_a969da938a6a73 296-297
+internal/harness/claude/claude_test.go
+  s_3df1fc42e2f590::t_727e3b236b3a79 180,189,291-309,313,325,330
+cmd/lineup/review_test.go
+  s_3df1fc42e2f590::t_0c8e4f1f1e65d3 96,103,139
+internal/lifecycle/board_test.go
+  s_3df1fc42e2f590::t_b2dfbfe9684bb8 252-265
+cmd/lineup/cli.go
+  s_3df1fc42e2f590::t_9e330a9d88993e 30,287-292
+  s_3df1fc42e2f590::t_a0116e849cc8c9 293-294
+cmd/lineup/wire.go
+  s_3df1fc42e2f590::t_da3426f97a3356 269
+internal/scheduler/api_test.go
+  s_3df1fc42e2f590::t_a969da938a6a73 23-31,118,122
+  s_3df1fc42e2f590::t_2c6ce84f0d407d 1-17,21-22,32-93,95-111,114-116,119,128-134
+  s_3df1fc42e2f590::t_b2dfbfe9684bb8 112-113,117,120-121,123-127
+  s_3df1fc42e2f590::t_5a65e224f3cf84 18-20,94
+internal/scheduler/ports.go
+  s_3df1fc42e2f590::t_da3426f97a3356 103
+cmd/lineup/main.go
+  s_3df1fc42e2f590::t_9e330a9d88993e 39-40
+internal/scheduler/api.go
+  s_3df1fc42e2f590::t_b794c93a04152d 53-55
+  s_3df1fc42e2f590::t_4f47a1caa1a64b 184-200
+internal/harness/claude/claude.go
+  s_3df1fc42e2f590::t_da3426f97a3356 181-182,197-198,250-252,350,361
+  s_3df1fc42e2f590::t_727e3b236b3a79 162-163
+internal/scheduler/scheduler.go
+  s_3df1fc42e2f590::t_5b2a2d63ac44e0 608,613,618-622,632-643
+  s_3df1fc42e2f590::t_7c33c2eed964d8 179,541
+  s_3df1fc42e2f590::t_da3426f97a3356 410
+  s_3df1fc42e2f590::t_e6ada4ffbea294 174
+  s_3df1fc42e2f590::t_a969da938a6a73 532,539-540,542-543
+  s_3df1fc42e2f590::t_f71412c1f0503f 644-645
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "055feb1463fb7d66b14ec71990e124d6e84251b1",
+  "prompts": {},
+  "sessions": {
+    "s_3df1fc42e2f590": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "112b0134-4079-47e5-afa8-03bcc89a3452",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
