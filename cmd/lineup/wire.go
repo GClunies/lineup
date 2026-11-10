@@ -267,7 +267,7 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 		return nil, nil, err
 	}
 	info := claude.TaskInfo{ID: w.Task, Ask: w.Text, PRURL: w.PRURL, Branch: w.Branch, Repo: w.Repo, PR: res.PR,
-		ReviewCycle: w.ReviewCycle, Bar: w.Bar, Standing: w.Standing}
+		ReviewCycle: w.ReviewCycle, Bar: w.Bar, Standing: w.Standing, Restart: w.Restart, Steers: w.Steers}
 	var addDirs []string
 	if lifecycle.KindReview.Has(w.Stage) {
 		info.ReviewWorktree, addDirs = w.Worktree, []string{w.Worktree}

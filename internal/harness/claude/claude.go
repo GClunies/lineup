@@ -222,6 +222,10 @@ type TaskInfo struct {
 	// the bar at the latest poll.
 	Bar      lifecycle.LandingBar
 	Standing lifecycle.Standing
+	// Restart is true for a Worker that replaces a lost one. Steers are the
+	// user's steers to the lost Worker, in order.
+	Restart bool
+	Steers  []string
 }
 
 var contracts = map[lifecycle.Stage]string{
@@ -348,7 +352,27 @@ func Prompt(stage lifecycle.Stage, task TaskInfo, skill, extra string) string {
 		contract += " The PR body must contain the line `" + task.Fixes + "`, so that the merge closes the Issue."
 	}
 	b.WriteString("\nContract. " + fmt.Sprintf(askContract, task.ID) + "When you finish, leave this behind: " + contract + "\n")
+	restartNote(&b, task)
 	return b.String()
+}
+
+// restartNote tells a replacement Worker that it is one, and replays what the
+// user said to the lost Worker. The steers are the user's own instructions,
+// so they carry no untrusted label. The quote marks keep a multi-line steer apart.
+func restartNote(b *strings.Builder, task TaskInfo) {
+	if !task.Restart {
+		return
+	}
+	b.WriteString("\nThis is a restart. Inspect the worktree, git log, and the PR before you repeat any outside action.\n")
+	if len(task.Steers) == 0 {
+		return
+	}
+	b.WriteString("The user told you, in order:\n")
+	for _, steer := range task.Steers {
+		for _, line := range strings.Split(strings.TrimRight(steer, "\n"), "\n") {
+			b.WriteString("> " + line + "\n")
+		}
+	}
 }
 
 // reviewPrompt always runs pr-review. The Task's skill and its pr override do not apply.
@@ -359,5 +383,6 @@ func reviewPrompt(task TaskInfo, extra string) string {
 		b.WriteString("\n" + extra + "\n")
 	}
 	b.WriteString("\nContract. " + fmt.Sprintf(askContract, task.ID) + fmt.Sprintf(reviewContract, task.ReviewWorktree) + "\n")
+	restartNote(&b, task)
 	return b.String()
 }

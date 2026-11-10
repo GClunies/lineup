@@ -992,3 +992,56 @@ func TestAPollSavesTheStanding(t *testing.T) {
 			saved.Stage == lifecycle.CIRunning && saved.Standing.ScoreDue && saved.Standing.Head == testHead
 	})
 }
+
+func (h *harness) waitSpecs(n int) WorkerSpec {
+	h.t.Helper()
+	var got WorkerSpec
+	eventually(h.t, fmt.Sprintf("%d Worker commands", n), func() bool {
+		h.hn.mu.Lock()
+		defer h.hn.mu.Unlock()
+		if len(h.hn.specs) < n {
+			return false
+		}
+		got = h.hn.specs[n-1]
+		return true
+	})
+	return got
+}
+
+func TestRecoverReplaysSteers(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	if first := h.waitSpecs(1); first.Restart || len(first.Steers) != 0 {
+		t.Fatalf("first Worker spec = %+v, want no restart", first)
+	}
+	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
+	h.do(Request{Op: "steer", Task: "ENG-1", Text: "skip the backfill"})
+
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	spec := h.waitSpecs(2)
+	if !spec.Restart || !slices.Equal(spec.Steers, []string{"use a dual write", "skip the backfill"}) {
+		t.Fatalf("restart spec = restart %v, steers %q", spec.Restart, spec.Steers)
+	}
+}
+
+func TestFreshStageHasNoRestartNote(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	key := PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}
+	worker := h.working()
+	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
+	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "done"}}
+	eventually(t, "stopped", func() bool { return h.task("ENG-1").Flag == "stopped" })
+	h.gh.set(key, 42, "pr-open")
+	h.waitStage("ENG-1", lifecycle.CIRunning)
+	h.gh.set(key, 42, "ci-failed")
+	h.waitStage("ENG-1", lifecycle.CIDebug)
+
+	debugger := h.waitTab("claude ci_debug")
+	if spec := h.waitSpecs(2); spec.Stage != lifecycle.CIDebug || spec.Restart || len(spec.Steers) != 0 {
+		t.Fatalf("CI debug spec = %+v, want a fresh start with no steers", spec)
+	}
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: debugger.BlockID}
+	if spec := h.waitSpecs(3); !spec.Restart || len(spec.Steers) != 0 {
+		t.Fatalf("CI debug restart spec = restart %v, steers %q, want a restart with no Working steers", spec.Restart, spec.Steers)
+	}
+}

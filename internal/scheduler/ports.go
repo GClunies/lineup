@@ -120,6 +120,10 @@ type WorkerSpec struct {
 	// Bar is the Task's Landing bar, and Standing is its PR at the latest poll.
 	Bar      lifecycle.LandingBar
 	Standing lifecycle.Standing
+	// Restart is true when a Worker replaces one that the Stage lost, and
+	// Steers are the user's steers since the Stage began.
+	Restart bool
+	Steers  []string
 }
 
 type Harness interface {

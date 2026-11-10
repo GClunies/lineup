@@ -406,7 +406,9 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 		r.Conversation = uuid.NewV4().String()
 		s.update(id, func(rec *Record) { rec.Conversation = r.Conversation })
 	}
+	restart, steers := s.replay(id, r.StageSince)
 	spec := WorkerSpec{
+		Restart: restart, Steers: steers,
 		Task: r.ID, Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
 		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
 		Conversation: r.Conversation, Name: r.tabLabel(), ReviewCycle: r.ReviewCycle(),
@@ -445,6 +447,31 @@ func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.
 	if r.Review != nil {
 		s.openHunk(ctx, id, w.SessionID, w.BlockID, r.Worktree, r.Review.URL)
 	}
+}
+
+// steerSignal names the event that records one `lineup steer`.
+const steerSignal = "steer"
+
+// replay reports whether the Stage lost a Worker since it began, and the
+// steers the user sent since. A new Stage has neither.
+func (s *Scheduler) replay(id string, since time.Time) (restart bool, steers []string) {
+	events, err := s.d.Store.Events(id)
+	if err != nil {
+		s.d.Log.Warn("replay", "task", id, "err", err)
+		return false, nil
+	}
+	for _, e := range events {
+		if e.At.Before(since) {
+			continue
+		}
+		switch e.Signal {
+		case lifecycle.WorkerLost{}.Name():
+			restart = true
+		case steerSignal:
+			steers = append(steers, e.Detail)
+		}
+	}
+	return restart, steers
 }
 
 // openHunk shows the PR in hunk beside a review Worker. A failed split leaves

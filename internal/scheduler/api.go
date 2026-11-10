@@ -251,7 +251,14 @@ func (s *Scheduler) toWorker(ctx context.Context, req Request) (any, error) {
 		if r.Job != JobWorker {
 			return nil, fmt.Errorf("%s has no live Worker", r.ID)
 		}
-		return nil, s.d.Rex.Type(ctx, r.SessionID, r.BlockID, req.Text)
+		if err := s.d.Rex.Type(ctx, r.SessionID, r.BlockID, req.Text); err != nil {
+			return nil, err
+		}
+		// A restart replays the Stage's steers, so each one is an event.
+		return nil, s.with(r.ID, func(p *Record) error {
+			s.save(p, store.Event{TaskID: p.ID, At: s.now(), Signal: steerSignal, From: p.Stage.String(), To: p.Stage.String(), Detail: req.Text})
+			return nil
+		})
 	case "focus":
 		return nil, s.d.Rex.Focus(ctx, r.SessionID, r.WindowID, r.BlockID)
 	}
