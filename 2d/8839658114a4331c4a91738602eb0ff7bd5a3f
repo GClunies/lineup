@@ -1,0 +1,27 @@
+internal/scheduler/api.go
+  s_e4666d30167fc3::t_184dc6a353d04b 164-168
+internal/scheduler/record.go
+  s_e4666d30167fc3::t_e270c284b55993 130-132,162
+internal/scheduler/review_test.go
+  s_e4666d30167fc3::t_35f0b89c92ff99 108,164-181,186,192,228
+internal/scheduler/scheduler.go
+  s_e4666d30167fc3::t_32f38eb93d9405 601-602,802-803,806-817,819-829,833,835,899-900,906
+internal/scheduler/scheduler_test.go
+  s_e4666d30167fc3::t_4d4c359aa8125d 567-570,572-573,575-602,604-729,731-732
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2d8839658114a4331c4a91738602eb0ff7bd5a3f",
+  "prompts": {},
+  "sessions": {
+    "s_e4666d30167fc3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "979a6594-e368-4174-be11-10cf92c06e30",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
