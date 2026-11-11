@@ -1,0 +1,21 @@
+internal/scheduler/review_test.go
+  s_e7e259d3c6ae5b::t_8aaa279d4be227 207
+internal/scheduler/scheduler_test.go
+  s_e7e259d3c6ae5b::t_1776d93eb7a0bd 757
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "106fff119f6f122c570a963231de05cc6cb1df3d",
+  "prompts": {},
+  "sessions": {
+    "s_e7e259d3c6ae5b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a3660f6b-9fce-40b7-bef0-a1399035e474",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
