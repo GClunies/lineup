@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -312,12 +313,15 @@ func intro(stage lifecycle.Stage, task TaskInfo) string {
 	return intros[stage]
 }
 
-// Input returns the bytes that put text into a Worker's input box. Text with a
+var slashCommand = regexp.MustCompile(`^/[\w:.-]+ `)
+
+// Input returns the writes that put text into a Worker's input box. Text with a
 // newline goes in as one bracketed paste, because Claude drops the start of a
 // long unbracketed write that comes right after a turn ends. A single line stays
-// typed, because a menu reads a pasted answer as no keypress. Control bytes are
-// dropped, so Issue text cannot end the paste or press a key.
-func Input(text string) string {
+// typed, because a menu reads a pasted answer as no keypress. A leading slash
+// command is typed too, because Claude runs a command only from typed keys.
+// Control bytes are dropped, so Issue text cannot end the paste or press a key.
+func Input(text string) []string {
 	multi := strings.Contains(text, "\n")
 	text = strings.Map(func(r rune) rune {
 		switch {
@@ -329,9 +333,13 @@ func Input(text string) string {
 		return r
 	}, text)
 	if !multi {
-		return text
+		return []string{text}
 	}
-	return "\x1b[200~" + text + "\x1b[201~"
+	var writes []string
+	if cmd := slashCommand.FindString(text); cmd != "" {
+		writes, text = append(writes, cmd), text[len(cmd):]
+	}
+	return append(writes, "\x1b[200~"+text+"\x1b[201~")
 }
 
 // Prompt returns the Stage prompt with the Stage contract appended. extra is

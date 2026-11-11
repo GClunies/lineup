@@ -84,3 +84,18 @@ func TestAMissingBinaryIsNotAMissingSession(t *testing.T) {
 		t.Fatal("CloseWindow with no rex binary returned nil, want the error")
 	}
 }
+
+func TestTypeWritesEachPartThenEnter(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "writes")
+	bin := filepath.Join(dir, "rex")
+	os.WriteFile(bin, []byte("#!/bin/sh\nprintf '%s\\n' \"$8\" >> \""+log+"\"\n"), 0o755)
+	c := Client{Bin: bin}
+	if err := c.Type(context.Background(), "s", "b", "/skill ", "body"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(log)
+	if want := "{\"data\":\"/skill \"}\n{\"data\":\"body\"}\n{\"data\":\"\\r\"}\n"; string(got) != want {
+		t.Fatalf("writes = %q, want %q", got, want)
+	}
+}

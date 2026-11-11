@@ -252,16 +252,20 @@ func (c *Client) ProgramStatus(ctx context.Context, session, block string) ([]St
 
 // Type types text and then Enter. Claude's prompt treats text and Enter in one
 // write as a paste, so Enter goes in a second write after a short pause.
-func (c *Client) Type(ctx context.Context, session, block, text string) error {
-	if err := c.write(ctx, session, block, text); err != nil {
-		return err
+// Type writes each part to the block, then presses Enter. A pause follows each
+// part, so that Claude reads the parts as separate input.
+func (c *Client) Type(ctx context.Context, session, block string, parts ...string) error {
+	for _, part := range append(parts, "\r") {
+		if err := c.write(ctx, session, block, part); err != nil {
+			return err
+		}
+		select {
+		case <-time.After(150 * time.Millisecond):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-	select {
-	case <-time.After(150 * time.Millisecond):
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	return c.write(ctx, session, block, "\r")
+	return nil
 }
 
 func (c *Client) write(ctx context.Context, session, block, data string) error {
