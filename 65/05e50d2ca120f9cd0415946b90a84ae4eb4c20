@@ -1,0 +1,27 @@
+cmd/lineup/wire.go
+  s_4a65f512997004::t_aa83763491091c 60
+cmd/lineup/wire_test.go
+  s_4a65f512997004::t_ea58ec36cba5f9 10,18,272-299
+internal/rex/client.go
+  s_4a65f512997004::t_14692beb999857 12,54-61,187,195
+internal/rex/client_test.go
+  s_4a65f512997004::t_9189aeedb28f5f 5,57-86
+internal/scheduler/scheduler_test.go
+  s_4a65f512997004::t_ad9f8c680721c7 53-54,129-131,740-758
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6505e50d2ca120f9cd0415946b90a84ae4eb4c20",
+  "prompts": {},
+  "sessions": {
+    "s_4a65f512997004": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ffa0817-0014-46bb-9f9b-68e59420477b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
