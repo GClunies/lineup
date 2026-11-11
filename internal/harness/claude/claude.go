@@ -312,10 +312,25 @@ func intro(stage lifecycle.Stage, task TaskInfo) string {
 	return intros[stage]
 }
 
-// Paste wraps text as one bracketed paste. Claude drops the start of a long
-// write that is not bracketed when the write comes right after a turn ends.
-func Paste(text string) string {
-	text = strings.NewReplacer("\x1b[200~", "", "\x1b[201~", "").Replace(text)
+// Input returns the bytes that put text into a Worker's input box. Text with a
+// newline goes in as one bracketed paste, because Claude drops the start of a
+// long unbracketed write that comes right after a turn ends. A single line stays
+// typed, because a menu reads a pasted answer as no keypress. Control bytes are
+// dropped, so Issue text cannot end the paste or press a key.
+func Input(text string) string {
+	multi := strings.Contains(text, "\n")
+	text = strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n' || (r == '\t' && multi):
+			return r
+		case r < 0x20 || (r >= 0x7f && r <= 0x9f):
+			return -1
+		}
+		return r
+	}, text)
+	if !multi {
+		return text
+	}
 	return "\x1b[200~" + text + "\x1b[201~"
 }
 

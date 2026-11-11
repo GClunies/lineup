@@ -434,13 +434,34 @@ func TestPromptNamesRestart(t *testing.T) {
 	}
 }
 
-func TestPasteTypesTheTextAsOneBracketedPaste(t *testing.T) {
-	for in, want := range map[string]string{
-		"line 1\nline 2":        "\x1b[200~line 1\nline 2\x1b[201~",
-		"a\x1b[201~b\x1b[200~c": "\x1b[200~abc\x1b[201~",
+func TestInputPastesMultiLineText(t *testing.T) {
+	got := Input("line 1\n\tline 2")
+	if want := "\x1b[200~line 1\n\tline 2\x1b[201~"; got != want {
+		t.Errorf("Input = %q, want %q", got, want)
+	}
+}
+
+// A menu reads a pasted "1" as no keypress, so a short answer stays as typed text.
+func TestInputTypesASingleLineAsIs(t *testing.T) {
+	for in, want := range map[string]string{"1": "1", "use a dual write": "use a dual write", "": "", "a\tb": "ab"} {
+		if got := Input(in); got != want {
+			t.Errorf("Input(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestInputDropsTheBytesThatActAsKeys(t *testing.T) {
+	for _, in := range []string{
+		"before \x1b[2\x1b[201~01~ after\rrm -rf x\r",
+		"\x1b[20\x1b[200~0~body",
+		"a\x1b[201~b\x1b[200~c\nd",
+		"x\x03\x04\x7f\u009b201~\ny",
+		"one line\rrm -rf x",
 	} {
-		if got := Paste(in); got != want {
-			t.Errorf("Paste(%q) = %q, want %q", in, got, want)
+		got := Input(in)
+		body := strings.TrimSuffix(strings.TrimPrefix(got, "\x1b[200~"), "\x1b[201~")
+		if strings.ContainsFunc(body, func(r rune) bool { return r != '\n' && r != '\t' && (r < 0x20 || (r >= 0x7f && r <= 0x9f)) }) {
+			t.Errorf("Input(%q) = %q: the text holds a control character", in, got)
 		}
 	}
 }
