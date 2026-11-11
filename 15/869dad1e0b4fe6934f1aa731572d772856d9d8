@@ -1,0 +1,27 @@
+GLOSSARY.md
+  s_535d8965140e10::t_c20780fb941354 34
+cmd/lineup/main.go
+  s_535d8965140e10::t_bc65972cf31f0a 43
+docs/adr/0018-one-worker-for-each-task.md
+  s_535d8965140e10::t_48ea5df82f41ca 3-5,15
+internal/lifecycle/signal.go
+  s_535d8965140e10::t_129d9f8b948575 19-20
+internal/scheduler/scheduler.go
+  s_535d8965140e10::t_d135a017b450a7 758-759
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "15869dad1e0b4fe6934f1aa731572d772856d9d8",
+  "prompts": {},
+  "sessions": {
+    "s_535d8965140e10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b9e1685c-5022-4378-9e4e-03f300532e37",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
