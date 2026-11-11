@@ -20,7 +20,7 @@ var anySignal = rapid.OneOf(rapid.SampledFrom([]Signal{
 	WorkerStatus{State: "working"}, WorkerStatus{State: "blocked", Kind: "permission"}, WorkerStatus{State: "error"},
 	WorkerExited{Code: 0}, WorkerExited{Code: 1}, WorkerLost{}, SetupFailed{},
 	PROpen{}, Pushed{}, ReviewCommented{}, ReviewChangesRequested{}, ReviewAdditionalAuthors{}, PRMerged{},
-	PRReviewed{}, PRClosed{}, ReviewBotLate{},
+	PRReviewed{}, PRClosed{}, ReviewBotLate{}, TabClosed{},
 }), rapid.Map(anyFacts, seen))
 
 // spending are the facts of a PR whose first gap spends a Loop budget under

@@ -55,8 +55,8 @@ func TestTransitions(t *testing.T) {
 		{"ready to land conflict", ReadyToLand, conflict, Responding, []Effect{StartWorker{Responding}}, ""},
 		{"ready to land with a new check", ReadyToLand, pendingCI, CIRunning, nil, ""},
 		{"ready to land with a new review request", ReadyToLand, needsReview, InReview, []Effect{TrackerStatus{"in_review"}}, ""},
-		{"merged by another person", Working, PRMerged{}, Done, []Effect{Cleanup{}, TrackerStatus{"merged"}}, OutcomeMerged},
-		{"merged from ready to land", ReadyToLand, PRMerged{}, Done, []Effect{Cleanup{}, TrackerStatus{"merged"}}, OutcomeMerged},
+		{"merged by another person", Working, PRMerged{}, Done, []Effect{TrackerStatus{"merged"}}, OutcomeMerged},
+		{"merged from ready to land", ReadyToLand, PRMerged{}, Done, []Effect{TrackerStatus{"merged"}}, OutcomeMerged},
 		{"closed", InReview, TaskClosed{}, Done, []Effect{Cleanup{}, TrackerStatus{"closed"}}, OutcomeClosed},
 		{"closed while queued", Queued, TaskClosed{}, Done, []Effect{Cleanup{}, TrackerStatus{"closed"}}, OutcomeClosed},
 		{"rerun ci debug", CIRunning, Rerun{CIDebug}, CIDebug, []Effect{StartWorker{CIDebug}}, ""},
@@ -78,6 +78,48 @@ func TestTransitions(t *testing.T) {
 				t.Errorf("outcome = %q, want %q", task.Outcome, c.outcome)
 			}
 		})
+	}
+}
+
+func TestClosingADoneTaskCleansUpOnly(t *testing.T) {
+	for _, o := range []Outcome{OutcomeMerged, OutcomeClosed} {
+		b, task := taskIn(Done)
+		task.Outcome = o
+		effects, err := b.Apply("T", TaskClosed{})
+		if err != nil {
+			t.Fatalf("%s: Apply: %v", o, err)
+		}
+		if !reflect.DeepEqual(effects, []Effect{Cleanup{}}) {
+			t.Errorf("%s: effects = %#v, want only Cleanup", o, effects)
+		}
+		if task.Stage != Done || task.Outcome != o {
+			t.Errorf("%s: stage %s outcome %q, want Done with the same outcome", o, task.Stage, task.Outcome)
+		}
+	}
+}
+
+func TestTabClosedCleansUpADoneTask(t *testing.T) {
+	b, task := taskIn(Done)
+	task.Outcome = OutcomeMerged
+	effects, err := b.Apply("T", TabClosed{})
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if !reflect.DeepEqual(effects, []Effect{Cleanup{}}) {
+		t.Errorf("effects = %#v, want only Cleanup", effects)
+	}
+	if task.Stage != Done || task.Outcome != OutcomeMerged {
+		t.Errorf("stage %s outcome %q, want Done, merged", task.Stage, task.Outcome)
+	}
+}
+
+func TestTabClosedChangesNothingInAStartedStage(t *testing.T) {
+	for _, stage := range []Stage{Queued, Working, CIRunning, CIDebug, InReview, Responding, ReadyToLand} {
+		b, task := taskIn(stage)
+		effects, err := b.Apply("T", TabClosed{})
+		if err != nil || len(effects) != 0 || task.Stage != stage {
+			t.Errorf("%s: effects %#v, err %v, stage %s, want no change", stage, effects, err, task.Stage)
+		}
 	}
 }
 
@@ -157,7 +199,6 @@ func TestUserSignalsOutsideTheirStageFail(t *testing.T) {
 	}{
 		{InReview, PRMerge{}},
 		{Working, Start{}},
-		{Done, TaskClosed{}},
 		{Queued, Rerun{Working}},
 		{Working, Rerun{InReview}},
 	}

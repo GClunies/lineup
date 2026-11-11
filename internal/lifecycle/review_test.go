@@ -15,7 +15,7 @@ func reviewIn(stage Stage, queue string) (*Board, *Task) {
 }
 
 func TestReviewTransitions(t *testing.T) {
-	closed := []Effect{Cleanup{}}
+	userClosed := []Effect{Cleanup{}}
 	cases := []struct {
 		name    string
 		from    Stage
@@ -28,20 +28,20 @@ func TestReviewTransitions(t *testing.T) {
 		{"start", Queued, Start{}, Reviewing, "", []Effect{StartWorker{Reviewing}}, ""},
 		{"done with findings", Reviewing, WorkerDone{ContractMet: true}, ReviewReady, "", nil, ""},
 		{"done without findings", Reviewing, WorkerDone{ContractMet: false}, Reviewing, ReasonStopped, nil, ""},
-		{"reviewed while reviewing", Reviewing, PRReviewed{}, Done, "", closed, OutcomeReviewed},
-		{"reviewed when ready", ReviewReady, PRReviewed{}, Done, "", closed, OutcomeReviewed},
-		{"merged while reviewing", Reviewing, PRMerged{}, Done, "", closed, OutcomeMerged},
-		{"merged when ready", ReviewReady, PRMerged{}, Done, "", closed, OutcomeMerged},
-		{"closed while reviewing", Reviewing, PRClosed{}, Done, "", closed, OutcomeClosed},
-		{"closed when ready", ReviewReady, PRClosed{}, Done, "", closed, OutcomeClosed},
+		{"reviewed while reviewing", Reviewing, PRReviewed{}, Done, "", nil, OutcomeReviewed},
+		{"reviewed when ready", ReviewReady, PRReviewed{}, Done, "", nil, OutcomeReviewed},
+		{"merged while reviewing", Reviewing, PRMerged{}, Done, "", nil, OutcomeMerged},
+		{"merged when ready", ReviewReady, PRMerged{}, Done, "", nil, OutcomeMerged},
+		{"closed while reviewing", Reviewing, PRClosed{}, Done, "", nil, OutcomeClosed},
+		{"closed when ready", ReviewReady, PRClosed{}, Done, "", nil, OutcomeClosed},
 		{"tab lost while reviewing", Reviewing, WorkerLost{}, Reviewing, "", []Effect{StartWorker{Reviewing}}, ""},
 		{"tab lost when ready", ReviewReady, WorkerLost{}, ReviewReady, "", nil, ""},
 		{"worker exits when ready", ReviewReady, WorkerExited{Code: 0}, ReviewReady, "", nil, ""},
 		{"worker fails when ready", ReviewReady, WorkerExited{Code: 1}, ReviewReady, "", nil, ""},
 		{"reopen when ready", ReviewReady, Reopen{}, ReviewReady, "", []Effect{StartWorker{ReviewReady}}, ""},
-		{"user closes while queued", Queued, TaskClosed{}, Done, "", closed, OutcomeClosed},
-		{"user closes while reviewing", Reviewing, TaskClosed{}, Done, "", closed, OutcomeClosed},
-		{"user closes when ready", ReviewReady, TaskClosed{}, Done, "", closed, OutcomeClosed},
+		{"user closes while queued", Queued, TaskClosed{}, Done, "", userClosed, OutcomeClosed},
+		{"user closes while reviewing", Reviewing, TaskClosed{}, Done, "", userClosed, OutcomeClosed},
+		{"user closes when ready", ReviewReady, TaskClosed{}, Done, "", userClosed, OutcomeClosed},
 		{"rerun the review", ReviewReady, Rerun{Reviewing}, Reviewing, "", []Effect{StartWorker{Reviewing}}, ""},
 		{"blocked when ready", ReviewReady, WorkerStatus{State: "blocked", Kind: "permission"}, ReviewReady, ReasonPermission, nil, ""},
 	}

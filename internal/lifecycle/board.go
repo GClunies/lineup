@@ -214,9 +214,15 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 
 	case TaskClosed:
 		if t.Stage == Done {
-			return nil, notAllowed
+			return []Effect{Cleanup{}}, nil
 		}
-		return t.finish(OutcomeClosed), nil
+		return append([]Effect{Cleanup{}}, t.finish(OutcomeClosed)...), nil
+
+	case TabClosed:
+		if t.Stage == Done {
+			return []Effect{Cleanup{}}, nil
+		}
+		return nil, nil
 
 	case Rerun:
 		if !s.Stage.Agent() || !t.Kind.Has(s.Stage) || t.Stage == Queued || t.Stage == Done {
@@ -493,14 +499,15 @@ func (t *Task) ready() []Effect {
 	return nil
 }
 
-// finish ends the Task. A review Task has no Tracker to tell.
+// finish ends the Task. The Task keeps its tab and worktree until the user
+// closes the tab. A review Task has no Tracker to tell.
 func (t *Task) finish(o Outcome) []Effect {
 	t.enter(Done)
 	t.Outcome = o
 	if t.Kind == KindReview {
-		return []Effect{Cleanup{}}
+		return nil
 	}
-	return []Effect{Cleanup{}, TrackerStatus{string(o)}}
+	return []Effect{TrackerStatus{string(o)}}
 }
 
 // enter changes the Stage, clears the flag and the review cycle's score, and

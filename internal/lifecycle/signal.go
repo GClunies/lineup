@@ -11,6 +11,9 @@ type Signal interface {
 
 type Start struct{ OverCap bool }
 type PRMerge struct{}
+
+// TaskClosed is the user's close. It ends a Task that has not ended, and it
+// cleans up a Done Task that kept its tab.
 type TaskClosed struct{}
 
 // Rerun is the Orchestrator's override that starts a fresh Worker for Stage.
@@ -35,6 +38,10 @@ type WorkerStatus struct {
 	Kind   string // for blocked: permission, question, or auth
 	Detail string
 }
+
+// TabClosed means the user closed the Task's tab in Rex. A Done Task then
+// cleans up. In every other Stage the Worker's Signals carry the news.
+type TabClosed struct{}
 
 type WorkerExited struct{ Code int }
 type WorkerLost struct{}
@@ -71,6 +78,7 @@ type PRClosed struct{}
 func (Start) Name() string                   { return "start" }
 func (PRMerge) Name() string                 { return "pr-merge" }
 func (TaskClosed) Name() string              { return "task-closed" }
+func (TabClosed) Name() string               { return "tab-closed" }
 func (Rerun) Name() string                   { return "rerun" }
 func (Reopen) Name() string                  { return "reopen" }
 func (WorkerDone) Name() string              { return "done" }
@@ -92,6 +100,7 @@ func (PRClosed) Name() string                { return "pr-closed" }
 func (Start) signal()                   {}
 func (PRMerge) signal()                 {}
 func (TaskClosed) signal()              {}
+func (TabClosed) signal()               {}
 func (Rerun) signal()                   {}
 func (Reopen) signal()                  {}
 func (WorkerDone) signal()              {}
@@ -118,7 +127,8 @@ type StartWorker struct{ Stage Stage }
 
 type Merge struct{}
 
-// Cleanup closes the Task's tab and removes its worktree.
+// Cleanup closes the Task's tab if it has one, removes its worktree, and
+// removes the Repo session when it is empty. Only the user starts it.
 type Cleanup struct{}
 
 // TrackerStatus writes the mapped Tracker status for a lifecycle event:
