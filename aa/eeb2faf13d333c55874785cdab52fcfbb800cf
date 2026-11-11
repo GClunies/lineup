@@ -1,0 +1,23 @@
+cmd/lineup/wire.go
+  s_535d8965140e10::t_6d599cc07a011f 87
+internal/harness/claude/claude.go
+  s_535d8965140e10::t_045d97f800d053 315-333
+internal/harness/claude/claude_test.go
+  s_535d8965140e10::t_be519b7fb4a8a1 437-459,461-464
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aaeeb2faf13d333c55874785cdab52fcfbb800cf",
+  "prompts": {},
+  "sessions": {
+    "s_535d8965140e10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b9e1685c-5022-4378-9e4e-03f300532e37",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
