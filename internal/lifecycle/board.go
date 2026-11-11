@@ -204,7 +204,7 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 		}
 		t.OverCap = s.OverCap && b.Started() >= b.Cap
 		t.enter(Working)
-		return []Effect{TrackerStatus{"started"}, StartWorker{Working}}, nil
+		return []Effect{TrackerStatus{"started"}, PromptWorker{Working}}, nil
 
 	case PRMerge:
 		if t.Stage != ReadyToLand {
@@ -235,7 +235,7 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 			return nil, notAllowed
 		}
 		t.flag("", "")
-		return []Effect{StartWorker{t.Stage}}, nil
+		return []Effect{PromptWorker{t.Stage}}, nil
 
 	case PRMerged:
 		if t.Stage == Done || t.Stage == Queued {
@@ -287,7 +287,7 @@ func (t *Task) observe(s Signal) []Effect {
 		}
 		t.Left.Restarts--
 		t.flag("", "")
-		return []Effect{StartWorker{t.Stage}}
+		return []Effect{PromptWorker{t.Stage}}
 
 	case WorkerDone:
 		if !t.Stage.Agent() {
@@ -488,7 +488,7 @@ func (t *Task) reviewCycle() []Effect {
 
 func (t *Task) startAgent(stage Stage) []Effect {
 	t.enter(stage)
-	return []Effect{StartWorker{stage}}
+	return []Effect{PromptWorker{stage}}
 }
 
 // ready enters Ready to land. The Responding budget is per review, so a fresh

@@ -35,31 +35,31 @@ func TestTransitions(t *testing.T) {
 		effects []Effect
 		outcome Outcome
 	}{
-		{"start", Queued, Start{}, Working, []Effect{TrackerStatus{"started"}, StartWorker{Working}}, ""},
+		{"start", Queued, Start{}, Working, []Effect{TrackerStatus{"started"}, PromptWorker{Working}}, ""},
 		{"working done with draft PR", Working, WorkerDone{ContractMet: true}, CIRunning, nil, ""},
-		{"ci failed", CIRunning, failedCI, CIDebug, []Effect{StartWorker{CIDebug}}, ""},
+		{"ci failed", CIRunning, failedCI, CIDebug, []Effect{PromptWorker{CIDebug}}, ""},
 		{"ci pending", CIRunning, pendingCI, CIRunning, nil, ""},
 		{"ci passed needs review", CIRunning, needsReview, InReview, []Effect{TrackerStatus{"in_review"}}, ""},
 		{"ci passed approved", CIRunning, approved, ReadyToLand, nil, ""},
-		{"ci running conflict", CIRunning, conflict, Responding, []Effect{StartWorker{Responding}}, ""},
+		{"ci running conflict", CIRunning, conflict, Responding, []Effect{PromptWorker{Responding}}, ""},
 		{"ci debug pushed", CIDebug, Pushed{}, CIRunning, nil, ""},
 		{"review approved", InReview, approved, ReadyToLand, nil, ""},
-		{"review commented", InReview, ReviewCommented{}, Responding, []Effect{StartWorker{Responding}}, ""},
-		{"review changes requested", InReview, ReviewChangesRequested{}, Responding, []Effect{StartWorker{Responding}}, ""},
-		{"review additional authors", InReview, ReviewAdditionalAuthors{}, Responding, []Effect{StartWorker{Responding}}, ""},
-		{"in review conflict", InReview, conflict, Responding, []Effect{StartWorker{Responding}}, ""},
+		{"review commented", InReview, ReviewCommented{}, Responding, []Effect{PromptWorker{Responding}}, ""},
+		{"review changes requested", InReview, ReviewChangesRequested{}, Responding, []Effect{PromptWorker{Responding}}, ""},
+		{"review additional authors", InReview, ReviewAdditionalAuthors{}, Responding, []Effect{PromptWorker{Responding}}, ""},
+		{"in review conflict", InReview, conflict, Responding, []Effect{PromptWorker{Responding}}, ""},
 		{"responding pushed", Responding, Pushed{}, CIRunning, nil, ""},
 		{"user merge", ReadyToLand, PRMerge{}, ReadyToLand, []Effect{Merge{}}, ""},
-		{"ready to land commented", ReadyToLand, ReviewCommented{}, Responding, []Effect{StartWorker{Responding}}, ""},
-		{"ready to land changes requested", ReadyToLand, ReviewChangesRequested{}, Responding, []Effect{StartWorker{Responding}}, ""},
-		{"ready to land conflict", ReadyToLand, conflict, Responding, []Effect{StartWorker{Responding}}, ""},
+		{"ready to land commented", ReadyToLand, ReviewCommented{}, Responding, []Effect{PromptWorker{Responding}}, ""},
+		{"ready to land changes requested", ReadyToLand, ReviewChangesRequested{}, Responding, []Effect{PromptWorker{Responding}}, ""},
+		{"ready to land conflict", ReadyToLand, conflict, Responding, []Effect{PromptWorker{Responding}}, ""},
 		{"ready to land with a new check", ReadyToLand, pendingCI, CIRunning, nil, ""},
 		{"ready to land with a new review request", ReadyToLand, needsReview, InReview, []Effect{TrackerStatus{"in_review"}}, ""},
 		{"merged by another person", Working, PRMerged{}, Done, []Effect{TrackerStatus{"merged"}}, OutcomeMerged},
 		{"merged from ready to land", ReadyToLand, PRMerged{}, Done, []Effect{TrackerStatus{"merged"}}, OutcomeMerged},
 		{"closed", InReview, TaskClosed{}, Done, []Effect{Cleanup{}, TrackerStatus{"closed"}}, OutcomeClosed},
 		{"closed while queued", Queued, TaskClosed{}, Done, []Effect{Cleanup{}, TrackerStatus{"closed"}}, OutcomeClosed},
-		{"rerun ci debug", CIRunning, Rerun{CIDebug}, CIDebug, []Effect{StartWorker{CIDebug}}, ""},
+		{"rerun ci debug", CIRunning, Rerun{CIDebug}, CIDebug, []Effect{PromptWorker{CIDebug}}, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -431,7 +431,7 @@ func TestAnOpenThreadOnAnApprovedPRStartsResponding(t *testing.T) {
 	for _, from := range []Stage{CIRunning, InReview, ReadyToLand} {
 		b, task := userTaskIn(from)
 		effects, _ := b.Apply("T", threads(nil, Thread{Resolved: true}))
-		if task.Stage != Responding || task.Flag != "" || !reflect.DeepEqual(effects, []Effect{StartWorker{Responding}}) {
+		if task.Stage != Responding || task.Flag != "" || !reflect.DeepEqual(effects, []Effect{PromptWorker{Responding}}) {
 			t.Errorf("from %s: stage %s flag %q effects %v, want a Responding round", from, task.Stage, task.Flag, effects)
 		}
 		if task.Left.Responding != 2 || task.ReviewCycle() != nil {
@@ -535,7 +535,7 @@ func TestWorkerRestartBudgetIsPerStage(t *testing.T) {
 	task.Left.Restarts = 2
 	for i := range 2 {
 		effects, _ := b.Apply("T", WorkerLost{})
-		if !reflect.DeepEqual(effects, []Effect{StartWorker{Working}}) {
+		if !reflect.DeepEqual(effects, []Effect{PromptWorker{Working}}) {
 			t.Fatalf("restart %d: effects %v", i+1, effects)
 		}
 	}
@@ -583,7 +583,7 @@ func TestReviewGate(t *testing.T) {
 	}{
 		{"top score goes to review", scored("abc", 5, DecisionRequired), InReview, []Effect{TrackerStatus{"in_review"}}, ""},
 		{"top score with no reviewer is ready", scored("abc", 5, DecisionNone), ReadyToLand, nil, ""},
-		{"low score starts a review cycle", scored("abc", 4, DecisionRequired), Responding, []Effect{StartWorker{Responding}}, ""},
+		{"low score starts a review cycle", scored("abc", 4, DecisionRequired), Responding, []Effect{PromptWorker{Responding}}, ""},
 		{"no score yet waits", scored("abc", -1, DecisionRequired), CIRunning, nil, ""},
 		{"pending checks wait first", PRSeen{PRFacts{Head: "abc", Score: &four, Checks: []Check{{Name: "test"}}}}, CIRunning, nil, ""},
 		{"a draft waits for the user first", PRSeen{PRFacts{Head: "abc", Draft: true, Score: &four}}, CIRunning, nil, ReasonDraft},
@@ -615,7 +615,7 @@ func TestReviewCyclesSpendTheirOwnBudget(t *testing.T) {
 	b, task := gatedIn(CIRunning)
 	for i := range 2 {
 		effects, _ := b.Apply("T", scored("abc", 4, DecisionNone))
-		if !reflect.DeepEqual(effects, []Effect{StartWorker{Responding}}) || task.Stage != Responding {
+		if !reflect.DeepEqual(effects, []Effect{PromptWorker{Responding}}) || task.Stage != Responding {
 			t.Fatalf("round %d: stage %s effects %v", i+1, task.Stage, effects)
 		}
 		if r := task.ReviewCycle(); r == nil || r.Score != 4 || r.MinScore != 5 {

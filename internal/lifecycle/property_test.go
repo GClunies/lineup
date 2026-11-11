@@ -305,7 +305,7 @@ func TestAnOptionalCheckNeverStartsCIDebug(t *testing.T) {
 			task := anyTask(t, b, ids)
 			s, effects, _ := stepFrom(t, b, task, barSignal)
 			seen, ok := s.(PRSeen)
-			if ok && slices.Contains(effects, Effect(StartWorker{CIDebug})) && !plainGaps(task.Policy.Bar, seen.Facts)[GapFailed] {
+			if ok && slices.Contains(effects, Effect(PromptWorker{CIDebug})) && !plainGaps(task.Policy.Bar, seen.Facts)[GapFailed] {
 				t.Fatalf("%s started CI debug on facts %+v with no gating check failed under %+v", task.ID, seen.Facts, task.Policy.Bar)
 			}
 		}
@@ -356,7 +356,7 @@ func TestReviewCyclesNeverPassTheirBudget(t *testing.T) {
 		for range rapid.IntRange(0, 200).Draw(t, "steps") {
 			task := anyTask(t, b, ids)
 			s, effects, _ := stepFrom(t, b, task, barSignal)
-			if _, ok := s.(PRSeen); ok && slices.Contains(effects, Effect(StartWorker{Responding})) && task.BotScore != nil {
+			if _, ok := s.(PRSeen); ok && slices.Contains(effects, Effect(PromptWorker{Responding})) && task.BotScore != nil {
 				rounds[task.ID]++
 			}
 			if rounds[task.ID] > task.Policy.Budgets.ReviewCycles || task.Left.ReviewCycles < 0 {

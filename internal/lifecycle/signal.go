@@ -122,8 +122,9 @@ func (PRClosed) signal()                {}
 // Effect is work the Scheduler must do after a transition, in order.
 type Effect interface{ effect() }
 
-// StartWorker replaces any Worker in the Task's tab with a fresh one for Stage.
-type StartWorker struct{ Stage Stage }
+// PromptWorker gives the Task's one Worker the prompt of Stage. It opens the
+// Worker first when the Task has none.
+type PromptWorker struct{ Stage Stage }
 
 type Merge struct{}
 
@@ -135,7 +136,7 @@ type Cleanup struct{}
 // started, in_review, merged, or closed.
 type TrackerStatus struct{ Event string }
 
-func (StartWorker) effect()   {}
+func (PromptWorker) effect()  {}
 func (Merge) effect()         {}
 func (Cleanup) effect()       {}
 func (TrackerStatus) effect() {}

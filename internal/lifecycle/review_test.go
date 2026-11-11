@@ -25,7 +25,7 @@ func TestReviewTransitions(t *testing.T) {
 		effects []Effect
 		outcome Outcome
 	}{
-		{"start", Queued, Start{}, Reviewing, "", []Effect{StartWorker{Reviewing}}, ""},
+		{"start", Queued, Start{}, Reviewing, "", []Effect{PromptWorker{Reviewing}}, ""},
 		{"done with findings", Reviewing, WorkerDone{ContractMet: true}, ReviewReady, "", nil, ""},
 		{"done without findings", Reviewing, WorkerDone{ContractMet: false}, Reviewing, ReasonStopped, nil, ""},
 		{"reviewed while reviewing", Reviewing, PRReviewed{}, Done, "", nil, OutcomeReviewed},
@@ -34,15 +34,15 @@ func TestReviewTransitions(t *testing.T) {
 		{"merged when ready", ReviewReady, PRMerged{}, Done, "", nil, OutcomeMerged},
 		{"closed while reviewing", Reviewing, PRClosed{}, Done, "", nil, OutcomeClosed},
 		{"closed when ready", ReviewReady, PRClosed{}, Done, "", nil, OutcomeClosed},
-		{"tab lost while reviewing", Reviewing, WorkerLost{}, Reviewing, "", []Effect{StartWorker{Reviewing}}, ""},
+		{"tab lost while reviewing", Reviewing, WorkerLost{}, Reviewing, "", []Effect{PromptWorker{Reviewing}}, ""},
 		{"tab lost when ready", ReviewReady, WorkerLost{}, ReviewReady, "", nil, ""},
 		{"worker exits when ready", ReviewReady, WorkerExited{Code: 0}, ReviewReady, "", nil, ""},
 		{"worker fails when ready", ReviewReady, WorkerExited{Code: 1}, ReviewReady, "", nil, ""},
-		{"reopen when ready", ReviewReady, Reopen{}, ReviewReady, "", []Effect{StartWorker{ReviewReady}}, ""},
+		{"reopen when ready", ReviewReady, Reopen{}, ReviewReady, "", []Effect{PromptWorker{ReviewReady}}, ""},
 		{"user closes while queued", Queued, TaskClosed{}, Done, "", userClosed, OutcomeClosed},
 		{"user closes while reviewing", Reviewing, TaskClosed{}, Done, "", userClosed, OutcomeClosed},
 		{"user closes when ready", ReviewReady, TaskClosed{}, Done, "", userClosed, OutcomeClosed},
-		{"rerun the review", ReviewReady, Rerun{Reviewing}, Reviewing, "", []Effect{StartWorker{Reviewing}}, ""},
+		{"rerun the review", ReviewReady, Rerun{Reviewing}, Reviewing, "", []Effect{PromptWorker{Reviewing}}, ""},
 		{"blocked when ready", ReviewReady, WorkerStatus{State: "blocked", Kind: "permission"}, ReviewReady, ReasonPermission, nil, ""},
 	}
 	for _, c := range cases {
@@ -158,7 +158,7 @@ func TestReopenFitsOnlyAResumableStage(t *testing.T) {
 func TestReopenClearsTheFlag(t *testing.T) {
 	b, task := reviewIn(ReviewReady, "")
 	task.flag(ReasonSetupFailed, "fetch: no network")
-	if effects, err := b.Apply("R", Reopen{}); err != nil || !reflect.DeepEqual(effects, []Effect{StartWorker{ReviewReady}}) || task.Flag != "" {
+	if effects, err := b.Apply("R", Reopen{}); err != nil || !reflect.DeepEqual(effects, []Effect{PromptWorker{ReviewReady}}) || task.Flag != "" {
 		t.Fatalf("reopen: effects %v err %v flag %q", effects, err, task.Flag)
 	}
 }

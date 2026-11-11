@@ -109,8 +109,8 @@ type WorkerSpec struct {
 	Text      string
 	PRURL     string
 	Overrides map[string]string
-	// Conversation is the ID of a review Worker's Claude conversation. A
-	// Reviewing Worker starts it, and a Review ready Worker resumes it.
+	// Conversation is the ID of the Task's Claude conversation. The Task's
+	// first Worker starts it, and a Worker in a new tab resumes it.
 	Conversation string
 	// Name is the Worker's session name, the same as its Rex tab label.
 	Name string
@@ -120,8 +120,9 @@ type WorkerSpec struct {
 	// Bar is the Task's Landing bar, and Standing is its PR at the latest poll.
 	Bar      lifecycle.LandingBar
 	Standing lifecycle.Standing
-	// Restart is true when a Worker replaces one that the Stage lost, and
-	// Steers are the user's steers since the Stage began.
+	// Restart is true when the Stage lost a Worker since it began. Steers
+	// are the user's steers since the Stage began. Only a Worker in a new
+	// conversation gets them, because a resumed one has them already.
 	Restart bool
 	Steers  []string
 }
@@ -129,7 +130,12 @@ type WorkerSpec struct {
 type Harness interface {
 	// Prepare readies a new worktree for the Harness, for example by trusting it.
 	Prepare(ctx context.Context, repo, worktree string) error
-	Command(ctx context.Context, w WorkerSpec) (argv []string, env map[string]string, err error)
+	// Prompt is the message that gives the Worker w.Stage. It is "" for a
+	// Stage with no prompt, such as Review ready.
+	Prompt(ctx context.Context, w WorkerSpec) (string, error)
+	// Command starts a Worker in a new tab. A prompt starts the conversation
+	// w.Conversation with it. No prompt resumes w.Conversation.
+	Command(ctx context.Context, w WorkerSpec, prompt string) (argv []string, env map[string]string, err error)
 }
 
 // The kinds of Tracker that an Issue can come from.

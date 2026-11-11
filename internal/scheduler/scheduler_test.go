@@ -22,11 +22,12 @@ import (
 
 type tab struct {
 	Window
-	label  string
-	cwd    string
-	env    map[string]string
-	argv   []string
-	closed bool
+	label     string
+	cwd       string
+	env       map[string]string
+	argv      []string
+	closed    bool
+	blockGone bool
 }
 
 // split is a block that Split opened beside the anchor block of a tab.
@@ -51,7 +52,14 @@ type fakeRex struct {
 	// capture is what Capture returns.
 	capture   string
 	blocksErr error
+	typed     []typed
+	// t fails the test when lineup closes a live tab that the user did not
+	// ask to close. asked is true after a close or archive op.
+	t     *testing.T
+	asked bool
 }
+
+type typed struct{ block, text string }
 
 func (f *fakeRex) EnsureSession(_ context.Context, label string) (string, error) {
 	return "session:" + label, nil
@@ -67,7 +75,7 @@ func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, env m
 	f.tabs = append(f.tabs, &tab{Window: w, label: label, cwd: cwd, env: env, argv: argv})
 	f.mu.Unlock()
 	if f.exitFast != "" && argv[0] == f.exitFast {
-		f.events <- RexEvent{Kind: EvExited, BlockID: w.BlockID}
+		f.exits(tab{Window: w}, 0)
 	}
 	return w, nil
 }
@@ -93,6 +101,9 @@ func (f *fakeRex) CloseWindow(_ context.Context, _, window string) error {
 	defer f.mu.Unlock()
 	for _, t := range f.tabs {
 		if t.WindowID == window {
+			if !t.closed && !t.blockGone && !f.asked && f.t != nil {
+				f.t.Errorf("lineup closed the live tab %s (%s) that the user did not ask to close", window, strings.Join(t.argv, " "))
+			}
 			t.closed = true
 		}
 	}
@@ -152,7 +163,66 @@ func (f *fakeRex) Capture(context.Context, string, string) (string, error) {
 	return f.capture, nil
 }
 
-func (f *fakeRex) Type(context.Context, string, string, string) error { return nil }
+func (f *fakeRex) Type(_ context.Context, _, block, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.typed = append(f.typed, typed{block, text})
+	return nil
+}
+
+func (f *fakeRex) typedInto(block string) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for _, t := range f.typed {
+		if t.block == block {
+			out = append(out, t.text)
+		}
+	}
+	return out
+}
+
+// exits ends the program in a tab as Rex does after about 1 s: the tab
+// closes, and Rex reports the exit.
+func (f *fakeRex) exits(w tab, code int) {
+	f.mu.Lock()
+	for _, t := range f.tabs {
+		if t.WindowID == w.WindowID {
+			t.closed = true
+		}
+	}
+	f.mu.Unlock()
+	f.events <- RexEvent{Kind: EvExited, BlockID: w.BlockID, ExitCode: code}
+}
+
+func (f *fakeRex) blockCloses(w tab) {
+	f.mu.Lock()
+	for _, t := range f.tabs {
+		if t.WindowID == w.WindowID {
+			t.blockGone = true
+		}
+	}
+	f.mu.Unlock()
+	f.events <- RexEvent{Kind: EvClosed, BlockID: w.BlockID}
+}
+
+// userCloses closes a tab as the user does in Rex: the tab goes, then Rex
+// reports its block closed.
+func (f *fakeRex) userCloses(w tab) {
+	f.mu.Lock()
+	for _, t := range f.tabs {
+		if t.WindowID == w.WindowID {
+			t.closed = true
+		}
+	}
+	for _, s := range f.splits {
+		if s.window == w.WindowID {
+			s.closed = true
+		}
+	}
+	f.mu.Unlock()
+	f.events <- RexEvent{Kind: EvClosed, BlockID: w.BlockID}
+}
 
 // open returns the open tabs whose command starts with word.
 func (f *fakeRex) open(word string) []tab {
@@ -369,10 +439,23 @@ func (h *fakeHarness) Prepare(_ context.Context, _, worktree string) error {
 	return nil
 }
 
-func (h *fakeHarness) Command(_ context.Context, w WorkerSpec) ([]string, map[string]string, error) {
+func (h *fakeHarness) Prompt(_ context.Context, w WorkerSpec) (string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.specs = append(h.specs, w)
+	if w.Stage == lifecycle.ReviewReady {
+		return "", nil
+	}
+	return "prompt " + w.Stage.Key(), nil
+}
+
+func (h *fakeHarness) Command(_ context.Context, w WorkerSpec, prompt string) ([]string, map[string]string, error) {
+	if prompt == "" {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		h.specs = append(h.specs, w)
+		return []string{"claude", "--resume", w.Conversation}, nil, nil
+	}
 	return []string{"claude", w.Stage.Key()}, nil, nil
 }
 
@@ -437,7 +520,7 @@ func newHarness(t *testing.T, dbPath string, seed func(*store.Store), opts ...fu
 		seed(st)
 	}
 	h := &harness{
-		t: t, rex: &fakeRex{events: make(chan RexEvent, 16)},
+		t: t, rex: &fakeRex{events: make(chan RexEvent, 16), t: t},
 		gh: &fakeGitHub{prs: map[PRKey]PRSnapshot{}, reviews: map[ReviewKey]ReviewSnapshot{}}, wt: &fakeWorktrees{root: t.TempDir()},
 		hn: &fakeHarness{}, tr: &fakeTracker{}, st: st, stateHome: t.TempDir(),
 	}
@@ -461,6 +544,11 @@ func newHarness(t *testing.T, dbPath string, seed func(*store.Store), opts ...fu
 
 func (h *harness) do(req Request) any {
 	h.t.Helper()
+	if req.Op == "close" || req.Op == "archive" {
+		h.rex.mu.Lock()
+		h.rex.asked = true
+		h.rex.mu.Unlock()
+	}
 	v, err := h.s.Handle(context.Background(), req)
 	if err != nil {
 		h.t.Fatalf("%s: %v", req.Op, err)
@@ -511,7 +599,7 @@ func TestALongTitleCutsTheTabLabel(t *testing.T) {
 	if setup.label != want {
 		t.Fatalf("setup tab label = %q (%d characters), want %q", setup.label, utf8.RuneCountInString(setup.label), want)
 	}
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: setup.BlockID}
+	h.rex.exits(setup, 0)
 	if worker := h.waitTab("claude working"); worker.label != want {
 		t.Fatalf("worker tab label = %q", worker.label)
 	}
@@ -536,7 +624,7 @@ func TestTaskFromStartToMerged(t *testing.T) {
 	if setup.cwd != "/repos/acme/data" || setup.label != "ENG-1 Add billing model" {
 		t.Fatalf("setup tab = %+v", setup)
 	}
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: setup.BlockID}
+	h.rex.exits(setup, 0)
 	worker := h.waitTab("claude working")
 	if worktree := filepath.Join(h.wt.root, "eng-1-billing"); worker.cwd != worktree {
 		t.Fatalf("worker cwd = %s, want %s", worker.cwd, worktree)
@@ -550,13 +638,13 @@ func TestTaskFromStartToMerged(t *testing.T) {
 
 	h.gh.set(key, 42, "ci-failed")
 	h.waitStage("ENG-1", lifecycle.CIDebug)
-	debugger := h.waitTab("claude ci_debug")
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
 	if v := h.task("ENG-1"); v.Note != "attempt 1/3" {
 		t.Fatalf("CI debug note = %q", v.Note)
 	}
 	h.gh.set(key, 42, "pushed")
 	h.waitStage("ENG-1", lifecycle.CIRunning)
-	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: debugger.BlockID, Status: Status{State: "done"}}
+	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "done"}}
 
 	h.gh.set(key, 42, "review-required")
 	h.waitStage("ENG-1", lifecycle.InReview)
@@ -576,7 +664,7 @@ func TestTaskFromStartToMerged(t *testing.T) {
 	if v := h.task("ENG-1"); v.Outcome != "merged" || v.PRNumber != 42 || !v.Tab {
 		t.Fatalf("done task = %+v, want merged with its tab", v)
 	}
-	if len(h.rex.open("claude ci_debug")) != 1 {
+	if len(h.rex.open("claude working")) != 1 {
 		t.Fatal("the Worker tab closed when the Task ended")
 	}
 	h.wt.mu.Lock()
@@ -595,7 +683,7 @@ func doneWithATab(t *testing.T) (*harness, tab) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 	h.gh.set(PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}, 42, "pr-merged")
 	h.waitStage("ENG-1", lifecycle.Done)
@@ -624,8 +712,7 @@ func TestADoneTabTheUserClosesRemovesTheWorktree(t *testing.T) {
 	if got := h.worktreesRemoved(); len(got) != 0 {
 		t.Fatalf("removed %v before the user closed the tab", got)
 	}
-	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	h.rex.userCloses(worker)
 	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
 	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:data"}) })
 	if v := h.task("ENG-1"); v.Stage != "Done" || v.Outcome != "merged" || v.Tab || v.Live {
@@ -638,8 +725,7 @@ func TestADoneTabTheUserClosesKeepsASessionWithAnotherTab(t *testing.T) {
 	if _, err := h.rex.NewWindow(context.Background(), worker.SessionID, "another tab", "/", nil, []string{"zsh"}); err != nil {
 		t.Fatal(err)
 	}
-	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	h.rex.userCloses(worker)
 	eventually(t, "the worktree removed", func() bool { return len(h.worktreesRemoved()) == 1 })
 	time.Sleep(150 * time.Millisecond)
 	if got := h.sessionsDestroyed(); len(got) != 0 {
@@ -817,7 +903,7 @@ func TestThePollOpPollsNow(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PollInterval = time.Hour })
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	h.waitTab("claude working")
 	polled := func() bool {
 		h.gh.mu.Lock()
@@ -893,7 +979,7 @@ func TestCloseRemovesTheWorktreeOfAFailedSetupOnly(t *testing.T) {
 
 	h.do(Request{Op: "add", Issue: "ENG-2"})
 	h.do(Request{Op: "start", Task: "ENG-2"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID, ExitCode: 1}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 1)
 	eventually(t, "setup failed", func() bool { return h.task("ENG-2").Flag == "setup failed" })
 	h.do(Request{Op: "close", Task: "ENG-2"})
 	eventually(t, "the failed setup's worktree removed", func() bool {
@@ -913,7 +999,7 @@ func TestChecksThatPassedBeforeCIRunningStillCount(t *testing.T) {
 	key := PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 
 	h.gh.set(key, 42, "pr-open", "ci-passed")
@@ -925,7 +1011,7 @@ func TestAStopShowsTheWorkerLastLine(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 
 	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "done", Msg: "  PR #5042: \"1.0\" or \"1.0.0\"?\nsecond line"}}
@@ -1182,7 +1268,7 @@ func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
 
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "done"}}
 	eventually(t, "stopped", func() bool { return h.task("ENG-1").Flag == "stopped" })
@@ -1206,7 +1292,7 @@ func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
 
 	h.gh.set(key, 42, "scored-low")
 	h.waitStage("ENG-1", lifecycle.Responding)
-	h.waitTab("claude responding")
+	h.waitTyped(worker.BlockID, "prompt responding")
 	if v := h.task("ENG-1"); v.Note != "Greptile 4/5, cycle 1/2" {
 		t.Fatalf("review cycle note = %q", v.Note)
 	}
@@ -1255,41 +1341,55 @@ func (h *harness) waitSpecs(n int) WorkerSpec {
 	return got
 }
 
-func TestRecoverReplaysSteers(t *testing.T) {
+func TestALostWorkerResumesItsConversation(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	worker := h.working()
-	if first := h.waitSpecs(1); first.Restart || len(first.Steers) != 0 {
-		t.Fatalf("first Worker spec = %+v, want no restart", first)
+	first := h.waitSpecs(1)
+	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
+
+	h.rex.userCloses(worker)
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	if got := h.rex.typedInto(resumed.BlockID); len(got) != 0 {
+		t.Fatalf("typed %q before the resumed Worker was idle", got)
 	}
+	h.status(resumed.BlockID, "idle")
+	h.waitTyped(resumed.BlockID, "prompt working")
+	if spec := h.waitSpecs(3); !spec.Restart || len(spec.Steers) != 0 || spec.Conversation != first.Conversation {
+		t.Fatalf("typed spec = %+v, want the restart note, no steers, and the first conversation", spec)
+	}
+}
+
+func TestAFreshWorkerReplaysSteers(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
 	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
 	h.do(Request{Op: "steer", Task: "ENG-1", Text: "skip the backfill"})
+	h.s.call(func() { h.s.recs["ENG-1"].Conversation = "" })
 
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	h.rex.userCloses(worker)
 	spec := h.waitSpecs(2)
-	if !spec.Restart || !slices.Equal(spec.Steers, []string{"use a dual write", "skip the backfill"}) {
-		t.Fatalf("restart spec = restart %v, steers %q", spec.Restart, spec.Steers)
+	if !spec.Restart || !slices.Equal(spec.Steers, []string{"use a dual write", "skip the backfill"}) || spec.Conversation == "" {
+		t.Fatalf("fresh spec = restart %v, steers %q, conversation %q", spec.Restart, spec.Steers, spec.Conversation)
 	}
 }
 
 func TestFreshStageHasNoRestartNote(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
-	key := PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}
 	worker := h.working()
 	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
-	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "done"}}
-	eventually(t, "stopped", func() bool { return h.task("ENG-1").Flag == "stopped" })
-	h.gh.set(key, 42, "pr-open")
-	h.waitStage("ENG-1", lifecycle.CIRunning)
-	h.gh.set(key, 42, "ci-failed")
-	h.waitStage("ENG-1", lifecycle.CIDebug)
+	h.prOpens(worker)
+	h.ciFails()
 
-	debugger := h.waitTab("claude ci_debug")
+	h.waitTyped(worker.BlockID, "use a dual write", "prompt ci_debug")
 	if spec := h.waitSpecs(2); spec.Stage != lifecycle.CIDebug || spec.Restart || len(spec.Steers) != 0 {
-		t.Fatalf("CI debug spec = %+v, want a fresh start with no steers", spec)
+		t.Fatalf("CI debug spec = %+v, want no restart and no steers", spec)
 	}
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: debugger.BlockID}
-	if spec := h.waitSpecs(3); !spec.Restart || len(spec.Steers) != 0 {
-		t.Fatalf("CI debug restart spec = restart %v, steers %q, want a restart with no Working steers", spec.Restart, spec.Steers)
+	h.rex.userCloses(worker)
+	resumed := h.waitTab("claude --resume " + h.waitSpecs(1).Conversation)
+	h.status(resumed.BlockID, "idle")
+	h.waitTyped(resumed.BlockID, "prompt ci_debug")
+	if spec := h.waitSpecs(4); !spec.Restart || len(spec.Steers) != 0 {
+		t.Fatalf("CI debug restart spec = restart %v, steers %q, want a restart with no steers", spec.Restart, spec.Steers)
 	}
 }
 
@@ -1297,12 +1397,12 @@ func TestFreshStageHasNoRestartNote(t *testing.T) {
 // with the given text on its screen. It returns the exited Worker's tab.
 func (h *harness) reopenAndExit(capture string) tab {
 	h.t.Helper()
-	h.readyReview()
+	reviewing := h.readyReview()
 	h.rex.mu.Lock()
 	h.rex.capture = capture
 	h.rex.mu.Unlock()
 	h.review(prURL7)
-	worker := h.waitTab("claude review_ready")
+	worker := h.waitTab("claude --resume " + reviewing.Conversation)
 	h.rex.events <- RexEvent{Kind: EvExited, ExitCode: 1, BlockID: worker.BlockID}
 	return worker
 }
@@ -1346,4 +1446,157 @@ func TestOtherExitDoesNotFallBack(t *testing.T) {
 	if tabs := h.rex.open("claude reviewing"); len(tabs) != 0 {
 		t.Fatalf("open Reviewing tabs = %d, want none", len(tabs))
 	}
+}
+
+func TestABuildResumeWithNoConversationStartsAFreshWorker(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.rex.mu.Lock()
+	h.rex.capture = "Error: " + claude.NoConversation + " with session ID: x"
+	h.rex.mu.Unlock()
+	h.rex.userCloses(worker)
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	h.rex.events <- RexEvent{Kind: EvExited, ExitCode: 1, BlockID: resumed.BlockID}
+
+	fresh := h.waitTab("claude working")
+	var conversation string
+	h.s.call(func() { conversation = h.s.recs["ENG-1"].Conversation })
+	if fresh.BlockID == worker.BlockID || conversation == "" || conversation == first.Conversation {
+		t.Fatalf("fresh tab %s, conversation %q, want a new Worker in a new conversation after %q", fresh.BlockID, conversation, first.Conversation)
+	}
+	if v := h.task("ENG-1"); v.Stage != "Working" || v.Flag != "" {
+		t.Fatalf("task = %+v, want Working with no flag", v)
+	}
+}
+
+var buildKey = PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}
+
+func (h *harness) prOpens(worker tab) {
+	h.t.Helper()
+	h.status(worker.BlockID, "done")
+	eventually(h.t, "stopped", func() bool { return h.task("ENG-1").Flag == "stopped" })
+	h.gh.set(buildKey, 42, "pr-open")
+	h.waitStage("ENG-1", lifecycle.CIRunning)
+}
+
+func (h *harness) ciFails() {
+	h.t.Helper()
+	h.gh.set(buildKey, 42, "ci-failed")
+	h.waitStage("ENG-1", lifecycle.CIDebug)
+}
+
+func (h *harness) waitTyped(block string, want ...string) {
+	h.t.Helper()
+	eventually(h.t, fmt.Sprintf("%q typed into %s", want, block), func() bool { return slices.Equal(h.rex.typedInto(block), want) })
+}
+
+func (h *harness) tabs() int {
+	h.rex.mu.Lock()
+	defer h.rex.mu.Unlock()
+	return len(h.rex.tabs)
+}
+
+func (h *harness) events(id string) []string {
+	h.t.Helper()
+	d, err := h.s.show(id)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	var out []string
+	for _, e := range d.Events {
+		out = append(out, e.Signal)
+	}
+	return out
+}
+
+func TestTheNextStageTypesIntoTheSameWorker(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	opened := h.tabs()
+	h.ciFails()
+
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+	if n := h.tabs(); n != opened {
+		t.Fatalf("CI debug opened %d new tabs, want none", n-opened)
+	}
+	if v := h.task("ENG-1"); !v.Live || !v.Tab {
+		t.Fatalf("task = %+v, want the Working Worker live in its tab", v)
+	}
+	var stage lifecycle.Stage
+	var conversation string
+	h.s.call(func() { stage, conversation = h.s.recs["ENG-1"].WorkerStage, h.s.recs["ENG-1"].Conversation })
+	if stage != lifecycle.CIDebug || conversation == "" {
+		t.Fatalf("worker stage %s, conversation %q, want CI debug in the Working conversation", stage, conversation)
+	}
+}
+
+func TestABuildWorkerStartsItsConversation(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.working()
+	spec := h.waitSpecs(1)
+	var conversation string
+	h.s.call(func() { conversation = h.s.recs["ENG-1"].Conversation })
+	if spec.Conversation == "" || spec.Conversation != conversation {
+		t.Fatalf("Working spec conversation %q, record %q, want one new ID in both", spec.Conversation, conversation)
+	}
+}
+
+func TestThePromptWaitsForABusyWorker(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.status(worker.BlockID, "working")
+	h.waitWorkerState("ENG-1", "working")
+	h.ciFails()
+
+	time.Sleep(100 * time.Millisecond)
+	if got := h.rex.typedInto(worker.BlockID); len(got) != 0 {
+		t.Fatalf("typed %q into a working Worker", got)
+	}
+	h.status(worker.BlockID, "blocked")
+	time.Sleep(50 * time.Millisecond)
+	if got := h.rex.typedInto(worker.BlockID); len(got) != 0 {
+		t.Fatalf("typed %q into a blocked Worker", got)
+	}
+	h.status(worker.BlockID, "done")
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+}
+
+func TestARerunTypesThePromptAgain(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.ciFails()
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+
+	h.status(worker.BlockID, "working")
+	h.status(worker.BlockID, "idle")
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "ci_debug"})
+	h.waitTyped(worker.BlockID, "prompt ci_debug", "prompt ci_debug")
+}
+
+func TestAWorkerBetweenStagesMeetsNoContract(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.status(worker.BlockID, "working")
+	h.waitWorkerState("ENG-1", "working")
+	h.ciFails()
+	before := len(h.events("ENG-1"))
+
+	h.status(worker.BlockID, "done")
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+	time.Sleep(100 * time.Millisecond)
+	if v := h.task("ENG-1"); v.Stage != "CI debug" || v.Flag != "" {
+		t.Fatalf("task = %+v, want CI debug with no flag: the done was the user's chat", v)
+	}
+	if got := h.events("ENG-1")[before:]; slices.Contains(got, "done") {
+		t.Fatalf("events after the prompt waited = %q, want no done", got)
+	}
+
+	h.status(worker.BlockID, "working")
+	h.status(worker.BlockID, "done")
+	eventually(t, "the CI debug contract checked", func() bool { return h.task("ENG-1").Flag == "stopped" })
 }

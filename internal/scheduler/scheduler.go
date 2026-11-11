@@ -15,7 +15,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"uuid"
 
 	"github.com/gclunies/lineup/internal/harness/claude"
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -184,6 +183,14 @@ func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error 
 	if r.Stage != from {
 		r.StageSince = s.now()
 	}
+	for _, e := range effects {
+		if p, ok := e.(lifecycle.PromptWorker); ok {
+			r.Pending = &p.Stage
+		}
+	}
+	if r.Pending != nil && *r.Pending != r.Stage {
+		r.Pending = nil
+	}
 	if detail == "" {
 		detail = string(r.Flag)
 		if r.FlagDetail != "" {
@@ -284,8 +291,8 @@ func (s *Scheduler) exec(ctx context.Context, id string, e lifecycle.Effect) {
 		return
 	}
 	switch e := e.(type) {
-	case lifecycle.StartWorker:
-		s.startWorker(ctx, id, e.Stage)
+	case lifecycle.PromptWorker:
+		s.deliver(ctx, id)
 	case lifecycle.Merge:
 		if r.PR == nil {
 			return
@@ -373,82 +380,8 @@ func (s *Scheduler) finishSetup(ctx context.Context, id string) {
 		s.setupFailed(id, err.Error())
 		return
 	}
-	var pending *lifecycle.Stage
-	s.update(id, func(r *Record) {
-		r.Worktree = path
-		pending, r.Pending = r.Pending, nil
-	})
-	if pending != nil {
-		s.startWorker(ctx, id, *pending)
-	}
-}
-
-func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.Stage) {
-	r, ok := s.snapshot(id)
-	if !ok || r.Stage != stage {
-		return
-	}
-	switch {
-	case r.Review != nil:
-		if !s.setupReview(ctx, r) {
-			return
-		}
-		if r, ok = s.snapshot(id); !ok || r.Stage != stage {
-			return
-		}
-	case r.Job == JobSetup || r.Worktree == "":
-		s.update(id, func(r *Record) { r.Pending = &stage })
-		if r.Job != JobSetup {
-			s.setup(ctx, r)
-		}
-		return
-	}
-	if r.Review != nil && stage == lifecycle.Reviewing {
-		// A restart or a rerun reviews afresh, so it never resumes the last review.
-		r.Conversation = uuid.NewV4().String()
-		s.update(id, func(rec *Record) { rec.Conversation = r.Conversation })
-	}
-	restart, steers := s.replay(id, r.StageSince)
-	spec := WorkerSpec{
-		Restart: restart, Steers: steers,
-		Task: r.ID, Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
-		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
-		Conversation: r.Conversation, Name: r.tabLabel(), ReviewCycle: r.ReviewCycle(),
-		Bar: r.Policy.Bar, Standing: r.Standing,
-	}
-	folder := r.Worktree
-	if r.Review != nil {
-		// The PR's code never becomes the Worker's folder: its .claude
-		// settings and hooks would run.
-		spec.PRURL, folder = r.Review.URL, r.Repo
-	}
-	argv, env, err := s.d.Harness.Command(ctx, spec)
-	if err != nil {
-		s.fail(id, "worker command", err)
-		return
-	}
-	if r.Review != nil {
-		if env == nil {
-			env = map[string]string{}
-		}
-		env["XDG_STATE_HOME"] = s.d.StateHome
-	}
-	s.detach(ctx, r)
-	session, err := s.d.Rex.EnsureSession(ctx, r.Session)
-	if err != nil {
-		s.fail(id, "rex session", err)
-		return
-	}
-	w, err := s.d.Rex.NewWindow(ctx, session, r.tabLabel(), folder, env, argv)
-	if err != nil {
-		s.fail(id, "rex tab", err)
-		return
-	}
-	s.update(id, func(r *Record) { r.WorkerStage = stage })
-	s.attach(id, w, JobWorker)
-	if r.Review != nil {
-		s.openHunk(ctx, id, w.SessionID, w.BlockID, r.Worktree, r.Review.URL)
-	}
+	s.update(id, func(r *Record) { r.Worktree = path })
+	s.deliver(ctx, id)
 }
 
 // steerSignal names the event that records one `lineup steer`.
@@ -502,19 +435,15 @@ func (s *Scheduler) sessionEmpty(ctx context.Context, session string) bool {
 	return len(blocks) == 0
 }
 
-// detach forgets the Task's tab before closing it, so its exit is not read as a lost Worker.
-func (s *Scheduler) detach(ctx context.Context, r Record) {
-	if r.WindowID == "" {
-		return
-	}
-	s.update(r.ID, func(r *Record) { r.WindowID, r.BlockID, r.HunkBlockID, r.Job = "", "", "", JobNone })
-	if err := s.d.Rex.CloseWindow(ctx, r.SessionID, r.WindowID); err != nil {
-		s.d.Log.Warn("close tab", "task", r.ID, "err", err)
-	}
-}
-
+// cleanup runs only when the user closes a Task. It forgets the Task's tab
+// before it closes it, so the tab's close is not read as a lost Worker.
 func (s *Scheduler) cleanup(ctx context.Context, r Record) {
-	s.detach(ctx, r)
+	if r.WindowID != "" {
+		s.update(r.ID, func(r *Record) { r.WindowID, r.BlockID, r.HunkBlockID, r.Job = "", "", "", JobNone })
+		if err := s.d.Rex.CloseWindow(ctx, r.SessionID, r.WindowID); err != nil {
+			s.d.Log.Warn("close tab", "task", r.ID, "err", err)
+		}
+	}
 	switch {
 	case r.Review != nil:
 		s.removeReviewWorktree(ctx, r)
@@ -562,6 +491,10 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		}
 		was := r.WorkerState
 		r.Status, r.WorkerState = ev.Status.Msg, ev.Status.State
+		if r.Pending != nil && (ev.Status.State == "idle" || ev.Status.State == "done") {
+			id := r.ID
+			s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
+		}
 		if ev.Status.State == "done" {
 			s.checkContract(r, false)
 			s.save(r)
@@ -580,6 +513,9 @@ func (s *Scheduler) onRex(ev RexEvent) {
 	case EvExited:
 		job := r.Job
 		r.Job = JobExited
+		if job == JobWorker && ev.ExitCode != 0 {
+			r.Pending = nil
+		}
 		s.save(r)
 		switch {
 		case job == JobSetup && ev.ExitCode != 0:
@@ -587,10 +523,13 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		case job == JobSetup:
 			id := r.ID
 			s.enqueue(id, func(ctx context.Context) { s.finishSetup(ctx, id) })
-		case job == JobWorker && ev.ExitCode != 0 && r.Review != nil && r.WorkerStage == lifecycle.ReviewReady:
+		case job == JobWorker && ev.ExitCode != 0 && r.WorkerState == "" && r.Conversation != "":
 			s.resumeFallback(r, ev.ExitCode)
 		case job == JobWorker && ev.ExitCode != 0:
 			s.apply(r, lifecycle.WorkerExited{Code: ev.ExitCode}, "")
+		case job == JobWorker && r.Pending != nil:
+			id := r.ID
+			s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
 		case job == JobWorker:
 			s.checkContract(r, false)
 		}
@@ -612,26 +551,31 @@ func (s *Scheduler) onRex(ev RexEvent) {
 	}
 }
 
-// resumeFallback handles a review Worker that exited non-zero. Only a Review
-// ready Worker starts with --resume. If its conversation file is gone, the
-// Task reviews afresh, and the new Worker's --session-id creates the
-// conversation for later reopens. The fresh start is Reviewing, so a second
-// failure takes the normal path.
+// resumeFallback handles a Worker that exited non-zero before its first
+// status. If `claude --resume` found no conversation file, the Task starts a
+// fresh Worker with a new conversation. A Review ready Task reviews afresh.
 func (s *Scheduler) resumeFallback(r *Record, code int) {
-	id, session, block, conversation := r.ID, r.SessionID, r.BlockID, r.Conversation
+	id, session, block, conversation, stage := r.ID, r.SessionID, r.BlockID, r.Conversation, r.Stage
 	s.enqueue(id, func(ctx context.Context) {
 		out, err := s.d.Rex.Capture(ctx, session, block)
 		s.call(func() {
 			r, ok := s.recs[id]
-			if !ok || r.Stage != lifecycle.ReviewReady {
+			if !ok || r.Stage != stage {
 				return
 			}
-			if err == nil && strings.Contains(out, claude.NoConversation) {
-				s.save(r, store.Event{TaskID: id, At: s.now(), Signal: "resume-fallback", From: r.Stage.String(), To: r.Stage.String(), Detail: conversation})
+			if err != nil || !strings.Contains(out, claude.NoConversation) {
+				s.apply(r, lifecycle.WorkerExited{Code: code}, "")
+				return
+			}
+			r.Conversation = ""
+			s.save(r, store.Event{TaskID: id, At: s.now(), Signal: "resume-fallback", From: r.Stage.String(), To: r.Stage.String(), Detail: conversation})
+			if r.Stage == lifecycle.ReviewReady {
 				s.apply(r, lifecycle.Rerun{Stage: lifecycle.Reviewing}, "")
 				return
 			}
-			s.apply(r, lifecycle.WorkerExited{Code: code}, "")
+			r.Pending = &stage
+			s.save(r)
+			s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
 		})
 	})
 }
@@ -675,7 +619,7 @@ func (s *Scheduler) keepOrphan(ev RexEvent) {
 // Task keeps the question flag.
 func (s *Scheduler) checkContract(r *Record, question bool) {
 	id, stage, block := r.ID, r.Stage, r.BlockID
-	if !stage.Agent() {
+	if !stage.Agent() || r.Pending != nil {
 		return
 	}
 	s.enqueue(id, func(ctx context.Context) {
@@ -684,7 +628,7 @@ func (s *Scheduler) checkContract(r *Record, question bool) {
 		}
 		s.call(func() {
 			r, ok := s.recs[id]
-			if !ok || r.Stage != stage || (r.BlockID != block && r.BlockID != "") {
+			if !ok || r.Stage != stage || r.Pending != nil || (r.BlockID != block && r.BlockID != "") {
 				return
 			}
 			reviewed, met := s.contractOutput(r)
@@ -865,14 +809,11 @@ func (s *Scheduler) recover(ctx context.Context) {
 			continue
 		}
 		switch {
-		case r.Review != nil && r.Worktree == "" && r.Stage.Agent():
-			id, stage := r.ID, r.Stage
-			s.enqueue(id, func(ctx context.Context) { s.startWorker(ctx, id, stage) })
 		case job == JobSetup || r.Worktree == "" && r.Stage.Agent():
-			stage := r.Stage
+			stage, id := r.Stage, r.ID
 			r.Pending = &stage
-			rec := *r
-			s.enqueue(r.ID, func(ctx context.Context) { s.setup(ctx, rec) })
+			s.save(r)
+			s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
 		case r.Stage.Agent():
 			s.d.Log.Info("recover worker", "task", r.ID, "stage", r.Stage.String())
 			s.apply(r, lifecycle.WorkerLost{}, "recovered at start")

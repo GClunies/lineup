@@ -251,26 +251,16 @@ func (p harnessPort) Prepare(ctx context.Context, repo, wt string) error {
 	return claude.Trust(dir, wt)
 }
 
-func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]string, map[string]string, error) {
+func (p harnessPort) Prompt(ctx context.Context, w scheduler.WorkerSpec) (string, error) {
 	res, err := p.cfg.Resolve(w.Repo, w.Overrides)
 	if err != nil {
-		return nil, nil, err
+		return "", err
 	}
-	stage := w.Stage
-	if stage == lifecycle.ReviewReady {
-		// The Worker resumes the Reviewing conversation, so it keeps its settings.
-		stage = lifecycle.Reviewing
-	}
-	st := res.Stages[stage]
-	dir, err := claude.ConfigDir(ctx, w.Repo)
-	if err != nil {
-		return nil, nil, err
-	}
+	st := res.Stages[w.Stage]
 	info := claude.TaskInfo{ID: w.Task, Ask: w.Text, PRURL: w.PRURL, Branch: w.Branch, Repo: w.Repo, PR: res.PR,
 		ReviewCycle: w.ReviewCycle, Bar: w.Bar, Standing: w.Standing, Restart: w.Restart, Steers: w.Steers}
-	var addDirs []string
 	if lifecycle.KindReview.Has(w.Stage) {
-		info.ReviewWorktree, addDirs = w.Worktree, []string{w.Worktree}
+		info.ReviewWorktree = w.Worktree
 	}
 	if w.Issue != nil {
 		info.IssueID, info.IssueTitle, info.IssueURL = w.Issue.Identifier, w.Issue.Title, w.Issue.URL
@@ -286,11 +276,27 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec) ([]str
 	if st.Command != "" {
 		extra = "Run " + st.Command + " first."
 	}
-	prompt := claude.Prompt(w.Stage, info, st.Skill, extra)
+	return claude.Prompt(w.Stage, info, st.Skill, extra), nil
+}
+
+func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec, prompt string) ([]string, map[string]string, error) {
+	res, err := p.cfg.Resolve(w.Repo, w.Overrides)
+	if err != nil {
+		return nil, nil, err
+	}
+	kind := lifecycle.KindBuild
+	var addDirs []string
+	if lifecycle.KindReview.Has(w.Stage) {
+		kind, addDirs = lifecycle.KindReview, []string{w.Worktree}
+	}
 	if prompt == "" && w.Conversation == "" {
 		return nil, nil, fmt.Errorf("%s has no prompt and no conversation to resume", w.Stage)
 	}
-	argv, env := claude.Command(res.Claude, dir, st, w.Conversation, w.Name, prompt, addDirs...)
+	dir, err := claude.ConfigDir(ctx, w.Repo)
+	if err != nil {
+		return nil, nil, err
+	}
+	argv, env := claude.Command(res.Claude, dir, res.Stages[kind.FirstStage()], w.Conversation, w.Name, prompt, addDirs...)
 	return argv, env, nil
 }
 

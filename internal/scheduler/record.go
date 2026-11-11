@@ -42,8 +42,8 @@ type Record struct {
 	// Review is the PR that a review Task reviews, fixed when it is added.
 	// Only a review Task has one.
 	Review *ReviewPR `json:"review,omitempty"`
-	// Conversation is the ID of the review Worker's Claude conversation. Each
-	// Reviewing Worker starts a new one, and a reopen resumes it.
+	// Conversation is the ID of the Task's Claude conversation. The Task's
+	// first Worker starts it, and every later Worker resumes it.
 	Conversation string `json:"conversation,omitempty"`
 
 	SessionID string `json:"session_id,omitempty"`
@@ -54,7 +54,8 @@ type Record struct {
 	// reaches the Task.
 	HunkBlockID string          `json:"hunk_block_id,omitempty"`
 	WorkerStage lifecycle.Stage `json:"worker_stage"`
-	// Pending is the Worker to start once setup finishes.
+	// Pending is the Stage whose prompt the Worker has not received yet. It is
+	// nil or the Task's Stage.
 	Pending *lifecycle.Stage `json:"pending,omitempty"`
 	Status  string           `json:"status,omitempty"`
 	// WorkerState is the Worker's last program status: working, blocked,

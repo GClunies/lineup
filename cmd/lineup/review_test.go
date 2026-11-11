@@ -96,12 +96,33 @@ func TestACIDebugWorkerSeesWhichChecksGate(t *testing.T) {
 		Task: "ENG-1", Stage: lifecycle.CIDebug, Repo: t.TempDir(), Branch: "ada/eng-1", Name: "ENG-1 Fix the tooltip",
 		PRURL: "https://github.com/umbrella/data/pull/7", Standing: lifecycle.Standing{Failed: []string{"test"}, Optional: []string{"lint"}},
 	}
-	argv, _, err := p.Command(context.Background(), spec)
+	prompt, err := p.Prompt(context.Background(), spec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prompt := argv[len(argv)-1]; !strings.Contains(prompt, "keep it from landing: test.") || !strings.Contains(prompt, "optional checks failed too: lint.") || !strings.Contains(prompt, "`lineup ask ENG-1 ") {
+	if !strings.Contains(prompt, "keep it from landing: test.") || !strings.Contains(prompt, "optional checks failed too: lint.") || !strings.Contains(prompt, "`lineup ask ENG-1 ") {
 		t.Fatalf("prompt = %s", prompt)
+	}
+}
+
+func TestABuildWorkerKeepsTheModelOfWorking(t *testing.T) {
+	claudeOnPath(t)
+	p := harnessPort{cfg: loadConfig(t, "[stage.default]\nmodel = \"d\"\n[stage.working]\nmodel = \"w\"\neffort = \"max\"\n[stage.ci_debug]\nskill = \"diagnosing-bugs\"\n")}
+	spec := scheduler.WorkerSpec{Task: "ENG-1", Stage: lifecycle.CIDebug, Repo: t.TempDir(), Branch: "ada/eng-1",
+		Name: "ENG-1 Fix the tooltip", Conversation: "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20"}
+	prompt, err := p.Prompt(context.Background(), spec)
+	if err != nil || !strings.HasPrefix(prompt, "/diagnosing-bugs ") {
+		t.Fatalf("CI debug prompt %q, err %v, want the CI debug skill", prompt, err)
+	}
+	argv, _, err := p.Command(context.Background(), spec, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.Index(argv, "--model"); i < 0 || argv[i+1] != "w" || argv[i+3] != "max" {
+		t.Fatalf("argv = %q, want the model and effort of Working", argv)
+	}
+	if i := slices.Index(argv, "--resume"); i < 0 || argv[i+1] != spec.Conversation {
+		t.Fatalf("argv = %q, want --resume %s", argv, spec.Conversation)
 	}
 }
 
@@ -114,7 +135,11 @@ func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 		PRURL: "https://github.com/umbrella/data/pull/4955", Overrides: map[string]string{"pr": "true"},
 		Conversation: "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20", Name: "R-1 data#4955 Fix the tooltip",
 	}
-	argv, _, err := p.Command(context.Background(), spec)
+	prompt, err := p.Prompt(context.Background(), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv, _, err := p.Command(context.Background(), spec, prompt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,15 +149,17 @@ func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 	if i := slices.Index(argv, "--session-id"); i < 0 || argv[i+1] != spec.Conversation {
 		t.Fatalf("argv = %q, want --session-id %s", argv, spec.Conversation)
 	}
-	prompt := argv[len(argv)-1]
-	if !strings.HasPrefix(prompt, "/pr-review https://github.com/umbrella/data/pull/4955\n") || !strings.Contains(prompt, "At Step 5, wait for the user's decisions") {
+	if argv[len(argv)-1] != prompt || !strings.HasPrefix(prompt, "/pr-review https://github.com/umbrella/data/pull/4955\n") || !strings.Contains(prompt, "At Step 5, wait for the user's decisions") {
 		t.Fatalf("prompt = %s", prompt)
 	}
 
 	// A reopened Worker resumes the conversation with the Reviewing settings and no prompt.
 	model := argv[slices.Index(argv, "--model")+1]
 	spec.Stage = lifecycle.ReviewReady
-	argv, _, err = p.Command(context.Background(), spec)
+	if prompt, err := p.Prompt(context.Background(), spec); err != nil || prompt != "" {
+		t.Fatalf("Review ready prompt %q, err %v, want none", prompt, err)
+	}
+	argv, _, err = p.Command(context.Background(), spec, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +168,7 @@ func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 		t.Fatalf("reopen argv = %q, want %q", argv, want)
 	}
 	spec.Conversation = ""
-	if _, _, err := p.Command(context.Background(), spec); err == nil {
+	if _, _, err := p.Command(context.Background(), spec, ""); err == nil {
 		t.Fatal("a reopen with no conversation got a command")
 	}
 }

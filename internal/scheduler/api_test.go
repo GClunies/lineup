@@ -14,7 +14,7 @@ func (h *harness) working() tab {
 	h.t.Helper()
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	w := h.waitTab("claude working")
 	eventually(h.t, "a live Worker", func() bool { return h.task("ENG-1").Live })
 	return w
