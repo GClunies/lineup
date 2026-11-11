@@ -105,7 +105,7 @@ type Model struct {
 	mode          mode
 	pendingTask   string // Task the current prompt is about
 	pendingOp     string // close or archive, for the y/n prompt
-	pendingAsk    string // the question that the footer asks before y/n
+	pendingAsk    string
 	width, height int
 
 	preview    bool

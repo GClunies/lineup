@@ -595,11 +595,13 @@ func (s *Scheduler) onRex(ev RexEvent) {
 
 	case EvClosed:
 		job := r.Job
+		if r.Stage == lifecycle.Done {
+			s.tabClosedByUser(r, "")
+			return
+		}
 		s.forgetTab(r)
 		s.save(r)
 		switch {
-		case r.Stage == lifecycle.Done:
-			s.apply(r, lifecycle.TabClosed{}, "")
 		case job == JobSetup:
 			s.apply(r, lifecycle.SetupFailed{Detail: "setup tab closed"}, "")
 		case job == JobWorker:
@@ -630,6 +632,14 @@ func (s *Scheduler) resumeFallback(r *Record, code int) {
 			s.apply(r, lifecycle.WorkerExited{Code: code}, "")
 		})
 	})
+}
+
+// tabClosedByUser records that the user closed a Done Task's tab, and
+// cleans the Task up.
+func (s *Scheduler) tabClosedByUser(r *Record, detail string) {
+	s.forgetTab(r)
+	s.save(r)
+	s.apply(r, lifecycle.TabClosed{}, detail)
 }
 
 // forgetTab drops the Task's tab after its block is gone. The hunk pane
@@ -799,8 +809,7 @@ func prURL(p *PRSnapshot) string {
 }
 
 // recover compares the store with Rex. Each Task in an agent Stage whose tab
-// is gone gets a fresh Worker from its restart budget. Each Done Task whose
-// tab the user closed while the Scheduler was down cleans up.
+// is gone gets a fresh Worker from its restart budget.
 func (s *Scheduler) recover(ctx context.Context) {
 	live := map[string]map[string]bool{}
 	blocksOf := func(r *Record) (map[string]bool, bool) {
@@ -821,9 +830,7 @@ func (s *Scheduler) recover(ctx context.Context) {
 				continue
 			}
 			if blocks, ok := blocksOf(r); ok && !blocks[r.BlockID] {
-				s.forgetTab(r)
-				s.save(r)
-				s.apply(r, lifecycle.TabClosed{}, "recovered at start")
+				s.tabClosedByUser(r, "recovered at start")
 			}
 			continue
 		}
@@ -896,14 +903,13 @@ func cmpString(a, b string) int {
 	return 0
 }
 
-// doneShownFor is how long a Done Task with no tab stays on the Board. A Done
-// Task with an open tab stays until the user closes the tab or archives it.
+// doneShownFor is how long a Done Task with no tab stays on the Board.
 const doneShownFor = 7 * 24 * time.Hour
 
 func (s *Scheduler) view() BoardView {
 	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap(), ReviewsPaused: s.paused}
 	for _, r := range s.list() {
-		if r.Stage == lifecycle.Done && (r.Archived || r.WindowID == "" && s.now().Sub(r.StageSince) > doneShownFor) {
+		if r.Stage == lifecycle.Done && (r.Archived || !r.keepsTab() && s.now().Sub(r.StageSince) > doneShownFor) {
 			continue
 		}
 		v.Tasks = append(v.Tasks, r.view())

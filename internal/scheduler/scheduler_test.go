@@ -586,7 +586,6 @@ func TestTaskFromStartToMerged(t *testing.T) {
 	}
 }
 
-// doneWithATab runs ENG-1 to Done by a merge on GitHub. Its Worker's tab stays open.
 func doneWithATab(t *testing.T) (*harness, tab) {
 	t.Helper()
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)

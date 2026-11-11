@@ -499,8 +499,7 @@ func (t *Task) ready() []Effect {
 	return nil
 }
 
-// finish ends the Task. The Task keeps its tab and worktree until the user
-// closes the tab. A review Task has no Tracker to tell.
+// finish ends the Task. A review Task has no Tracker to tell.
 func (t *Task) finish(o Outcome) []Effect {
 	t.enter(Done)
 	t.Outcome = o

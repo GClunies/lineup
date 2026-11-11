@@ -206,8 +206,7 @@ func (s *Scheduler) addReview(a reviewAdd) (*Record, error) {
 }
 
 // reviewTask is the Record as the queue rules see it. ok is false for a
-// build Task. A Done review that keeps its tab still holds the PR, because a
-// new review would take its ID and its worktree.
+// build Task.
 func (r *Record) reviewTask() (t github.ReviewTask, ok bool) {
 	if r.Review == nil {
 		return t, false

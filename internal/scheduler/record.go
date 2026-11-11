@@ -127,9 +127,7 @@ type TaskView struct {
 	Worktree   string         `json:"worktree,omitempty"`
 	Since      time.Time      `json:"since"`
 	Live       bool           `json:"live"`
-	// Tab is true while the Task has a tab open in Rex. A Done Task keeps
-	// its tab until the user closes it.
-	Tab bool `json:"tab,omitempty"`
+	Tab        bool           `json:"tab,omitempty"`
 }
 
 type BoardView struct {
@@ -153,8 +151,6 @@ func (v BoardView) OfKind(k lifecycle.Kind) BoardView {
 	return out
 }
 
-// keepsTab reports whether the Task is Done and its tab is still open. Only
-// the user closes that tab.
 func (r *Record) keepsTab() bool { return r.Stage == lifecycle.Done && r.WindowID != "" }
 
 func (r *Record) view() TaskView {
