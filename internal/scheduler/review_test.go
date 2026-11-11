@@ -105,7 +105,7 @@ func TestParseReviewKey(t *testing.T) {
 	}
 }
 
-func TestReviewFromStartToReviewedAndCleanedUp(t *testing.T) {
+func TestAReviewedTaskKeepsItsTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 
@@ -161,24 +161,35 @@ func TestReviewFromStartToReviewedAndCleanedUp(t *testing.T) {
 	if v := h.task("pr-7"); v.Outcome != "reviewed" {
 		t.Fatalf("done = %+v", v)
 	}
+	if v := h.task("pr-7"); !v.Tab || v.Worktree != "/repos/acme/data.review-pr-7" {
+		t.Fatalf("reviewed task = %+v, want its tab and worktree kept", v)
+	}
+	h.still("pr-7", lifecycle.Done)
+	if len(h.rex.open("claude reviewing")) != 1 {
+		t.Fatal("the review tab closed when the review ended")
+	}
+	for _, sp := range h.rex.allSplits() {
+		if sp.closed {
+			t.Fatal("the hunk pane closed when the review ended")
+		}
+	}
+	if n := len(h.reviewsRemoved()); n != 0 || len(h.sessionsDestroyed()) != 0 {
+		t.Fatalf("the end removed %d review worktrees and sessions %v, want none", n, h.sessionsDestroyed())
+	}
+
+	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
 	eventually(t, "the review worktree removed", func() bool { return len(h.reviewsRemoved()) == 1 })
 	if got := h.reviewsRemoved()[0]; got != "/repos/acme/data.review-pr-7" {
 		t.Fatalf("removed %s", got)
 	}
-	eventually(t, "the reviews session removed", func() bool {
-		h.rex.mu.Lock()
-		defer h.rex.mu.Unlock()
-		return slices.Contains(h.rex.destroyed, "session:reviews")
-	})
-	if len(h.rex.open("claude reviewing")) != 0 {
-		t.Fatal("the review tab is still open after Done")
-	}
+	eventually(t, "the reviews session removed", func() bool { return slices.Contains(h.sessionsDestroyed(), "session:reviews") })
 	h.wt.mu.Lock()
 	defer h.wt.mu.Unlock()
 	if len(h.wt.removed) != 0 {
 		t.Fatalf("a review Task ran wt remove for %v", h.wt.removed)
 	}
-	if v := h.task("pr-7"); v.Worktree != "" || v.Note != "#7" {
+	if v := h.task("pr-7"); v.Worktree != "" || v.Note != "#7" || v.Tab {
 		t.Fatalf("done task after cleanup = %+v", v)
 	}
 }
@@ -214,6 +225,7 @@ func TestTheLastReviewKeepsASessionThatHoldsOtherTabs(t *testing.T) {
 	h.gh.setReview(merged)
 	h.status(worker.BlockID, "idle")
 	h.waitStage("pr-7", lifecycle.Done)
+	h.do(Request{Op: "close", Task: "pr-7"})
 	eventually(t, "the review worktree removed", func() bool { return len(h.reviewsRemoved()) == 1 })
 	time.Sleep(150 * time.Millisecond)
 	h.rex.mu.Lock()

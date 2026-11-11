@@ -161,6 +161,11 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 				return &lifecycle.NotAllowedError{Signal: "archive", Stage: r.Stage}
 			}
 			if !r.Archived {
+				if r.WindowID != "" {
+					if err := s.apply(r, lifecycle.TaskClosed{}, ""); err != nil {
+						return err
+					}
+				}
 				r.Archived = true
 				s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: "archive", From: r.Stage.String(), To: r.Stage.String()})
 			}

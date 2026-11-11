@@ -598,6 +598,8 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		s.forgetTab(r)
 		s.save(r)
 		switch {
+		case r.Stage == lifecycle.Done:
+			s.apply(r, lifecycle.TabClosed{}, "")
 		case job == JobSetup:
 			s.apply(r, lifecycle.SetupFailed{Detail: "setup tab closed"}, "")
 		case job == JobWorker:
@@ -797,21 +799,40 @@ func prURL(p *PRSnapshot) string {
 }
 
 // recover compares the store with Rex. Each Task in an agent Stage whose tab
-// is gone gets a fresh Worker from its restart budget.
+// is gone gets a fresh Worker from its restart budget. Each Done Task whose
+// tab the user closed while the Scheduler was down cleans up.
 func (s *Scheduler) recover(ctx context.Context) {
 	live := map[string]map[string]bool{}
+	blocksOf := func(r *Record) (map[string]bool, bool) {
+		if blocks, ok := live[r.SessionID]; ok {
+			return blocks, true
+		}
+		blocks, err := s.d.Rex.Blocks(ctx, r.SessionID)
+		if err != nil {
+			s.d.Log.Error("recover", "task", r.ID, "err", err)
+			return nil, false
+		}
+		live[r.SessionID] = blocks
+		return blocks, true
+	}
 	for _, r := range s.list() {
+		if r.Stage == lifecycle.Done {
+			if r.BlockID == "" {
+				continue
+			}
+			if blocks, ok := blocksOf(r); ok && !blocks[r.BlockID] {
+				s.forgetTab(r)
+				s.save(r)
+				s.apply(r, lifecycle.TabClosed{}, "recovered at start")
+			}
+			continue
+		}
 		if !r.Stage.Started() || r.SessionID == "" && r.Job == JobNone && !r.Stage.Agent() {
 			continue
 		}
-		blocks, ok := live[r.SessionID]
+		blocks, ok := blocksOf(r)
 		if !ok {
-			var err error
-			if blocks, err = s.d.Rex.Blocks(ctx, r.SessionID); err != nil {
-				s.d.Log.Error("recover", "task", r.ID, "err", err)
-				continue
-			}
-			live[r.SessionID] = blocks
+			continue
 		}
 		if r.BlockID != "" && blocks[r.BlockID] {
 			if r.Job == JobWorker {
@@ -875,13 +896,14 @@ func cmpString(a, b string) int {
 	return 0
 }
 
-// doneShownFor is how long a Done Task stays on the Board.
+// doneShownFor is how long a Done Task with no tab stays on the Board. A Done
+// Task with an open tab stays until the user closes the tab or archives it.
 const doneShownFor = 7 * 24 * time.Hour
 
 func (s *Scheduler) view() BoardView {
 	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap(), ReviewsPaused: s.paused}
 	for _, r := range s.list() {
-		if r.Stage == lifecycle.Done && (r.Archived || s.now().Sub(r.StageSince) > doneShownFor) {
+		if r.Stage == lifecycle.Done && (r.Archived || r.WindowID == "" && s.now().Sub(r.StageSince) > doneShownFor) {
 			continue
 		}
 		v.Tasks = append(v.Tasks, r.view())

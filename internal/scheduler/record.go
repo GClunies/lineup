@@ -127,6 +127,9 @@ type TaskView struct {
 	Worktree   string         `json:"worktree,omitempty"`
 	Since      time.Time      `json:"since"`
 	Live       bool           `json:"live"`
+	// Tab is true while the Task has a tab open in Rex. A Done Task keeps
+	// its tab until the user closes it.
+	Tab bool `json:"tab,omitempty"`
 }
 
 type BoardView struct {
@@ -156,7 +159,7 @@ func (r *Record) view() TaskView {
 		Stage: r.Stage.String(), StageKey: r.Stage.Key(), Group: r.Group().String(),
 		Flag: string(r.Flag), FlagDetail: r.FlagDetail, Outcome: string(r.Outcome),
 		OverCap: r.OverCap, Worktree: r.Worktree, Since: r.StageSince,
-		Live: r.Job == JobWorker, Skill: r.Overrides["skill"],
+		Live: r.Job == JobWorker, Tab: r.WindowID != "", Skill: r.Overrides["skill"],
 	}
 	if v.Repo == "" { // a Record from before RepoLabel, when the session was the Repo's label
 		v.Repo = r.Session

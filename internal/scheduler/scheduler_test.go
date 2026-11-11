@@ -564,26 +564,172 @@ func TestTaskFromStartToMerged(t *testing.T) {
 
 	h.do(Request{Op: "merge", Task: "ENG-1"})
 	h.waitStage("ENG-1", lifecycle.Done)
-	eventually(t, "cleanup", func() bool {
-		h.wt.mu.Lock()
-		defer h.wt.mu.Unlock()
-		return slices.Contains(h.wt.removed, "ada/eng-1-billing")
+	eventually(t, "the tracker told", func() bool {
+		h.tr.mu.Lock()
+		defer h.tr.mu.Unlock()
+		return slices.Equal(h.tr.status, []string{"started", "in_review", "merged"})
 	})
-	if v := h.task("ENG-1"); v.Outcome != "merged" || v.PRNumber != 42 {
-		t.Fatalf("done task = %+v", v)
+	if v := h.task("ENG-1"); v.Outcome != "merged" || v.PRNumber != 42 || !v.Tab {
+		t.Fatalf("done task = %+v, want merged with its tab", v)
 	}
-	eventually(t, "the Repo session removed", func() bool {
-		h.rex.mu.Lock()
-		defer h.rex.mu.Unlock()
-		return slices.Contains(h.rex.destroyed, "session:data")
+	if len(h.rex.open("claude ci_debug")) != 1 {
+		t.Fatal("the Worker tab closed when the Task ended")
+	}
+	h.wt.mu.Lock()
+	removed := slices.Clone(h.wt.removed)
+	h.wt.mu.Unlock()
+	h.rex.mu.Lock()
+	destroyed := slices.Clone(h.rex.destroyed)
+	h.rex.mu.Unlock()
+	if len(removed) != 0 || len(destroyed) != 0 {
+		t.Fatalf("the Task's end removed worktrees %v and sessions %v, want neither", removed, destroyed)
+	}
+}
+
+// doneWithATab runs ENG-1 to Done by a merge on GitHub. Its Worker's tab stays open.
+func doneWithATab(t *testing.T) (*harness, tab) {
+	t.Helper()
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	worker := h.waitTab("claude working")
+	h.gh.set(PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}, 42, "pr-merged")
+	h.waitStage("ENG-1", lifecycle.Done)
+	eventually(t, "the tracker told", func() bool {
+		h.tr.mu.Lock()
+		defer h.tr.mu.Unlock()
+		return slices.Contains(h.tr.status, "merged")
 	})
-	if len(h.rex.open("claude ci_debug")) != 0 {
-		t.Fatal("a Worker tab is still open after Done")
+	return h, worker
+}
+
+func (h *harness) worktreesRemoved() []string {
+	h.wt.mu.Lock()
+	defer h.wt.mu.Unlock()
+	return slices.Clone(h.wt.removed)
+}
+
+func (h *harness) sessionsDestroyed() []string {
+	h.rex.mu.Lock()
+	defer h.rex.mu.Unlock()
+	return slices.Clone(h.rex.destroyed)
+}
+
+func TestADoneTabTheUserClosesRemovesTheWorktree(t *testing.T) {
+	h, worker := doneWithATab(t)
+	if got := h.worktreesRemoved(); len(got) != 0 {
+		t.Fatalf("removed %v before the user closed the tab", got)
 	}
-	h.tr.mu.Lock()
-	defer h.tr.mu.Unlock()
-	if !slices.Equal(h.tr.status, []string{"started", "in_review", "merged"}) {
-		t.Fatalf("tracker events = %v", h.tr.status)
+	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:data"}) })
+	if v := h.task("ENG-1"); v.Stage != "Done" || v.Outcome != "merged" || v.Tab || v.Live {
+		t.Fatalf("task = %+v, want Done, merged, with no tab", v)
+	}
+}
+
+func TestADoneTabTheUserClosesKeepsASessionWithAnotherTab(t *testing.T) {
+	h, worker := doneWithATab(t)
+	if _, err := h.rex.NewWindow(context.Background(), worker.SessionID, "another tab", "/", nil, []string{"zsh"}); err != nil {
+		t.Fatal(err)
+	}
+	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	eventually(t, "the worktree removed", func() bool { return len(h.worktreesRemoved()) == 1 })
+	time.Sleep(150 * time.Millisecond)
+	if got := h.sessionsDestroyed(); len(got) != 0 {
+		t.Fatalf("destroyed %v while the session held another tab", got)
+	}
+}
+
+func TestClosingADoneTaskClosesItsTabAndRemovesTheWorktree(t *testing.T) {
+	h, worker := doneWithATab(t)
+	h.do(Request{Op: "close", Task: "ENG-1"})
+	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude working")) == 0 })
+	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:data"}) })
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	h.still("ENG-1", lifecycle.Done)
+	if v := h.task("ENG-1"); v.Outcome != "merged" || v.Tab {
+		t.Fatalf("task = %+v, want Done, merged, with no tab", v)
+	}
+	if got := h.worktreesRemoved(); len(got) != 1 {
+		t.Fatalf("removed %v, want one removal", got)
+	}
+}
+
+func TestArchiveClosesAnOpenTab(t *testing.T) {
+	h, _ := doneWithATab(t)
+	h.do(Request{Op: "archive", Task: "ENG-1"})
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); len(ids) != 0 {
+		t.Fatalf("board after archive = %v", ids)
+	}
+	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude working")) == 0 })
+	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	if v := h.task("ENG-1"); v.Outcome != "merged" {
+		t.Fatalf("task = %+v, want the merged outcome kept", v)
+	}
+}
+
+func seedDone(id string, age time.Duration, withTab bool) func(*store.Store) {
+	return func(st *store.Store) {
+		r := Record{Task: lifecycle.Task{ID: id, Stage: lifecycle.Done, Outcome: lifecycle.OutcomeMerged, Policy: testPolicy},
+			Title: id, Session: "data", Repo: "/repos/acme/data", Branch: "b-" + id, StageSince: time.Now().Add(-age)}
+		if withTab {
+			r.SessionID, r.WindowID, r.BlockID = "session:data", "window:"+id, "block:"+id
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+}
+
+func withOpenTabs(ids ...string) func(*Deps) {
+	return func(d *Deps) {
+		rex := d.Rex.(*fakeRex)
+		for _, id := range ids {
+			rex.tabs = append(rex.tabs, &tab{Window: Window{"session:data", "window:" + id, "block:" + id}, argv: []string{"claude"}})
+		}
+	}
+}
+
+func TestADoneTaskWithAnOpenTabStaysOnTheBoard(t *testing.T) {
+	seed := func(st *store.Store) {
+		seedDone("ENG-tab", 8*24*time.Hour, true)(st)
+		seedDone("ENG-bare", 8*24*time.Hour, false)(st)
+		seedDone("ENG-new", 24*time.Hour, false)(st)
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, withOpenTabs("ENG-tab"))
+	ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView))
+	slices.Sort(ids)
+	if !slices.Equal(ids, []string{"ENG-new", "ENG-tab"}) {
+		t.Fatalf("board = %v, want ENG-new and ENG-tab", ids)
+	}
+	if v := h.task("ENG-tab"); !v.Tab {
+		t.Fatalf("task = %+v, want its tab shown", v)
+	}
+}
+
+func TestRecoveryCleansUpADoneTaskWhoseTabClosedWhileTheSchedulerWasDown(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedDone("ENG-gone", 8*24*time.Hour, true))
+	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"b-ENG-gone"}) })
+	if v := h.task("ENG-gone"); v.Tab || v.Stage != "Done" {
+		t.Fatalf("task = %+v, want Done with no tab", v)
+	}
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); len(ids) != 0 {
+		t.Fatalf("board = %v, want the aged-out Task gone", ids)
+	}
+}
+
+func TestRecoveryKeepsADoneTaskWhoseTabIsOpen(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedDone("ENG-open", time.Hour, true), withOpenTabs("ENG-open"))
+	h.still("ENG-open", lifecycle.Done)
+	if got := h.worktreesRemoved(); len(got) != 0 {
+		t.Fatalf("removed %v for a Task whose tab is open", got)
+	}
+	if v := h.task("ENG-open"); !v.Tab {
+		t.Fatalf("task = %+v, want its tab kept", v)
 	}
 }
 
