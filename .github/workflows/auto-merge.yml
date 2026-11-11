@@ -6,27 +6,28 @@ name: Auto-merge
 # a PR in a stack, so `gh stack merge` lands each one. A PR from a fork never
 # gets auto-merge.
 #
-# The merge runs as github-actions[bot], and GitHub neither applies the
-# delete-branch-on-merge setting to that merge nor starts a workflow from it.
-# The sweep job deletes the head branch of each merged PR on a schedule.
+# The job arms auto-merge with LINEUP_PAT, a fine-grained token of the repo
+# owner's, so the merge is credited to the owner. GitHub then deletes the
+# merged branch under the delete-branch-on-merge setting, which it skips for
+# a merge by github-actions[bot].
 on:
   pull_request:
     types: [opened, reopened, ready_for_review]
-  schedule:
-    - cron: '17 * * * *'
-  workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   enable:
-    if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The LINEUP_PAT secret is empty. Create a fine-grained token with Contents and Pull requests write on this repo, then: gh secret set LINEUP_PAT --repo $GITHUB_REPOSITORY"
+            exit 1
+          fi
           required=$(gh api "repos/$GITHUB_REPOSITORY/rules/branches/$BASE" \
             --jq '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | index("test") != null')
           if [ "$required" != "true" ]; then
@@ -43,23 +44,6 @@ jobs:
             exit 1
           fi
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.LINEUP_PAT }}
           PR: ${{ github.event.pull_request.number }}
           BASE: ${{ github.event.pull_request.base.ref }}
-  sweep:
-    if: ${{ github.event_name != 'pull_request' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - run: |
-          default=$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)
-          gh api "repos/$GITHUB_REPOSITORY/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
-            --jq ".[] | select(.merged_at != null and .head.repo.full_name == \"$GITHUB_REPOSITORY\") | .head.ref" \
-          | sort -u | while read -r head; do
-            [ "$head" = "$default" ] && continue
-            gh api "repos/$GITHUB_REPOSITORY/branches/$head" --silent 2>/dev/null || continue
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$head" --silent
-            echo "::notice::Deleted $head, merged."
-          done
-        env:
-          GH_TOKEN: ${{ github.token }}
