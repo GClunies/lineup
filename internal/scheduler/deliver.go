@@ -166,7 +166,7 @@ func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.St
 	var claimed bool
 	s.update(r.ID, func(rec *Record) {
 		if claimed = rec.Pending != nil && *rec.Pending == stage && rec.BlockID == r.BlockID; claimed {
-			rec.Pending, rec.WorkerStage = nil, stage
+			rec.Pending, rec.WorkerStage, rec.WorkerState = nil, stage, "working"
 		}
 	})
 	if !claimed || prompt == "" {

@@ -1576,6 +1576,23 @@ func TestARerunTypesThePromptAgain(t *testing.T) {
 	h.waitTyped(worker.BlockID, "prompt ci_debug", "prompt ci_debug")
 }
 
+func TestARerunWaitsWhileTheWorkerReadsATypedPrompt(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.ciFails()
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "ci_debug"})
+	time.Sleep(300 * time.Millisecond)
+	if got := h.rex.typedInto(worker.BlockID); len(got) != 1 {
+		t.Fatalf("typed %q: the second prompt went in before the Worker reported working", got)
+	}
+	h.status(worker.BlockID, "working")
+	h.status(worker.BlockID, "idle")
+	h.waitTyped(worker.BlockID, "prompt ci_debug", "prompt ci_debug")
+}
+
 func TestAWorkerBetweenStagesMeetsNoContract(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	worker := h.working()

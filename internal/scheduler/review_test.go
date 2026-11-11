@@ -758,6 +758,8 @@ func TestEachReviewWorkerTabOpensThePRInHunkBesideIt(t *testing.T) {
 	}
 	h.status(resumed.BlockID, "idle")
 	h.waitTyped(resumed.BlockID, "prompt reviewing")
+	h.status(resumed.BlockID, "working")
+	h.status(resumed.BlockID, "idle")
 
 	h.do(Request{Op: "rerun", Task: "pr-7", Stage: "reviewing"})
 	h.waitTyped(resumed.BlockID, "prompt reviewing", "prompt reviewing")
