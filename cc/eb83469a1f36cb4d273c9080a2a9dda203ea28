@@ -1,0 +1,24 @@
+docs/plans/user-closes-tabs.md
+  s_ca2efc3bd22f0b::t_9cc486621f5e9d 299
+  s_ca2efc3bd22f0b::t_240275a3192f6d 68-69
+  s_ca2efc3bd22f0b::t_408e367df6ffa1 1-59,61,66-67,70-124,126-211,213-298,300-438
+  s_ca2efc3bd22f0b::t_ff07ff65d7edf1 60,62-65
+  s_ca2efc3bd22f0b::t_e737becfd2b54f 125
+  s_ca2efc3bd22f0b::t_b45a7467604b73 212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cceb83469a1f36cb4d273c9080a2a9dda203ea28",
+  "prompts": {},
+  "sessions": {
+    "s_ca2efc3bd22f0b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04f225e1-7e75-4e97-88e6-0baef854aa41",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
