@@ -318,8 +318,13 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 			}
 			r.Branch = "lineup/" + strings.ToLower(r.ID) + "-" + slug
 		}
-		if old, ok := s.recs[r.ID]; ok && old.Stage != lifecycle.Done {
-			return fmt.Errorf("%s is already on the Board", r.ID)
+		if old, ok := s.recs[r.ID]; ok {
+			if old.keepsTab() {
+				return fmt.Errorf("%s is Done and keeps its tab: close its tab first", r.ID)
+			}
+			if old.Stage != lifecycle.Done {
+				return fmt.Errorf("%s is already on the Board", r.ID)
+			}
 		}
 		r.RepoLabel = sessionLabel(r.Repo, s.repos())
 		r.Session = r.RepoLabel

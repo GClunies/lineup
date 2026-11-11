@@ -206,12 +206,13 @@ func (s *Scheduler) addReview(a reviewAdd) (*Record, error) {
 }
 
 // reviewTask is the Record as the queue rules see it. ok is false for a
-// build Task.
+// build Task. A Done review that keeps its tab still holds the PR, because a
+// new review would take its ID and its worktree.
 func (r *Record) reviewTask() (t github.ReviewTask, ok bool) {
 	if r.Review == nil {
 		return t, false
 	}
-	return github.ReviewTask{URL: r.Review.URL, Head: r.Review.Head, Done: r.Stage == lifecycle.Done}, true
+	return github.ReviewTask{URL: r.Review.URL, Head: r.Review.Head, Done: r.Stage == lifecycle.Done && !r.keepsTab()}, true
 }
 
 // startOpenReview finds the open review Task of the PR. It starts the Task if
@@ -220,6 +221,9 @@ func (r *Record) reviewTask() (t github.ReviewTask, ok bool) {
 // itself. Only the loop calls it.
 func (s *Scheduler) startOpenReview(key ReviewKey) (ReviewResult, bool, error) {
 	for _, r := range s.list() {
+		if r.Review != nil && r.keepsTab() && r.Review.is(key) {
+			return ReviewResult{}, false, fmt.Errorf("%s is Done and keeps its tab: close its tab first", r.ID)
+		}
 		if r.Review == nil || r.Stage == lifecycle.Done || !r.Review.is(key) {
 			continue
 		}

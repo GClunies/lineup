@@ -153,6 +153,10 @@ func (v BoardView) OfKind(k lifecycle.Kind) BoardView {
 	return out
 }
 
+// keepsTab reports whether the Task is Done and its tab is still open. Only
+// the user closes that tab.
+func (r *Record) keepsTab() bool { return r.Stage == lifecycle.Done && r.WindowID != "" }
+
 func (r *Record) view() TaskView {
 	v := TaskView{
 		ID: r.ID, Kind: r.Kind, Title: r.Title, Repo: r.RepoLabel,

@@ -660,6 +660,17 @@ func TestClosingADoneTaskClosesItsTabAndRemovesTheWorktree(t *testing.T) {
 	}
 }
 
+func TestAddRefusesATaskWhoseDoneTaskKeepsItsTab(t *testing.T) {
+	h, _ := doneWithATab(t)
+	_, err := h.s.Handle(context.Background(), Request{Op: "add", Issue: "ENG-1"})
+	if err == nil || !strings.Contains(err.Error(), "close its tab") {
+		t.Fatalf("add over a Done Task with a tab: err = %v, want a refusal that names the tab", err)
+	}
+	if v := h.task("ENG-1"); v.Stage != "Done" || !v.Tab {
+		t.Fatalf("task = %+v, want the Done Task untouched", v)
+	}
+}
+
 func TestArchiveClosesAnOpenTab(t *testing.T) {
 	h, _ := doneWithATab(t)
 	h.do(Request{Op: "archive", Task: "ENG-1"})

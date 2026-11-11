@@ -194,6 +194,38 @@ func TestAReviewedTaskKeepsItsTab(t *testing.T) {
 	}
 }
 
+func TestADoneReviewWithAnOpenTabBlocksANewReviewOfThePR(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	worker := h.waitTab("claude reviewing")
+	merged := openPR(7, "h1")
+	merged.State = "MERGED"
+	h.gh.setReview(merged)
+	h.status(worker.BlockID, "idle")
+	h.waitStage("pr-7", lifecycle.Done)
+
+	h.gh.setReview(openPR(7, "h2"))
+	if _, err := h.s.Handle(context.Background(), Request{Op: "review", URL: prURL7}); err == nil || !strings.Contains(err.Error(), "close its tab") {
+		t.Fatalf("review of a PR whose Done review keeps its tab: err = %v, want a refusal that names the tab", err)
+	}
+	var task github.ReviewTask
+	h.s.call(func() { task, _ = h.s.recs["pr-7"].reviewTask() })
+	if task.Done {
+		t.Fatal("the queue sees a Done review that keeps its tab as ended, so it would add the PR again")
+	}
+
+	h.do(Request{Op: "close", Task: "pr-7"})
+	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude reviewing")) == 0 })
+	h.s.call(func() { task, _ = h.s.recs["pr-7"].reviewTask() })
+	if !task.Done {
+		t.Fatal("the queue still holds the PR after the tab closed")
+	}
+	if res := h.review(prURL7); res.Action != ReviewAdded {
+		t.Fatalf("review after the tab closed = %+v, want a new review", res)
+	}
+}
+
 func TestMergedAndClosedPRsEndTheReview(t *testing.T) {
 	for state, outcome := range map[string]string{"MERGED": "merged", "CLOSED": "closed"} {
 		h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
