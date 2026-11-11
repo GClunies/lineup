@@ -523,6 +523,8 @@ func (s *Scheduler) cleanup(ctx context.Context, r Record) {
 	case r.Worktree != "" || r.SessionID != "":
 		if err := s.d.Worktrees.Remove(ctx, r.Repo, r.Branch); err != nil {
 			s.d.Log.Error("remove worktree", "task", r.ID, "err", err)
+		} else {
+			s.update(r.ID, func(r *Record) { r.Worktree = "" })
 		}
 	}
 	var last bool
@@ -827,6 +829,9 @@ func (s *Scheduler) recover(ctx context.Context) {
 	for _, r := range s.list() {
 		if r.Stage == lifecycle.Done {
 			if r.BlockID == "" {
+				if r.Worktree != "" && !r.WorktreeKept {
+					s.apply(r, lifecycle.TabClosed{}, "recovered at start")
+				}
 				continue
 			}
 			if blocks, ok := blocksOf(r); ok && !blocks[r.BlockID] {

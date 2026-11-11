@@ -652,6 +652,17 @@ func TestRecoveryWithNoTabInReviewReadyKeepsTheReview(t *testing.T) {
 	}
 }
 
+func TestRecoveryRemovesTheWorktreeOfADoneReviewWhoseCleanupNeverRan(t *testing.T) {
+	seed := func(st *store.Store) {
+		seedReviewTab(lifecycle.Done, "", "", "")(st)
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed)
+	eventually(t, "the review worktree removed", func() bool {
+		return slices.Equal(h.reviewsRemoved(), []string{"/repos/acme/data.review-pr-7"})
+	})
+	eventually(t, "the removed worktree to leave the review", func() bool { return h.task("R-3").Worktree == "" })
+}
+
 func TestRecoveryWithNoTabWhileReviewingStartsAFreshWorker(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReview(lifecycle.Reviewing))
 	if w := h.waitTab("claude reviewing"); w.cwd != "/repos/acme/data" {

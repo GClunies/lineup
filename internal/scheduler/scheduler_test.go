@@ -664,6 +664,53 @@ func TestClosingADoneTaskClosesItsTabAndRemovesTheWorktree(t *testing.T) {
 	}
 }
 
+func TestACleanedUpTaskReportsNoWorktree(t *testing.T) {
+	h, worker := doneWithATab(t)
+	if v := h.task("ENG-1"); v.Worktree == "" {
+		t.Fatalf("task = %+v, want its worktree before the close", v)
+	}
+	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	eventually(t, "the worktree removed", func() bool { return len(h.worktreesRemoved()) == 1 })
+	eventually(t, "the removed worktree to leave the Task", func() bool { return h.task("ENG-1").Worktree == "" })
+}
+
+func TestClosingADoneTaskTwiceRemovesItsWorktreeOnce(t *testing.T) {
+	h, _ := doneWithATab(t)
+	h.do(Request{Op: "close", Task: "ENG-1"})
+	eventually(t, "the worktree removed", func() bool { return len(h.worktreesRemoved()) == 1 })
+	eventually(t, "the removed worktree to leave the Task", func() bool { return h.task("ENG-1").Worktree == "" })
+	h.do(Request{Op: "close", Task: "ENG-1"})
+	h.still("ENG-1", lifecycle.Done)
+	if got := h.worktreesRemoved(); len(got) != 1 {
+		t.Fatalf("removed %v, want one removal for two closes", got)
+	}
+}
+
+func seedDoneWithAWorktree(id string) func(*store.Store) {
+	return func(st *store.Store) {
+		r := Record{Task: lifecycle.Task{ID: id, Stage: lifecycle.Done, Outcome: lifecycle.OutcomeMerged, Policy: testPolicy},
+			Title: id, Session: "data", SessionID: "session:data", Repo: "/repos/acme/data", Branch: "b-" + id,
+			Worktree: "/worktrees/b-" + id, StageSince: time.Now()}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+}
+
+func TestRecoveryRemovesTheWorktreeOfADoneTaskWhoseCleanupNeverRan(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedDoneWithAWorktree("ENG-crash"))
+	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"b-ENG-crash"}) })
+	eventually(t, "the removed worktree to leave the Task", func() bool { return h.task("ENG-crash").Worktree == "" })
+}
+
+func TestRecoveryLeavesADoneTaskWithNoWorktreeAlone(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedDone("ENG-clean", time.Hour, false))
+	h.still("ENG-clean", lifecycle.Done)
+	if got := h.worktreesRemoved(); len(got) != 0 {
+		t.Fatalf("removed %v for a Done Task with no tab and no worktree", got)
+	}
+}
+
 func TestAddRefusesATaskWhoseDoneTaskKeepsItsTab(t *testing.T) {
 	h, _ := doneWithATab(t)
 	_, err := h.s.Handle(context.Background(), Request{Op: "add", Issue: "ENG-1"})

@@ -154,7 +154,12 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 	case "merge":
 		return nil, s.signal(req.Task, lifecycle.PRMerge{})
 	case "close":
-		return nil, s.signal(req.Task, lifecycle.TaskClosed{})
+		return nil, s.with(req.Task, func(r *Record) error {
+			if r.Stage == lifecycle.Done && r.WindowID == "" && r.Worktree == "" {
+				return nil
+			}
+			return s.apply(r, lifecycle.TaskClosed{}, "")
+		})
 	case "archive":
 		return nil, s.with(req.Task, func(r *Record) error {
 			if r.Stage != lifecycle.Done {
