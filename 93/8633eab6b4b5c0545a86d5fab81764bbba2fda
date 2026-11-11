@@ -1,0 +1,31 @@
+internal/scheduler/deliver.go
+  s_d9bf6f60fdc2aa::t_21426f4a31b707 169
+internal/scheduler/review_test.go
+  s_535d8965140e10::t_99c79926d8b411 761-762
+internal/scheduler/scheduler_test.go
+  s_535d8965140e10::t_27cb2af8a2d176 1579-1595
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "938633eab6b4b5c0545a86d5fab81764bbba2fda",
+  "prompts": {},
+  "sessions": {
+    "s_535d8965140e10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b9e1685c-5022-4378-9e4e-03f300532e37",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_d9bf6f60fdc2aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1bbe6ae-c0b4-4d57-9fe2-abde2ab7c5a0",
+        "model": "claude-haiku-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
