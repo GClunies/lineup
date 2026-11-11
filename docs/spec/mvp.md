@@ -12,7 +12,7 @@ The MVP is complete when this sequence works with no manual step other than the 
 2. A Worker does the Task in the background. If the skill or the user asks for a plan first, the Worker shows it to the user in its own tab.
 3. Workers implement the change, fix CI, and answer review comments.
 4. The user merges the PR from the Board.
-5. The Scheduler closes the tab and removes the worktree.
+5. The Task goes to Done and keeps its tab and worktree. When the user closes the tab, the Scheduler removes the worktree.
 
 ## Scope
 
@@ -96,7 +96,9 @@ A Responding round that pushes nothing meets its contract when the latest poll s
 | CI debug, Responding, with a `budget spent` flag that `pr-seen` set | `pr-seen` | The Stage that the first gap leads to |
 | Ready to land | `pr-merge` (user key `m`) | Done, marked merged |
 | Any Stage | `pr-merged` outside lineup, for example by a person or by GitHub auto-merge | Done, marked merged |
-| Any Stage | `task-closed` (user key `x`, confirmed) | Done, marked closed |
+| Any Stage except Done | `task-closed` (user key `x`, confirmed) | Done, marked closed. The Scheduler closes the tab and removes the worktree. |
+| Done | `task-closed` (user key `x` on a Done Task with a tab, confirmed) | Done, with the same outcome. The Scheduler closes the tab and removes the worktree. |
+| Done | `tab-closed`: the user closed the Task's tab in Rex | Done, with the same outcome. The Scheduler removes the worktree, and the Repo session if it holds no other tab. |
 
 `pr-seen` is a level Signal. The poll sends it for each open build PR at each poll, after the other GitHub Signals. It carries the PR's current facts. A second `pr-seen` with the same facts changes nothing. A Task that is already where its first gap leads stays there.
 
@@ -458,14 +460,14 @@ The Board shows the build Tasks. Review Tasks show on the Reviews tab of the `re
 | `p` | Show a live preview of the Worker's screen beside the Board |
 | `f` | Show the detail pane at full screen, and back |
 | `m` | Merge the PR (Ready to land) |
-| `x` | Close the Task, after a confirmation. On a Done Task, archive it after a confirmation. |
+| `x` | Close the Task, after a confirmation. On a Done Task with a tab, close the tab and remove the worktree, after a confirmation. On a Done Task with no tab, archive it, after a confirmation. |
 | `s` | Start a Queued Task |
 | `o` | Open the PR or the Issue in the browser |
 | `R` | Refresh now: the Scheduler polls GitHub for every started Task |
 | `z` | Zoom this tab's agent pane to full height, and back |
 | `?` | Show all keys |
 
-A Done Task leaves the Board 7 days after it ends, or when the user archives it (`x` or `lineup archive <task>`). The Scheduler keeps the Task and its events, so `lineup show <task>` still finds it. To put an archived Issue back on the Board, run `lineup add` again.
+A Task that ends keeps its tab and worktree. Only the user closes the tab: with `x` or `lineup close <task>` on the Done Task, with the tab's own close in Rex, or with `lineup archive <task>`. A Done Task leaves the Board when the user archives it. It also leaves 7 days after it ends, but only if its tab is closed. A Done Task with an open tab stays on the Board. The Scheduler refuses `lineup add` for a Done Task's ID while that Task keeps its tab. The Scheduler keeps the Task and its events, so `lineup show <task>` still finds it. To put an archived Issue back on the Board, run `lineup add` again.
 
 ## Tracker browser
 

@@ -31,7 +31,7 @@ A Tracker's own group of Issues, for example a Linear project.
 _Avoid_: Area, epic, repo
 
 **Task**:
-One unit of work on the Board, in exactly one Repo, done by Workers in one isolated tab and worktree. A Task links to zero or one Issue, and it ends when its PR merges or the user closes it.
+One unit of work on the Board, in exactly one Repo, done by Workers in one isolated tab and worktree. A Task links to zero or one Issue, and it ends when its PR merges or the user closes it. A Task that ends goes to Done and keeps its tab and worktree. Only the user closes a Task's tab.
 _Avoid_: Job, thread, card, item
 
 **Ad hoc Task**:
@@ -45,11 +45,11 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The top of the `hub` tab, above the Orchestrator. It has three views, and the keys `1`, `2`, and `3` pick one. `1 plan` is the tracker browser. `2 work` lists the build Tasks, grouped as Needs you, Working, Waiting, Queued, and Done. `3 review` has a Reviews tab that shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived or 7 days after it ends.
+The top of the `hub` tab, above the Orchestrator. It has three views, and the keys `1`, `2`, and `3` pick one. `1 plan` is the tracker browser. `2 work` lists the build Tasks, grouped as Needs you, Working, Waiting, Queued, and Done. `3 review` has a Reviews tab that shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:
-A Done Task that the user hid from the Board. Its record and events stay in the store.
+A Done Task that the user hid from the Board. Archiving closes the Task's tab and removes its worktree, if they are still there. Its record and events stay in the store.
 _Avoid_: Deleted, removed
 
 **Hub**:
