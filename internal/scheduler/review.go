@@ -282,9 +282,8 @@ func hunkArgv(url string) []string {
 	return []string{"sh", "-c", `GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"`, "hunk", url}
 }
 
-// removeReviewWorktree runs when the user closes a Done review's tab, or closes
-// the review with `lineup close`. It never runs worktrunk: the review worktree
-// is not worktrunk's.
+// removeReviewWorktree never runs worktrunk: the review worktree is not
+// worktrunk's.
 func (s *Scheduler) removeReviewWorktree(ctx context.Context, r Record) {
 	if r.Worktree == "" {
 		return

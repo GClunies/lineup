@@ -51,8 +51,6 @@ func (c *Client) run(ctx context.Context, args ...string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// targetNotFound matches the text that rex prints for a session, window, or
-// block that does not exist, for example `session target "session:1" not found`.
 var targetNotFound = regexp.MustCompile(`target "[^"]*" not found`)
 
 // IsNotFound reports whether err says that a rex target is missing. A missing

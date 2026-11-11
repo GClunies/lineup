@@ -49,8 +49,7 @@ type fakeRex struct {
 	// before NewWindow returns.
 	exitFast string
 	// capture is what Capture returns.
-	capture string
-	// blocksErr fails every Blocks call.
+	capture   string
 	blocksErr error
 }
 
