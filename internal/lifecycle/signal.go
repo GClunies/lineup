@@ -16,7 +16,8 @@ type PRMerge struct{}
 // cleans up a Done Task that kept its tab.
 type TaskClosed struct{}
 
-// Rerun is the Orchestrator's override that starts a fresh Worker for Stage.
+// Rerun is the Orchestrator's override that types the prompt for Stage into the
+// Task's Worker again.
 type Rerun struct{ Stage Stage }
 
 // Reopen starts the Task's Worker again in its Stage, in the same conversation.

@@ -31,7 +31,7 @@ A Tracker's own group of Issues, for example a Linear project.
 _Avoid_: Area, epic, repo
 
 **Task**:
-One unit of work on the Board, in exactly one Repo, done by Workers in one isolated tab and worktree. A Task links to zero or one Issue, and it ends when its PR merges or the user closes it. A Task that ends goes to Done and keeps its tab and worktree. Only the user closes a Task's tab.
+One unit of work on the Board, in exactly one Repo, done by one Worker in one isolated tab and worktree. A Task links to zero or one Issue, and it ends when its PR merges or the user closes it. A Task that ends goes to Done and keeps its tab and worktree. Only the user closes a Task's tab.
 _Avoid_: Job, thread, card, item
 
 **Ad hoc Task**:

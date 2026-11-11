@@ -40,7 +40,7 @@ const usage = `usage: lineup [command]
                                a Worker's question for the user, on the Task's row
   lineup set <task> key=value  override configuration, for example model=claude-opus-5-5
   lineup cap <n>               set the WIP cap
-  lineup rerun <task> <stage>  start a fresh Worker, for example for ci_debug
+  lineup rerun <task> <stage>  type the Stage's prompt into the Worker again, for example for ci_debug
   lineup merge <task>
   lineup close <task>
   lineup archive <task>        hide a Done Task from the Board

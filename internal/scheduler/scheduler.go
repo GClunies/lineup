@@ -755,7 +755,8 @@ func prURL(p *PRSnapshot) string {
 }
 
 // recover compares the store with Rex. Each Task in an agent Stage whose tab
-// is gone gets a fresh Worker from its restart budget.
+// is gone resumes its conversation in a new tab. Each resume spends one restart
+// from its budget.
 func (s *Scheduler) recover(ctx context.Context) {
 	live := map[string]map[string]bool{}
 	blocksOf := func(r *Record) (map[string]bool, bool) {
