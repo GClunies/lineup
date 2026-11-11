@@ -325,7 +325,7 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 		}
 		if old, ok := s.recs[r.ID]; ok {
 			if old.keepsTab() {
-				return fmt.Errorf("%s is Done and keeps its tab: close its tab first", r.ID)
+				return fmt.Errorf("%s is Done and keeps its tab: close its tab first with lineup close %s", r.ID, r.ID)
 			}
 			if old.Stage != lifecycle.Done {
 				return fmt.Errorf("%s is already on the Board", r.ID)

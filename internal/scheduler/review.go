@@ -221,7 +221,7 @@ func (r *Record) reviewTask() (t github.ReviewTask, ok bool) {
 func (s *Scheduler) startOpenReview(key ReviewKey) (ReviewResult, bool, error) {
 	for _, r := range s.list() {
 		if r.Review != nil && r.keepsTab() && r.Review.is(key) {
-			return ReviewResult{}, false, fmt.Errorf("%s is Done and keeps its tab: close its tab first", r.ID)
+			return ReviewResult{}, false, fmt.Errorf("%s is Done and keeps its tab: close its tab first with lineup close %s", r.ID, r.ID)
 		}
 		if r.Review == nil || r.Stage == lifecycle.Done || !r.Review.is(key) {
 			continue

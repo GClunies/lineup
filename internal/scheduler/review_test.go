@@ -206,7 +206,7 @@ func TestADoneReviewWithAnOpenTabBlocksANewReviewOfThePR(t *testing.T) {
 	h.waitStage("pr-7", lifecycle.Done)
 
 	h.gh.setReview(openPR(7, "h2"))
-	if _, err := h.s.Handle(context.Background(), Request{Op: "review", URL: prURL7}); err == nil || !strings.Contains(err.Error(), "close its tab") {
+	if _, err := h.s.Handle(context.Background(), Request{Op: "review", URL: prURL7}); err == nil || !strings.Contains(err.Error(), "close its tab first with lineup close pr-7") {
 		t.Fatalf("review of a PR whose Done review keeps its tab: err = %v, want a refusal that names the tab", err)
 	}
 	var task github.ReviewTask
