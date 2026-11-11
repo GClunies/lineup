@@ -105,6 +105,7 @@ type Model struct {
 	mode          mode
 	pendingTask   string // Task the current prompt is about
 	pendingOp     string // close or archive, for the y/n prompt
+	pendingAsk    string // the question that the footer asks before y/n
 	width, height int
 
 	preview    bool
@@ -349,8 +350,13 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		if ok {
 			m.mode, m.pendingTask, m.pendingOp = modeConfirm, t.ID, "close"
+			m.pendingAsk = "close " + t.ID
 			if t.Group == lifecycle.GroupDone.String() {
-				m.pendingOp = "archive"
+				if t.Tab {
+					m.pendingAsk = "close " + t.ID + "'s tab and worktree"
+				} else {
+					m.pendingOp, m.pendingAsk = "archive", "archive "+t.ID
+				}
 			}
 		}
 	case "s":

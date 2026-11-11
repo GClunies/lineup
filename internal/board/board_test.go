@@ -261,6 +261,45 @@ func TestXArchivesADoneTask(t *testing.T) {
 	}
 }
 
+func TestXClosesTheTabOfADoneTask(t *testing.T) {
+	f := &fakeClient{}
+	v := fixture()
+	for i := range v.Tasks {
+		if v.Tasks[i].ID == "ENG-560" {
+			v.Tasks[i].Tab = true
+		}
+	}
+	m := newModel(f, v)
+	m.sel = "ENG-560"
+	if !strings.Contains(m.footer(), "x close") {
+		t.Fatalf("footer = %q, want the close hint", m.footer())
+	}
+	m, _ = press(m, "x")
+	if !strings.Contains(m.footer(), "close ENG-560's tab and worktree? (y/n)") {
+		t.Fatalf("footer = %q", m.footer())
+	}
+	_, cmd := press(m, "y")
+	cmd()
+	if len(f.calls) != 1 || f.calls[0].Op != "close" || f.calls[0].Task != "ENG-560" {
+		t.Fatalf("calls = %+v, want one close", f.calls)
+	}
+}
+
+func TestNOnTheCloseOfADoneTaskKeepsTheTab(t *testing.T) {
+	f := &fakeClient{}
+	v := fixture()
+	for i := range v.Tasks {
+		v.Tasks[i].Tab = v.Tasks[i].ID == "ENG-560"
+	}
+	m := newModel(f, v)
+	m.sel = "ENG-560"
+	m, _ = press(m, "x")
+	m, cmd := press(m, "n")
+	if cmd != nil || len(f.calls) != 0 || !strings.Contains(m.footer(), "close cancelled") {
+		t.Fatalf("n sent %+v, footer %q, want nothing sent", f.calls, m.footer())
+	}
+}
+
 func startFull(t *testing.T) (*fakeClient, Model) {
 	f := &fakeClient{errs: map[string]error{"start": errors.New("wip cap full")}}
 	m := newModel(f, fixture())

@@ -270,7 +270,8 @@ const reviewTasksHelp = `
             in Review ready
    p        live preview of the Worker's screen
    f        detail pane at full screen, and back
-   x        close the Task, or archive a Done Task, after y/n
+   x        close the Task, or its tab and worktree when it is Done,
+            or archive a Done Task with no tab, after y/n
    s        start a Queued Task
    o        open the PR
    R        refresh now: search GitHub again and poll every started
