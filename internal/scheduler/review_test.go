@@ -194,6 +194,27 @@ func TestAReviewedTaskKeepsItsTab(t *testing.T) {
 	}
 }
 
+func TestClosingTheWorkerPaneOfADoneReviewClosesTheHunkTabAndRemovesTheWorktree(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	worker := h.waitTab("claude reviewing")
+	merged := openPR(7, "h1")
+	merged.State = "MERGED"
+	h.gh.setReview(merged)
+	h.status(worker.BlockID, "idle")
+	h.waitStage("pr-7", lifecycle.Done)
+
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	eventually(t, "the hunk pane's tab closed", func() bool {
+		splits := h.rex.allSplits()
+		return len(splits) == 1 && splits[0].closed
+	})
+	eventually(t, "the review worktree removed", func() bool {
+		return slices.Equal(h.reviewsRemoved(), []string{"/repos/acme/data.review-pr-7"})
+	})
+}
+
 func TestADoneReviewWithAnOpenTabBlocksANewReviewOfThePR(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))

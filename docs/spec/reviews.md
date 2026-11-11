@@ -168,7 +168,7 @@ The queue's filters pick the candidates. A candidate enters the queue only when 
 
 - It is not a draft, and it does not come from a fork. `pr-review` refuses fork PRs, because a fork's code would run with the user's credentials.
 - Its author is not the user and is not a bot.
-- No review Task exists for its URL at its current head commit, Done or not. A Task that the user closed at one head stays closed until the author pushes. The user can always start a review again with `r`.
+- No review Task exists for its URL at its current head commit, Done or not. A Done review that keeps its tab holds the PR. The queue starts a new review only after the user closes that tab. A Task that the user closed at one head stays closed until the author pushes. The user can always start a review again with `r`, after the tab closes.
 - It wants the user's review. A PR that the user reviewed before wants it only when it requests the user again. Any other PR wants it only when nobody approved it yet. A pending review, a draft that the user has not submitted, does not count as a review.
 
 These rules are the rules of the Herdr `review-queue` plugin, which this queue replaces.
@@ -204,7 +204,7 @@ The Scheduler reads the queues and their slots when it starts. After a change to
 
 ## Review Tasks
 
-A review Task is a Task with Kind `review`. Its ID has the form `pr-<number>`, for example `pr-4955`. If a live Task already has that ID for another repository's PR, the ID adds the repository's name, for example `pr-4955-web`. A new review of a PR whose review Task is Done takes the same ID. It keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `r` or `lineup review` has no queue. While the Done review keeps its tab, the queue adds no review of the PR and `lineup review` refuses it, until the user closes the tab.
+A review Task is a Task with Kind `review`. Its ID has the form `pr-<number>`, for example `pr-4955`. If a Task with that ID for another repository's PR is live or keeps its tab, the ID adds the repository's name, for example `pr-4955-web`. A new review of a PR whose review Task is Done takes the same ID. The Task keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `r` or `lineup review` has no queue. A Done review that keeps its tab holds its PR. Until the user closes the tab, the queue adds no review of the PR, and `lineup review` refuses it.
 
 `lineup review` and `r` read the URL as `owner/repo#number`. If a review Task for that PR is open, they add nothing. They start that Task if it is Queued. They reopen its Worker if the Worker closed in Review ready. They run it again if it stopped for good, for example after a failed setup. If it runs, they focus its tab. They refuse a PR from a fork, and a PR that is closed or merged.
 
@@ -242,7 +242,7 @@ A review Task never enters a Stage of a build Task, and a build Task never enter
 - Review ready is a Stage, not a flag. The Worker's later statuses, for example `working` after the user's answer, never move the Task back to Reviewing. Recovery restarts a lost Worker only in an agent Stage, so a finished review never runs again after a restart.
 - `reopen` fits only Review ready. It clears the Task's flag and opens a new tab, and it takes no new slot.
 - `rerun` takes only the Stages of the Task's Kind, so a review Task never enters Working, CI running, or any other build Stage.
-- When a PR that the user reviewed requests the user again, its review Task is already Done. The queue then starts a new review Task. `pr-review` reads its review record and reviews only what changed.
+- When a PR that the user reviewed requests the user again, its review Task is already Done. A Done review that keeps its tab holds the PR. The queue starts a new review Task only after the user closes that tab. `pr-review` reads its review record and reviews only what changed.
 
 ### The review poll
 
@@ -274,7 +274,7 @@ If no `[[repos]]` checkout has the PR's repository as its `origin`, the add fail
 
 The lock keeps two starts from fetching into one checkout at once. A fetch from outside lineup, for example the user's editor, can still hold a ref lock in that checkout. If git reports `cannot lock ref`, lineup tries the fetch again after 0.5 s, 1 s, and 2 s. A failed step gives the flag `setup failed`.
 
-**Cleanup.** A review Task that ends keeps its tab, its hunk pane, and its review worktree. The user ends them by closing the Task's tab, or with `x` or `lineup close <task>`. Then lineup closes the tab if it is open, fetches, and removes the review worktree if it holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
+**Cleanup.** A review Task that ends keeps its tab, its hunk pane, and its review worktree. The user ends them by closing the Task's tab, or with `x` or `lineup close <task>`. Then lineup closes the tab if it is open and fetches. It removes the review worktree if the worktree holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
 
 **The hunk pane.** Each review Worker gets the PR's diff beside it, so the user reads the diff next to the review. lineup splits the Worker's tab when the Worker starts: on the first start, a restart, a rerun, and a reopen. The Worker keeps the focus. The pane runs this command:
 
@@ -288,6 +288,7 @@ sh -c 'GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"' hunk <PR URL>
 - When the Scheduler starts, it opens the pane again beside each live review Worker whose pane is gone.
 - The events of the pane never change the Task. Closing the pane alone leaves the review as it is.
 - The pane holds the tab open after the Worker's block closes. lineup then closes the tab. Recovery does the same.
+- When the user closes the Worker's pane of a Done review, lineup closes the hunk pane's tab and removes the review worktree.
 - If the split fails, lineup logs a warning. The Worker runs without the pane.
 
 The review contract:

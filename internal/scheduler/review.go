@@ -282,8 +282,9 @@ func hunkArgv(url string) []string {
 	return []string{"sh", "-c", `GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"`, "hunk", url}
 }
 
-// removeReviewWorktree runs at Done, after the tab closed. It never runs
-// worktrunk: the review worktree is not worktrunk's.
+// removeReviewWorktree runs when the user closes a Done review's tab, or closes
+// the review with `lineup close`. It never runs worktrunk: the review worktree
+// is not worktrunk's.
 func (s *Scheduler) removeReviewWorktree(ctx context.Context, r Record) {
 	if r.Worktree == "" {
 		return
@@ -303,8 +304,9 @@ func (s *Scheduler) removeReviewWorktree(ctx context.Context, r Record) {
 }
 
 // pollReviews reads each review Task's PR by number and applies its level
-// while the Worker does not work. pr-review posts the review in its Step 9,
-// and a Done before that step ends would show the review as ended while the Worker still posts it.
+// while the Worker does not work. pr-review posts the review in its Step 9, and
+// a Done before that step ends would show the review as ended while the Worker
+// still posts it.
 func (s *Scheduler) pollReviews(ctx context.Context, keys map[ReviewKey]string) {
 	if len(keys) == 0 {
 		return
