@@ -204,7 +204,7 @@ The Scheduler reads the queues and their slots when it starts. After a change to
 
 ## Review Tasks
 
-A review Task is a Task with Kind `review`. Its ID has the form `pr-<number>`, for example `pr-4955`. If a live Task already has that ID for another repository's PR, the ID adds the repository's name, for example `pr-4955-web`. A new review of a PR whose review Task is Done takes the same ID. While the Done review keeps its tab, the queue adds no review of the PR and `lineup review` refuses it, until the user closes the tab. It keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `r` or `lineup review` has no queue.
+A review Task is a Task with Kind `review`. Its ID has the form `pr-<number>`, for example `pr-4955`. If a live Task already has that ID for another repository's PR, the ID adds the repository's name, for example `pr-4955-web`. A new review of a PR whose review Task is Done takes the same ID. It keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `r` or `lineup review` has no queue. While the Done review keeps its tab, the queue adds no review of the PR and `lineup review` refuses it, until the user closes the tab.
 
 `lineup review` and `r` read the URL as `owner/repo#number`. If a review Task for that PR is open, they add nothing. They start that Task if it is Queued. They reopen its Worker if the Worker closed in Review ready. They run it again if it stopped for good, for example after a failed setup. If it runs, they focus its tab. They refuse a PR from a fork, and a PR that is closed or merged.
 
@@ -274,7 +274,7 @@ If no `[[repos]]` checkout has the PR's repository as its `origin`, the add fail
 
 The lock keeps two starts from fetching into one checkout at once. A fetch from outside lineup, for example the user's editor, can still hold a ref lock in that checkout. If git reports `cannot lock ref`, lineup tries the fetch again after 0.5 s, 1 s, and 2 s. A failed step gives the flag `setup failed`.
 
-**Cleanup.** A review Task that ends keeps its tab, its hunk pane, and its review worktree. The user ends them by closing the Task's tab, or with `x` or `lineup close <task>`. Then lineup closes the tab, fetches and then removes the review worktree if it holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
+**Cleanup.** A review Task that ends keeps its tab, its hunk pane, and its review worktree. The user ends them by closing the Task's tab, or with `x` or `lineup close <task>`. Then lineup closes the tab if it is open, fetches, and removes the review worktree if it holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
 
 **The hunk pane.** Each review Worker gets the PR's diff beside it, so the user reads the diff next to the review. lineup splits the Worker's tab when the Worker starts: on the first start, a restart, a rerun, and a reopen. The Worker keeps the focus. The pane runs this command:
 

@@ -305,7 +305,7 @@ func (s *Scheduler) removeReviewWorktree(ctx context.Context, r Record) {
 
 // pollReviews reads each review Task's PR by number and applies its level
 // while the Worker does not work. pr-review posts the review in its Step 9,
-// and a Done before that step ends would close the tab under it.
+// and a Done before that step ends would show the review as ended while the Worker still posts it.
 func (s *Scheduler) pollReviews(ctx context.Context, keys map[ReviewKey]string) {
 	if len(keys) == 0 {
 		return
