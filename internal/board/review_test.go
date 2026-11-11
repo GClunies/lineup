@@ -606,6 +606,26 @@ func TestTheQueueTabListsThePRsThatWaitFirstToStartFirst(t *testing.T) {
 	}
 }
 
+func TestTheQueueTabHoldsAPRWhoseDoneReviewKeepsItsTab(t *testing.T) {
+	pushed := github.PullRequest{Repo: "umbrella/data", Number: 5006, Title: "Change 5006", Author: "hopper",
+		URL: "https://github.com/umbrella/data/pull/5006", Head: "h5006", CreatedAt: epoch.Add(-2 * time.Hour)}
+	for _, tab := range []bool{true, false} {
+		e := newRvEnv(t)
+		e.api.lists["queue:platform"] = []github.PullRequest{pushed}
+		b := reviewBoard()
+		done := tv("R-5", lifecycle.Done, "data", "data#5006 Change 5006", "", time.Hour)
+		done.Kind, done.PRURL, done.ReviewHead, done.Tab = lifecycle.KindReview, pushed.URL, "h5006-before-the-push", tab
+		b.Tasks = append(b.Tasks, done)
+		e.m.setBoard(b)
+		e.open()
+		e.press("shift+tab")
+		listed := strings.Contains(ansi.Strip(e.m.View()), "data#5006")
+		if listed == tab {
+			t.Errorf("a Done review with tab=%v: the queue lists PR 5006 = %v, want %v", tab, listed, !tab)
+		}
+	}
+}
+
 // A review Task whose Worker closed in Review ready waits for the user's
 // decisions, so enter reopens its Worker.
 func TestReviewEnterReopensAClosedReviewWorker(t *testing.T) {

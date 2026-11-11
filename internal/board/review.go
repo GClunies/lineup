@@ -542,7 +542,7 @@ func reviewTasks(tasks []scheduler.TaskView) []github.ReviewTask {
 	var out []github.ReviewTask
 	for _, t := range tasks {
 		if t.Kind == lifecycle.KindReview {
-			out = append(out, github.ReviewTask{URL: t.PRURL, Head: t.ReviewHead, Done: t.Group == lifecycle.GroupDone.String()})
+			out = append(out, github.ReviewTask{URL: t.PRURL, Head: t.ReviewHead, Done: t.Group == lifecycle.GroupDone.String() && !t.Tab})
 		}
 	}
 	return out
