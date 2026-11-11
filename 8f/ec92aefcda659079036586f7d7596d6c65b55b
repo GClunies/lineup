@@ -1,0 +1,27 @@
+GLOSSARY.md
+  s_e7e259d3c6ae5b::t_8b1e6a5fd52bf2 70,80
+docs/adr/0004-fresh-worker-per-stage.md
+  s_e7e259d3c6ae5b::t_3a22b91e079883 1-2
+docs/adr/0018-one-worker-for-each-task.md
+  s_e7e259d3c6ae5b::t_b41079308f62ff 1-17
+docs/spec/mvp.md
+  s_e7e259d3c6ae5b::t_5df40e7addb3d0 233,285,306-311
+docs/spec/reviews.md
+  s_e7e259d3c6ae5b::t_92a34e9df343a2 233,263,279,371
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8fec92aefcda659079036586f7d7596d6c65b55b",
+  "prompts": {},
+  "sessions": {
+    "s_e7e259d3c6ae5b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a3660f6b-9fce-40b7-bef0-a1399035e474",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
