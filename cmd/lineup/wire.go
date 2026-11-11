@@ -84,7 +84,7 @@ func (p rexPort) ProgramStatus(ctx context.Context, session, block string) (sche
 }
 
 func (p rexPort) Type(ctx context.Context, session, block, text string) error {
-	return p.c.Type(ctx, session, block, text)
+	return p.c.Type(ctx, session, block, claude.Paste(text))
 }
 
 func (p rexPort) Focus(ctx context.Context, session, window, block string) error {

@@ -433,3 +433,14 @@ func TestPromptNamesRestart(t *testing.T) {
 		t.Errorf("a fresh Stage names a restart:\n%s", p)
 	}
 }
+
+func TestPasteTypesTheTextAsOneBracketedPaste(t *testing.T) {
+	for in, want := range map[string]string{
+		"line 1\nline 2":        "\x1b[200~line 1\nline 2\x1b[201~",
+		"a\x1b[201~b\x1b[200~c": "\x1b[200~abc\x1b[201~",
+	} {
+		if got := Paste(in); got != want {
+			t.Errorf("Paste(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

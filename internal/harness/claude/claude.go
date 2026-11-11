@@ -312,6 +312,13 @@ func intro(stage lifecycle.Stage, task TaskInfo) string {
 	return intros[stage]
 }
 
+// Paste wraps text as one bracketed paste. Claude drops the start of a long
+// write that is not bracketed when the write comes right after a turn ends.
+func Paste(text string) string {
+	text = strings.NewReplacer("\x1b[200~", "", "\x1b[201~", "").Replace(text)
+	return "\x1b[200~" + text + "\x1b[201~"
+}
+
 // Prompt returns the Stage prompt with the Stage contract appended. extra is
 // free text from configuration, for example a command to run first.
 func Prompt(stage lifecycle.Stage, task TaskInfo, skill, extra string) string {
