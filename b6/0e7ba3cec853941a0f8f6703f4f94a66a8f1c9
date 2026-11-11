@@ -1,0 +1,25 @@
+GLOSSARY.md
+  s_e4666d30167fc3::t_924f30f5961a7b 34,48,52
+docs/adr/0017-the-user-closes-every-task-tab.md
+  s_e4666d30167fc3::t_02ef39273220c3 1-21
+docs/spec/mvp.md
+  s_e4666d30167fc3::t_92443d486a95a6 15,99-101,463,470
+docs/spec/reviews.md
+  s_e4666d30167fc3::t_36297ec1aa6a90 207,236-237,240,277
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b60e7ba3cec853941a0f8f6703f4f94a66a8f1c9",
+  "prompts": {},
+  "sessions": {
+    "s_e4666d30167fc3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "979a6594-e368-4174-be11-10cf92c06e30",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
