@@ -1,0 +1,27 @@
+internal/lifecycle/board.go
+  s_e4666d30167fc3::t_218648802bf02f 217-223,225,502-503,508,510
+internal/lifecycle/board_test.go
+  s_e4666d30167fc3::t_2dc3b498ef0e1f 58-59,84-125
+internal/lifecycle/property_test.go
+  s_e4666d30167fc3::t_94154c0250eda6 23
+internal/lifecycle/review_test.go
+  s_e4666d30167fc3::t_66405631373e5d 18,31-36,42-44
+internal/lifecycle/signal.go
+  s_e4666d30167fc3::t_f4ec58ea848bdc 14-16,42-45,81,103,130-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5a7a1bb1349b07638160fc16bce62b39a7126cb0",
+  "prompts": {},
+  "sessions": {
+    "s_e4666d30167fc3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "979a6594-e368-4174-be11-10cf92c06e30",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
