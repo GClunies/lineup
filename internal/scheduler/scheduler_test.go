@@ -50,6 +50,8 @@ type fakeRex struct {
 	exitFast string
 	// capture is what Capture returns.
 	capture string
+	// blocksErr fails every Blocks call.
+	blocksErr error
 }
 
 func (f *fakeRex) EnsureSession(_ context.Context, label string) (string, error) {
@@ -124,6 +126,9 @@ func (f *fakeRex) DestroySession(_ context.Context, session string) error {
 func (f *fakeRex) Blocks(_ context.Context, session string) (map[string]bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.blocksErr != nil {
+		return nil, f.blocksErr
+	}
 	live, windows := map[string]bool{}, map[string]bool{}
 	for _, t := range f.tabs {
 		if !t.closed && t.SessionID == session {
@@ -729,6 +734,25 @@ func TestRecoveryCleansUpADoneTaskWhoseTabClosedWhileTheSchedulerWasDown(t *test
 	}
 	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); len(ids) != 0 {
 		t.Fatalf("board = %v, want the aged-out Task gone", ids)
+	}
+}
+
+func TestRecoveryKeepsEveryDoneTaskWhenRexCannotListBlocks(t *testing.T) {
+	seed := func(st *store.Store) {
+		seedDone("ENG-a", time.Hour, true)(st)
+		seedDone("ENG-b", time.Hour, true)(st)
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, func(d *Deps) {
+		d.Rex.(*fakeRex).blocksErr = errors.New(`exec: "rex": executable file not found in $PATH`)
+	})
+	h.still("ENG-a", lifecycle.Done)
+	if got := h.worktreesRemoved(); len(got) != 0 {
+		t.Fatalf("removed %v while Rex could not list blocks", got)
+	}
+	for _, id := range []string{"ENG-a", "ENG-b"} {
+		if v := h.task(id); !v.Tab {
+			t.Fatalf("%s = %+v, want its tab record kept", id, v)
+		}
 	}
 }
 

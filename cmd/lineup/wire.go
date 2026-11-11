@@ -57,7 +57,7 @@ func (p rexPort) Blocks(ctx context.Context, session string) (map[string]bool, e
 	}
 	v, err := p.c.View(ctx, session)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if rex.IsNotFound(err) {
 			return live, nil
 		}
 		return nil, err

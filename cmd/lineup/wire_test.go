@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/gclunies/lineup/internal/config"
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/localissues"
+	"github.com/gclunies/lineup/internal/rex"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
@@ -265,5 +267,33 @@ func TestTheReviewRankHasItsOwnFile(t *testing.T) {
 	r.WriteCache("view:My teammates", nil)
 	if _, err := os.Stat(filepath.Join(dir, "cache", "github", "view:My%20teammates.json")); err != nil {
 		t.Errorf("the cache file is not under cache/github: %v", err)
+	}
+}
+
+func rexThatFails(t *testing.T, stderr string, code int) *rex.Client {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "rex")
+	script := "#!/bin/sh\necho '" + stderr + "' >&2\nexit " + strconv.Itoa(code) + "\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return &rex.Client{Bin: bin}
+}
+
+func TestBlocksReportsAMissingSessionAsNoBlocks(t *testing.T) {
+	p := rexPort{rexThatFails(t, `Error: session target "session:1" not found`, 3)}
+	live, err := p.Blocks(context.Background(), "session:1")
+	if err != nil || len(live) != 0 {
+		t.Fatalf("Blocks = %v, %v, want no blocks and no error", live, err)
+	}
+}
+
+func TestBlocksReportsEveryOtherFailureAsAnError(t *testing.T) {
+	missing := rexPort{&rex.Client{Bin: "lineup-no-such-rex"}}
+	down := rexPort{rexThatFails(t, "Error: cannot connect to the rex server", 1)}
+	for name, p := range map[string]rexPort{"missing binary": missing, "server down": down} {
+		if live, err := p.Blocks(context.Background(), "session:1"); err == nil {
+			t.Errorf("%s: Blocks = %v, nil, want an error", name, live)
+		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -50,8 +51,14 @@ func (c *Client) run(ctx context.Context, args ...string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-func isNotFound(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "not found")
+// targetNotFound matches the text that rex prints for a session, window, or
+// block that does not exist, for example `session target "session:1" not found`.
+var targetNotFound = regexp.MustCompile(`target "[^"]*" not found`)
+
+// IsNotFound reports whether err says that a rex target is missing. A missing
+// rex binary or a down server is not a missing target.
+func IsNotFound(err error) bool {
+	return err != nil && targetNotFound.MatchString(err.Error())
 }
 
 func (c *Client) Sessions(ctx context.Context) ([]Session, error) {
@@ -177,7 +184,7 @@ func (c *Client) Split(ctx context.Context, session, block, cwd string, argv []s
 
 func (c *Client) CloseWindow(ctx context.Context, session, windowID string) error {
 	_, err := c.run(ctx, "window", "close", "-s", session, windowID)
-	if isNotFound(err) {
+	if IsNotFound(err) {
 		return nil
 	}
 	return err
@@ -185,7 +192,7 @@ func (c *Client) CloseWindow(ctx context.Context, session, windowID string) erro
 
 func (c *Client) DestroySession(ctx context.Context, session string) error {
 	_, err := c.run(ctx, "session", "kill", session)
-	if isNotFound(err) {
+	if IsNotFound(err) {
 		return nil
 	}
 	return err
