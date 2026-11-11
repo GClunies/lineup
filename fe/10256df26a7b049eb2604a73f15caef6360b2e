@@ -1,0 +1,25 @@
+internal/board/board_test.go
+  s_e4666d30167fc3::t_a1afe82e4ee418 264-302
+internal/board/model.go
+  s_e4666d30167fc3::t_e4744ad89c549e 108,353,355-359
+internal/board/review_view.go
+  s_e4666d30167fc3::t_e04f7938b4c82a 273-274
+internal/board/view.go
+  s_e4666d30167fc3::t_a0d7ca4ee13e59 128,198,323-324
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fe10256df26a7b049eb2604a73f15caef6360b2e",
+  "prompts": {},
+  "sessions": {
+    "s_e4666d30167fc3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "979a6594-e368-4174-be11-10cf92c06e30",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
