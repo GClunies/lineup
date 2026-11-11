@@ -754,8 +754,7 @@ func TestACleanedUpTaskReportsNoWorktree(t *testing.T) {
 	if v := h.task("ENG-1"); v.Worktree == "" {
 		t.Fatalf("task = %+v, want its worktree before the close", v)
 	}
-	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	h.rex.userCloses(worker)
 	eventually(t, "the worktree removed", func() bool { return len(h.worktreesRemoved()) == 1 })
 	eventually(t, "the removed worktree to leave the Task", func() bool { return h.task("ENG-1").Worktree == "" })
 }

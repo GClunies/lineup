@@ -204,7 +204,7 @@ func TestClosingTheWorkerPaneOfADoneReviewClosesTheHunkTabAndRemovesTheWorktree(
 	h.status(worker.BlockID, "idle")
 	h.waitStage("pr-7", lifecycle.Done)
 
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	h.rex.blockCloses(worker)
 	eventually(t, "the hunk pane's tab closed", func() bool {
 		splits := h.rex.allSplits()
 		return len(splits) == 1 && splits[0].closed
