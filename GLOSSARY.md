@@ -67,7 +67,7 @@ The long-lived agent that the user talks to in the `LINEUP` pane of the Hub's `w
 _Avoid_: Coordinator, manager agent
 
 **Worker**:
-An agent that does one Stage of a Task inside that Task's own tab and worktree.
+The agent that does every agent Stage of one Task, inside that Task's own tab and worktree. The Scheduler types each new Stage's prompt into the same Worker when it is idle.
 _Avoid_: Thread, sub-agent, runner
 
 **Harness**:
@@ -77,7 +77,7 @@ _Avoid_: Provider, runner, vendor
 ### Lifecycle
 
 **Stage**:
-The place in the lifecycle where a Task waits, with exactly one owner: an agent, CI, other reviewers, or the user. The Stages are Queued, Working, CI running, CI debug, In review, Responding, Ready to land, and Done.
+The place in the lifecycle where a Task waits, with exactly one owner: an agent, CI, other reviewers, or the user. The Stages are Queued, Working, CI running, CI debug, In review, Responding, Ready to land, and Done. Each agent Stage is a new prompt to the Task's one Worker, not a new Worker.
 _Avoid_: Status, state, column, phase
 
 **Stage contract**:

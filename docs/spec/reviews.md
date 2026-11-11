@@ -230,7 +230,7 @@ A review Task never enters a Stage of a build Task, and a build Task never enter
 | Reviewing or Review ready | `pr-reviewed`: the user submitted a review after the Task was added. A pending review does not count. | Done, marked reviewed |
 | Reviewing or Review ready | `pr-merged` | Done, marked merged |
 | Reviewing or Review ready | `pr-closed`: closed without a merge | Done, marked closed |
-| Reviewing | the Worker's tab closes or the Worker is lost | Reviewing, with a fresh Worker from the restart budget, as for a build Task |
+| Reviewing | the Worker's tab closes or the Worker is lost | Reviewing, with the Worker resumed in a new tab from the restart budget, as for a build Task |
 | Review ready | the Worker's tab closes, the Worker exits, or recovery finds no tab | Review ready, with no Worker. The Task keeps its slot and still needs the user. |
 | Review ready | `reopen`: `lineup review`, `r`, or `enter` on a Task with no live Worker | Review ready, with a Worker that resumes the review's conversation |
 | Any Stage except Done | `task-closed` (user key `x`, confirmed) | Done, marked closed. The Scheduler closes the tab and removes the review worktree. |
@@ -260,7 +260,7 @@ If the PR's head moves after Review ready, the row shows the note `head moved`. 
 | Review worktree | `<main checkout's parent>/<repo>.review-pr-<number>`, detached at the PR's head. lineup makes it and removes it. |
 | Prompt | `/pr-review <PR URL>`, the review worktree, then the review contract |
 | Harness, model, effort | `[stage.reviewing]`, else `[stage.default]`. The Worker gets `--add-dir <review worktree>`, so it reads the PR's code with no permission prompt. |
-| Conversation | Each Reviewing Worker starts a Claude conversation with `--session-id <uuid>`, and the Task's Record keeps the ID. A restart or a rerun starts a new conversation, because it reviews afresh. |
+| Conversation | The first Reviewing Worker starts a Claude conversation with `--session-id <uuid>`, and the Task's Record keeps the ID. A rerun of Reviewing types the review prompt into the same Worker and keeps the conversation. A restart resumes it. If the conversation file is gone, the Worker starts a new conversation. |
 | Reopened Worker | `claude --resume <uuid>` with no prompt, the Reviewing model and effort, and `--add-dir <review worktree>`. Setup runs again first. If the Task has no conversation ID, for example a Task from before conversation IDs, the reopen runs the review again in Reviewing. |
 | Hunk pane | `hunk gh pr <PR URL>` in the review worktree, to the right of the Worker in its tab, with half of the tab. See **The hunk pane** below. |
 
@@ -276,7 +276,7 @@ The lock keeps two starts from fetching into one checkout at once. A fetch from 
 
 **Cleanup.** A review Task that ends keeps its tab, its hunk pane, and its review worktree. The user ends them by closing the Task's tab, or with `x` or `lineup close <task>`. Then lineup closes the tab if it is open and fetches. It removes the review worktree if the worktree holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
 
-**The hunk pane.** Each review Worker gets the PR's diff beside it, so the user reads the diff next to the review. lineup splits the Worker's tab when the Worker starts: on the first start, a restart, a rerun, and a reopen. The Worker keeps the focus. The pane runs this command:
+**The hunk pane.** Each review Worker gets the PR's diff beside it, so the user reads the diff next to the review. lineup splits the Worker's tab when it opens the tab: on the first start, a restart, and a reopen. A rerun types into the same tab, so it keeps its pane. The Worker keeps the focus. The pane runs this command:
 
 ```
 sh -c 'GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"' hunk <PR URL>
@@ -368,7 +368,7 @@ The `review` Hub tab holds one pane, `REVIEWS`, which runs `lineup board --revie
 5. **Fill.** Two fills in the same state start the same Tasks once. A paused queue starts nothing. Table tests for the shared slots: an earlier queue's PR is added above an older later-queue PR, a PR that two queues match is added once in the first queue, the shared count caps the started reviews of all queues, and a full queue leaves a new PR of the first queue waiting until a slot frees.
 6. **Review poll.** Against recorded responses, `pr-reviewed`, `pr-merged`, and `pr-closed` fire as the table says, wait while the Worker works, and fire on the next poll after the Worker stops. A pending review does not fire `pr-reviewed`.
 7. **Setup and cleanup.** Two review starts in one Repo fetch one after the other. Cleanup removes a clean review worktree and keeps one with an unpushed commit. A review Task never calls `wt remove`.
-8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then reopens the Worker in the same conversation. A closed tab in Reviewing starts a fresh Worker. Recovery with no tab in Review ready leaves the Task as it is. The events of the hunk pane leave the Task as it is. A closed Worker block closes the hunk pane with its tab.
+8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then reopens the Worker in the same conversation. A closed tab in Reviewing resumes the Worker in a new tab. Recovery with no tab in Review ready leaves the Task as it is. The events of the hunk pane leave the Task as it is. A closed Worker block closes the hunk pane with its tab.
 9. **Config.** Load and validation: an unknown key, an empty filter list, a bad team or repository form, a duplicate name, and `slots` below 1 each fail at load.
 10. **Board.** A render test of the review view with a build Task and a review Task on PRs. Only the review Task joins. `enter` on a joined row sends `focus` for that Task. The Reviews tab lists only the review Task. Typing `q` in the search does not quit.
 11. **Speed.** The review view's first paint from the cache meets the Board's 100 ms budget.

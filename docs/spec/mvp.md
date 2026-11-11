@@ -230,7 +230,7 @@ The rules for this layout:
 - The Scheduler creates each Task tab with `rex window new -s <session> <label> --focus=false -- <command>`. The user stays on the Hub.
 - The label is the Task ID, or the Issue identifier, and the title. Rex refuses a label longer than 128 characters, so a longer label stops at 127 characters and ends in `…`.
 - Each Task tab names its command. A tab without a command reports exit code 0 when its shell exits, whatever the real code is.
-- If a Worker exits within about 1 s, Rex keeps its tab open so that the user can read the error. Before the Scheduler restarts that Worker, it closes the tab.
+- If a Worker exits within about 1 s, Rex keeps its tab open so that the user can read the error. The Scheduler never closes that tab. A later prompt for the Task opens a new tab, and the user closes the old one.
 - The Scheduler creates a Repo session with the first Task in that Repo. It removes the session when the last Task tab in it closes and the session holds no other tab. A tab that the user or another Scheduler opened keeps the session.
 - If two Repos have the same folder name, the session label adds the parent folder, for example `acme-data`.
 - An ad hoc Task opens in the session `ad hoc`, or in the session that `ad_hoc_session` names. The Board still shows its Repo. The Scheduler removes this session after its last Task, as with a Repo session, so `ad_hoc_session` can't be `lineup hub`.
@@ -282,7 +282,7 @@ A PR whose head commit has no checks meets the check items of the Landing bar, s
 
 ### Recovery
 
-When `lineup serve` starts, it compares the store with `rex ls` and `rex session inspect`. For each Task in an agent Stage whose tab or block is gone, the Scheduler opens a new tab in the existing worktree and starts a fresh Worker for the same Stage. Each restart uses one Worker restart from the budget.
+When `lineup serve` starts, it compares the store with `rex ls` and `rex session inspect`. For each Task in an agent Stage whose tab or block is gone, the Scheduler opens a new tab in the existing worktree. The Worker there resumes the Task's conversation with `claude --resume`, and gets the Stage prompt at its first `idle`. A Task with no conversation gets a fresh Worker for the same Stage. Each restart uses one Worker restart from the budget.
 
 Recovery also runs after a Rex server restart. The Scheduler reads the Rex server's instance id every 5 s. When the id changes, every Worker is gone, so the Scheduler exits. launchd starts it again and startup recovery runs.
 
@@ -303,7 +303,12 @@ This sequence runs in the background. The Board shows only the Task as it change
    - The Worker command passes `--name <tab label> --remote-control <tab label>`. The tab label starts with the Task ID, so the user finds each Worker by its Task ID on claude.ai and on their phone. Each Hub agent gets the same flags, with the name `lineup-<tab>`: `lineup-work`, `lineup-plan`, `lineup-review`, and `lineup-assist`.
    - `--remote-control` takes an optional value, so the command always gives it the name. Without a value, it takes the prompt as the name.
 
-Each agent Stage after Working starts a fresh Worker in the same tab and worktree. The Worker gets its context from the Issue and the PR.
+Each Task keeps one Worker for its whole life. The Worker starts with `--session-id <conversation>`, and the Record keeps that conversation ID. Each agent Stage after Working types its prompt into the same Worker, in the same tab and worktree:
+
+- The Scheduler types the prompt only when the Worker's program status is `idle` or `done`. While the Worker is busy, for example with a message that the user typed, the prompt waits for its next `idle` or `done`.
+- The Scheduler does not check the Stage contract while a prompt waits, because a `done` then belongs to the Stage before it.
+- A Worker whose tab is gone starts again with `claude --resume <conversation>` in a new tab, and gets the prompt at its first `idle`.
+- The Worker keeps the model and effort of Working. `skill` and `command` apply to each Stage, because the prompt carries them.
 
 ## Configuration
 
