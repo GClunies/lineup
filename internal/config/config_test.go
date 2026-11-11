@@ -159,8 +159,8 @@ ci_debug = 1
 [stage.default]
 model = "global-model"
 effort = "low"
-[stage.responding]
-model = "responding-model"
+[stage.working]
+model = "working-model"
 [[repos]]
 match = "`+repo+`"
 teams = ["APP"]
@@ -181,14 +181,40 @@ poll_interval = "20s"
 	if r.PollInterval != 20*time.Second || r.Budgets.CIDebug != 1 || r.Budgets.Responding != 3 {
 		t.Errorf("merge of layers wrong: %+v", r)
 	}
-	if got := r.Stages[lifecycle.Working]; got.Model != "global-model" || got.Effort != "max" {
-		t.Errorf("working = %+v", got)
+	if got := r.Stages[lifecycle.Working]; got.Model != "working-model" || got.Effort != "max" {
+		t.Errorf("a stage section must beat any default, working = %+v", got)
 	}
-	if got := r.Stages[lifecycle.Responding]; got.Model != "responding-model" || got.Effort != "max" {
-		t.Errorf("a stage section must beat any default, responding = %+v", got)
+	if got := r.Stages[lifecycle.Responding]; got.Model != "global-model" || got.Effort != "max" {
+		t.Errorf("responding = %+v", got)
 	}
 	if got := r.Stages[lifecycle.CIDebug]; got.Skill != "diagnosing-bugs" {
 		t.Errorf("ci_debug = %+v", got)
+	}
+}
+
+func TestALaterStageModelIsRejected(t *testing.T) {
+	for _, key := range []string{"ci_debug", "responding"} {
+		for _, field := range []string{"model", "effort"} {
+			text := fmt.Sprintf("[stage.%s]\n%s = \"x\"\n", key, field)
+			want := fmt.Sprintf("stage.%s.%s: a Task keeps the %s of the Stage its Worker starts in", key, field, field)
+			_, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), text))
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("%s.%s: err = %v, want %q", key, field, err, want)
+			}
+		}
+	}
+	repo := t.TempDir()
+	write(t, filepath.Join(repo, ".lineup.toml"), "[stage.ci_debug]\nmodel = \"x\"\n")
+	if _, err := load(t, "").Resolve(repo, nil); err == nil || !strings.Contains(err.Error(), "stage.ci_debug.model") {
+		t.Errorf("repo file: err = %v, want the stage.ci_debug.model message", err)
+	}
+	g := load(t, "[stage.default]\nmodel = \"d\"\n[stage.working]\neffort = \"max\"\n[stage.reviewing]\nmodel = \"r\"\n[stage.ci_debug]\nskill = \"diagnosing-bugs\"\n")
+	r, err := g.Resolve(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Stages[lifecycle.CIDebug]; got.Skill != "diagnosing-bugs" || got.Model != "d" {
+		t.Errorf("ci_debug = %+v, want its skill and the default model", got)
 	}
 }
 

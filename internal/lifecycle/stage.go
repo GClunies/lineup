@@ -2,7 +2,10 @@
 // feeds it Signals and executes the Effects it returns. Nothing here does I/O.
 package lifecycle
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 type Stage int
 
@@ -35,6 +38,16 @@ func (k Kind) String() string { return kindNames[k] }
 
 // Has reports whether a Task of this Kind can be in the Stage.
 func (k Kind) Has(s Stage) bool { return stages[s].kinds&(1<<k) != 0 }
+
+// firstStages is the Stage that each Kind's Worker starts in.
+var firstStages = [...]Stage{KindBuild: Working, KindReview: Reviewing}
+
+// FirstStage is the Stage that a Task of this Kind starts its Worker in. The
+// Worker keeps the model and effort of this Stage for the Task's whole life.
+func (k Kind) FirstStage() Stage { return firstStages[k] }
+
+// StartsWorker reports whether the Stage is the FirstStage of a Kind.
+func (s Stage) StartsWorker() bool { return slices.Contains(firstStages[:], s) }
 
 func (k Kind) MarshalText() ([]byte, error) { return []byte(k.String()), nil }
 

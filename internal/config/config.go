@@ -443,6 +443,19 @@ func (g *Global) validate(l *layer, where string) error {
 		if err != nil || !st.Agent() {
 			return fmt.Errorf("%s: stage.%s is not an agent Stage or default", where, key)
 		}
+		if st.StartsWorker() {
+			continue
+		}
+		field := ""
+		switch s := l.Stage[key]; {
+		case s.Model != nil:
+			field = "model"
+		case s.Effort != nil:
+			field = "effort"
+		}
+		if field != "" {
+			return fmt.Errorf("%s: stage.%s.%s: a Task keeps the %s of the Stage its Worker starts in", where, key, field, field)
+		}
 	}
 	return nil
 }
