@@ -385,6 +385,21 @@ func TestAReviewIDNamesItsPR(t *testing.T) {
 	}
 }
 
+func TestAReviewIDKeepsADoneReviewThatHoldsItsTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	var web string
+	h.s.call(func() {
+		h.s.recs["pr-7"] = &Record{
+			Task:   lifecycle.Task{ID: "pr-7", Kind: lifecycle.KindReview, Stage: lifecycle.Done},
+			Review: &ReviewPR{Repo: "acme/data", Number: 7}, WindowID: "window:7", BlockID: "block:7",
+		}
+		web = h.s.reviewID(ReviewPR{Repo: "acme/web", Number: 7})
+	})
+	if web != "pr-7-web" {
+		t.Errorf("ID of acme/web#7 = %q, want pr-7-web beside a Done acme/data#7 that keeps its tab", web)
+	}
+}
+
 func TestADoneReviewDoesNotBlockANewOne(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
