@@ -744,6 +744,127 @@ func TestTheBoardToastsEachNewAlertOnce(t *testing.T) {
 	}
 }
 
+func TestEachViewCountsTheOtherViewsNeedsYouTasks(t *testing.T) {
+	flagged := func(id string) scheduler.TaskView {
+		r := rtv(id, lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour)
+		r.Flag, r.Group = "question", "Needs you"
+		return r
+	}
+	header := func(v scheduler.BoardView, keys ...string) string {
+		m, _ := press(New(v, Options{Client: &fakeClient{}}), keys...)
+		m.width = 200
+		return ansi.Strip(m.header())
+	}
+	v := fixture()
+	v.Tasks = append(v.Tasks, flagged("R-3"), rtv("R-4", lifecycle.Reviewing, "data#8 Fix the map", urlBase, time.Hour))
+	if h := header(v); !strings.Contains(h, "●2 need you (+1 in reviews)   ◐2 working") {
+		t.Errorf("work header %q", h)
+	}
+	if h := header(v, "3"); !strings.Contains(h, "●1 need you (+2 in work)   ◐") {
+		t.Errorf("review header %q", h)
+	}
+	quiet := fixture()
+	quiet.Tasks = quiet.Tasks[:4]
+	quiet.Tasks = append(quiet.Tasks, rtv("R-4", lifecycle.Reviewing, "data#8 Fix the map", urlBase, time.Hour))
+	for _, h := range []string{header(quiet), header(quiet, "3")} {
+		if strings.Contains(h, "(+") {
+			t.Errorf("no Needs you Task in the other view, but the header shows a count: %q", h)
+		}
+	}
+}
+
+func TestTheBoardToastsTheNextReadyIssueWhenASlotFrees(t *testing.T) {
+	ready := mineIssuesMsg{ws: acme, live: true, issues: []linear.Issue{
+		mineIssue("ENG-620", "backlog", 1), mineIssue("ENG-611", "unstarted", 2), mineIssue("ENG-612", "unstarted", 3),
+	}}
+	ready.issues[1].Title = "Move the retry job"
+	landing := tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636", 0)
+	landing.Group = "Needs you"
+	done := tv("ENG-571", lifecycle.Done, "data", "Rate limit login", "#4636", 0)
+	done.Outcome = "merged"
+	review := rtv("R-3", lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour)
+	reviewDone := review
+	reviewDone.Stage, reviewDone.StageKey, reviewDone.Group, reviewDone.Outcome =
+		lifecycle.Done.String(), lifecycle.Done.Key(), groupOf[lifecycle.Done], "reviewed"
+	board := func(started int, tasks ...scheduler.TaskView) scheduler.BoardView {
+		v := fixture()
+		v.Started = started
+		v.Tasks = append(v.Tasks[:2:2], tasks...)
+		return v
+	}
+	for _, c := range []struct {
+		name         string
+		issues       bool
+		before, then scheduler.BoardView
+		want         string
+	}{
+		{"a free slot names the first Ready row", true,
+			board(4, landing, review), board(3, done, review), "2 slots free, next ENG-611: Move the retry job"},
+		{"one free slot", true,
+			board(5, landing, review), board(4, done, review), "1 slot free, next ENG-611: Move the retry job"},
+		{"no free slot", true, board(5, landing, review), board(5, done, review), ""},
+		{"no Ready row", false, board(4, landing, review), board(3, done, review), ""},
+		{"a review Task reached Done", true, board(3, landing, review), board(3, landing, reviewDone), ""},
+	} {
+		for _, keys := range [][]string{nil, {"3"}} {
+			var toasts []string
+			m := New(c.before, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
+			m, _ = press(m, keys...)
+			if c.issues {
+				m = feed(m, ready)
+			}
+			send := func(v scheduler.BoardView) {
+				t2, cmd := m.Update(boardMsg(v))
+				m = t2.(Model)
+				if cmd != nil {
+					cmd()
+				}
+			}
+			send(c.before)
+			send(c.then)
+			send(c.then)
+			var hints []string
+			for _, s := range toasts {
+				if strings.Contains(s, "free, next") {
+					hints = append(hints, s)
+				}
+			}
+			var want []string
+			if c.want != "" {
+				want = []string{c.want}
+			}
+			if !slices.Equal(hints, want) {
+				t.Errorf("%s, keys %v: slot toasts %q, want %q (all toasts %q)", c.name, keys, hints, want, toasts)
+			}
+			if len(toasts) == 0 {
+				t.Errorf("%s, keys %v: the Task that reached Done made no toast", c.name, keys)
+			}
+		}
+	}
+}
+
+func TestOneSlotToastForSeveralDoneTasks(t *testing.T) {
+	var toasts []string
+	v := fixture()
+	m := New(v, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
+	m = feed(m, mineIssuesMsg{ws: acme, live: true, issues: []linear.Issue{mineIssue("ENG-611", "unstarted", 2)}})
+	then := fixture()
+	then.Started = 2
+	for _, i := range []int{3, 6} {
+		then.Tasks[i].Stage, then.Tasks[i].StageKey, then.Tasks[i].Group = lifecycle.Done.String(), lifecycle.Done.Key(), groupOf[lifecycle.Done]
+		then.Tasks[i].Outcome = "merged"
+	}
+	_, cmd := m.Update(boardMsg(then))
+	cmd()
+	if want := []string{
+		"WEB-12 Done, merged: Fix map tooltip",
+		"ENG-592 Done, merged: Fix flaky test",
+		"3 slots free, next ENG-611: Title of ENG-611",
+	}; !slices.Equal(toasts, want) {
+		t.Fatalf("toasts %q, want %q", toasts, want)
+	}
+}
+
 func TestTheDetailPaneShowsTheLandingBar(t *testing.T) {
 	d := scheduler.TaskDetail{
 		TaskView: scheduler.TaskView{ID: "ENG-590", Title: "Add billing model", Stage: "Responding",

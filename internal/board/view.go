@@ -94,8 +94,15 @@ func (m Model) header() string {
 			s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
 		}
 	}
-	s += fmt.Sprintf("   ●%d need you   ◐%d working   ◷%d waiting   %d queued",
-		count["Needs you"], count["Working"], count["Waiting"], count["Queued"])
+	s += fmt.Sprintf("   ●%d need you", count["Needs you"])
+	other, name := lifecycle.KindReview, "reviews"
+	if m.kind == lifecycle.KindReview {
+		other, name = lifecycle.KindBuild, "work"
+	}
+	if n := needsYou(m.board.OfKind(other).Tasks); n > 0 {
+		s += fmt.Sprintf(" (+%d in %s)", n, name)
+	}
+	s += fmt.Sprintf("   ◐%d working   ◷%d waiting   %d queued", count["Working"], count["Waiting"], count["Queued"])
 	if m.kind == lifecycle.KindBuild {
 		s += fmt.Sprintf("   %d ready   %d backlog", count[groupReady], count[groupBacklog])
 	}
@@ -106,6 +113,16 @@ func (m Model) header() string {
 		s += "   " + bad.Render("scheduler offline, showing cache: run lineup restart")
 	}
 	return ansi.Truncate(s, m.width, "…")
+}
+
+func needsYou(tasks []scheduler.TaskView) int {
+	n := 0
+	for _, t := range tasks {
+		if t.Group == lifecycle.GroupNeedsYou.String() {
+			n++
+		}
+	}
+	return n
 }
 
 // viewNames lists the three views with the one on screen bright.
