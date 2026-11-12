@@ -53,8 +53,7 @@ type ReviewKey struct {
 	Number int
 }
 
-// URL is the PR's address, in the spelling that every skip and queue rule
-// compares ignoring case.
+// URL is the PR's GitHub URL. A skip compares it without case.
 func (k ReviewKey) URL() string {
 	return fmt.Sprintf("https://github.com/%s/pull/%d", k.Repo, k.Number)
 }

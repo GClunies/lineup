@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"maps"
 	"slices"
 	"sort"
@@ -583,7 +582,7 @@ func urlRef(url string) string {
 	if err != nil {
 		return url
 	}
-	return k.Repo[strings.LastIndex(k.Repo, "/")+1:] + fmt.Sprintf("#%d", k.Number)
+	return prRef(github.PullRequest{Repo: k.Repo, Number: k.Number})
 }
 
 // skipHint names the key that skips the PR, or undoes its skip.
