@@ -1,0 +1,53 @@
+internal/board/model.go
+  s_490b26d3044ac3::t_77bff230de0746 146
+  s_490b26d3044ac3::t_6b930a7a6bf42c 12
+internal/lifecycle/review_test.go
+  s_490b26d3044ac3::t_dfa650899090f2 44-46
+internal/github/queue.go
+  s_490b26d3044ac3::t_60e3885cc93aba 7,12,14-48,60,62,66-71,74-76,78-81,87-97,99
+internal/lifecycle/property_test.go
+  s_490b26d3044ac3::t_dfa650899090f2 17
+internal/board/review.go
+  s_490b26d3044ac3::t_77bff230de0746 90-91,162,168
+  s_490b26d3044ac3::t_d635fee4acd5cf 543-546
+internal/lifecycle/signal.go
+  s_490b26d3044ac3::t_60e3885cc93aba 16-19
+internal/scheduler/skip_test.go
+  s_490b26d3044ac3::t_e0c5846453b25d 1-115
+internal/scheduler/review.go
+  s_490b26d3044ac3::t_d635fee4acd5cf 214
+internal/lifecycle/board_test.go
+  s_490b26d3044ac3::t_d635fee4acd5cf 86
+  s_490b26d3044ac3::t_dfa650899090f2 62
+internal/scheduler/queue.go
+  s_490b26d3044ac3::t_d635fee4acd5cf 78,247-248,280,283,290
+internal/github/skip_test.go
+  s_490b26d3044ac3::t_10b86a50da7610 1-169
+internal/github/testdata/rapid/TestPropertyATaskThatASkipEndedHoldsNothing/TestPropertyATaskThatASkipEndedHoldsNothing-20261112005004-99844.fail
+  s_490b26d3044ac3::t_a497a9a959706c 1-92
+internal/board/review_test.go
+  s_490b26d3044ac3::t_c75d80ca84786c 771-785
+internal/lifecycle/board.go
+  s_490b26d3044ac3::t_75550d71e1f000 219
+  s_490b26d3044ac3::t_60e3885cc93aba 218,220-222
+internal/github/queue_test.go
+  s_490b26d3044ac3::t_d635fee4acd5cf 121,139,192,196
+internal/lifecycle/stage.go
+  s_490b26d3044ac3::t_60e3885cc93aba 198
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "694b895ebcb64239d4014736c51038ce52f67001",
+  "prompts": {},
+  "sessions": {
+    "s_490b26d3044ac3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6fe89f94-e7ea-40ef-8491-3e121004251f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
