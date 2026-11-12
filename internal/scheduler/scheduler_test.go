@@ -2333,3 +2333,42 @@ func TestOpenClosesTheKeptTabOfABuildWorkerBeforeTheNewTabOpens(t *testing.T) {
 	h.do(Request{Op: "close", Task: "ENG-1"})
 	eventually(t, "the restored tab closed", func() bool { return len(h.rex.open("claude --resume "+first.Conversation)) == 0 })
 }
+
+// The user types /exit, and a rerun types the CI debug prompt into the exiting
+// Worker. The exiting Worker sends a late done, then its program exits, then
+// Rex closes its block. The prompt was lost, so the Task waits for the restore.
+func TestAPromptTypedIntoAnExitingWorkerWaitsForTheRestore(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.prOpens(worker)
+	h.ciFails()
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+
+	h.status(worker.BlockID, "done")
+	h.waitWorkerState("ENG-1", "prompted")
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: worker.BlockID, ExitCode: 0}
+	h.rex.blockCloses(worker)
+
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Note == "tab closed: CI debug waits for the Worker" })
+	var pending bool
+	h.s.call(func() { pending = h.s.recs["ENG-1"].Pending != nil })
+	if !pending {
+		t.Fatal("the CI debug prompt is not pending")
+	}
+
+	h.open("ENG-1")
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	h.status(resumed.BlockID, "idle")
+	h.waitTyped(resumed.BlockID, "prompt ci_debug")
+}
+
+// An exit and then a close of the same block still flags the Task.
+func TestABlockThatClosesAfterItsProgramExitedFlagsTheTask(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: worker.BlockID, ExitCode: 0}
+	eventually(t, "the Worker gone", func() bool { return !h.task("ENG-1").Live })
+	h.rex.blockCloses(worker)
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Flag == "tab closed" })
+}

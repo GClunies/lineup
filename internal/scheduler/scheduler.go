@@ -553,6 +553,9 @@ func (s *Scheduler) onRex(ev RexEvent) {
 
 	case EvExited:
 		job := r.Job
+		if job == JobWorker {
+			s.lostPrompt(r)
+		}
 		r.Job = JobExited
 		if job == JobWorker && ev.ExitCode != 0 {
 			r.Pending = nil
@@ -581,13 +584,14 @@ func (s *Scheduler) onRex(ev RexEvent) {
 			s.tabClosedByUser(r, "")
 			return
 		}
+		s.lostPrompt(r)
 		waits := r.Pending != nil
 		s.forgetTab(r)
 		s.save(r)
 		switch {
 		case job == JobSetup:
 			s.apply(r, lifecycle.SetupFailed{Detail: "setup tab closed"}, "")
-		case job == JobWorker:
+		case job == JobWorker || job == JobExited:
 			s.apply(r, lifecycle.TabClosed{Waits: waits}, "")
 		}
 	}
@@ -618,6 +622,14 @@ func (s *Scheduler) resumeFallback(r *Record, code int) {
 			}
 		})
 	})
+}
+
+// lostPrompt puts a typed prompt back in Pending when its Worker ended before it
+// reported working on the prompt.
+func (s *Scheduler) lostPrompt(r *Record) {
+	if r.WorkerState == promptedState && r.WorkerStage == r.Stage && r.Pending == nil {
+		s.pend(r, r.Stage)
+	}
 }
 
 // tabClosedByUser records that the user closed a Done Task's tab, and
@@ -859,6 +871,7 @@ func (s *Scheduler) recover(ctx context.Context) {
 			s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
 		case r.Stage.Agent():
 			s.d.Log.Info("recover worker", "task", r.ID, "stage", r.Stage.String())
+			s.lostPrompt(r)
 			s.apply(r, lifecycle.TabClosed{Waits: r.Pending != nil}, "recovered at start")
 		}
 	}
