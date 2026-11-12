@@ -21,6 +21,10 @@ type fakeLinear struct {
 	statuses []string
 	assigned []string
 	created  []linear.NewIssue
+	// createErr is what Create returns.
+	createErr error
+	// teamsErr is what Teams returns, by workspace ID.
+	teamsErr map[string]error
 	// projectsErr comes back with the Projects, as a truncated list does.
 	projectsErr error
 	// views are each workspace's favorite views, by workspace ID.
@@ -39,6 +43,12 @@ type wsLinear struct {
 }
 
 func (f wsLinear) Views(context.Context) ([]linear.View, error) { return f.views[f.ws], nil }
+func (f wsLinear) Teams(ctx context.Context) ([]linear.Team, error) {
+	if err := f.teamsErr[f.ws]; err != nil {
+		return nil, err
+	}
+	return f.fakeLinear.Teams(ctx)
+}
 func (f *fakeLinear) ViewIssues(_ context.Context, v linear.View) ([]linear.Issue, error) {
 	return f.viewIssues[v.ID], nil
 }
@@ -103,8 +113,11 @@ func (f *fakeLinear) AssignToMe(_ context.Context, id string) error {
 func (f *fakeLinear) Create(_ context.Context, n linear.NewIssue) (linear.Issue, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.createErr != nil {
+		return linear.Issue{}, f.createErr
+	}
 	f.created = append(f.created, n)
-	return linear.Issue{}, nil
+	return linear.Issue{Identifier: "ENG-900", Title: n.Title}, nil
 }
 
 func lissue(id, title, state string, blockedBy ...string) linear.Issue {

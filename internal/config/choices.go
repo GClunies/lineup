@@ -53,7 +53,7 @@ func (c *RepoChoices) Set(projectID, repoPath string) error {
 		return err
 	}
 	m[projectID] = repoPath
-	return writeJSON(c.path, m)
+	return WriteJSON(c.path, m)
 }
 
 // ViewOrder remembers the user's rank of their Linear views, as View IDs.
@@ -90,11 +90,11 @@ func (v *ViewOrder) Get() ([]string, error) {
 func (v *ViewOrder) Set(ids []string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	return writeJSON(v.path, ids)
+	return WriteJSON(v.path, ids)
 }
 
-// writeJSON replaces the file at path in one rename, so a reader never sees half a file.
-func writeJSON(path string, x any) error {
+// WriteJSON replaces the file at path in one rename, so a reader never sees half a file.
+func WriteJSON(path string, x any) error {
 	data, err := json.MarshalIndent(x, "", "  ")
 	if err != nil {
 		return err

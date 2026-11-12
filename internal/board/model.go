@@ -49,6 +49,9 @@ type Options struct {
 	// LocalIssues is the Local Tracker folder that the work view reads,
 	// whatever local_tracker says. Empty reads no local Issues.
 	LocalIssues string
+	// Destinations is destinations.json in the state folder. It keeps the
+	// last Destinations that the user picked. Empty keeps them for this run.
+	Destinations string
 }
 
 type viewID int
@@ -66,6 +69,8 @@ const (
 	modeConfirm
 	modeCap
 	modeHelp
+	modeBox   // the capture box
+	modeDests // the capture box's Destination list
 )
 
 const (
@@ -128,9 +133,11 @@ type Model struct {
 	detailTask string
 	vp         viewport.Model
 
-	tr   *tracker
-	rv   *review
-	mine mine
+	tr    *tracker
+	rv    *review
+	mine  mine
+	box   captureBox
+	dests destinations
 
 	alerted map[string]string // Task ID to the Attention that last toasted
 }
@@ -147,6 +154,8 @@ func New(v scheduler.BoardView, opts Options) Model {
 	m.tr = newTracker(opts.Tracker)
 	m.rv = newReview(opts.Reviews)
 	m.mine = mine{lin: map[string][]linear.Issue{}, fresh: map[string]bool{}}
+	m.box = newCaptureBox()
+	m.dests = destinations{linear: map[string][]destination{}, errs: map[string]string{}}
 	m.setBoard(v)
 	m.alerted = map[string]string{}
 	scheduler.Alerts(m.alerted, v) // what is on the Board now is not news
@@ -244,6 +253,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m2, cmd, ok := m.mineMsg(msg); ok {
 			return m2, cmd
 		}
+		if m2, cmd, ok := m.boxMsg(msg); ok {
+			return m2, cmd
+		}
 	}
 	return m, nil
 }
@@ -271,6 +283,10 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case modeCap:
 		return m.capKey(k)
+	case modeBox:
+		return m.boxKey(msg)
+	case modeDests:
+		return m.destKey(msg)
 	}
 
 	if (m.view == viewTracker && m.tr.capturing()) || m.picking() {
@@ -358,6 +374,10 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "R":
 		return m, m.op("refresh", scheduler.Request{Op: "poll"})
+	case "n":
+		if m.view == viewBoard {
+			return m.openBox()
+		}
 	case "p":
 		m.preview = !m.preview
 		m.previewGen++
