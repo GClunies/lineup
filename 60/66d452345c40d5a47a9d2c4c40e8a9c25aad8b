@@ -1,0 +1,21 @@
+internal/board/capture.go
+  s_06f618fc4ae197::t_696871871616d0 403-404
+internal/board/capture_test.go
+  s_06f618fc4ae197::t_b77a86dca1cf53 236-250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6066d452345c40d5a47a9d2c4c40e8a9c25aad8b",
+  "prompts": {},
+  "sessions": {
+    "s_06f618fc4ae197": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0f96725b-43c5-4c73-a2c7-36a82adcd497",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
