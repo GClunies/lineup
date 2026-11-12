@@ -195,4 +195,5 @@ const (
 	OutcomeMerged   Outcome = "merged"
 	OutcomeClosed   Outcome = "closed"
 	OutcomeReviewed Outcome = "reviewed"
+	OutcomeSkipped  Outcome = "skipped"
 )

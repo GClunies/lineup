@@ -14,7 +14,7 @@ import (
 func seen(f PRFacts) Signal { return PRSeen{f} }
 
 var anySignal = rapid.OneOf(rapid.SampledFrom([]Signal{
-	Start{}, Start{OverCap: true}, PRMerge{}, TaskClosed{},
+	Start{}, Start{OverCap: true}, PRMerge{}, TaskClosed{}, TaskClosed{Skipped: true},
 	Rerun{Working}, Rerun{CIDebug}, Rerun{Responding}, Rerun{Reviewing},
 	WorkerDone{ContractMet: true}, WorkerDone{ContractMet: false},
 	WorkerStatus{State: "working"}, WorkerStatus{State: "blocked", Kind: "permission"}, WorkerStatus{State: "error"},

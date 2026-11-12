@@ -75,7 +75,7 @@ func (s *Scheduler) readQueues(ctx context.Context) (queueRows, error) {
 	rows := queueRows{Found: found, Repos: map[string]queueRepo{}}
 	tried := map[string]bool{}
 	for _, q := range s.d.Queues {
-		for _, c := range github.Candidates(found[q.Name], nil) {
+		for _, c := range github.Rank(found[q.Name], github.Holds{}).Ranked {
 			slug := strings.ToLower(c.PR.Repo)
 			if tried[slug] {
 				continue
@@ -244,6 +244,8 @@ type fillInput struct {
 	Queues []Queue
 	// Records is every Task, oldest first.
 	Records []*Record
+	// Skips are the PRs that the user holds out of every queue.
+	Skips []github.Skip
 	// Found is each queue's search rows, by queue name.
 	Found map[string][]github.PullRequest
 	// Repos maps each GitHub repository, owner/name in lower case, to its
@@ -275,17 +277,17 @@ type fillAdd struct {
 // later queue's PRs. A fill starts at most one review in each Repo, because
 // each start fetches into the Repo's main checkout.
 func planFill(in fillInput) fillPlan {
-	var tasks []github.ReviewTask
+	holds := github.Holds{Skips: in.Skips}
 	for _, r := range in.Records {
 		if t, ok := r.reviewTask(); ok {
-			tasks = append(tasks, t)
+			holds.Tasks = append(holds.Tasks, t)
 		}
 	}
 	p := fillPlan{Ranked: map[string][]github.Candidate{}}
 	owned := map[string]bool{}
 	for _, q := range in.Queues {
 		var urls []string
-		for _, c := range github.Candidates(in.Found[q.Name], tasks) {
+		for _, c := range github.Rank(in.Found[q.Name], holds).Ranked {
 			u := strings.ToLower(c.PR.URL)
 			if owned[u] {
 				continue

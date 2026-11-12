@@ -768,3 +768,18 @@ func TestReviewEnterRestoresAStartedTaskWithNoWorker(t *testing.T) {
 		t.Fatalf("enter on a started Task with no Worker: opened %v, calls %+v, want open %s", e.opened, c, b.Tasks[0].ID)
 	}
 }
+
+func TestReviewTasksMarkTheOnesThatASkipEnded(t *testing.T) {
+	skipped := tv("R-1", lifecycle.Done, "data", "data#1 One", "", time.Hour)
+	skipped.Kind, skipped.PRURL, skipped.ReviewHead, skipped.Outcome = lifecycle.KindReview, "https://github.com/umbrella/data/pull/1", "h1", "skipped"
+	closed := skipped
+	closed.PRURL, closed.Outcome = "https://github.com/umbrella/data/pull/2", "closed"
+	got := reviewTasks([]scheduler.TaskView{skipped, closed})
+	want := []github.ReviewTask{
+		{URL: skipped.PRURL, Head: "h1", Done: true, Skipped: true},
+		{URL: closed.PRURL, Head: "h1", Done: true},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("reviewTasks = %+v, want %+v", got, want)
+	}
+}

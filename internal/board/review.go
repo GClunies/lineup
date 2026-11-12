@@ -87,8 +87,8 @@ type review struct {
 	members   map[string][]string
 	membersAt time.Time
 	viewer    string // the user's login, read once
-	// reviews are the review Tasks on the Board, which keep PRs out of a queue.
-	reviews []github.ReviewTask
+	// holds are the review Tasks on the Board, which keep PRs out of a queue.
+	holds github.Holds
 
 	sel       string // the selected PR's URL
 	filter    textinput.Model
@@ -159,13 +159,13 @@ func (r *review) list(tb ReviewView) ([]github.PullRequest, bool) {
 			break
 		}
 		if v.Queue {
-			for _, c := range github.Candidates(r.lists[v.Key], r.reviews) {
+			for _, c := range github.Rank(r.lists[v.Key], r.holds).Ranked {
 				owned[strings.ToLower(c.PR.URL)] = true
 			}
 		}
 	}
 	var out []github.PullRequest
-	for _, c := range github.Candidates(prs, r.reviews) {
+	for _, c := range github.Rank(prs, r.holds).Ranked {
 		if !owned[strings.ToLower(c.PR.URL)] {
 			out = append(out, c.PR)
 		}
@@ -540,7 +540,10 @@ func reviewTasks(tasks []scheduler.TaskView) []github.ReviewTask {
 	var out []github.ReviewTask
 	for _, t := range tasks {
 		if t.Kind == lifecycle.KindReview {
-			out = append(out, github.ReviewTask{URL: t.PRURL, Head: t.ReviewHead, Done: t.Group == lifecycle.GroupDone.String() && !t.Tab})
+			out = append(out, github.ReviewTask{
+				URL: t.PRURL, Head: t.ReviewHead, Done: t.Group == lifecycle.GroupDone.String() && !t.Tab,
+				Skipped: t.Outcome == string(lifecycle.OutcomeSkipped),
+			})
 		}
 	}
 	return out

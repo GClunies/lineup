@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
@@ -142,7 +143,7 @@ func New(v scheduler.BoardView, opts Options) Model {
 
 func (m *Model) setBoard(v scheduler.BoardView) {
 	m.board = v
-	m.rv.reviews = reviewTasks(v.Tasks)
+	m.rv.holds = github.Holds{Tasks: reviewTasks(v.Tasks)}
 	m.tasks = m.tasks[:0]
 	own := v.OfKind(m.kind).Tasks
 	for _, g := range groupOrder {
