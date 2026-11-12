@@ -19,6 +19,7 @@ import (
 type Status string
 
 const (
+	Backlog  Status = "backlog"
 	Todo     Status = "todo"
 	Started  Status = "started"
 	InReview Status = "in review"
@@ -27,7 +28,7 @@ const (
 )
 
 // Statuses are the values of the status field, in workflow order.
-var Statuses = []Status{Todo, Started, InReview, Done, Canceled}
+var Statuses = []Status{Backlog, Todo, Started, InReview, Done, Canceled}
 
 type Issue struct {
 	N         int
@@ -122,8 +123,9 @@ func (s Store) read(n int) (Issue, error) {
 	return is, err
 }
 
-// Create writes a new Issue with the next free ID. O_EXCL makes two writers
-// that pick the same ID retry instead of overwriting each other.
+// Create writes a new Issue in the backlog with the next free ID. O_EXCL
+// makes two writers that pick the same ID retry instead of overwriting each
+// other.
 func (s Store) Create(title, repo, body string) (Issue, error) {
 	title = strings.TrimSpace(title)
 	if title == "" || strings.ContainsAny(title, "\r\n") {
@@ -132,7 +134,7 @@ func (s Store) Create(title, repo, body string) (Issue, error) {
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
 		return Issue{}, err
 	}
-	is := Issue{Title: title, Repo: strings.TrimSpace(repo), Status: Todo, Body: body}
+	is := Issue{Title: title, Repo: strings.TrimSpace(repo), Status: Backlog, Body: body}
 	for range 100 {
 		n, err := s.next()
 		if err != nil {
@@ -281,7 +283,7 @@ func Parse(data []byte) (Issue, error) {
 		return Issue{}, errors.New("no title")
 	}
 	if !slices.Contains(Statuses, is.Status) {
-		return Issue{}, fmt.Errorf("status %q is not one of todo, started, in review, done, canceled", is.Status)
+		return Issue{}, fmt.Errorf("status %q is not one of backlog, todo, started, in review, done, canceled", is.Status)
 	}
 	is.Body = strings.TrimPrefix(rest, "\n")
 	return is, nil

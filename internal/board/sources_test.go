@@ -95,7 +95,7 @@ func TestWithNoLinearTheBrowserOpensOnTheLocalTab(t *testing.T) {
 	if strings.Contains(v, "lineup login") || strings.Contains(tabLine(e.m), "Browse") {
 		t.Fatalf("with a Local Tracker there is nothing to sign in to, and no Browse:\n%s", v)
 	}
-	inOrder(t, v, "todo · no repo", "local-2", "todo · data", "local-1", "started · data", "local-3")
+	inOrder(t, v, "backlog · no repo", "local-2", "backlog · data", "local-1", "started · data", "local-3")
 
 	e.press("s", "enter")
 	add := lastAdd(t, e)
@@ -208,7 +208,7 @@ func TestALinearStatusPickAfterALocalOneStaysInTheTeamsStates(t *testing.T) {
 	store.Create("Write the runbook", "", "")
 	e := sourceEnv(t, true, LocalSource{S: store})
 	e.press("tab", "tab", "tab", "tab", "c")
-	if len(e.m.tr.itemStates) != 5 || !strings.Contains(e.m.View(), "canceled") {
+	if len(e.m.tr.itemStates) != 6 || !strings.Contains(e.m.View(), "canceled") {
 		t.Fatalf("Local status picker:\n%s", e.m.View())
 	}
 	e.press("esc", "tab", "j", "enter", "enter", "enter", "c")

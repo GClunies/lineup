@@ -78,6 +78,21 @@ func TestCreateNeverReusesAnID(t *testing.T) {
 	})
 }
 
+func TestCreateWritesANewIssueInTheBacklog(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	is, err := s.Create("Retry failed loads", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(s.Dir, is.ID()+".md"))
+	if !strings.Contains(string(b), "\nstatus: backlog\n") {
+		t.Fatalf("file\n%s\nwant status: backlog", b)
+	}
+	if got, err := s.Get(is.ID()); err != nil || got.Status != Backlog {
+		t.Fatalf("read back %+v, %v, want status backlog", got, err)
+	}
+}
+
 func TestABrokenFileIsReportedAndTheRestStillList(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	if _, err := s.Create("Good one", "data", ""); err != nil {

@@ -122,10 +122,11 @@ The description, in Markdown.
 |---|---|---|
 | `title` | Text | Yes |
 | `repo` | A Repo name or path, as `lineup add --repo` takes | No. Without it, the start opens the fuzzy picker. |
-| `status` | `todo`, `started`, `in review`, `done`, `canceled` | Yes |
+| `status` | `backlog`, `todo`, `started`, `in review`, `done`, `canceled` | Yes |
 | `blocked_by` | Local Issue IDs | No |
 
 - The next ID is one more than the highest ID in the folder. The adapter creates the file with `O_EXCL`, so two writers can't take one ID.
+- A new Issue gets `status: backlog`. The `2 work` view shows a `backlog` Issue in Backlog and a `todo` Issue in Ready.
 - The branch name is `local-<n>-<title slug>`, for example `local-7-retry-failed-loads-before-alerting`. A GitHub Issue's branch is `gh-<n>-<title slug>`.
 - The adapter reads files that the Orchestrator or the user wrote. A file that it can't parse shows in the Local tab as an error row with the file name.
 
