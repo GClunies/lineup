@@ -1,0 +1,29 @@
+GLOSSARY.md
+  s_425b607edf0515::t_5ea4d68115a07f 92-100
+cmd/lineup/rexwatch.go
+  s_425b607edf0515::t_5303dcdf1cc936 13-14
+docs/adr/0008-scheduler-runs-as-a-launchd-agent.md
+  s_425b607edf0515::t_b582673acd2a63 8
+docs/adr/0018-one-worker-for-each-task.md
+  s_425b607edf0515::t_f044f4daf10d8a 20
+docs/spec/mvp.md
+  s_425b607edf0515::t_1f83cccc72b5df 174,269,289,313
+docs/spec/reviews.md
+  s_425b607edf0515::t_b5785e27058124 128,209,264,279,335,372
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c3a0596816d8ef06b0946d62934b71f8facacc28",
+  "prompts": {},
+  "sessions": {
+    "s_425b607edf0515": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "766ac254-3905-4d3c-8f8a-f4da8bc9c252",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
