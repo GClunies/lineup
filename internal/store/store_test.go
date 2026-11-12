@@ -2,6 +2,7 @@ package store
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -48,5 +49,41 @@ func TestTasksAndEventsSurviveReopen(t *testing.T) {
 	}
 	if v, err := s.Setting("missing"); v != "" || err != nil {
 		t.Fatalf("missing setting = %q, %v", v, err)
+	}
+}
+
+func TestSkipsSurviveReopenAndIgnoreCase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 11, 9, 17, 0, 0, 0, time.UTC)
+	const url = "https://github.com/Umbrella/Data/pull/7"
+	if added, err := s.AddSkip(Skip{URL: url, Title: "first", At: at}); err != nil || !added {
+		t.Fatalf("add = %v, %v", added, err)
+	}
+	if added, err := s.AddSkip(Skip{URL: strings.ToLower(url), Title: "second", At: at.Add(time.Hour)}); err != nil || added {
+		t.Fatalf("a repeat in another case: added = %v, %v, want false", added, err)
+	}
+	s.Close()
+
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	got, err := s.Skips()
+	if err != nil || len(got) != 1 || got[0].Title != "first" || got[0].URL != url || !got[0].At.Equal(at) {
+		t.Fatalf("skips = %+v, %v, want the first write, in its own case", got, err)
+	}
+	if removed, err := s.RemoveSkip(strings.ToLower(url)); err != nil || !removed {
+		t.Fatalf("remove = %v, %v", removed, err)
+	}
+	if removed, err := s.RemoveSkip(url); err != nil || removed {
+		t.Fatalf("a second remove: removed = %v, %v, want false", removed, err)
+	}
+	if got, _ := s.Skips(); len(got) != 0 {
+		t.Fatalf("skips = %+v after the remove", got)
 	}
 }

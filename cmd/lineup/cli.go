@@ -142,10 +142,10 @@ func cmdReview(c scheduler.Client, args []string, out io.Writer) error {
 }
 
 // cmdReviews lists each review queue with its started reviews and the PRs
-// that wait, or pauses or resumes every queue fill.
+// that wait, pauses or resumes every queue fill, or skips or unskips a PR.
 func cmdReviews(c scheduler.Client, args []string, out io.Writer) error {
 	var asJSON bool
-	fs, err := parse("reviews", "[--json] | pause | resume", args, func(fs *flag.FlagSet) { fs.BoolVar(&asJSON, "json", false, "print JSON") })
+	fs, err := parse("reviews", "[--json] | pause | resume | skip <PR> | unskip <PR>", args, func(fs *flag.FlagSet) { fs.BoolVar(&asJSON, "json", false, "print JSON") })
 	if err != nil {
 		return err
 	}
@@ -160,6 +160,13 @@ func cmdReviews(c scheduler.Client, args []string, out io.Writer) error {
 		} else {
 			fmt.Fprintln(out, "Review queues resumed.")
 		}
+		return nil
+	case fs.NArg() == 2 && !asJSON && (fs.Arg(0) == "skip" || fs.Arg(0) == "unskip"):
+		var res scheduler.SkipResult
+		if err := c.Do(scheduler.Request{Op: "reviews-" + fs.Arg(0), URL: fs.Arg(1)}, &res); err != nil {
+			return err
+		}
+		printSkip(out, fs.Arg(0), fs.Arg(1), res)
 		return nil
 	default:
 		fs.Usage()
@@ -206,10 +213,38 @@ func cmdReviews(c scheduler.Client, args []string, out io.Writer) error {
 			return err
 		}
 	}
+	if len(v.Skips) > 0 {
+		fmt.Fprintf(out, "Skips: %d. Put one back with lineup reviews unskip <PR>.\n", len(v.Skips))
+		tw := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
+		for _, k := range v.Skips {
+			key, _ := scheduler.ParseReviewKey(k.URL)
+			fmt.Fprintf(tw, "  %s#%d\t%s\tsince %s\n", key.Repo, key.Number, k.Title, k.At.Format(time.DateOnly))
+		}
+		if err := tw.Flush(); err != nil {
+			return err
+		}
+	}
 	for _, s := range v.Unmapped {
 		fmt.Fprintln(out, "Unmapped: "+s)
 	}
 	return nil
+}
+
+// printSkip says what a skip or an unskip did. pr is the PR as the user typed it.
+func printSkip(out io.Writer, verb, pr string, res scheduler.SkipResult) {
+	switch {
+	case verb == "skip" && !res.Changed:
+		fmt.Fprintf(out, "%s is already skipped.\n", pr)
+	case verb == "skip":
+		fmt.Fprintf(out, "Skipped %s: %s. No queue picks it until you run lineup reviews unskip %s.\n", pr, res.Title, pr)
+		if res.Closed != "" {
+			fmt.Fprintf(out, "Closed %s.\n", res.Closed)
+		}
+	case !res.Changed:
+		fmt.Fprintf(out, "%s is not skipped.\n", pr)
+	default:
+		fmt.Fprintf(out, "Unskipped %s. The queues can pick it again.\n", pr)
+	}
 }
 
 func cmdLs(c scheduler.Client, args []string, out io.Writer) error {

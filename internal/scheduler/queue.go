@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"slices"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
+	"github.com/gclunies/lineup/internal/store"
 )
 
 // membersEvery is how long the Scheduler keeps the members of a team.
@@ -123,7 +125,7 @@ func (s *Scheduler) teamMembers(ctx context.Context) (map[string][]string, error
 // fillInput is the state that planFill reads. A pause that lands while a
 // fill searches holds that fill too. Only the loop calls it.
 func (s *Scheduler) fillInput(rows queueRows) fillInput {
-	return fillInput{Paused: s.paused, Slots: s.d.Slots, Queues: s.d.Queues, Records: s.list(), Found: rows.Found, Repos: rows.Repos}
+	return fillInput{Paused: s.paused, Slots: s.d.Slots, Queues: s.d.Queues, Records: s.list(), Skips: s.skips, Found: rows.Found, Repos: rows.Repos}
 }
 
 // pauseReviews stops or restarts every queue fill. A pause stops no review
@@ -139,16 +141,111 @@ func (s *Scheduler) pauseReviews(paused bool) error {
 	return err
 }
 
+// SkipResult is what `reviews-skip` or `reviews-unskip` did. Changed is false
+// when the PR was in the state that the op asked for. Closed is the review Task
+// that a skip ended, or "".
+type SkipResult struct {
+	github.Skip
+	Changed bool   `json:"changed"`
+	Closed  string `json:"closed,omitempty"`
+}
+
+// skip holds the PR out of every queue at every head until the user unskips
+// it. It ends the PR's open review Task with the outcome skipped, in the same
+// loop call, so no fill can start a review of the PR between the two. A Done
+// review Task keeps its tab: only the user closes that. It writes nothing to
+// GitHub. Running it twice changes nothing the second time.
+func (s *Scheduler) skip(ctx context.Context, url string) (SkipResult, error) {
+	key, err := ParseReviewKey(url)
+	if err != nil {
+		return SkipResult{}, err
+	}
+	var sk github.Skip
+	var known bool
+	s.call(func() { sk, known = s.skipOf(key) })
+	if !known {
+		prs, err := s.d.GitHub.ReviewPRs(ctx, []ReviewKey{key})
+		if err != nil {
+			return SkipResult{}, err
+		}
+		pr, ok := prs[key]
+		switch {
+		case !ok:
+			return SkipResult{}, fmt.Errorf("GitHub has no PR %s#%d", key.Repo, key.Number)
+		case pr.State != "OPEN":
+			return SkipResult{}, fmt.Errorf("%s#%d is %s", pr.Repo, pr.Number, strings.ToLower(pr.State))
+		}
+		sk = github.Skip{URL: pr.URL, Title: pr.Title, At: s.now()}
+	}
+	res := SkipResult{Skip: sk}
+	err = s.withLoop(func() error {
+		added, err := s.d.Store.AddSkip(store.Skip(sk))
+		if err != nil {
+			return err
+		}
+		if added {
+			s.skips = append(slices.Clone(s.skips), sk)
+		}
+		res.Changed = added
+		for _, r := range s.list() {
+			if r.Review != nil && r.Review.is(key) && r.Stage != lifecycle.Done {
+				if err := s.apply(r, lifecycle.TaskClosed{Skipped: true}, "skip"); err != nil {
+					return err
+				}
+				res.Closed, res.Changed = r.ID, true
+			}
+		}
+		s.publish()
+		return nil
+	})
+	return res, err
+}
+
+// skipOf finds the skip of the PR. Only the loop calls it.
+func (s *Scheduler) skipOf(key ReviewKey) (github.Skip, bool) {
+	i := slices.IndexFunc(s.skips, func(k github.Skip) bool { return strings.EqualFold(k.URL, key.URL()) })
+	if i < 0 {
+		return github.Skip{}, false
+	}
+	return s.skips[i], true
+}
+
+// unskip lets the queues pick the PR again, at the next fill. A PR that is not
+// skipped is not an error.
+func (s *Scheduler) unskip(url string) (SkipResult, error) {
+	key, err := ParseReviewKey(url)
+	if err != nil {
+		return SkipResult{}, err
+	}
+	var res SkipResult
+	err = s.withLoop(func() error {
+		sk, ok := s.skipOf(key)
+		if !ok {
+			return nil
+		}
+		if _, err := s.d.Store.RemoveSkip(sk.URL); err != nil {
+			return err
+		}
+		s.skips = slices.DeleteFunc(slices.Clone(s.skips), func(k github.Skip) bool { return k.URL == sk.URL })
+		res = SkipResult{Skip: sk, Changed: true}
+		s.publish()
+		return nil
+	})
+	return res, err
+}
+
 // ReviewsView is the review queues as `lineup reviews` shows them. Slots is
 // review.slots, or 0 when it is not set. Started counts the started review
-// Tasks of all queues. Unmapped says why the PRs of some repositories never
+// Tasks of all queues. Skips are the PRs that the user holds out of every
+// queue, oldest first. Unmapped says why the PRs of some repositories never
 // start.
 type ReviewsView struct {
-	Paused   bool        `json:"paused"`
-	Slots    int         `json:"slots,omitempty"`
-	Started  int         `json:"started"`
-	Queues   []QueueView `json:"queues"`
-	Unmapped []string    `json:"unmapped,omitempty"`
+	Paused   bool          `json:"paused"`
+	Slots    int           `json:"slots,omitempty"`
+	Started  int           `json:"started"`
+	Queues   []QueueView   `json:"queues"`
+	Skips    []github.Skip `json:"skips"`
+	Unmapped []string      `json:"unmapped,omitempty"`
 }
 
 // QueueView is one queue: its started review Tasks, and the PRs that wait,
@@ -167,9 +264,10 @@ func (s *Scheduler) reviews(ctx context.Context) (ReviewsView, error) {
 	if err != nil {
 		return ReviewsView{}, err
 	}
-	v := ReviewsView{Queues: []QueueView{}, Unmapped: rows.Unmapped}
+	v := ReviewsView{Queues: []QueueView{}, Skips: []github.Skip{}, Unmapped: rows.Unmapped}
 	s.call(func() {
 		in := s.fillInput(rows)
+		v.Skips = append(v.Skips, in.Skips...)
 		ranked := planFill(in).Ranked
 		v.Paused = in.Paused
 		v.Slots, v.Started = in.Slots, queueStarted(in.Records)

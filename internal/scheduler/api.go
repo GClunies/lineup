@@ -136,6 +136,10 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 		// The poll outlives the request, so it runs on the Scheduler's context.
 		s.call(func() { go s.poll(s.ctx, nil) })
 		return nil, nil
+	case "reviews-skip":
+		return s.skip(ctx, req.URL)
+	case "reviews-unskip":
+		return s.unskip(req.URL)
 	case "reviews-pause", "reviews-resume":
 		return nil, s.pauseReviews(req.Op == "reviews-pause")
 	case "cap":
