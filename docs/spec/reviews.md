@@ -102,9 +102,9 @@ A header row names the columns. A row shows these columns, in this order, with 3
 | `PR` | The short repository name and the number |
 | `TITLE` | The title |
 | `AUTHOR` | The author, in every view |
-| `CI` | The CI state, `draft`, or `merged`. A merged row is dim, as a draft row is. |
+| `CI` | The CI state, `draft`, or `merged`. A merged row is dim, as a draft row is. A skipped row is dim too. |
 | `REVIEW` | `✗ changes` when changes are requested, or the count of approvals |
-| `TASK` | The joined review Task, if one exists |
+| `TASK` | The joined review Task, if one exists. A skipped PR adds `skipped`. |
 | `AGE` | The age of the PR |
 
 On a narrow screen the columns drop from the right, with their headings, so that the title keeps at least 24 cells.
@@ -113,7 +113,7 @@ On a narrow screen the columns drop from the right, with their headings, so that
 
 ### Keys
 
-On the Reviews tab, the keys are the Board's keys (see `docs/spec/mvp.md`), with `tab`, `shift+tab`, `<`, `>`, and `R` as below. `m` does nothing, because no review Task is Ready to land. `enter` on a started review Task that has no live Worker restores the Worker.
+On the Reviews tab, the keys are the Board's keys (see `docs/spec/mvp.md`), with `tab`, `shift+tab`, `<`, `>`, `R`, and `S` as below. `m` does nothing, because no review Task is Ready to land. `enter` on a started review Task that has no live Worker restores the Worker. `S` acts on the PR of the selected Task, as it does on a PR tab.
 
 On a PR tab:
 
@@ -126,6 +126,7 @@ On a PR tab:
 | `enter` | Focus the Worker's tab of the joined Task. If the joined Task has started and has no live Worker, restore the Worker with `lineup open`. If the PR has no started Task, open the PR in the browser. |
 | `o` | Open the PR in the browser |
 | `r` | Start a review Task for this PR now, outside every queue's slots. If the PR has an open review Task, start it if it is Queued. Restore its Worker if the Worker closed in Review ready, or in Reviewing with the flag `tab closed`. Run it again if it stopped for good. Else focus its tab. |
+| `S` | Skip the PR, or unskip it if it is skipped. See [Skips](#skips). If the PR has an open review Task, the skip closes that Task, so lineup asks `skip <PR> and close <Task>? (y/n)` first. The footer reads `S skip` or `S unskip` for the selected row. |
 | `R` | Refresh now: search every PR tab again, and ask the Scheduler to poll every started Task |
 | `z` | Go to the Orchestrator in the `work` tab |
 | `?` | Show all keys |
@@ -168,12 +169,28 @@ The queue's filters pick the candidates. A candidate enters the queue only when 
 
 - It is not a draft, and it does not come from a fork. `pr-review` refuses fork PRs, because a fork's code would run with the user's credentials.
 - Its author is not the user and is not a bot.
-- No review Task exists for its URL at its current head commit, Done or not. A Done review that keeps its tab holds the PR. The queue starts a new review only after the user closes that tab. A Task that the user closed at one head stays closed until the author pushes. The user can always start a review again with `r`, after the tab closes.
+- The user did not skip it. A skip holds the PR out of every queue, at every head, until the user unskips it. See [Skips](#skips).
+- No review Task exists for its URL at its current head commit, Done or not. A Done review that keeps its tab holds the PR. The queue starts a new review only after the user closes that tab. A Task that the user closed with `x` at one head stays closed until the author pushes. A Task that a skip ended holds nothing, because the skip alone holds the PR. The user can always start a review again with `r`, after the tab closes.
 - It wants the user's review. A PR that the user reviewed before wants it only when it requests the user again. Any other PR wants it only when nobody approved it yet. A pending review, a draft that the user has not submitted, does not count as a review.
 - No other person's review is open on it. A review is open when a person other than the user and the author requested changes, or commented on the current head and did not approve. Bots do not count. A second review can contradict an open review, so the PR waits until the author pushes a new head or the reviewer approves. `pr-review` stops on the same rule.
 - A person who approved and then commented still counts as an approval. GitHub's `latestReviews` shows only the comment, so lineup reads `latestOpinionatedReviews` too.
 
 These rules are the rules of the Herdr `review-queue` plugin, which this queue replaces.
+
+### Skips
+
+The queue can pick a PR in code that the user does not know, or has no time to learn. The user skips that PR. A skip holds the PR out of every queue until the user unskips it.
+
+- A skip keys on the PR alone, `owner/repo#number`. It holds at every head, in every queue, and across a restart of the Scheduler. The URL of a skip ignores case.
+- A skip writes nothing to GitHub. lineup reads the PR once, to take its URL and title and to check that it is open.
+- If the PR has an open review Task, the skip ends that Task in the same loop call, as `x` does: the Task goes to Done, the Scheduler closes its tab, and it removes the review worktree. The Task's outcome is `skipped`. A Done review that keeps its tab stays as it is. Only the user closes that tab.
+- A Task that a skip ended holds nothing. So the PR stays on its `Q:` tab after the skip, and an unskip lets the next fill add the PR again at the same head.
+- A skip and an unskip are idempotent. A second skip changes nothing, except that it ends a review Task that is still open. An unskip of a PR that is not skipped is not an error.
+- `r` and `lineup review` review a skipped PR, and keep the skip. While that review Task is open it holds the PR. When it ends, the skip holds the PR again.
+- A skip never expires. The user unskips a PR that merged or closed with `lineup reviews unskip <PR>`.
+- The state is the `skips` table of the Scheduler's database: the PR URL, its title, and the time of the skip.
+
+A `Q:` tab lists a skipped PR after the PRs that wait, in rank order. The row is dim and has `skipped` in the `TASK` column. The header counts only the PRs that wait, then `· <n> skipped`. A PR that no queue lists, for example a draft, has no row to show. The other PR tabs mark a skipped row with `skipped` too, and they list the PR as before.
 
 ### Ranking
 
@@ -188,7 +205,7 @@ Ranking is inside one queue. A queue's PRs always rank behind the PRs of the que
 On every full poll, after it reads Task PRs, the Scheduler fills each queue that is not paused. A poll for a few Tasks, for example after a Worker reports `done`, fills nothing.
 
 1. Search every queue, each in its own GraphQL call, at the same time. Only one fill runs at a time. A fill that is due while another runs is skipped. If a search fails, the fill logs the error and starts nothing. Without the PRs of an earlier queue, a later queue can take a PR that the earlier queue owns.
-2. In one call on the loop goroutine, rank each queue's candidates in config order. Drop from a queue each PR that an earlier queue ranked, so each PR has one owner.
+2. In one call on the loop goroutine, rank each queue's candidates in config order. Drop each skipped PR. Drop from a queue each PR that an earlier queue ranked, so each PR has one owner.
 3. In the same call, for each queue in config order: start its Queued review Tasks first, then add and start a review Task for each top-ranked candidate. Stop when the queue's started count reaches its `slots`, or when the started count of all queues reaches `review.slots`.
 4. Start at most one review Task in each Repo per fill, because each start fetches into the Repo's main checkout.
 
@@ -236,6 +253,7 @@ A review Task never enters a Stage of a build Task, and a build Task never enter
 | Review ready | the Worker's tab closes, the Worker exits, or recovery finds no tab | Review ready, with no Worker. The Task keeps its slot and still needs the user. |
 | Reviewing or Review ready | `open`: `lineup open`, `lineup review`, `r`, or `enter` on a Task with no live Worker | The same Stage, with a Worker that resumes the review's conversation. The flag `tab closed` clears. |
 | Any Stage except Done | `task-closed` (user key `x`, confirmed) | Done, marked closed. The Scheduler closes the tab and removes the review worktree. |
+| Any Stage except Done | `task-closed` from a skip (user key `S`, confirmed, or `lineup reviews skip`) | Done, marked skipped. The Scheduler closes the tab and removes the review worktree. |
 | Done | `task-closed` (user key `x`, confirmed) or `tab-closed`: the user closed the Task's tab in Rex | Done, with the same outcome. The Scheduler closes the tab, removes the review worktree, and removes the Repo session if it holds no other tab. |
 
 - `pr-reviewed`, `pr-merged`, and `pr-closed` are levels, not edges. Each full poll computes them from the PR's current state, so a Signal that waits is not lost.
@@ -336,10 +354,12 @@ The skills live in the dotfiles repository, `~/.agents/skills`.
 |---|---|
 | `lineup review <PR URL>` | Adds and starts a review Task with no queue, or restores the closed Worker of an open review Task |
 | `lineup open <task>` | Focuses the review Task's tab, or restores its closed Worker |
-| `lineup reviews` | Lists each queue with its slots, started reviews, and ranked PRs. When `review.slots` is set, it prints `Reviews: <started>/<slots> started` first. `--json` has `slots` when it is set, and always has `started`, the started review Tasks of all queues |
+| `lineup reviews` | Lists each queue with its slots, started reviews, and ranked PRs, then the skips, then the repositories that have no checkout (`Unmapped:`). When `review.slots` is set, it prints `Reviews: <started>/<slots> started` first. `--json` has `slots` when it is set, and always has `started`, the started review Tasks of all queues, and `skips`. `unmapped` lists the repositories that have no checkout |
 | `lineup reviews pause` / `resume` | Stops or restarts every queue fill |
+| `lineup reviews skip <PR>` | Skips the PR, and ends its open review Task. `<PR>` is a PR URL or `owner/repo#number`. It refuses a PR that GitHub does not have, and a PR that is not open. |
+| `lineup reviews unskip <PR>` | Lets the queues pick the PR again, at the next fill |
 
-The Orchestrator maps "review <url>" and `/pr-review <url>` to `lineup review <url>`. It keeps the `/pr-explain` row of its instructions. In a review Task's tab, the user asks the Worker for `/pr-explain` directly.
+The Orchestrator maps "review <url>" and `/pr-review <url>` to `lineup review <url>`. It maps "skip <PR>" and "unskip <PR>" to `lineup reviews skip <PR>` and `lineup reviews unskip <PR>`. It asks the user before a skip that closes a review Task. It keeps the `/pr-explain` row of its instructions. In a review Task's tab, the user asks the Worker for `/pr-explain` directly.
 
 ## Code changes
 
@@ -347,7 +367,7 @@ The Orchestrator maps "review <url>" and `/pr-review <url>` to `lineup review <u
 |---|---|
 | `internal/lifecycle` | `Kind` and `Queue` on Task, and `Slots` and `SharedSlots` on Board. The Stages Reviewing and Review ready. `Board.Started()` and `Board.OverCap()` count only build Tasks. `Stage.Started()` stays as it is. `Start` and `Rerun` check the Task's Kind. The Signals `pr-reviewed` and `pr-closed`. |
 | `internal/scheduler` | The review PR, head, and review worktree on Record, and the Worker's last program status. The review add path with its dedupe. Review setup and cleanup. The review poll, apart from the branch poll. The contract check by findings file. The single-flight queue fill. The `reviews` settings and ops. |
-| `internal/github` | `SearchPRs`: one GraphQL call for each view, run at the same time. `TeamMembers`. The review poll by number. |
+| `internal/github` | `SearchPRs`: one GraphQL call for each view, run at the same time. `TeamMembers`. The review poll by number. `Rank(prs, Holds)` applies the queue rules. `Holds` is the review Tasks and the skips. |
 | `internal/config` | `[[review.views]]` and `[[review.queues]]` in the global file only, with validation at load. `[stage.reviewing]`, and the Stage loop of `Resolve` covers the new Stages. |
 | `internal/harness/claude` | The review intro, prompt, and contract. The `pr` override does not apply to a review Task. `--add-dir` for the review worktree. |
 | `internal/board` | The review view: a PR list model, its cache, its keys, and the Task join |
@@ -367,13 +387,13 @@ The `review` Hub tab holds one pane, `REVIEWS`, which runs `lineup board --revie
    - Review Tasks never change `Started()`, so the WIP cap property holds unchanged.
    - Every started review Task ends in Done or in the Needs you group.
    - A review Task never receives an Effect that writes to GitHub.
-4. **Queue rules.** Table tests over draft, fork, bot, own PR, open review Task, approved, reviewed, and re-requested PRs, and the ranking order.
-5. **Fill.** Two fills in the same state start the same Tasks once. A paused queue starts nothing. Table tests for the shared slots: an earlier queue's PR is added above an older later-queue PR, a PR that two queues match is added once in the first queue, the shared count caps the started reviews of all queues, and a full queue leaves a new PR of the first queue waiting until a slot frees.
+4. **Queue rules.** Table tests over draft, fork, bot, own PR, open review Task, approved, reviewed, and re-requested PRs, and the ranking order. A skipped PR never enters `Ranked`, at any head. A Task that a skip ended holds nothing, and a Task that `x` closed holds its head. Property tests with `rapid` check both.
+5. **Fill.** A skipped PR is never added, at any head, also after a restart of the Scheduler. A skip ends the open review Task in one loop call, and an unskip lets the next fill add the PR at the same head. A skip writes nothing to GitHub. Two fills in the same state start the same Tasks once. A paused queue starts nothing. Table tests for the shared slots: an earlier queue's PR is added above an older later-queue PR, a PR that two queues match is added once in the first queue, the shared count caps the started reviews of all queues, and a full queue leaves a new PR of the first queue waiting until a slot frees.
 6. **Review poll.** Against recorded responses, `pr-reviewed`, `pr-merged`, and `pr-closed` fire as the table says, wait while the Worker works, and fire on the next poll after the Worker stops. A pending review does not fire `pr-reviewed`.
 7. **Setup and cleanup.** Two review starts in one Repo fetch one after the other. Cleanup removes a clean review worktree and keeps one with an unpushed commit. A review Task never calls `wt remove`.
 8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then restores the Worker in the same conversation. A closed tab in Reviewing flags the Task `tab closed` and opens no tab, and `lineup open` or `lineup review` then resumes the Worker. Recovery with no tab in Review ready leaves the Task as it is, and in Reviewing it sets the flag. The events of the hunk pane leave the Task as it is. A closed Worker block closes the hunk pane with its tab.
 9. **Config.** Load and validation: an unknown key, an empty filter list, a bad team or repository form, a duplicate name, and `slots` below 1 each fail at load.
-10. **Board.** A render test of the review view with a build Task and a review Task on PRs. Only the review Task joins. `enter` on a joined row sends `focus` for that Task when its Worker is live, and `open` when it is not. The Reviews tab lists only the review Task. Typing `q` in the search does not quit.
+10. **Board.** A render test of the review view with a build Task and a review Task on PRs. Only the review Task joins. `enter` on a joined row sends `focus` for that Task when its Worker is live, and `open` when it is not. The Reviews tab lists only the review Task. Typing `q` in the search does not quit. A `Q:` tab lists a skipped PR dim after the PRs that wait, also right after the skip closed its review Task. `S` toggles the skip.
 11. **Speed.** The review view's first paint from the cache meets the Board's 100 ms budget.
 12. **Live.**
     - The review tab lists the user's open PRs, and a PR of a running Task shows that Task's Stage.

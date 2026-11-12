@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gclunies/lineup/internal/github"
+	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
@@ -28,7 +29,16 @@ func (m Model) reviewBody() string {
 	}
 	prs, loaded := r.list(tb)
 	if loaded {
-		head += dim.Render(fmt.Sprintf("  %d", len(prs)))
+		skipped := 0
+		for _, pr := range prs {
+			if tb.Queue && r.holds.IsSkipped(pr.URL) {
+				skipped++
+			}
+		}
+		head += dim.Render(fmt.Sprintf("  %d", len(prs)-skipped))
+		if skipped > 0 {
+			head += dim.Render(fmt.Sprintf(" · %d skipped", skipped))
+		}
 	}
 	if r.loading {
 		head += dim.Render("  refreshing…")
@@ -71,8 +81,13 @@ func (m Model) prRows(rows []github.PullRequest) []string {
 	}
 	for i, pr := range rows {
 		task := ""
-		if t, ok := join[pr.URL]; ok {
+		t, joined := join[pr.URL]
+		if joined {
 			task = taskText(t)
+		}
+		skipped := m.rv.holds.IsSkipped(pr.URL)
+		if skipped && !(joined && t.Outcome == string(lifecycle.OutcomeSkipped)) {
+			task = strings.TrimSpace(task + " skipped")
 		}
 		all[i] = [][]seg{
 			{{pr.Author, dim}},
@@ -124,7 +139,7 @@ func (m Model) prRows(rows []github.PullRequest) []string {
 			ss = append(ss, seg{colGap, plain})
 			ss = append(ss, padSegs(truncSegs(all[i][j], widths[j]), widths[j])...)
 		}
-		out = append(out, m.richRow(i == sel, pr.Draft || !pr.MergedAt.IsZero(), ss))
+		out = append(out, m.richRow(i == sel, pr.Draft || !pr.MergedAt.IsZero() || m.rv.holds.IsSkipped(pr.URL), ss))
 	}
 	return out
 }
@@ -223,7 +238,7 @@ func (m Model) reviewFooter() string {
 		case joined && restorable(t):
 			hs = append(hs, hint{"enter", "restore the Worker"})
 		}
-		hs = append(hs, hint{"o", "open the PR"}, hint{"r", "review now"})
+		hs = append(hs, hint{"o", "open the PR"}, hint{"r", "review now"}, m.skipHint(pr.URL))
 	}
 	hs = append(hs, hint{"/", "search"}, hint{"z", "agent"}, hint{"R", "refresh now"}, hint{"< >", "move the tab"}, hint{"j/k", "move"}, hint{"q", "quit"}, hint{"?", "all keys"})
 	return hintBar(m.width, hs)
@@ -248,6 +263,11 @@ const reviewHelp = `
    o        open the PR in the browser
    r        start a review Task for this PR now, outside every queue's
             slots, or restore its closed Worker
+   S        skip this PR, or unskip it if it is skipped. No queue picks a
+            skipped PR, at any head, until you unskip it. If a review
+            Task of the PR is open, S closes it, after y/n. A skipped PR
+            shows "skipped" in the TASK column, and on a Q: tab it moves
+            below the PRs that wait.
    R        refresh now: search GitHub again and poll every started
             Task; lineup also refreshes every 2 minutes
    z        zoom the agent pane
@@ -272,6 +292,9 @@ const reviewTasksHelp = `
    x        close the Task, or its tab and worktree when it is Done,
             or archive a Done Task with no tab, after y/n
    s        start a Queued Task
+   S        skip the Task's PR, or unskip it if it is skipped. A skip
+            closes the Task, after y/n, and no queue picks the PR until
+            you unskip it.
    o        open the PR
    R        refresh now: search GitHub again and poll every started
             Task; lineup also refreshes every 2 minutes

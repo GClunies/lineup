@@ -1,0 +1,92 @@
+# 2026/11/12 00:50:04.108846 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw n: 5
+# 2026/11/12 00:50:04.108850 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw requested: false
+# 2026/11/12 00:50:04.108852 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw byName: false
+# 2026/11/12 00:50:04.108852 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw reviewed: false
+# 2026/11/12 00:50:04.108854 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw draft: false
+# 2026/11/12 00:50:04.108854 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw head: "a"
+# 2026/11/12 00:50:04.108856 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw age: 0
+# 2026/11/12 00:50:04.108856 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw requested: false
+# 2026/11/12 00:50:04.108857 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw byName: false
+# 2026/11/12 00:50:04.108857 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw reviewed: false
+# 2026/11/12 00:50:04.108861 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw draft: false
+# 2026/11/12 00:50:04.108861 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw head: "a"
+# 2026/11/12 00:50:04.108862 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw age: 0
+# 2026/11/12 00:50:04.108863 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw requested: false
+# 2026/11/12 00:50:04.108863 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw byName: false
+# 2026/11/12 00:50:04.108863 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw reviewed: false
+# 2026/11/12 00:50:04.108864 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw draft: false
+# 2026/11/12 00:50:04.108865 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw head: "a"
+# 2026/11/12 00:50:04.108865 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw age: 0
+# 2026/11/12 00:50:04.108866 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw requested: false
+# 2026/11/12 00:50:04.108867 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw byName: false
+# 2026/11/12 00:50:04.108867 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw reviewed: false
+# 2026/11/12 00:50:04.108868 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw draft: false
+# 2026/11/12 00:50:04.108868 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw head: "a"
+# 2026/11/12 00:50:04.108869 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw age: 0
+# 2026/11/12 00:50:04.108869 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw requested: false
+# 2026/11/12 00:50:04.108869 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw byName: false
+# 2026/11/12 00:50:04.108870 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw reviewed: false
+# 2026/11/12 00:50:04.108870 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw draft: false
+# 2026/11/12 00:50:04.108871 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw head: "a"
+# 2026/11/12 00:50:04.108871 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw age: 0
+# 2026/11/12 00:50:04.108872 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw task: false
+# 2026/11/12 00:50:04.108872 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw task: false
+# 2026/11/12 00:50:04.108873 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw task: false
+# 2026/11/12 00:50:04.108873 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw task: false
+# 2026/11/12 00:50:04.108873 [TestPropertyATaskThatASkipEndedHoldsNothing] [rapid] draw task: true
+# 2026/11/12 00:50:04.108878 [TestPropertyATaskThatASkipEndedHoldsNothing] ranked [1 2 3 4] skipped [], want [1 2 3 4 5] and none
+# 
+v0.4.8#6188703102250557447
+0x0
+0x6b74f03291620
+0x5
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1

@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -50,6 +51,11 @@ type PRSnapshot struct {
 type ReviewKey struct {
 	Repo   string
 	Number int
+}
+
+// URL is the PR's GitHub URL. A skip compares it without case.
+func (k ReviewKey) URL() string {
+	return fmt.Sprintf("https://github.com/%s/pull/%d", k.Repo, k.Number)
 }
 
 // ReviewSnapshot is the state of a reviewed PR that one poll read.

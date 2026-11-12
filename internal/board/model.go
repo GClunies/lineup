@@ -4,11 +4,13 @@ package board
 
 import (
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
@@ -104,7 +106,9 @@ type Model struct {
 	loaded        [3]bool // the views whose first load ran
 	mode          mode
 	pendingTask   string // Task the current prompt is about
-	pendingOp     string // close or archive, for the y/n prompt
+	pendingOp     string // close, archive, or reviews-skip, for the y/n prompt
+	pendingURL    string // the PR that a skip prompt is about
+	pendingRef    string // that PR's short name
 	pendingAsk    string
 	width, height int
 
@@ -142,7 +146,7 @@ func New(v scheduler.BoardView, opts Options) Model {
 
 func (m *Model) setBoard(v scheduler.BoardView) {
 	m.board = v
-	m.rv.reviews = reviewTasks(v.Tasks)
+	m.rv.holds = github.Holds{Tasks: reviewTasks(v.Tasks), Skips: v.Skips}
 	m.tasks = m.tasks[:0]
 	own := v.OfKind(m.kind).Tasks
 	for _, g := range groupOrder {
@@ -229,10 +233,13 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case modeConfirm:
 		m.mode = modeNormal
+		if k == "y" && m.pendingOp == opSkip {
+			return m, m.skipOp(opSkip, m.pendingURL, m.pendingRef)
+		}
 		if k == "y" {
 			return m, m.op(m.pendingOp, scheduler.Request{Op: m.pendingOp, Task: m.pendingTask})
 		}
-		m.setStatus(m.pendingOp+" cancelled", false)
+		m.setStatus(strings.TrimPrefix(m.pendingOp, "reviews-")+" cancelled", false)
 		return m, nil
 	case modeCap:
 		return m.capKey(k)
@@ -359,6 +366,10 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "s":
 		if ok && t.Group == "Queued" {
 			return m, m.op("start", scheduler.Request{Op: "start", Task: t.ID})
+		}
+	case "S":
+		if ok && t.Kind == lifecycle.KindReview {
+			return m.toggleSkip(t.PRURL, urlRef(t.PRURL))
 		}
 	case "o":
 		if ok {

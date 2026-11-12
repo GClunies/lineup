@@ -13,8 +13,10 @@ type Start struct{ OverCap bool }
 type PRMerge struct{}
 
 // TaskClosed is the user's close. It ends a Task that has not ended, and it
-// cleans up a Done Task that kept its tab.
-type TaskClosed struct{}
+// cleans up a Done Task that kept its tab. Skipped is the user's skip of the
+// PR that a review Task reviews. It ends the Task with the outcome skipped, so
+// that the Task no longer holds its PR out of a queue.
+type TaskClosed struct{ Skipped bool }
 
 // Rerun is the Orchestrator's override that types the prompt for Stage into the
 // Task's Worker again.

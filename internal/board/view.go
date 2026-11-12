@@ -194,6 +194,9 @@ func (m Model) boardHints() []hint {
 	case t.IssueURL != "":
 		hs = append(hs, hint{"o", "open the Issue"})
 	}
+	if t.Kind == lifecycle.KindReview && t.PRURL != "" {
+		hs = append(hs, m.skipHint(t.PRURL))
+	}
 	hs = append(hs, hint{"f", "details"})
 	if t.Group == lifecycle.GroupDone.String() && !t.Tab {
 		hs = append(hs, hint{"x", "archive"})

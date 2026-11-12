@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 )
 
@@ -138,8 +139,11 @@ type BoardView struct {
 	Started int `json:"started"`
 	OverCap int `json:"over_cap"`
 	// ReviewsPaused is true while `lineup reviews pause` holds every queue fill.
-	ReviewsPaused bool       `json:"reviews_paused,omitempty"`
-	Tasks         []TaskView `json:"tasks"`
+	ReviewsPaused bool `json:"reviews_paused,omitempty"`
+	// Skips are the PRs that the user holds out of every review queue. The
+	// Board feeds them to the queue rules with the review Tasks.
+	Skips []github.Skip `json:"skips,omitempty"`
+	Tasks []TaskView    `json:"tasks"`
 }
 
 // OfKind is the view with only the Tasks of Kind k. Each Hub tab shows one Kind.

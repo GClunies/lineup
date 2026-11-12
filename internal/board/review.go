@@ -87,8 +87,9 @@ type review struct {
 	members   map[string][]string
 	membersAt time.Time
 	viewer    string // the user's login, read once
-	// reviews are the review Tasks on the Board, which keep PRs out of a queue.
-	reviews []github.ReviewTask
+	// holds are the review Tasks on the Board and the user's skips: what keeps a
+	// PR out of a queue besides the PR itself.
+	holds github.Holds
 
 	sel       string // the selected PR's URL
 	filter    textinput.Model
@@ -147,7 +148,9 @@ func (r *review) curTab() ReviewView { return r.tabs[r.tab] }
 // tabErr is why the open tab has no fresh list, or "".
 func (r *review) tabErr() string { return cmp.Or(r.err, r.failed[r.curTab().Key]) }
 
-// list is the tab's PRs, and false before the first list arrives.
+// list is the tab's PRs, and false before the first list arrives. A Q: tab
+// lists the PRs that wait, then the PRs that the user skipped and the queue
+// would otherwise review.
 func (r *review) list(tb ReviewView) ([]github.PullRequest, bool) {
 	prs, ok := r.lists[tb.Key]
 	if !tb.Queue || !ok {
@@ -159,13 +162,15 @@ func (r *review) list(tb ReviewView) ([]github.PullRequest, bool) {
 			break
 		}
 		if v.Queue {
-			for _, c := range github.Candidates(r.lists[v.Key], r.reviews) {
+			rk := github.Rank(r.lists[v.Key], r.holds)
+			for _, c := range slices.Concat(rk.Ranked, rk.Skipped) {
 				owned[strings.ToLower(c.PR.URL)] = true
 			}
 		}
 	}
 	var out []github.PullRequest
-	for _, c := range github.Candidates(prs, r.reviews) {
+	rk := github.Rank(prs, r.holds)
+	for _, c := range slices.Concat(rk.Ranked, rk.Skipped) {
 		if !owned[strings.ToLower(c.PR.URL)] {
 			out = append(out, c.PR)
 		}
@@ -489,6 +494,10 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(rows) > 0 {
 			return m, m.reviewPR(rows[i].URL, prRef(rows[i]))
 		}
+	case "S":
+		if len(rows) > 0 {
+			return m.toggleSkip(rows[i].URL, prRef(rows[i]))
+		}
 	}
 	return m, nil
 }
@@ -530,6 +539,60 @@ func (m Model) reviewPR(url, ref string) tea.Cmd {
 	}
 }
 
+const (
+	opSkip   = "reviews-skip"
+	opUnskip = "reviews-unskip"
+)
+
+// toggleSkip unskips a skipped PR at once. Otherwise it skips the PR, which
+// holds it out of every queue until the user unskips it. If a review Task of
+// the PR is open, the skip ends that Task, so it asks first.
+func (m Model) toggleSkip(url, ref string) (tea.Model, tea.Cmd) {
+	switch t, open := m.joinPR()[url]; {
+	case m.rv.holds.IsSkipped(url):
+		return m, m.skipOp(opUnskip, url, ref)
+	case open && t.Group != lifecycle.GroupDone.String():
+		m.mode, m.pendingOp, m.pendingURL, m.pendingRef = modeConfirm, opSkip, url, ref
+		m.pendingAsk = "skip " + ref + " and close " + t.ID
+		return m, nil
+	}
+	return m, m.skipOp(opSkip, url, ref)
+}
+
+// skipOp sends the skip or unskip to the Scheduler and reports it as an opMsg.
+func (m Model) skipOp(op, url, ref string) tea.Cmd {
+	c := m.client
+	label := strings.TrimPrefix(op, "reviews-")
+	return func() tea.Msg {
+		var res scheduler.SkipResult
+		if err := c.Do(scheduler.Request{Op: op, URL: url}, &res); err != nil {
+			return opMsg{label: label, task: ref, err: err}
+		}
+		note := ""
+		if res.Closed != "" {
+			note = "closed " + res.Closed
+		}
+		return opMsg{label: label, task: ref, note: note}
+	}
+}
+
+// urlRef is the short name of the PR at url, for example data#4945.
+func urlRef(url string) string {
+	k, err := scheduler.ParseReviewKey(url)
+	if err != nil {
+		return url
+	}
+	return prRef(github.PullRequest{Repo: k.Repo, Number: k.Number})
+}
+
+// skipHint names the key that skips the PR, or undoes its skip.
+func (m Model) skipHint(url string) hint {
+	if m.rv.holds.IsSkipped(url) {
+		return hint{"S", "unskip"}
+	}
+	return hint{"S", "skip"}
+}
+
 func restorable(t scheduler.TaskView) bool {
 	st, err := lifecycle.ParseStage(t.StageKey)
 	return err == nil && st.Started() && !t.Live
@@ -540,7 +603,10 @@ func reviewTasks(tasks []scheduler.TaskView) []github.ReviewTask {
 	var out []github.ReviewTask
 	for _, t := range tasks {
 		if t.Kind == lifecycle.KindReview {
-			out = append(out, github.ReviewTask{URL: t.PRURL, Head: t.ReviewHead, Done: t.Group == lifecycle.GroupDone.String() && !t.Tab})
+			out = append(out, github.ReviewTask{
+				URL: t.PRURL, Head: t.ReviewHead, Done: t.Group == lifecycle.GroupDone.String() && !t.Tab,
+				Skipped: t.Outcome == string(lifecycle.OutcomeSkipped),
+			})
 		}
 	}
 	return out

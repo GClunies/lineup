@@ -327,7 +327,8 @@ func TestLineupReviewsListsEachQueue(t *testing.T) {
 				{PR: github.PullRequest{Repo: "umbrella/data", Number: 4919, Title: "Move the CSV readers", Author: "noether"}},
 			},
 		}},
-		Skipped: []string{"no Repo mapping for umbrella/infra: no [[repos]] checkout has it as its origin"},
+		Skips:    []github.Skip{{URL: "https://github.com/umbrella/data/pull/4945", Title: "Write the usage logs again", At: time.Date(2026, 11, 9, 17, 0, 0, 0, time.UTC)}},
+		Unmapped: []string{"no Repo mapping for umbrella/infra: no [[repos]] checkout has it as its origin"},
 	}
 	c, got := fakeScheduler(t, map[string]scheduler.Response{"reviews": reviewsReply(t, view)})
 	var out bytes.Buffer
@@ -345,7 +346,9 @@ func TestLineupReviewsListsEachQueue(t *testing.T) {
 		{"R-12", "Review ready", "data#4955 Pull the base images"},
 		{"1", "re-review", "data#4960 Write the usage logs", "hopper"},
 		{"2", "data#4919 Move the CSV readers", "noether"},
-		{"Skipped", "umbrella/infra"},
+		{"Skips: 1", "lineup reviews unskip <PR>"},
+		{"umbrella/data#4945", "Write the usage logs again", "since 2026-11-09"},
+		{"Unmapped", "umbrella/infra"},
 	}
 	if len(lines) != len(want) {
 		t.Fatalf("out =\n%s", out.String())
@@ -392,5 +395,54 @@ func TestLineupReviewsPauseAndResume(t *testing.T) {
 	}
 	if n := len(got()); n != 2 {
 		t.Fatalf("a usage error sent a request: %d requests", n)
+	}
+}
+
+func skipReply(t *testing.T, res scheduler.SkipResult) scheduler.Response {
+	data, err := json.Marshal(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scheduler.Response{OK: true, Data: data}
+}
+
+func TestLineupReviewsSkipAndUnskip(t *testing.T) {
+	skipped := github.Skip{URL: "https://github.com/umbrella/data/pull/4945", Title: "Write the usage logs again"}
+	cases := []struct {
+		args  []string
+		reply scheduler.SkipResult
+		want  string
+	}{
+		{[]string{"skip", "umbrella/data#4945"}, scheduler.SkipResult{Skip: skipped, Changed: true},
+			"Skipped umbrella/data#4945: Write the usage logs again. No queue picks it until you run lineup reviews unskip umbrella/data#4945.\n"},
+		{[]string{"skip", "umbrella/data#4945"}, scheduler.SkipResult{Skip: skipped, Changed: true, Closed: "pr-4945"},
+			"Skipped umbrella/data#4945: Write the usage logs again. No queue picks it until you run lineup reviews unskip umbrella/data#4945.\nClosed pr-4945.\n"},
+		{[]string{"skip", "umbrella/data#4945"}, scheduler.SkipResult{Skip: skipped}, "umbrella/data#4945 is already skipped.\n"},
+		{[]string{"skip", "https://github.com/Umbrella/Data/pull/4945/files"}, scheduler.SkipResult{Skip: skipped, Changed: true},
+			"Skipped umbrella/data#4945: Write the usage logs again. No queue picks it until you run lineup reviews unskip umbrella/data#4945.\n"},
+		{[]string{"unskip", "umbrella/data#4945"}, scheduler.SkipResult{Skip: skipped, Changed: true}, "Unskipped umbrella/data#4945. The queues can pick it again.\n"},
+		{[]string{"unskip", "umbrella/data#4945"}, scheduler.SkipResult{}, "umbrella/data#4945 is not skipped.\n"},
+	}
+	for _, c := range cases {
+		c1, got := fakeScheduler(t, map[string]scheduler.Response{"reviews-" + c.args[0]: skipReply(t, c.reply)})
+		var out bytes.Buffer
+		if err := cmdReviews(c1, c.args, &out); err != nil {
+			t.Fatal(err)
+		}
+		if reqs := got(); len(reqs) != 1 || reqs[0].Op != "reviews-"+c.args[0] || reqs[0].URL != c.args[1] {
+			t.Fatalf("requests = %+v", reqs)
+		}
+		if out.String() != c.want {
+			t.Errorf("%v printed %q, want %q", c.args, out.String(), c.want)
+		}
+	}
+	c, got := fakeScheduler(t, map[string]scheduler.Response{})
+	for _, args := range [][]string{{"skip"}, {"skip", "a", "b"}, {"--json", "skip", "a"}, {"unskip"}} {
+		if err := cmdReviews(c, args, io.Discard); !errors.Is(err, errUsage) {
+			t.Errorf("lineup reviews %v: %v, want the usage", args, err)
+		}
+	}
+	if n := len(got()); n != 0 {
+		t.Fatalf("a usage error sent %d requests", n)
 	}
 }

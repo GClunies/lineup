@@ -571,7 +571,7 @@ func newHarness(t *testing.T, dbPath string, seed func(*store.Store), opts ...fu
 
 func (h *harness) do(req Request) any {
 	h.t.Helper()
-	if req.Op == "close" || req.Op == "archive" || req.Op == "open" || req.Op == "review" {
+	if req.Op == "close" || req.Op == "archive" || req.Op == "open" || req.Op == "review" || req.Op == "reviews-skip" {
 		h.rex.mu.Lock()
 		h.rex.asked = true
 		h.rex.mu.Unlock()

@@ -41,6 +41,9 @@ func TestReviewTransitions(t *testing.T) {
 		{"user closes while queued", Queued, TaskClosed{}, Done, "", userClosed, OutcomeClosed},
 		{"user closes while reviewing", Reviewing, TaskClosed{}, Done, "", userClosed, OutcomeClosed},
 		{"user closes when ready", ReviewReady, TaskClosed{}, Done, "", userClosed, OutcomeClosed},
+		{"user skips while queued", Queued, TaskClosed{Skipped: true}, Done, "", userClosed, OutcomeSkipped},
+		{"user skips while reviewing", Reviewing, TaskClosed{Skipped: true}, Done, "", userClosed, OutcomeSkipped},
+		{"user skips when ready", ReviewReady, TaskClosed{Skipped: true}, Done, "", userClosed, OutcomeSkipped},
 		{"rerun the review", ReviewReady, Rerun{Reviewing}, Reviewing, "", []Effect{PromptWorker{Reviewing}}, ""},
 		{"blocked when ready", ReviewReady, WorkerStatus{State: "blocked", Kind: "permission"}, ReviewReady, ReasonPermission, nil, ""},
 	}

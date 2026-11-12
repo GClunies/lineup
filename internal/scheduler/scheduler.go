@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/harness/claude"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/store"
@@ -87,6 +88,10 @@ type Scheduler struct {
 	filling atomic.Bool
 	// paused is `lineup reviews pause`: no fill starts a review.
 	paused bool
+	// skips are the PRs that `lineup reviews skip` holds out of every queue.
+	// Only the loop writes it, and it replaces the slice instead of editing it,
+	// so a published view can share it.
+	skips []github.Skip
 	// members holds the logins of the queues' author teams, read at membersAt.
 	members   map[string][]string
 	membersAt time.Time
@@ -124,6 +129,13 @@ func New(d Deps) (*Scheduler, error) {
 		return nil, err
 	}
 	s.paused, _ = strconv.ParseBool(paused)
+	rows, err := d.Store.Skips()
+	if err != nil {
+		return nil, err
+	}
+	for _, k := range rows {
+		s.skips = append(s.skips, github.Skip(k))
+	}
 	raw, err := d.Store.Tasks()
 	if err != nil {
 		return nil, err
@@ -909,7 +921,7 @@ func cmpString(a, b string) int {
 const doneShownFor = 7 * 24 * time.Hour
 
 func (s *Scheduler) view() BoardView {
-	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap(), ReviewsPaused: s.paused}
+	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap(), ReviewsPaused: s.paused, Skips: s.skips}
 	for _, r := range s.list() {
 		if r.Stage == lifecycle.Done && (r.Archived || !r.keepsTab() && s.now().Sub(r.StageSince) > doneShownFor) {
 			continue

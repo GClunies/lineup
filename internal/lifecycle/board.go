@@ -215,7 +215,11 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 		if t.Stage == Done {
 			return []Effect{Cleanup{}}, nil
 		}
-		return append([]Effect{Cleanup{}}, t.finish(OutcomeClosed)...), nil
+		outcome := OutcomeClosed
+		if s.Skipped && t.Kind == KindReview {
+			outcome = OutcomeSkipped
+		}
+		return append([]Effect{Cleanup{}}, t.finish(outcome)...), nil
 
 	case TabClosed:
 		if t.Stage == Done {

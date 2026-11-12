@@ -59,6 +59,7 @@ func TestTransitions(t *testing.T) {
 		{"merged from ready to land", ReadyToLand, PRMerged{}, Done, []Effect{TrackerStatus{"merged"}}, OutcomeMerged},
 		{"closed", InReview, TaskClosed{}, Done, []Effect{Cleanup{}, TrackerStatus{"closed"}}, OutcomeClosed},
 		{"closed while queued", Queued, TaskClosed{}, Done, []Effect{Cleanup{}, TrackerStatus{"closed"}}, OutcomeClosed},
+		{"a skip closes a build Task as a close does", InReview, TaskClosed{Skipped: true}, Done, []Effect{Cleanup{}, TrackerStatus{"closed"}}, OutcomeClosed},
 		{"rerun ci debug", CIRunning, Rerun{CIDebug}, CIDebug, []Effect{PromptWorker{CIDebug}}, ""},
 	}
 	for _, c := range cases {
@@ -82,7 +83,7 @@ func TestTransitions(t *testing.T) {
 }
 
 func TestClosingADoneTaskCleansUpOnly(t *testing.T) {
-	for _, o := range []Outcome{OutcomeMerged, OutcomeClosed} {
+	for _, o := range []Outcome{OutcomeMerged, OutcomeClosed, OutcomeSkipped} {
 		b, task := taskIn(Done)
 		task.Outcome = o
 		effects, err := b.Apply("T", TaskClosed{})

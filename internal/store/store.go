@@ -32,6 +32,11 @@ CREATE INDEX IF NOT EXISTS events_task ON events(task_id, seq);
 CREATE TABLE IF NOT EXISTS settings (
 	key   TEXT PRIMARY KEY,
 	value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS skips (
+	url   TEXT PRIMARY KEY COLLATE NOCASE,
+	title TEXT NOT NULL,
+	at    TEXT NOT NULL
 );`
 
 type Event struct {
@@ -135,4 +140,54 @@ func (s *Store) SetSetting(key, value string) error {
 	_, err := s.db.Exec(`INSERT INTO settings(key, value) VALUES(?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 	return err
+}
+
+// Skip is a PR that the user holds out of every review queue.
+type Skip struct {
+	URL   string
+	Title string
+	At    time.Time
+}
+
+// Skips returns every skip, oldest first.
+func (s *Store) Skips() ([]Skip, error) {
+	rows, err := s.db.Query(`SELECT url, title, at FROM skips ORDER BY at, url`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Skip
+	for rows.Next() {
+		var k Skip
+		var at string
+		if err := rows.Scan(&k.URL, &k.Title, &at); err != nil {
+			return nil, err
+		}
+		k.At, _ = time.Parse(time.RFC3339Nano, at)
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
+// AddSkip keeps the skip. A URL that differs only in case is the same skip, and
+// the first write wins. added is false when the PR was skipped already.
+func (s *Store) AddSkip(k Skip) (added bool, err error) {
+	res, err := s.db.Exec(`INSERT INTO skips(url, title, at) VALUES(?, ?, ?) ON CONFLICT(url) DO NOTHING`,
+		k.URL, k.Title, k.At.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// RemoveSkip drops the skip whose URL matches url, ignoring case. removed is
+// false when the PR was not skipped.
+func (s *Store) RemoveSkip(url string) (removed bool, err error) {
+	res, err := s.db.Exec(`DELETE FROM skips WHERE url = ?`, url)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }

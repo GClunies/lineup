@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gclunies/lineup/internal/github"
@@ -665,7 +666,7 @@ func TestTheReviewsTabListsOnlyTheReviewTasks(t *testing.T) {
 	if l := line(v, "Reviews  "); !strings.HasSuffix(strings.TrimSpace(l), "2") {
 		t.Fatalf("Reviews head = %q, want 2 Tasks", l)
 	}
-	if f := line(v, "all keys"); !strings.Contains(f, "x close") || !strings.Contains(f, "tab next view") {
+	if f := line(v, "all keys"); !strings.Contains(f, "x close") || !strings.Contains(f, "S skip") {
 		t.Fatalf("the footer lacks the Board's keys: %q", f)
 	}
 	e.press("enter")
@@ -766,5 +767,241 @@ func TestReviewEnterRestoresAStartedTaskWithNoWorker(t *testing.T) {
 	e.press("enter")
 	if c := e.sched.calls; len(c) != 1 || c[0].Op != "open" || c[0].Task != b.Tasks[0].ID || len(e.opened) != 0 {
 		t.Fatalf("enter on a started Task with no Worker: opened %v, calls %+v, want open %s", e.opened, c, b.Tasks[0].ID)
+	}
+}
+
+func TestReviewTasksMarkTheOnesThatASkipEnded(t *testing.T) {
+	skipped := tv("R-1", lifecycle.Done, "data", "data#1 One", "", time.Hour)
+	skipped.Kind, skipped.PRURL, skipped.ReviewHead, skipped.Outcome = lifecycle.KindReview, "https://github.com/umbrella/data/pull/1", "h1", "skipped"
+	closed := skipped
+	closed.PRURL, closed.Outcome = "https://github.com/umbrella/data/pull/2", "closed"
+	got := reviewTasks([]scheduler.TaskView{skipped, closed})
+	want := []github.ReviewTask{
+		{URL: skipped.PRURL, Head: "h1", Done: true, Skipped: true},
+		{URL: closed.PRURL, Head: "h1", Done: true},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("reviewTasks = %+v, want %+v", got, want)
+	}
+}
+
+func skipPR(n int, age time.Duration) github.PullRequest {
+	return github.PullRequest{Repo: "umbrella/data", Number: n, Title: fmt.Sprintf("Change %d", n), Author: "hopper",
+		URL: fmt.Sprintf("https://github.com/umbrella/data/pull/%d", n), Head: fmt.Sprintf("h%d", n), CreatedAt: epoch.Add(-age)}
+}
+
+func skipOf(pr github.PullRequest) github.Skip { return github.Skip{URL: pr.URL, Title: pr.Title} }
+
+// withSkips is the Board of the review fixture with the PRs skipped.
+func withSkips(prs ...github.PullRequest) scheduler.BoardView {
+	b := reviewBoard()
+	for _, pr := range prs {
+		b.Skips = append(b.Skips, skipOf(pr))
+	}
+	return b
+}
+
+func TestTheQueueTabListsASkippedPRLastAndDim(t *testing.T) {
+	old := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0)
+	t.Cleanup(func() { lipgloss.SetColorProfile(old) })
+	e := newRvEnv(t)
+	skipped, waits, later := skipPR(5001, 72*time.Hour), skipPR(5002, 10*time.Hour), skipPR(5003, time.Hour)
+	e.api.lists["queue:platform"] = []github.PullRequest{skipped, waits, later}
+	e.m.setBoard(withSkips(skipped))
+	e.open()
+	e.press("shift+tab")
+
+	v := e.m.View()
+	if l := line(v, "Q: platform  "); !strings.Contains(l, "2 · 1 skipped") {
+		t.Fatalf("queue head = %q, want 2 PRs that wait and 1 skipped", l)
+	}
+	at := func(s string) int { return strings.Index(ansi.Strip(v), s) }
+	if !(at("data#5002") < at("data#5003") && at("data#5003") < at("data#5001")) || at("data#5002") < 0 {
+		t.Fatalf("want #5002, #5003, then the skipped #5001, though #5001 is the oldest:\n%s", v)
+	}
+	if l := line(v, "data#5001"); !strings.Contains(l, "skipped") {
+		t.Errorf("the skipped row = %q, want skipped in TASK", l)
+	}
+	if l := line(v, "data#5003"); strings.Contains(l, "skipped") {
+		t.Errorf("the row that waits = %q", l)
+	}
+	faded := strings.SplitN(dim.Render("x"), "x", 2)[0]
+	raw := func(s string) string {
+		for _, l := range strings.Split(v, "\n") {
+			if strings.Contains(ansi.Strip(l), s) {
+				return l
+			}
+		}
+		return ""
+	}
+	if l := raw("data#5001"); !strings.HasPrefix(l, faded) {
+		t.Errorf("the skipped row is not dim: %q", l)
+	}
+	if l := raw("data#5003"); strings.HasPrefix(l, faded) {
+		t.Errorf("the row that waits is dim: %q", l)
+	}
+	e.press("down", "down")
+	if f := line(e.m.View(), "all keys"); !strings.Contains(f, "S unskip") {
+		t.Fatalf("footer on the skipped row = %q, want S unskip", f)
+	}
+	e.press("k")
+	if f := line(e.m.View(), "all keys"); !strings.Contains(f, "S skip") || strings.Contains(f, "unskip") {
+		t.Fatalf("footer on the row that waits = %q, want S skip", f)
+	}
+}
+
+// A skip ends the review Task of the PR. The row must not leave the Q: tab
+// with the Task, or the user could not unskip it. An unskip brings it back to
+// the PRs that wait, at the same head. A close still holds the PR at its head.
+func TestAPRWhoseReviewASkipEndedStaysOnTheQueueTab(t *testing.T) {
+	pr := skipPR(5001, 72*time.Hour)
+	ended := func(outcome string) scheduler.TaskView {
+		done := rtv("pr-5001", lifecycle.Done, "data#5001 Change 5001", pr.URL, time.Hour)
+		done.ReviewHead, done.Outcome = pr.Head, outcome
+		return done
+	}
+	cases := []struct {
+		name      string
+		outcome   string
+		skipped   bool
+		wantHead  string
+		wantTask  string
+		wantListd bool
+	}{
+		{"the skip just ended the review", "skipped", true, "0 · 1 skipped", "pr-5001 skipped", true},
+		{"after the unskip", "skipped", false, "1", "pr-5001 skipped", true},
+		{"a close at the same head", "closed", false, "", "", false},
+	}
+	for _, c := range cases {
+		e := newRvEnv(t)
+		e.api.lists["queue:platform"] = []github.PullRequest{pr}
+		b := reviewBoard()
+		b.Tasks = append(b.Tasks, ended(c.outcome))
+		if c.skipped {
+			b.Skips = []github.Skip{skipOf(pr)}
+		}
+		e.m.setBoard(b)
+		e.open()
+		e.press("shift+tab")
+		v := e.m.View()
+		l := line(v, "data#5001")
+		if (l != "") != c.wantListd {
+			t.Errorf("%s: the Q: tab lists the PR = %v, want %v:\n%s", c.name, l != "", c.wantListd, v)
+			continue
+		}
+		if !c.wantListd {
+			continue
+		}
+		if h := line(v, "Q: platform  "); !strings.HasSuffix(strings.TrimSpace(h), c.wantHead) {
+			t.Errorf("%s: head = %q, want it to end with %q", c.name, h, c.wantHead)
+		}
+		if !strings.Contains(l, c.wantTask) || strings.Count(l, "skipped") > 1 {
+			t.Errorf("%s: row = %q, want %q once", c.name, l, c.wantTask)
+		}
+	}
+}
+
+func TestSKeyTogglesTheSelectedPRsSkip(t *testing.T) {
+	e := newRvEnv(t)
+	skipped, waits := skipPR(5001, 72*time.Hour), skipPR(5002, time.Hour)
+	e.api.lists["queue:platform"] = []github.PullRequest{skipped, waits}
+	e.m.setBoard(withSkips(skipped))
+	e.open()
+	e.press("shift+tab")
+
+	e.press("S")
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "reviews-skip" || c[0].URL != waits.URL {
+		t.Fatalf("S on a PR that waits sent %+v, want reviews-skip %s at once", c, waits.URL)
+	}
+	if l := line(e.m.View(), "skip data#5002"); !strings.Contains(l, "ok") {
+		t.Fatalf("status line = %q", l)
+	}
+
+	e.press("down", "S")
+	if c := e.sched.calls[1:]; len(c) != 1 || c[0].Op != "reviews-unskip" || c[0].URL != skipped.URL {
+		t.Fatalf("S on a skipped PR sent %+v, want reviews-unskip %s at once", c, skipped.URL)
+	}
+	if l := line(e.m.View(), "unskip data#5001"); !strings.Contains(l, "ok") {
+		t.Fatalf("status line = %q", l)
+	}
+	e.sched.errs["reviews-skip"] = errors.New("umbrella/data#5002 is merged")
+	e.press("k", "S")
+	if l := line(e.m.View(), "skip data#5002"); !strings.Contains(l, "is merged") {
+		t.Fatalf("status line = %q, want the refusal", l)
+	}
+}
+
+func TestSKeyAsksBeforeItClosesAnOpenReview(t *testing.T) {
+	e := newRvEnv(t)
+	b := reviewBoard()
+	b.Tasks[0].ID = "pr-4945"
+	e.m.setBoard(b)
+	e.open()
+	e.press("tab")
+	e.press("S")
+	if len(e.sched.calls) != 0 {
+		t.Fatalf("S on a PR with an open review sent %+v before the answer", e.sched.calls)
+	}
+	if f := line(e.m.View(), "(y/n)"); !strings.Contains(f, "skip data#4945 and close pr-4945?") {
+		t.Fatalf("prompt = %q", f)
+	}
+	e.press("n")
+	if len(e.sched.calls) != 0 {
+		t.Fatalf("n sent %+v", e.sched.calls)
+	}
+	if l := line(e.m.View(), "cancelled"); !strings.Contains(l, "skip cancelled") {
+		t.Fatalf("status line = %q", l)
+	}
+	e.press("S", "y")
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "reviews-skip" || c[0].URL != urlLogs {
+		t.Fatalf("y sent %+v, want reviews-skip %s", c, urlLogs)
+	}
+}
+
+func TestSKeyOnTheReviewsTabSkipsTheTasksPR(t *testing.T) {
+	e := newRvEnv(t)
+	e.open()
+	e.press("S")
+	if f := line(e.m.View(), "(y/n)"); !strings.Contains(f, "skip data#4955 and close R-10?") {
+		t.Fatalf("prompt = %q", f)
+	}
+	e.press("y")
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "reviews-skip" || c[0].URL != urlBase {
+		t.Fatalf("y sent %+v, want reviews-skip %s", c, urlBase)
+	}
+
+	e = newRvEnv(t)
+	b := reviewBoard()
+	b.Skips = []github.Skip{{URL: urlBase}}
+	e.m.setBoard(b)
+	e.open()
+	if f := line(e.m.View(), "all keys"); !strings.Contains(f, "S unskip") {
+		t.Fatalf("footer = %q, want S unskip on the Task of a skipped PR", f)
+	}
+	e.press("S")
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "reviews-unskip" || c[0].URL != urlBase {
+		t.Fatalf("S on the Task of a skipped PR sent %+v, want reviews-unskip at once", c)
+	}
+}
+
+func TestEveryPRTabMarksASkippedPRAndKeepsItsRow(t *testing.T) {
+	e := newRvEnv(t)
+	b := reviewBoard()
+	b.Skips = []github.Skip{{URL: urlBase}}
+	e.m.setBoard(b)
+	e.open()
+	e.press("tab", "tab")
+	l := line(e.m.View(), "data#4955")
+	if !strings.Contains(l, "skipped") {
+		t.Fatalf("the Requested row of a skipped PR = %q, want skipped in TASK", l)
+	}
+	if strings.Contains(e.m.View(), "1 skipped") {
+		t.Fatalf("a tab that applies no queue rule counts skips:\n%s", e.m.View())
+	}
+	e.sched.review = scheduler.ReviewResult{TaskView: scheduler.TaskView{ID: "pr-4955", Stage: "Reviewing"}, Action: scheduler.ReviewAdded}
+	e.press("r")
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "review" || c[0].URL != urlBase {
+		t.Fatalf("r on a skipped PR sent %+v, want review %s", c, urlBase)
 	}
 }

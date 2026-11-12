@@ -4,14 +4,48 @@ import (
 	"cmp"
 	"slices"
 	"strings"
+	"time"
 )
 
 // ReviewTask is a review Task as the queue rules see it: the PR that it
 // reviews, the head commit that it was added at, and whether it is Done.
+// Skipped is true when a skip ended the Task.
 type ReviewTask struct {
-	URL  string `json:"url"`
-	Head string `json:"head"`
-	Done bool   `json:"done"`
+	URL     string `json:"url"`
+	Head    string `json:"head"`
+	Done    bool   `json:"done"`
+	Skipped bool   `json:"skipped,omitempty"`
+}
+
+// Skip is a PR that the user keeps out of every review queue until they
+// unskip it. The skip holds at every head, and it writes nothing to GitHub.
+type Skip struct {
+	URL   string    `json:"url"`
+	Title string    `json:"title"`
+	At    time.Time `json:"at"`
+}
+
+// Holds is what keeps a PR out of a review queue besides the PR's own state.
+// It is the whole outside input of the queue rules.
+type Holds struct {
+	// Tasks is every review Task, Done or not.
+	Tasks []ReviewTask
+	Skips []Skip
+}
+
+// IsSkipped reports whether the user skipped the PR at url. GitHub URLs ignore case.
+func (h Holds) IsSkipped(url string) bool {
+	return slices.ContainsFunc(h.Skips, func(s Skip) bool { return strings.EqualFold(s.URL, url) })
+}
+
+// Ranking is what the queue rules make of one queue's search.
+type Ranking struct {
+	// Ranked are the PRs that the queue reviews, in start order. A skipped PR is
+	// never in it.
+	Ranked []Candidate
+	// Skipped are the PRs that the queue would review if the user had not
+	// skipped them, in the same order.
+	Skipped []Candidate
 }
 
 // Candidate is a PR that a queue reviews, with why it wants the user.
@@ -23,32 +57,46 @@ type Candidate struct {
 	ByName   bool `json:"by_name,omitempty"`
 }
 
-// Candidates are the PRs of a queue's search that the queue reviews, in rank
+// Rank applies the queue rules to a queue's search. Ranked PRs come in this
 // order: re-reviews first, then the PRs that request the user by name, then
-// the oldest. tasks holds every review Task, Done or not.
+// the oldest.
 //
 // A PR with an open review Task never enters, because that Task's Worker
 // reviews each new head itself. A Done review Task keeps its PR out until the
-// author pushes a new head.
-func Candidates(prs []PullRequest, tasks []ReviewTask) []Candidate {
-	open, seen := map[string]bool{}, map[string]bool{}
-	for _, t := range tasks {
+// author pushes a new head, unless a skip ended the Task: the skip holds the
+// PR, and an unskip lets it back at the same head. A skipped PR never enters,
+// at any head, until the user unskips it.
+func Rank(prs []PullRequest, h Holds) Ranking {
+	open, seen, skipped := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for _, t := range h.Tasks {
 		u := strings.ToLower(t.URL)
 		open[u] = open[u] || !t.Done
-		seen[u+" "+t.Head] = true
+		if !t.Skipped {
+			seen[u+" "+t.Head] = true
+		}
 	}
-	var out []Candidate
+	for _, s := range h.Skips {
+		skipped[strings.ToLower(s.URL)] = true
+	}
+	var r Ranking
 	for _, pr := range prs {
 		u := strings.ToLower(pr.URL)
 		if open[u] || seen[u+" "+pr.Head] || !pr.wantsReview() {
 			continue
 		}
-		out = append(out, Candidate{PR: pr, Rereview: pr.Viewer.Reviewed && pr.Viewer.Requested, ByName: pr.Viewer.ByName})
+		c := Candidate{PR: pr, Rereview: pr.Viewer.Reviewed && pr.Viewer.Requested, ByName: pr.Viewer.ByName}
+		if skipped[u] {
+			r.Skipped = append(r.Skipped, c)
+		} else {
+			r.Ranked = append(r.Ranked, c)
+		}
 	}
-	slices.SortStableFunc(out, func(a, b Candidate) int {
-		return cmp.Or(first(a.Rereview, b.Rereview), first(a.ByName, b.ByName), a.PR.CreatedAt.Compare(b.PR.CreatedAt))
-	})
-	return out
+	for _, cs := range [][]Candidate{r.Ranked, r.Skipped} {
+		slices.SortStableFunc(cs, func(a, b Candidate) int {
+			return cmp.Or(first(a.Rereview, b.Rereview), first(a.ByName, b.ByName), a.PR.CreatedAt.Compare(b.PR.CreatedAt))
+		})
+	}
+	return r
 }
 
 // wantsReview applies the queue rules that need no review Task. pr-review
