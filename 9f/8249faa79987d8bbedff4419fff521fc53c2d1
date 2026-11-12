@@ -1,0 +1,35 @@
+docs/adr/0018-one-worker-for-each-task.md
+  s_535d8965140e10::t_593e00565700c3 17-18
+docs/spec/mvp.md
+  s_535d8965140e10::t_e8151a5699881c 175
+internal/lifecycle/board.go
+  s_535d8965140e10::t_e701ef2b237e7f 344-348
+internal/lifecycle/signal.go
+  s_535d8965140e10::t_9b36720f7e0e58 64-67,102,125
+internal/lifecycle/stage.go
+  s_535d8965140e10::t_8c66bf3d64b74f 174-177,189
+internal/scheduler/deliver.go
+  s_535d8965140e10::t_2a16b217464057 156-160,174,183
+internal/scheduler/record.go
+  s_535d8965140e10::t_326c7b4f022774 60-62,64-65
+internal/scheduler/scheduler.go
+  s_535d8965140e10::t_9d91a786fca564 6,52-54,161,177-192,209,597,836
+internal/scheduler/scheduler_test.go
+  s_535d8965140e10::t_89cb0426c57022 1596-1623
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9f8249faa79987d8bbedff4419fff521fc53c2d1",
+  "prompts": {},
+  "sessions": {
+    "s_535d8965140e10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b9e1685c-5022-4378-9e4e-03f300532e37",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
