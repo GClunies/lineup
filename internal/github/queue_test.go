@@ -58,6 +58,49 @@ func TestCandidateRules(t *testing.T) {
 			p.Viewer, p.Fork = ViewerState{Reviewed: true, Requested: true}, true
 			return p
 		}, nil, false},
+		{"another person's comments on the head", func(p PullRequest) PullRequest {
+			p.LatestReviews = []Review{{Author: "knuth", State: "COMMENTED", Commit: "h7"}}
+			return p
+		}, nil, false},
+		{"another person's comments on an older head", func(p PullRequest) PullRequest {
+			p.LatestReviews = []Review{{Author: "knuth", State: "COMMENTED", Commit: "h6"}}
+			return p
+		}, nil, true},
+		{"another person's change request on an older head", func(p PullRequest) PullRequest {
+			p.LatestReviews = []Review{{Author: "knuth", State: "CHANGES_REQUESTED", Commit: "h6"}}
+			return p
+		}, nil, false},
+		{"another person's change request, then comments on an older head", func(p PullRequest) PullRequest {
+			p.LatestReviews = []Review{{Author: "knuth", State: "COMMENTED", Commit: "h6", Opinion: "CHANGES_REQUESTED"}}
+			return p
+		}, nil, false},
+		{"approved, then comments on the head, never reviewed", func(p PullRequest) PullRequest {
+			p.LatestReviews = []Review{{Author: "knuth", State: "COMMENTED", Commit: "h7", Opinion: "APPROVED"}}
+			return p
+		}, nil, false},
+		{"a re-review after another person approved, then commented on the head", func(p PullRequest) PullRequest {
+			p.Viewer = ViewerState{Reviewed: true, Requested: true}
+			p.LatestReviews = []Review{{Author: "knuth", State: "COMMENTED", Commit: "h7", Opinion: "APPROVED"}}
+			return p
+		}, nil, true},
+		{"a bot's comments on the head", func(p PullRequest) PullRequest {
+			p.LatestReviews = []Review{{Author: "greptile-apps", State: "COMMENTED", Commit: "h7", Bot: true}}
+			return p
+		}, nil, true},
+		{"the author's comments on the head", func(p PullRequest) PullRequest {
+			p.Author, p.LatestReviews = "hopper", []Review{{Author: "hopper", State: "COMMENTED", Commit: "h7"}}
+			return p
+		}, nil, true},
+		{"a re-review after the user's own comments on the head", func(p PullRequest) PullRequest {
+			p.Viewer = ViewerState{Reviewed: true, Requested: true}
+			p.LatestReviews = []Review{{Author: "octocat", State: "COMMENTED", Commit: "h7", Viewer: true}}
+			return p
+		}, nil, true},
+		{"a re-review while another person's comments on the head are open", func(p PullRequest) PullRequest {
+			p.Viewer = ViewerState{Reviewed: true, Requested: true}
+			p.LatestReviews = []Review{{Author: "knuth", State: "COMMENTED", Commit: "h7"}}
+			return p
+		}, nil, false},
 		// GitHub reports only submitted reviews in Viewer.Reviewed, so a
 		// pending review leaves a PR that nobody approved wanted.
 		{"only a pending review", func(p PullRequest) PullRequest { p.Viewer = ViewerState{}; return p }, nil, true},
@@ -138,9 +181,16 @@ func TestCandidatesOfARecordedQueueSearch(t *testing.T) {
 		t.Errorf("the user's own PR = %+v", pr)
 	}
 
-	want := []int{4790, 4849, 4851, 4880, 4939, 4940, 4944, 4954}
+	if r := byNumber[4944].LatestReviews; len(r) != 2 || !r[0].Bot || r[1].Bot || r[1].Commit != byNumber[4944].Head || r[1].Viewer {
+		t.Errorf("data#4944 reviews = %+v, want a bot and liskov on the head", r)
+	}
+	if r := byNumber[4873].LatestReviews; len(r) != 2 || !r[1].Viewer {
+		t.Errorf("data#4873 reviews = %+v, want the user's approval", r)
+	}
+
+	want := []int{4790, 4849, 4851, 4880, 4939, 4940, 4954}
 	if c := Candidates(queue, nil); !slices.Equal(numbers(c), want) {
-		t.Errorf("candidates %v, want %v: oldest first, without the two the user approved", numbers(c), want)
+		t.Errorf("candidates %v, want %v: oldest first, without the two the user approved and the one liskov reviews", numbers(c), want)
 	}
 	for _, k := range []string{"bots", "mine"} {
 		if c := Candidates(got[k], nil); len(c) != 0 {

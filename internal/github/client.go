@@ -34,6 +34,14 @@ type Review struct {
 	Author      string
 	State       string // APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, PENDING
 	SubmittedAt time.Time
+	// Commit, Bot, Viewer, and Opinion come only from the review queue's
+	// search. Commit is the head that the review read, Bot is true when a
+	// GitHub App wrote it, and Viewer is true when the user wrote it.
+	// Opinion is the author's last APPROVED or CHANGES_REQUESTED, or "".
+	// GitHub's latest review of a person is their last review of any kind,
+	// so a comment after an approval hides the approval in State.
+	Commit, Opinion string
+	Bot, Viewer     bool
 }
 
 type PR struct {

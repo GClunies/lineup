@@ -134,7 +134,8 @@ fragment R on PullRequest {
   reviewRequests(first: 20) { nodes { requestedReviewer { ... on Team { combinedSlug } ... on User { login isViewer } } } }
   viewerLatestReviewRequest { id }
   viewerReviews: reviews(author: $viewer, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) { totalCount }
-  latestReviews(first: 20) { nodes { author { login } state submittedAt } }
+  latestReviews(first: 20) { nodes { author { __typename login } state submittedAt viewerDidAuthor commit { oid } } }
+  latestOpinionatedReviews(first: 20) { nodes { author { login } state } }
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
 }`
 
@@ -256,11 +257,24 @@ type gqlSearchPR struct {
 	} `json:"viewerReviews"`
 	LatestReviews struct {
 		Nodes []struct {
-			Author      *gqlLogin `json:"author"`
-			State       string    `json:"state"`
-			SubmittedAt time.Time `json:"submittedAt"`
+			Author *struct {
+				Typename string `json:"__typename"`
+				Login    string `json:"login"`
+			} `json:"author"`
+			State           string    `json:"state"`
+			SubmittedAt     time.Time `json:"submittedAt"`
+			ViewerDidAuthor bool      `json:"viewerDidAuthor"`
+			Commit          *struct {
+				OID string `json:"oid"`
+			} `json:"commit"`
 		} `json:"nodes"`
 	} `json:"latestReviews"`
+	LatestOpinionatedReviews struct {
+		Nodes []struct {
+			Author *gqlLogin `json:"author"`
+			State  string    `json:"state"`
+		} `json:"nodes"`
+	} `json:"latestOpinionatedReviews"`
 	Commits struct {
 		Nodes []struct {
 			Commit struct {
@@ -293,10 +307,19 @@ func (g gqlSearchPR) toPullRequest() PullRequest {
 			pr.Viewer.ByName = pr.Viewer.ByName || r.IsViewer
 		}
 	}
-	for _, r := range g.LatestReviews.Nodes {
-		rv := Review{State: r.State, SubmittedAt: r.SubmittedAt}
+	opinions := map[string]string{}
+	for _, r := range g.LatestOpinionatedReviews.Nodes {
 		if r.Author != nil {
-			rv.Author = r.Author.Login
+			opinions[r.Author.Login] = r.State
+		}
+	}
+	for _, r := range g.LatestReviews.Nodes {
+		rv := Review{State: r.State, SubmittedAt: r.SubmittedAt, Viewer: r.ViewerDidAuthor}
+		if r.Author != nil {
+			rv.Author, rv.Bot, rv.Opinion = r.Author.Login, r.Author.Typename == "Bot", opinions[r.Author.Login]
+		}
+		if r.Commit != nil {
+			rv.Commit = r.Commit.OID
 		}
 		pr.LatestReviews = append(pr.LatestReviews, rv)
 	}

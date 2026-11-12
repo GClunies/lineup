@@ -170,6 +170,8 @@ The queue's filters pick the candidates. A candidate enters the queue only when 
 - Its author is not the user and is not a bot.
 - No review Task exists for its URL at its current head commit, Done or not. A Done review that keeps its tab holds the PR. The queue starts a new review only after the user closes that tab. A Task that the user closed at one head stays closed until the author pushes. The user can always start a review again with `r`, after the tab closes.
 - It wants the user's review. A PR that the user reviewed before wants it only when it requests the user again. Any other PR wants it only when nobody approved it yet. A pending review, a draft that the user has not submitted, does not count as a review.
+- No other person's review is open on it. A review is open when a person other than the user and the author requested changes, or commented on the current head and did not approve. Bots do not count. A second review can contradict an open review, so the PR waits until the author pushes a new head or the reviewer approves. `pr-review` stops on the same rule.
+- A person who approved and then commented still counts as an approval. GitHub's `latestReviews` shows only the comment, so lineup reads `latestOpinionatedReviews` too.
 
 These rules are the rules of the Herdr `review-queue` plugin, which this queue replaces.
 
