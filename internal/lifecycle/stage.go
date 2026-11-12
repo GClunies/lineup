@@ -162,8 +162,8 @@ const (
 	ReasonSetupFailed Reason = "setup failed"
 	ReasonStopped     Reason = "stopped"
 	ReasonBudgetSpent Reason = "budget spent"
-	// ReasonTabClosed is a Worker that the user closed the tab of, or that Rex
-	// lost, in a Stage that needs it. lineup opens no tab until the user asks.
+	// ReasonTabClosed means the Worker's tab is gone in a Stage that needs the
+	// Worker. The user closed the tab, or Rex lost it. lineup opens no tab.
 	ReasonTabClosed Reason = "tab closed"
 	// ReasonWorkerSilent is a Stage prompt that waits on a Worker that has sent
 	// no status.
@@ -174,12 +174,15 @@ const (
 	ReasonNoBotReview Reason = "no bot review"
 )
 
+// reasonWorkerLost is the flag that a Record from before tab closed can carry.
+const reasonWorkerLost Reason = "worker lost"
+
 // Transient reasons clear when the Worker's program status goes back to working.
 // A Worker that stops before its contract output often waits for the user, so
 // the user's reply clears it.
 func (r Reason) Transient() bool {
 	switch r {
-	case ReasonQuestion, ReasonPermission, ReasonAuth, ReasonError, ReasonStopped, ReasonWorkerSilent:
+	case ReasonQuestion, ReasonPermission, ReasonAuth, ReasonError, ReasonStopped, ReasonWorkerSilent, reasonWorkerLost:
 		return true
 	}
 	return false

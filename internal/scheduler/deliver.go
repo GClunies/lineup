@@ -47,7 +47,7 @@ func (r *Record) worker() worker {
 		return settingUp
 	case r.Review == nil && r.Worktree == "":
 		return noWorktree
-	case r.Conversation == "":
+	case !r.hadWorker():
 		return noWorker
 	}
 	return lostWorker

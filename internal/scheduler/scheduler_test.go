@@ -58,7 +58,7 @@ type fakeRex struct {
 	// hold makes NewWindow of a Worker wait for the channel to close.
 	hold chan struct{}
 	// t fails the test when lineup closes a live tab that the user did not
-	// ask to close. asked is true after a close, archive, or open op.
+	// ask to close. asked is true after a close, archive, open, or review op.
 	t     *testing.T
 	asked bool
 }
@@ -567,7 +567,7 @@ func newHarness(t *testing.T, dbPath string, seed func(*store.Store), opts ...fu
 
 func (h *harness) do(req Request) any {
 	h.t.Helper()
-	if req.Op == "close" || req.Op == "archive" || req.Op == "open" {
+	if req.Op == "close" || req.Op == "archive" || req.Op == "open" || req.Op == "review" {
 		h.rex.mu.Lock()
 		h.rex.asked = true
 		h.rex.mu.Unlock()
@@ -2165,4 +2165,130 @@ func TestARestartedSchedulerKeepsAPromptedWorkerPrompted(t *testing.T) {
 	eventually(t, "the silent Worker flag", func() bool { return h.task("ENG-7").Flag == string(lifecycle.ReasonWorkerSilent) })
 	h.status("block:live", "working")
 	eventually(t, "the flag clears", func() bool { return h.task("ENG-7").Flag == "" })
+}
+
+func TestARefusedOpenLeavesTheConversationSoAPromptOpensNoTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.prOpens(worker)
+	h.rex.userCloses(worker)
+	eventually(t, "the tab gone", func() bool { return !h.task("ENG-1").Tab })
+	h.hn.mu.Lock()
+	h.hn.gone = []string{first.Conversation}
+	h.hn.mu.Unlock()
+	h.openFails("ENG-1")
+	var kept string
+	h.s.call(func() { kept = h.s.recs["ENG-1"].Conversation })
+	if kept != first.Conversation {
+		t.Fatalf("a refused open changed the conversation to %q", kept)
+	}
+
+	tabs := h.tabs()
+	h.ciFails()
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Note == "tab closed: CI debug waits for the Worker" })
+	time.Sleep(300 * time.Millisecond)
+	if n := h.tabs(); n != tabs {
+		t.Fatalf("%d tabs, want %d: a prompt opened a tab with no ask from the user", n, tabs)
+	}
+}
+
+// A Task from before conversation IDs has had a Worker but holds no conversation.
+func TestAPromptOpensNoTabForATaskThatHadAWorkerButHoldsNoConversation(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.s.call(func() { h.s.recs["ENG-1"].Conversation = "" })
+	h.rex.userCloses(worker)
+	eventually(t, "the tab gone", func() bool { return !h.task("ENG-1").Tab })
+
+	tabs := h.tabs()
+	h.ciFails()
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Note == "tab closed: CI debug waits for the Worker" })
+	time.Sleep(300 * time.Millisecond)
+	if n := h.tabs(); n != tabs {
+		t.Fatalf("%d tabs, want %d: a prompt opened a tab with no ask from the user", n, tabs)
+	}
+	h.open("ENG-1")
+	h.waitTab("claude ci_debug")
+}
+
+func TestAStoredWorkerLostFlagClearsWhenTheUserOpensTheTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.closeAndFlag(worker)
+	h.s.call(func() { h.s.recs["ENG-1"].Flag = "worker lost" })
+	h.open("ENG-1")
+	eventually(t, "the restored Worker live", func() bool { return h.task("ENG-1").Live })
+	if f := h.task("ENG-1").Flag; f != "" {
+		t.Fatalf("flag = %q after the open, want none", f)
+	}
+}
+
+func TestRecoveryReplacesAStoredWorkerLostFlag(t *testing.T) {
+	seed := func(st *store.Store) {
+		r := Record{
+			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Flag: "worker lost", Policy: testPolicy, Left: testPolicy.Budgets},
+			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data", WorkerStage: lifecycle.Working,
+			Branch: "ada/eng-7", Worktree: "/wt/eng-7", Conversation: "conv-7", SessionID: "session:data", WindowID: "window:gone", BlockID: "block:gone", Job: JobWorker,
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed)
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-7").Flag == "tab closed" })
+}
+
+func TestTwoOpensAtOnceOpenOneTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.closeAndFlag(worker)
+	var wg sync.WaitGroup
+	for range 3 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			h.s.Handle(context.Background(), Request{Op: "open", Task: "ENG-1"})
+		}()
+	}
+	wg.Wait()
+	time.Sleep(200 * time.Millisecond)
+	if n := h.tabs(); n != 3 {
+		t.Fatalf("%d tabs, want the setup tab, the first Worker, and one restored Worker", n)
+	}
+}
+
+func TestOpenOfAReviewReadyTaskWithNoConversationFocusesTheNewTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReview(lifecycle.ReviewReady))
+	h.open("R-3")
+	tab := h.waitTab("claude reviewing")
+	eventually(t, "the new tab focused", func() bool {
+		h.rex.mu.Lock()
+		defer h.rex.mu.Unlock()
+		return slices.Contains(h.rex.focused, tab.BlockID)
+	})
+}
+
+// A failed resume in a Stage that waits for others has no prompt to start over
+// with, so the Task keeps its conversation.
+func TestAFailedResumeInAWaitingStageKeepsTheConversation(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.prOpens(worker)
+	h.rex.userCloses(worker)
+	eventually(t, "the tab gone", func() bool { return !h.task("ENG-1").Tab })
+	h.rex.mu.Lock()
+	h.rex.capture = "Error: " + claude.NoConversation + " with session ID: x"
+	h.rex.mu.Unlock()
+	h.open("ENG-1")
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	tabs := h.tabs()
+	h.rex.events <- RexEvent{Kind: EvExited, ExitCode: 1, BlockID: resumed.BlockID}
+	time.Sleep(300 * time.Millisecond)
+	var kept string
+	h.s.call(func() { kept = h.s.recs["ENG-1"].Conversation })
+	if kept != first.Conversation || h.tabs() != tabs {
+		t.Fatalf("conversation %q, %d tabs, want %q and %d: the failed resume must change nothing", kept, h.tabs(), first.Conversation, tabs)
+	}
 }

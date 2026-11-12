@@ -42,6 +42,16 @@ func (s *Scheduler) open(id string) (OpenResult, error) {
 	return res, err
 }
 
+// restoreLater restores the Task's Worker on its lane, without a focus. Only the
+// loop calls it.
+func (s *Scheduler) restoreLater(id string) {
+	s.enqueue(id, func(ctx context.Context) {
+		if _, err := s.restore(ctx, id, false); err != nil {
+			s.d.Log.Warn("restore the Worker", "task", id, "err", err)
+		}
+	})
+}
+
 // restore gives the Task a Worker in a tab, and focuses it when focus is true.
 // A tab that Rex kept after its program exited closes first.
 func (s *Scheduler) restore(ctx context.Context, id string, focus bool) (OpenResult, error) {
@@ -63,28 +73,24 @@ func (s *Scheduler) restore(ctx context.Context, id string, focus bool) (OpenRes
 	case r.Review == nil && r.Worktree == "":
 		return res, fmt.Errorf("%s has no worktree yet", id)
 	}
-	if r.Conversation != "" && !s.d.Harness.HasConversation(ctx, WorkerSpec{Repo: r.Repo, Conversation: r.Conversation}) {
-		s.update(id, func(rec *Record) { rec.Conversation = "" })
-		r.Conversation = ""
-	}
-	if r.Conversation == "" && r.Stage != lifecycle.ReviewReady && !r.Stage.Agent() {
+	gone := r.Conversation != "" && !s.d.Harness.HasConversation(ctx, WorkerSpec{Repo: r.Repo, Conversation: r.Conversation})
+	fresh := r.Conversation == "" || gone
+	if fresh && r.Stage != lifecycle.ReviewReady && !r.Stage.Agent() {
 		return res, fmt.Errorf("%s has no conversation to restore in %s", id, r.Stage)
 	}
 	s.closeTab(ctx, r)
-	if r.Conversation == "" && r.Stage == lifecycle.ReviewReady {
-		// The review's findings are on disk, but nothing resumes their
-		// conversation, so the Task reviews again.
-		if err := s.signal(id, lifecycle.Rerun{Stage: lifecycle.Reviewing}); err != nil {
-			return res, err
-		}
-		res.Action = OpenStarted
-		return s.opened(res, id), nil
-	}
-	fresh := r.Conversation == ""
 	if fresh {
 		s.update(id, func(rec *Record) {
-			s.save(rec, store.Event{TaskID: id, At: s.now(), Signal: replacedSignal, From: rec.Stage.String(), To: rec.Stage.String()})
+			rec.Conversation = ""
+			s.save(rec, store.Event{TaskID: id, At: s.now(), Signal: replacedSignal, From: rec.Stage.String(), To: rec.Stage.String(), Detail: r.Conversation})
 		})
+		if r.Stage == lifecycle.ReviewReady {
+			// The review's findings are on disk, but nothing resumes their
+			// conversation, so the Task reviews again.
+			if err := s.signal(id, lifecycle.Rerun{Stage: lifecycle.Reviewing}); err != nil {
+				return res, err
+			}
+		}
 	}
 	r, ok = s.snapshot(id)
 	if !ok {

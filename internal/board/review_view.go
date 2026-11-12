@@ -247,7 +247,7 @@ const reviewHelp = `
             no started Task
    o        open the PR in the browser
    r        start a review Task for this PR now, outside every queue's
-            slots, or reopen its closed Worker
+            slots, or restore its closed Worker
    R        refresh now: search GitHub again and poll every started
             Task; lineup also refreshes every 2 minutes
    z        zoom the agent pane

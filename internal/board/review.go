@@ -507,7 +507,7 @@ func (m Model) pollQuietly() tea.Cmd {
 
 // reviewPR starts a review Task for the PR at url now, outside every queue's
 // slots. If the PR has an open review Task, it starts that Task if it is
-// Queued, reopens its closed Worker, runs it again if it stopped for good, and
+// Queued, restores its closed Worker, runs it again if it stopped for good, and
 // otherwise focuses its tab. ref names the PR in an error.
 func (m Model) reviewPR(url, ref string) tea.Cmd {
 	c := m.client

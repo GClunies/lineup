@@ -727,3 +727,18 @@ func TestALateBotFlagsTheTask(t *testing.T) {
 		t.Fatalf("a Task with no gate: stage %s flag %q", task.Stage, task.Flag)
 	}
 }
+
+// A Record from before the tab closed flag can carry worker lost.
+func TestAStoredWorkerLostFlagGivesWayToTheTabFlags(t *testing.T) {
+	b, task := taskIn(Working)
+	task.flag("worker lost", "")
+	b.Apply("T", TabClosed{})
+	if task.Flag != ReasonTabClosed {
+		t.Fatalf("tab closed over worker lost: flag %q", task.Flag)
+	}
+	task.flag("worker lost", "")
+	b.Apply("T", TabOpened{})
+	if task.Flag != "" {
+		t.Fatalf("tab opened left the flag %q", task.Flag)
+	}
+}

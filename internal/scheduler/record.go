@@ -154,6 +154,10 @@ func (v BoardView) OfKind(k lifecycle.Kind) BoardView {
 	return out
 }
 
+// hadWorker reports whether a Worker ever opened in a tab for the Task. A Task
+// that had one and has no tab now waits for the user, so no prompt opens a tab.
+func (r *Record) hadWorker() bool { return r.WorkerStage != lifecycle.Queued }
+
 func (r *Record) keepsTab() bool { return r.Stage == lifecycle.Done && r.WindowID != "" }
 
 func (r *Record) view() TaskView {

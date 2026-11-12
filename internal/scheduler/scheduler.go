@@ -594,11 +594,11 @@ func (s *Scheduler) onRex(ev RexEvent) {
 }
 
 // resumeFallback handles a Worker that exited non-zero before its first
-// status. If `claude --resume` found no conversation file, the Task gets a
-// fresh Worker with a new conversation when its Stage needs one. A Review ready
-// Task reviews afresh.
+// status. If `claude --resume` found no conversation file, the user's restore
+// goes on with a fresh Worker in a new conversation. A Stage that needs no
+// Worker keeps its conversation, because it has no prompt to start over with.
 func (s *Scheduler) resumeFallback(r *Record, code int) {
-	id, session, block, conversation, stage := r.ID, r.SessionID, r.BlockID, r.Conversation, r.Stage
+	id, session, block, stage := r.ID, r.SessionID, r.BlockID, r.Stage
 	s.enqueue(id, func(ctx context.Context) {
 		out, err := s.d.Rex.Capture(ctx, session, block)
 		s.call(func() {
@@ -606,19 +606,15 @@ func (s *Scheduler) resumeFallback(r *Record, code int) {
 			if !ok || r.Stage != stage {
 				return
 			}
-			if err != nil || !strings.Contains(out, claude.NoConversation) {
-				s.apply(r, lifecycle.WorkerExited{Code: code}, "")
-				return
-			}
-			r.Conversation = ""
-			s.save(r, store.Event{TaskID: id, At: s.now(), Signal: replacedSignal, From: r.Stage.String(), To: r.Stage.String(), Detail: conversation})
 			switch {
-			case r.Stage == lifecycle.ReviewReady:
-				s.apply(r, lifecycle.Rerun{Stage: lifecycle.Reviewing}, "")
-			case r.Stage.Agent():
-				s.pend(r, stage)
+			case err != nil || !strings.Contains(out, claude.NoConversation):
+				s.apply(r, lifecycle.WorkerExited{Code: code}, "")
+			case r.Stage == lifecycle.ReviewReady || r.Stage.Agent():
+				r.Conversation = ""
 				s.save(r)
-				s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
+				s.restoreLater(id)
+			default:
+				s.d.Log.Warn("resume found no conversation", "task", id, "stage", r.Stage.String())
 			}
 		})
 	})
