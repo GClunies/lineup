@@ -371,6 +371,9 @@ func (s *Scheduler) attach(id string, w Window, job Job) {
 		}
 		r.SessionID, r.WindowID, r.BlockID, r.Job = w.SessionID, w.WindowID, w.BlockID, job
 		r.Status, r.WorkerState = "", ""
+		if job == JobWorker && r.Pending != nil {
+			r.PendingSince = s.now()
+		}
 		s.save(r)
 		for _, o := range s.orphans[w.BlockID] {
 			s.onRex(o.ev)
@@ -793,6 +796,9 @@ func (s *Scheduler) recover(ctx context.Context) {
 		return blocks, true
 	}
 	for _, r := range s.list() {
+		if r.Pending != nil && r.Job == JobWorker && r.WorkerState == "" {
+			r.PendingSince = s.now()
+		}
 		if r.Stage == lifecycle.Done {
 			if r.BlockID == "" {
 				if r.Worktree != "" && !r.WorktreeKept {

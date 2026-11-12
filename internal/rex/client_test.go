@@ -99,3 +99,19 @@ func TestTypeWritesEachPartThenEnter(t *testing.T) {
 		t.Fatalf("writes = %q, want %q", got, want)
 	}
 }
+
+func TestAFailedTypeClearsTheInputBox(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "writes")
+	bin := filepath.Join(dir, "rex")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$8\" >> \"" + log + "\"\ncase \"$8\" in *alpha*) echo 'write failed' >&2; exit 1;; esac\n"
+	os.WriteFile(bin, []byte(script), 0o755)
+	c := Client{Bin: bin}
+	if err := c.Type(context.Background(), "s", "b", "/skill ", "alpha\nbeta"); err == nil {
+		t.Fatal("Type returned no error for a failed write")
+	}
+	got, _ := os.ReadFile(log)
+	if want := "{\"data\":\"/skill \"}\n{\"data\":\"alpha\\nbeta\"}\n" + strings.Repeat("{\"data\":\"\\u0015\"}\n", 4); string(got) != want {
+		t.Fatalf("writes = %q, want %q", got, want)
+	}
+}

@@ -251,9 +251,19 @@ func (c *Client) ProgramStatus(ctx context.Context, session, block string) ([]St
 }
 
 // Type writes each part to the block, then presses Enter. Claude reads text and
-// Enter in one write as a paste, so a short pause follows each write.
+// Enter in one write as a paste, so a short pause follows each write. After a
+// failure, Type clears the input box, so a retry does not append to a half-typed
+// prompt.
 func (c *Client) Type(ctx context.Context, session, block string, parts ...string) error {
-	for _, part := range append(parts, "\r") {
+	err := c.typeParts(ctx, session, block, append(parts, "\r"))
+	if err != nil {
+		c.clearInput(ctx, session, block, parts)
+	}
+	return err
+}
+
+func (c *Client) typeParts(ctx context.Context, session, block string, parts []string) error {
+	for _, part := range parts {
 		if err := c.write(ctx, session, block, part); err != nil {
 			return err
 		}
@@ -264,6 +274,18 @@ func (c *Client) Type(ctx context.Context, session, block string, parts ...strin
 		}
 	}
 	return nil
+}
+
+// Claude's Ctrl+U deletes the cursor's line, then the line break before it, so
+// each line of parts needs two presses.
+func (c *Client) clearInput(ctx context.Context, session, block string, parts []string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	for range 2 * (1 + strings.Count(strings.Join(parts, ""), "\n")) {
+		if c.write(ctx, session, block, "\x15") != nil {
+			return
+		}
+	}
 }
 
 func (c *Client) write(ctx context.Context, session, block, data string) error {

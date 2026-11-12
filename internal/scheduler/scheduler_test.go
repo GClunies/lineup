@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -1618,6 +1619,125 @@ func TestAPromptThatWaitsOnAReportingWorkerRaisesNoFlag(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	if f := h.task("ENG-1").Flag; f != "" {
 		t.Fatalf("flag = %q, want none: the Worker reports its turn", f)
+	}
+}
+
+type failTypes struct {
+	*fakeRex
+	left atomic.Int32
+}
+
+func (f *failTypes) Type(ctx context.Context, session, block, text string) error {
+	if f.left.Add(-1) >= 0 {
+		return errors.New("rex write failed")
+	}
+	return f.fakeRex.Type(ctx, session, block, text)
+}
+
+type noPrompts struct {
+	Harness
+	empty atomic.Bool
+}
+
+func (n *noPrompts) Prompt(ctx context.Context, w WorkerSpec) (string, error) {
+	if n.empty.Load() {
+		return "", nil
+	}
+	return n.Harness.Prompt(ctx, w)
+}
+
+func TestARerunAfterAFailedTypeTypesThePrompt(t *testing.T) {
+	var rex *failTypes
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) {
+		rex = &failTypes{fakeRex: d.Rex.(*fakeRex)}
+		rex.left.Store(1)
+		d.Rex = rex
+	})
+	worker := h.working()
+	h.prOpens(worker)
+	h.ciFails()
+	eventually(t, "the error flag", func() bool { return h.task("ENG-1").Flag == "error" })
+
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "ci_debug"})
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+}
+
+func TestAnEmptyPromptLeavesTheWorkerReadyForTheNextPrompt(t *testing.T) {
+	var prompts *noPrompts
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) {
+		prompts = &noPrompts{Harness: d.Harness}
+		d.Harness = prompts
+	})
+	worker := h.working()
+	h.status(worker.BlockID, "idle")
+	h.waitWorkerState("ENG-1", "idle")
+	prompts.empty.Store(true)
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+	time.Sleep(100 * time.Millisecond)
+	if got := h.rex.typedInto(worker.BlockID); len(got) != 0 {
+		t.Fatalf("typed %q for an empty prompt", got)
+	}
+
+	prompts.empty.Store(false)
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+	h.waitTyped(worker.BlockID, "prompt working")
+}
+
+func TestAResumedWorkerGetsAFullPromptWaitFromItsOwnStart(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PromptWait = 400 * time.Millisecond })
+	worker := h.working()
+	h.status(worker.BlockID, "working")
+	h.waitWorkerState("ENG-1", "working")
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+	time.Sleep(600 * time.Millisecond)
+	h.rex.exits(worker, 0)
+	eventually(t, "the resumed tab", func() bool { return h.tabs() == 2 })
+
+	time.Sleep(100 * time.Millisecond)
+	if f := h.task("ENG-1").Flag; f != "" {
+		t.Fatalf("flag = %q within 100 ms of the resumed tab starting, want none", f)
+	}
+	eventually(t, "the silent Worker flag", func() bool { return h.task("ENG-1").Flag == string(lifecycle.ReasonWorkerSilent) })
+}
+
+func seedPendingWorker(since time.Time) func(*store.Store) {
+	return func(st *store.Store) {
+		pending := lifecycle.Working
+		r := Record{
+			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Policy: testPolicy, Left: testPolicy.Budgets},
+			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data",
+			Branch: "ada/eng-7", Worktree: "/wt/eng-7", SessionID: "session:data", WindowID: "window:live", BlockID: "block:live",
+			Job: JobWorker, Pending: &pending, PendingSince: since,
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+}
+
+func TestARestartedSchedulerGivesAPendingWorkerAFullPromptWait(t *testing.T) {
+	cases := []struct {
+		name      string
+		since     time.Time
+		blocksErr error
+	}{
+		{"saved before the restart", time.Now().Add(-time.Hour), nil},
+		{"saved before the field existed", time.Time{}, nil},
+		{"with Rex unable to list blocks", time.Time{}, errors.New("rex is down")},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			live := &tab{Window: Window{"session:data", "window:live", "block:live"}, argv: []string{"claude", "working"}}
+			rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, blocksErr: c.blocksErr}
+			h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedPendingWorker(c.since), func(d *Deps) {
+				d.Rex = rex
+				d.PromptWait = 400 * time.Millisecond
+			})
+			time.Sleep(100 * time.Millisecond)
+			if f := h.task("ENG-7").Flag; f != "" {
+				t.Fatalf("flag = %q within 100 ms of the restart, want none", f)
+			}
+			eventually(t, "the silent Worker flag", func() bool { return h.task("ENG-7").Flag == string(lifecycle.ReasonWorkerSilent) })
+		})
 	}
 }
 

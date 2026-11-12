@@ -158,8 +158,8 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 // to working that clears a flag.
 const promptedState = "prompted"
 
-// typePrompt claims Pending before it types, so a rerun during the Type sets
-// Pending again and gets its own prompt.
+// typePrompt claims Pending and marks the Worker prompted before it types, so a
+// rerun during the Type sets Pending again and waits for the Worker.
 func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.Stage) {
 	spec := s.spec(r, stage)
 	spec.Steers = nil
@@ -169,9 +169,13 @@ func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.St
 		return
 	}
 	var claimed bool
+	var was string
 	s.update(r.ID, func(rec *Record) {
 		if claimed = rec.Pending != nil && *rec.Pending == stage && rec.BlockID == r.BlockID; claimed {
-			rec.Pending, rec.WorkerStage, rec.WorkerState = nil, stage, promptedState
+			rec.Pending, rec.WorkerStage = nil, stage
+			if prompt != "" {
+				was, rec.WorkerState = rec.WorkerState, promptedState
+			}
 		}
 	})
 	if !claimed || prompt == "" {
@@ -179,6 +183,9 @@ func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.St
 	}
 	if err := s.d.Rex.Type(ctx, r.SessionID, r.BlockID, prompt); err != nil {
 		s.update(r.ID, func(rec *Record) {
+			if rec.WorkerState == promptedState {
+				rec.WorkerState = was
+			}
 			if rec.Pending == nil && rec.Stage == stage {
 				s.pend(rec, stage)
 			}
