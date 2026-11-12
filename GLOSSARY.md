@@ -31,7 +31,7 @@ A Tracker's own group of Issues, for example a Linear project.
 _Avoid_: Area, epic, repo
 
 **Task**:
-One unit of work on the Board, in exactly one Repo, done by Workers in one isolated tab and worktree. A Task links to zero or one Issue, and it ends when its PR merges or the user closes it.
+One unit of work on the Board, in exactly one Repo, done by one Worker in one isolated tab and worktree. A Task links to zero or one Issue, and it ends when its PR merges or the user closes it. A Task that ends goes to Done and keeps its tab and worktree. Only the user closes a Task's tab.
 _Avoid_: Job, thread, card, item
 
 **Ad hoc Task**:
@@ -45,11 +45,11 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The top of the `hub` tab, above the Orchestrator. It has three views, and the keys `1`, `2`, and `3` pick one. `1 plan` is the tracker browser. `2 work` lists the build Tasks, grouped as Needs you, Working, Waiting, Queued, and Done. `3 review` has a Reviews tab that shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived or 7 days after it ends.
+The top of the `hub` tab, above the Orchestrator. It has three views, and the keys `1`, `2`, and `3` pick one. `1 plan` is the tracker browser. `2 work` lists the build Tasks, grouped as Needs you, Working, Waiting, Queued, and Done. `3 review` has a Reviews tab that shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:
-A Done Task that the user hid from the Board. Its record and events stay in the store.
+A Done Task that the user hid from the Board. Archiving closes the Task's tab and removes its worktree, if they are still there. Its record and events stay in the store.
 _Avoid_: Deleted, removed
 
 **Hub**:
@@ -67,7 +67,7 @@ The long-lived agent that the user talks to in the `LINEUP` pane of the Hub's `w
 _Avoid_: Coordinator, manager agent
 
 **Worker**:
-An agent that does one Stage of a Task inside that Task's own tab and worktree.
+The agent that does every agent Stage of one Task, inside that Task's own tab and worktree. The Scheduler types each new Stage's prompt into the same Worker when it is idle.
 _Avoid_: Thread, sub-agent, runner
 
 **Harness**:
@@ -77,7 +77,7 @@ _Avoid_: Provider, runner, vendor
 ### Lifecycle
 
 **Stage**:
-The place in the lifecycle where a Task waits, with exactly one owner: an agent, CI, other reviewers, or the user. The Stages are Queued, Working, CI running, CI debug, In review, Responding, Ready to land, and Done.
+The place in the lifecycle where a Task waits, with exactly one owner: an agent, CI, other reviewers, or the user. The Stages are Queued, Working, CI running, CI debug, In review, Responding, Ready to land, and Done. Each agent Stage is a new prompt to the Task's one Worker, not a new Worker.
 _Avoid_: Status, state, column, phase
 
 **Stage contract**:
@@ -89,7 +89,15 @@ An observed event that moves a Task from one Stage to another, for example `pr-o
 _Avoid_: Trigger, transition, state
 
 **Needs you**:
-A flag on a Task, in any Stage, that says the user must act and gives the reason: a question, a permission, an auth request, an error, a Worker that stopped before its Stage contract, a draft PR that passed CI, a review bot that did not score a passing PR, or a spent Loop budget.
+A flag on a Task, in any Stage, that says the user must act and gives the reason. The reasons are:
+
+- a question, a permission, or an auth request
+- an error
+- a Worker that stopped before its Stage contract
+- a closed tab in a Stage that needs the Worker
+- a draft PR that passed CI
+- a review bot that did not score a passing PR
+- a spent Loop budget
 _Avoid_: Blocked, waiting, attention state
 
 **Ready to land**:
@@ -113,7 +121,7 @@ A thread of review comments on a line of a PR. Under the default Landing bar, a 
 _Avoid_: Conversation, comment
 
 **Loop budget**:
-The most automatic attempts that a Stage gets before the Task gets the Needs you flag, for example 3 CI debug attempts.
+The most automatic attempts that a Stage gets before the Task gets the Needs you flag, for example 3 CI debug attempts. A lost Worker spends no budget, because lineup opens no tab by itself.
 _Avoid_: Retry limit, max attempts
 
 **Review bot**:

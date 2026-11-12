@@ -55,7 +55,7 @@ func TestMissingFileMeansDefaults(t *testing.T) {
 	if r.WIPCap != 5 || r.PollInterval != 30*time.Second {
 		t.Errorf("defaults wrong: %+v", r)
 	}
-	if r.Budgets != (lifecycle.Budgets{CIDebug: 3, Responding: 3, Restarts: 2}) {
+	if r.Budgets != (lifecycle.Budgets{CIDebug: 3, Responding: 3}) {
 		t.Errorf("budgets = %+v", r.Budgets)
 	}
 	want := StageConfig{Model: "claude-opus-5-5", Effort: "high"}
@@ -131,7 +131,7 @@ func TestInvalidValuesFailAtLoad(t *testing.T) {
 	for name, text := range map[string]string{
 		"cap":        "wip_cap = 0\n",
 		"interval":   "poll_interval = \"soon\"\n",
-		"budget":     "[budgets]\nrestarts = -1\n",
+		"budget":     "[budgets]\nci_debug = -1\n",
 		"stage":      "[stage.queued]\nmodel = \"x\"\n",
 		"user stage": "[stage.review_ready]\nmodel = \"x\"\n",
 		"event":      "[linear.w.status.ENG]\nbogus = \"x\"\n",
@@ -140,6 +140,13 @@ func TestInvalidValuesFailAtLoad(t *testing.T) {
 		if _, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), text)); err == nil {
 			t.Errorf("%s: no error", name)
 		}
+	}
+}
+
+func TestARestartsBudgetIsAnUnknownKey(t *testing.T) {
+	_, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), "[budgets]\nrestarts = 2\n"))
+	if err == nil || !strings.Contains(err.Error(), "unknown keys: budgets.restarts") {
+		t.Fatalf("err = %v, want unknown keys: budgets.restarts", err)
 	}
 }
 
@@ -159,8 +166,8 @@ ci_debug = 1
 [stage.default]
 model = "global-model"
 effort = "low"
-[stage.responding]
-model = "responding-model"
+[stage.working]
+model = "working-model"
 [[repos]]
 match = "`+repo+`"
 teams = ["APP"]
@@ -181,14 +188,40 @@ poll_interval = "20s"
 	if r.PollInterval != 20*time.Second || r.Budgets.CIDebug != 1 || r.Budgets.Responding != 3 {
 		t.Errorf("merge of layers wrong: %+v", r)
 	}
-	if got := r.Stages[lifecycle.Working]; got.Model != "global-model" || got.Effort != "max" {
-		t.Errorf("working = %+v", got)
+	if got := r.Stages[lifecycle.Working]; got.Model != "working-model" || got.Effort != "max" {
+		t.Errorf("a stage section must beat any default, working = %+v", got)
 	}
-	if got := r.Stages[lifecycle.Responding]; got.Model != "responding-model" || got.Effort != "max" {
-		t.Errorf("a stage section must beat any default, responding = %+v", got)
+	if got := r.Stages[lifecycle.Responding]; got.Model != "global-model" || got.Effort != "max" {
+		t.Errorf("responding = %+v", got)
 	}
 	if got := r.Stages[lifecycle.CIDebug]; got.Skill != "diagnosing-bugs" {
 		t.Errorf("ci_debug = %+v", got)
+	}
+}
+
+func TestALaterStageModelIsRejected(t *testing.T) {
+	for _, key := range []string{"ci_debug", "responding"} {
+		for _, field := range []string{"model", "effort"} {
+			text := fmt.Sprintf("[stage.%s]\n%s = \"x\"\n", key, field)
+			want := fmt.Sprintf("stage.%s.%s: a Task keeps the %s of the Stage its Worker starts in", key, field, field)
+			_, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), text))
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("%s.%s: err = %v, want %q", key, field, err, want)
+			}
+		}
+	}
+	repo := t.TempDir()
+	write(t, filepath.Join(repo, ".lineup.toml"), "[stage.ci_debug]\nmodel = \"x\"\n")
+	if _, err := load(t, "").Resolve(repo, nil); err == nil || !strings.Contains(err.Error(), "stage.ci_debug.model") {
+		t.Errorf("repo file: err = %v, want the stage.ci_debug.model message", err)
+	}
+	g := load(t, "[stage.default]\nmodel = \"d\"\n[stage.working]\neffort = \"max\"\n[stage.reviewing]\nmodel = \"r\"\n[stage.ci_debug]\nskill = \"diagnosing-bugs\"\n")
+	r, err := g.Resolve(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Stages[lifecycle.CIDebug]; got.Skill != "diagnosing-bugs" || got.Model != "d" {
+		t.Errorf("ci_debug = %+v, want its skill and the default model", got)
 	}
 }
 
@@ -635,5 +668,12 @@ func TestBadLandingBarFailsAtLoad(t *testing.T) {
 	write(t, filepath.Join(repo, ".lineup.toml"), "[landing_bar]\nthreads = \"open\"\n")
 	if _, err := load(t, "").Resolve(repo, nil); err == nil || !strings.Contains(err.Error(), `.lineup.toml: landing_bar.threads: "open" is not one of`) {
 		t.Errorf("the Repo file: err = %v", err)
+	}
+}
+
+func TestTheRestartsHintTellsTheUserToDeleteTheLine(t *testing.T) {
+	_, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), "[budgets]\nci_debug = 3\nrestarts = 2\n"))
+	if err == nil || !strings.Contains(err.Error(), "delete the restarts line from the [budgets] table") {
+		t.Fatalf("err = %v, want a hint that names the restarts line", err)
 	}
 }

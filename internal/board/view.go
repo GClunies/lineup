@@ -125,7 +125,7 @@ func (m Model) footer() string {
 	}
 	switch m.mode {
 	case modeConfirm:
-		s = bad.Render(" " + m.pendingOp + " " + m.pendingTask + "? (y/n)")
+		s = bad.Render(" " + m.pendingAsk + "? (y/n)")
 	case modeCap:
 		s = bad.Render(fmt.Sprintf(" wip cap full: start once over the cap (o) or raise the cap to %d (c)?", m.board.Cap+1))
 	case modeNormal:
@@ -185,8 +185,8 @@ func (m Model) boardHints() []hint {
 	switch {
 	case t.Live:
 		hs = append(hs, hint{"enter", "go to the Worker"}, hint{"p", "preview"})
-	case reopens(t):
-		hs = append(hs, hint{"enter", "reopen the Worker"})
+	case restorable(t):
+		hs = append(hs, hint{"enter", "restore the Worker"})
 	}
 	switch {
 	case t.PRURL != "":
@@ -195,7 +195,7 @@ func (m Model) boardHints() []hint {
 		hs = append(hs, hint{"o", "open the Issue"})
 	}
 	hs = append(hs, hint{"f", "details"})
-	if t.Group == lifecycle.GroupDone.String() {
+	if t.Group == lifecycle.GroupDone.String() && !t.Tab {
 		hs = append(hs, hint{"x", "archive"})
 	} else {
 		hs = append(hs, hint{"x", "close"})
@@ -316,11 +316,12 @@ const boardHelp = `
  lineup board keys
 
    j k      move the selection
-   enter    focus the Task's tab in Rex
+   enter    focus the Task's tab in Rex, or restore its closed Worker
    p        live preview of the Worker's screen
    f        detail pane at full screen, and back
    m        merge the PR            (Ready to land)
-   x        close the Task, or archive a Done Task, after y/n
+   x        close the Task, or its tab and worktree when it is Done,
+            or archive a Done Task with no tab, after y/n
    s        start a Queued Task
    o        open the PR or the Issue
    R        refresh now: poll GitHub for every started Task

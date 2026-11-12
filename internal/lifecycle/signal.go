@@ -11,13 +11,14 @@ type Signal interface {
 
 type Start struct{ OverCap bool }
 type PRMerge struct{}
+
+// TaskClosed is the user's close. It ends a Task that has not ended, and it
+// cleans up a Done Task that kept its tab.
 type TaskClosed struct{}
 
-// Rerun is the Orchestrator's override that starts a fresh Worker for Stage.
+// Rerun is the Orchestrator's override that types the prompt for Stage into the
+// Task's Worker again.
 type Rerun struct{ Stage Stage }
-
-// Reopen starts the Task's Worker again in its Stage, in the same conversation.
-type Reopen struct{}
 
 // Worker signals.
 
@@ -36,8 +37,17 @@ type WorkerStatus struct {
 	Detail string
 }
 
+// TabClosed means the Task's tab is gone: the user closed it, or Rex lost it. A
+// Done Task then cleans up. A Task in an agent Stage gets the tab closed flag,
+// and a Task in a Stage that waits for others changes nothing. Waits is true
+// when the Stage's prompt waits for a Worker that has no tab.
+type TabClosed struct{ Waits bool }
+
+// TabOpened means the user restored the Task's Worker in a tab. The old
+// Worker's flags go, such as tab closed.
+type TabOpened struct{}
+
 type WorkerExited struct{ Code int }
-type WorkerLost struct{}
 type SetupFailed struct{ Detail string }
 
 // GitHub signals.
@@ -52,6 +62,10 @@ type PRSeen struct{ Facts PRFacts }
 // ReviewBotLate is the Scheduler's timer: the Task has been in CI running
 // long enough that a review bot that reviews the head would have scored it.
 type ReviewBotLate struct{}
+
+// PromptStalled is the Scheduler's timer: the prompt for Stage has waited too
+// long on a Worker that has never reported a program status.
+type PromptStalled struct{ Stage Stage }
 
 type ReviewCommented struct{}
 type ReviewChangesRequested struct{}
@@ -71,12 +85,12 @@ type PRClosed struct{}
 func (Start) Name() string                   { return "start" }
 func (PRMerge) Name() string                 { return "pr-merge" }
 func (TaskClosed) Name() string              { return "task-closed" }
+func (TabClosed) Name() string               { return "tab-closed" }
+func (TabOpened) Name() string               { return "tab-opened" }
 func (Rerun) Name() string                   { return "rerun" }
-func (Reopen) Name() string                  { return "reopen" }
 func (WorkerDone) Name() string              { return "done" }
 func (WorkerStatus) Name() string            { return "status" }
 func (WorkerExited) Name() string            { return "exited" }
-func (WorkerLost) Name() string              { return "worker-lost" }
 func (SetupFailed) Name() string             { return "setup-failed" }
 func (PROpen) Name() string                  { return "pr-open" }
 func (Pushed) Name() string                  { return "pushed" }
@@ -86,18 +100,19 @@ func (ReviewChangesRequested) Name() string  { return "review-changes-requested"
 func (ReviewAdditionalAuthors) Name() string { return "review-additional-authors" }
 func (PRMerged) Name() string                { return "pr-merged" }
 func (ReviewBotLate) Name() string           { return "review-bot-late" }
+func (PromptStalled) Name() string           { return "prompt-stalled" }
 func (PRReviewed) Name() string              { return "pr-reviewed" }
 func (PRClosed) Name() string                { return "pr-closed" }
 
 func (Start) signal()                   {}
 func (PRMerge) signal()                 {}
 func (TaskClosed) signal()              {}
+func (TabClosed) signal()               {}
+func (TabOpened) signal()               {}
 func (Rerun) signal()                   {}
-func (Reopen) signal()                  {}
 func (WorkerDone) signal()              {}
 func (WorkerStatus) signal()            {}
 func (WorkerExited) signal()            {}
-func (WorkerLost) signal()              {}
 func (SetupFailed) signal()             {}
 func (PROpen) signal()                  {}
 func (Pushed) signal()                  {}
@@ -107,25 +122,28 @@ func (ReviewChangesRequested) signal()  {}
 func (ReviewAdditionalAuthors) signal() {}
 func (PRMerged) signal()                {}
 func (ReviewBotLate) signal()           {}
+func (PromptStalled) signal()           {}
 func (PRReviewed) signal()              {}
 func (PRClosed) signal()                {}
 
 // Effect is work the Scheduler must do after a transition, in order.
 type Effect interface{ effect() }
 
-// StartWorker replaces any Worker in the Task's tab with a fresh one for Stage.
-type StartWorker struct{ Stage Stage }
+// PromptWorker gives the Task's one Worker the prompt of Stage. It opens the
+// Worker first when the Task has none.
+type PromptWorker struct{ Stage Stage }
 
 type Merge struct{}
 
-// Cleanup closes the Task's tab and removes its worktree.
+// Cleanup closes the Task's tab if it has one, removes its worktree, and
+// removes the Repo session when it is empty. Only the user starts it.
 type Cleanup struct{}
 
 // TrackerStatus writes the mapped Tracker status for a lifecycle event:
 // started, in_review, merged, or closed.
 type TrackerStatus struct{ Event string }
 
-func (StartWorker) effect()   {}
+func (PromptWorker) effect()  {}
 func (Merge) effect()         {}
 func (Cleanup) effect()       {}
 func (TrackerStatus) effect() {}

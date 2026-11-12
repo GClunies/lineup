@@ -105,7 +105,7 @@ type ReviewResult struct {
 
 // review adds and starts a review Task with no queue for the PR at url. If an
 // open review Task has the PR, it adds nothing. It starts that Task if it is
-// Queued, reopens its Worker if it closed in Review ready, and runs it again
+// Queued, restores its Worker if it closed in Review ready, and runs it again
 // if it stopped for good.
 func (s *Scheduler) review(ctx context.Context, url string) (ReviewResult, error) {
 	key, err := ParseReviewKey(url)
@@ -173,11 +173,11 @@ type reviewAdd struct {
 }
 
 // reviewID names a review Task after its PR number. The caller has found no
-// open review of the PR, so a live Task with the ID reviews another
-// repository's PR, and the ID then adds the repository's name.
+// open review of the PR, so a Task with the ID that is live or keeps its tab
+// reviews another repository's PR, and the ID then adds the repository's name.
 func (s *Scheduler) reviewID(pr ReviewPR) string {
 	id := fmt.Sprintf("pr-%d", pr.Number)
-	if o, ok := s.recs[id]; ok && o.Stage != lifecycle.Done {
+	if o, ok := s.recs[id]; ok && (o.Stage != lifecycle.Done || o.keepsTab()) {
 		_, name, _ := strings.Cut(pr.Repo, "/")
 		id += "-" + name
 	}
@@ -211,15 +211,18 @@ func (r *Record) reviewTask() (t github.ReviewTask, ok bool) {
 	if r.Review == nil {
 		return t, false
 	}
-	return github.ReviewTask{URL: r.Review.URL, Head: r.Review.Head, Done: r.Stage == lifecycle.Done}, true
+	return github.ReviewTask{URL: r.Review.URL, Head: r.Review.Head, Done: r.Stage == lifecycle.Done && !r.keepsTab()}, true
 }
 
 // startOpenReview finds the open review Task of the PR. It starts the Task if
-// it is Queued, and reopens its Worker if the Worker closed in Review ready. It
-// runs the Task again if no Worker will, because its flag never clears by
-// itself. Only the loop calls it.
+// it is Queued, and restores its Worker if the Worker closed in Review ready or
+// in a Stage that needs it. It runs the Task again if no Worker will, because
+// its flag never clears by itself. Only the loop calls it.
 func (s *Scheduler) startOpenReview(key ReviewKey) (ReviewResult, bool, error) {
 	for _, r := range s.list() {
+		if r.Review != nil && r.keepsTab() && r.Review.is(key) {
+			return ReviewResult{}, false, fmt.Errorf("%s is Done and keeps its tab: close its tab first with lineup close %s", r.ID, r.ID)
+		}
 		if r.Review == nil || r.Stage == lifecycle.Done || !r.Review.is(key) {
 			continue
 		}
@@ -228,13 +231,16 @@ func (s *Scheduler) startOpenReview(key ReviewKey) (ReviewResult, bool, error) {
 		switch {
 		case r.Stage == lifecycle.Queued:
 			action, err = ReviewStarted, s.apply(r, lifecycle.Start{}, "")
-		case r.Stage.Resumable() && r.Job != JobWorker && r.Conversation == "":
+		case r.Stage == lifecycle.ReviewReady && r.Job != JobWorker && r.Conversation == "":
 			// A Task from before conversation IDs has no conversation to resume.
 			action, err = ReviewRestarted, s.apply(r, lifecycle.Rerun{Stage: lifecycle.Reviewing}, "")
-		case r.Stage.Resumable() && r.Job != JobWorker:
-			action, err = ReviewReopened, s.apply(r, lifecycle.Reopen{}, "")
+			s.restoreLater(r.ID)
+		case r.Stage == lifecycle.ReviewReady && r.Job != JobWorker || r.Flag == lifecycle.ReasonTabClosed:
+			action = ReviewReopened
+			s.restoreLater(r.ID)
 		case r.Flag != "" && !r.Flag.Transient():
 			action, err = ReviewRestarted, s.apply(r, lifecycle.Rerun{Stage: lifecycle.Reviewing}, "")
+			s.restoreLater(r.ID)
 		}
 		return ReviewResult{TaskView: r.view(), Action: action}, true, err
 	}
@@ -279,8 +285,8 @@ func hunkArgv(url string) []string {
 	return []string{"sh", "-c", `GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"`, "hunk", url}
 }
 
-// removeReviewWorktree runs at Done, after the tab closed. It never runs
-// worktrunk: the review worktree is not worktrunk's.
+// removeReviewWorktree never runs worktrunk: the review worktree is not
+// worktrunk's.
 func (s *Scheduler) removeReviewWorktree(ctx context.Context, r Record) {
 	if r.Worktree == "" {
 		return
@@ -300,8 +306,9 @@ func (s *Scheduler) removeReviewWorktree(ctx context.Context, r Record) {
 }
 
 // pollReviews reads each review Task's PR by number and applies its level
-// while the Worker does not work. pr-review posts the review in its Step 9,
-// and a Done before that step ends would close the tab under it.
+// while the Worker does not work. pr-review posts the review in its Step 9, and
+// a Done before that step ends would show the review as ended while the Worker
+// still posts it.
 func (s *Scheduler) pollReviews(ctx context.Context, keys map[ReviewKey]string) {
 	if len(keys) == 0 {
 		return

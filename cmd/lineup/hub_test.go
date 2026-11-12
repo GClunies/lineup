@@ -81,6 +81,38 @@ func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 	}
 }
 
+func TestAgentRoleAsksWithAskUserQuestion(t *testing.T) {
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/bin/lineup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	role := string(raw)
+	_, questions, ok := strings.Cut(role, "\n## Questions\n")
+	if !ok {
+		t.Fatalf("the role has no Questions section:\n%s", role)
+	}
+	questions, _, _ = strings.Cut(questions, "\n## ")
+	for _, want := range []string{
+		"`AskUserQuestion`",
+		"**Close the tab**", "**Open the tab**", "**Keep it open**",
+		"**Restore**", "**Close the Task**",
+		"**Answer here**", "`lineup steer <task>",
+		"`lineup close <task>`", "`lineup open <task>`",
+	} {
+		if !strings.Contains(questions, want) {
+			t.Errorf("the Questions section has no %s", want)
+		}
+	}
+	for _, plain := range []string{"in chat", "Do not act on an alert yourself"} {
+		if strings.Contains(role, plain) {
+			t.Errorf("the role still says %q", plain)
+		}
+	}
+	if !strings.Contains(role, "| `lineup open <task>` |") {
+		t.Error("the Jobs table has no lineup open row")
+	}
+}
+
 func TestHubHasTwoTabsAndTheHubTabCarriesTheAgent(t *testing.T) {
 	var tabs, agents []string
 	for _, tab := range agentTabs {

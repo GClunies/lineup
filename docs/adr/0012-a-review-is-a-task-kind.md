@@ -11,5 +11,5 @@ A review of someone else's PR is a Task with Kind `review`. It has its own Stage
 ## Consequences
 
 - `Started()` counts only build Tasks, so reviews never fill the WIP cap. Each queue's `slots` caps its own started reviews in the reducer.
-- Review ready is a user-owned Stage. Recovery restarts only agent Stages, so a finished review does not run again.
+- Review ready is a user-owned Stage. Recovery flags only agent Stages, so a finished review does not run again.
 - lineup makes no worktree for a review. `pr-review` makes and removes its own review worktree from the Repo's main checkout.

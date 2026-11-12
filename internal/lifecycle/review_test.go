@@ -15,7 +15,7 @@ func reviewIn(stage Stage, queue string) (*Board, *Task) {
 }
 
 func TestReviewTransitions(t *testing.T) {
-	closed := []Effect{Cleanup{}}
+	userClosed := []Effect{Cleanup{}}
 	cases := []struct {
 		name    string
 		from    Stage
@@ -25,24 +25,23 @@ func TestReviewTransitions(t *testing.T) {
 		effects []Effect
 		outcome Outcome
 	}{
-		{"start", Queued, Start{}, Reviewing, "", []Effect{StartWorker{Reviewing}}, ""},
+		{"start", Queued, Start{}, Reviewing, "", []Effect{PromptWorker{Reviewing}}, ""},
 		{"done with findings", Reviewing, WorkerDone{ContractMet: true}, ReviewReady, "", nil, ""},
 		{"done without findings", Reviewing, WorkerDone{ContractMet: false}, Reviewing, ReasonStopped, nil, ""},
-		{"reviewed while reviewing", Reviewing, PRReviewed{}, Done, "", closed, OutcomeReviewed},
-		{"reviewed when ready", ReviewReady, PRReviewed{}, Done, "", closed, OutcomeReviewed},
-		{"merged while reviewing", Reviewing, PRMerged{}, Done, "", closed, OutcomeMerged},
-		{"merged when ready", ReviewReady, PRMerged{}, Done, "", closed, OutcomeMerged},
-		{"closed while reviewing", Reviewing, PRClosed{}, Done, "", closed, OutcomeClosed},
-		{"closed when ready", ReviewReady, PRClosed{}, Done, "", closed, OutcomeClosed},
-		{"tab lost while reviewing", Reviewing, WorkerLost{}, Reviewing, "", []Effect{StartWorker{Reviewing}}, ""},
-		{"tab lost when ready", ReviewReady, WorkerLost{}, ReviewReady, "", nil, ""},
+		{"reviewed while reviewing", Reviewing, PRReviewed{}, Done, "", nil, OutcomeReviewed},
+		{"reviewed when ready", ReviewReady, PRReviewed{}, Done, "", nil, OutcomeReviewed},
+		{"merged while reviewing", Reviewing, PRMerged{}, Done, "", nil, OutcomeMerged},
+		{"merged when ready", ReviewReady, PRMerged{}, Done, "", nil, OutcomeMerged},
+		{"closed while reviewing", Reviewing, PRClosed{}, Done, "", nil, OutcomeClosed},
+		{"closed when ready", ReviewReady, PRClosed{}, Done, "", nil, OutcomeClosed},
+		{"tab closed while reviewing", Reviewing, TabClosed{}, Reviewing, ReasonTabClosed, nil, ""},
+		{"tab closed when ready", ReviewReady, TabClosed{}, ReviewReady, "", nil, ""},
 		{"worker exits when ready", ReviewReady, WorkerExited{Code: 0}, ReviewReady, "", nil, ""},
 		{"worker fails when ready", ReviewReady, WorkerExited{Code: 1}, ReviewReady, "", nil, ""},
-		{"reopen when ready", ReviewReady, Reopen{}, ReviewReady, "", []Effect{StartWorker{ReviewReady}}, ""},
-		{"user closes while queued", Queued, TaskClosed{}, Done, "", closed, OutcomeClosed},
-		{"user closes while reviewing", Reviewing, TaskClosed{}, Done, "", closed, OutcomeClosed},
-		{"user closes when ready", ReviewReady, TaskClosed{}, Done, "", closed, OutcomeClosed},
-		{"rerun the review", ReviewReady, Rerun{Reviewing}, Reviewing, "", []Effect{StartWorker{Reviewing}}, ""},
+		{"user closes while queued", Queued, TaskClosed{}, Done, "", userClosed, OutcomeClosed},
+		{"user closes while reviewing", Reviewing, TaskClosed{}, Done, "", userClosed, OutcomeClosed},
+		{"user closes when ready", ReviewReady, TaskClosed{}, Done, "", userClosed, OutcomeClosed},
+		{"rerun the review", ReviewReady, Rerun{Reviewing}, Reviewing, "", []Effect{PromptWorker{Reviewing}}, ""},
 		{"blocked when ready", ReviewReady, WorkerStatus{State: "blocked", Kind: "permission"}, ReviewReady, ReasonPermission, nil, ""},
 	}
 	for _, c := range cases {
@@ -123,7 +122,7 @@ func TestAReviewReadyTaskKeepsItsSlotWithoutItsWorker(t *testing.T) {
 	next := b.AddReview("R-2", "platform", policy)
 	b.Apply("R-1", Start{})
 	b.Apply("R-1", WorkerDone{ContractMet: true})
-	for _, s := range []Signal{WorkerLost{}, WorkerExited{Code: 0}, WorkerExited{Code: 130}} {
+	for _, s := range []Signal{TabClosed{}, WorkerExited{Code: 0}, WorkerExited{Code: 130}} {
 		if effects, err := b.Apply("R-1", s); err != nil || effects != nil {
 			t.Fatalf("%s: effects %v err %v", s.Name(), effects, err)
 		}
@@ -133,33 +132,6 @@ func TestAReviewReadyTaskKeepsItsSlotWithoutItsWorker(t *testing.T) {
 	}
 	if _, err := b.Apply("R-2", Start{}); !errors.Is(err, ErrSlotsFull) || next.Stage != Queued {
 		t.Fatalf("start with the slot held: stage %s err %v, want ErrSlotsFull", next.Stage, err)
-	}
-}
-
-func TestReopenFitsOnlyAResumableStage(t *testing.T) {
-	for _, stage := range Stages() {
-		for _, kind := range []Kind{KindBuild, KindReview} {
-			if !kind.Has(stage) || stage.Resumable() {
-				continue
-			}
-			b := NewBoard(5)
-			task := b.Add("T", policy)
-			task.Kind, task.Stage = kind, stage
-			effects, err := b.Apply("T", Reopen{})
-			var na *NotAllowedError
-			if !errors.As(err, &na) || effects != nil || task.Stage != stage {
-				t.Errorf("reopen of a %s Task in %s: stage %s effects %v err %v", kind, stage, task.Stage, effects, err)
-			}
-		}
-	}
-}
-
-// A reopen that follows a failed setup must not keep the old flag on the new Worker.
-func TestReopenClearsTheFlag(t *testing.T) {
-	b, task := reviewIn(ReviewReady, "")
-	task.flag(ReasonSetupFailed, "fetch: no network")
-	if effects, err := b.Apply("R", Reopen{}); err != nil || !reflect.DeepEqual(effects, []Effect{StartWorker{ReviewReady}}) || task.Flag != "" {
-		t.Fatalf("reopen: effects %v err %v flag %q", effects, err, task.Flag)
 	}
 }
 

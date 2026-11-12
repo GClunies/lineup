@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -22,11 +23,12 @@ import (
 
 type tab struct {
 	Window
-	label  string
-	cwd    string
-	env    map[string]string
-	argv   []string
-	closed bool
+	label     string
+	cwd       string
+	env       map[string]string
+	argv      []string
+	closed    bool
+	blockGone bool
 }
 
 // split is a block that Split opened beside the anchor block of a tab.
@@ -49,8 +51,21 @@ type fakeRex struct {
 	// before NewWindow returns.
 	exitFast string
 	// capture is what Capture returns.
-	capture string
+	capture   string
+	blocksErr error
+	typed     []typed
+	focused   []string
+	// calls lists each window that NewWindow opened and CloseWindow closed, in order.
+	calls []string
+	// hold makes NewWindow of a Worker wait for the channel to close.
+	hold chan struct{}
+	// t fails the test when lineup closes a live tab that the user did not
+	// ask to close. asked is true after a close, archive, open, or review op.
+	t     *testing.T
+	asked bool
 }
+
+type typed struct{ block, text string }
 
 func (f *fakeRex) EnsureSession(_ context.Context, label string) (string, error) {
 	return "session:" + label, nil
@@ -61,12 +76,19 @@ func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, env m
 		return Window{}, errors.New("label must be at most 128 characters")
 	}
 	f.mu.Lock()
+	hold := f.hold
+	f.mu.Unlock()
+	if hold != nil && len(argv) > 0 && argv[0] == "claude" {
+		<-hold
+	}
+	f.mu.Lock()
 	f.n++
 	w := Window{session, fmt.Sprintf("window:%d", f.n), fmt.Sprintf("block:%d", f.n)}
 	f.tabs = append(f.tabs, &tab{Window: w, label: label, cwd: cwd, env: env, argv: argv})
+	f.calls = append(f.calls, "new "+w.WindowID)
 	f.mu.Unlock()
 	if f.exitFast != "" && argv[0] == f.exitFast {
-		f.events <- RexEvent{Kind: EvExited, BlockID: w.BlockID}
+		f.exits(tab{Window: w}, 0)
 	}
 	return w, nil
 }
@@ -90,8 +112,12 @@ func (f *fakeRex) Split(_ context.Context, _, block, cwd string, argv []string) 
 func (f *fakeRex) CloseWindow(_ context.Context, _, window string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.calls = append(f.calls, "close "+window)
 	for _, t := range f.tabs {
 		if t.WindowID == window {
+			if !t.closed && !t.blockGone && !f.asked && f.t != nil {
+				f.t.Errorf("lineup closed the live tab %s (%s) that the user did not ask to close", window, strings.Join(t.argv, " "))
+			}
 			t.closed = true
 		}
 	}
@@ -124,6 +150,9 @@ func (f *fakeRex) DestroySession(_ context.Context, session string) error {
 func (f *fakeRex) Blocks(_ context.Context, session string) (map[string]bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.blocksErr != nil {
+		return nil, f.blocksErr
+	}
 	live, windows := map[string]bool{}, map[string]bool{}
 	for _, t := range f.tabs {
 		if !t.closed && t.SessionID == session {
@@ -141,14 +170,78 @@ func (f *fakeRex) Blocks(_ context.Context, session string) (map[string]bool, er
 func (f *fakeRex) ProgramStatus(context.Context, string, string) (Status, error) {
 	return Status{}, nil
 }
-func (f *fakeRex) Focus(context.Context, string, string, string) error { return nil }
+func (f *fakeRex) Focus(_ context.Context, _, _, block string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.focused = append(f.focused, block)
+	return nil
+}
 func (f *fakeRex) Capture(context.Context, string, string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.capture, nil
 }
 
-func (f *fakeRex) Type(context.Context, string, string, string) error { return nil }
+func (f *fakeRex) Type(_ context.Context, _, block, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.typed = append(f.typed, typed{block, text})
+	return nil
+}
+
+func (f *fakeRex) typedInto(block string) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for _, t := range f.typed {
+		if t.block == block {
+			out = append(out, t.text)
+		}
+	}
+	return out
+}
+
+// exits ends the program in a tab as Rex does after about 1 s: the tab
+// closes, and Rex reports the exit.
+func (f *fakeRex) exits(w tab, code int) {
+	f.mu.Lock()
+	for _, t := range f.tabs {
+		if t.WindowID == w.WindowID {
+			t.closed = true
+		}
+	}
+	f.mu.Unlock()
+	f.events <- RexEvent{Kind: EvExited, BlockID: w.BlockID, ExitCode: code}
+}
+
+func (f *fakeRex) blockCloses(w tab) {
+	f.mu.Lock()
+	for _, t := range f.tabs {
+		if t.WindowID == w.WindowID {
+			t.blockGone = true
+		}
+	}
+	f.mu.Unlock()
+	f.events <- RexEvent{Kind: EvClosed, BlockID: w.BlockID}
+}
+
+// userCloses closes a tab as the user does in Rex: the tab goes, then Rex
+// reports its block closed.
+func (f *fakeRex) userCloses(w tab) {
+	f.mu.Lock()
+	for _, t := range f.tabs {
+		if t.WindowID == w.WindowID {
+			t.closed = true
+		}
+	}
+	for _, s := range f.splits {
+		if s.window == w.WindowID {
+			s.closed = true
+		}
+	}
+	f.mu.Unlock()
+	f.events <- RexEvent{Kind: EvClosed, BlockID: w.BlockID}
+}
 
 // open returns the open tabs whose command starts with word.
 func (f *fakeRex) open(word string) []tab {
@@ -353,6 +446,8 @@ func (w *fakeWorktrees) Remove(_ context.Context, _, branch string) error {
 
 type fakeHarness struct {
 	mu sync.Mutex
+	// gone lists the conversations that HasConversation does not find.
+	gone []string
 	// trusted lists each folder that Prepare trusted.
 	trusted []string
 	specs   []WorkerSpec
@@ -365,10 +460,29 @@ func (h *fakeHarness) Prepare(_ context.Context, _, worktree string) error {
 	return nil
 }
 
-func (h *fakeHarness) Command(_ context.Context, w WorkerSpec) ([]string, map[string]string, error) {
+func (h *fakeHarness) HasConversation(_ context.Context, w WorkerSpec) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return !slices.Contains(h.gone, w.Conversation)
+}
+
+func (h *fakeHarness) Prompt(_ context.Context, w WorkerSpec) (string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.specs = append(h.specs, w)
+	if w.Stage == lifecycle.ReviewReady {
+		return "", nil
+	}
+	return "prompt " + w.Stage.Key(), nil
+}
+
+func (h *fakeHarness) Command(_ context.Context, w WorkerSpec, prompt string) ([]string, map[string]string, error) {
+	if prompt == "" {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		h.specs = append(h.specs, w)
+		return []string{"claude", "--resume", w.Conversation}, nil, nil
+	}
 	return []string{"claude", w.Stage.Key()}, nil, nil
 }
 
@@ -396,7 +510,7 @@ func (t *fakeTracker) SetStatus(_ context.Context, _ Issue, event string) error 
 
 type fakeConfig struct{}
 
-var testPolicy = lifecycle.Policy{Budgets: lifecycle.Budgets{CIDebug: 3, Responding: 3, Restarts: 2}}
+var testPolicy = lifecycle.Policy{Budgets: lifecycle.Budgets{CIDebug: 3, Responding: 3}}
 
 func (fakeConfig) Policy(string, map[string]string) (lifecycle.Policy, error) { return testPolicy, nil }
 func (fakeConfig) RepoForIssue(Issue) (string, bool)                          { return "/repos/acme/data", true }
@@ -433,7 +547,7 @@ func newHarness(t *testing.T, dbPath string, seed func(*store.Store), opts ...fu
 		seed(st)
 	}
 	h := &harness{
-		t: t, rex: &fakeRex{events: make(chan RexEvent, 16)},
+		t: t, rex: &fakeRex{events: make(chan RexEvent, 16), t: t},
 		gh: &fakeGitHub{prs: map[PRKey]PRSnapshot{}, reviews: map[ReviewKey]ReviewSnapshot{}}, wt: &fakeWorktrees{root: t.TempDir()},
 		hn: &fakeHarness{}, tr: &fakeTracker{}, st: st, stateHome: t.TempDir(),
 	}
@@ -457,6 +571,11 @@ func newHarness(t *testing.T, dbPath string, seed func(*store.Store), opts ...fu
 
 func (h *harness) do(req Request) any {
 	h.t.Helper()
+	if req.Op == "close" || req.Op == "archive" || req.Op == "open" || req.Op == "review" {
+		h.rex.mu.Lock()
+		h.rex.asked = true
+		h.rex.mu.Unlock()
+	}
 	v, err := h.s.Handle(context.Background(), req)
 	if err != nil {
 		h.t.Fatalf("%s: %v", req.Op, err)
@@ -507,7 +626,7 @@ func TestALongTitleCutsTheTabLabel(t *testing.T) {
 	if setup.label != want {
 		t.Fatalf("setup tab label = %q (%d characters), want %q", setup.label, utf8.RuneCountInString(setup.label), want)
 	}
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: setup.BlockID}
+	h.rex.exits(setup, 0)
 	if worker := h.waitTab("claude working"); worker.label != want {
 		t.Fatalf("worker tab label = %q", worker.label)
 	}
@@ -532,7 +651,7 @@ func TestTaskFromStartToMerged(t *testing.T) {
 	if setup.cwd != "/repos/acme/data" || setup.label != "ENG-1 Add billing model" {
 		t.Fatalf("setup tab = %+v", setup)
 	}
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: setup.BlockID}
+	h.rex.exits(setup, 0)
 	worker := h.waitTab("claude working")
 	if worktree := filepath.Join(h.wt.root, "eng-1-billing"); worker.cwd != worktree {
 		t.Fatalf("worker cwd = %s, want %s", worker.cwd, worktree)
@@ -546,13 +665,13 @@ func TestTaskFromStartToMerged(t *testing.T) {
 
 	h.gh.set(key, 42, "ci-failed")
 	h.waitStage("ENG-1", lifecycle.CIDebug)
-	debugger := h.waitTab("claude ci_debug")
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
 	if v := h.task("ENG-1"); v.Note != "attempt 1/3" {
 		t.Fatalf("CI debug note = %q", v.Note)
 	}
 	h.gh.set(key, 42, "pushed")
 	h.waitStage("ENG-1", lifecycle.CIRunning)
-	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: debugger.BlockID, Status: Status{State: "done"}}
+	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "done"}}
 
 	h.gh.set(key, 42, "review-required")
 	h.waitStage("ENG-1", lifecycle.InReview)
@@ -564,26 +683,245 @@ func TestTaskFromStartToMerged(t *testing.T) {
 
 	h.do(Request{Op: "merge", Task: "ENG-1"})
 	h.waitStage("ENG-1", lifecycle.Done)
-	eventually(t, "cleanup", func() bool {
-		h.wt.mu.Lock()
-		defer h.wt.mu.Unlock()
-		return slices.Contains(h.wt.removed, "ada/eng-1-billing")
+	eventually(t, "the tracker told", func() bool {
+		h.tr.mu.Lock()
+		defer h.tr.mu.Unlock()
+		return slices.Equal(h.tr.status, []string{"started", "in_review", "merged"})
 	})
-	if v := h.task("ENG-1"); v.Outcome != "merged" || v.PRNumber != 42 {
-		t.Fatalf("done task = %+v", v)
+	if v := h.task("ENG-1"); v.Outcome != "merged" || v.PRNumber != 42 || !v.Tab {
+		t.Fatalf("done task = %+v, want merged with its tab", v)
 	}
-	eventually(t, "the Repo session removed", func() bool {
-		h.rex.mu.Lock()
-		defer h.rex.mu.Unlock()
-		return slices.Contains(h.rex.destroyed, "session:data")
+	if len(h.rex.open("claude working")) != 1 {
+		t.Fatal("the Worker tab closed when the Task ended")
+	}
+	h.wt.mu.Lock()
+	removed := slices.Clone(h.wt.removed)
+	h.wt.mu.Unlock()
+	h.rex.mu.Lock()
+	destroyed := slices.Clone(h.rex.destroyed)
+	h.rex.mu.Unlock()
+	if len(removed) != 0 || len(destroyed) != 0 {
+		t.Fatalf("the Task's end removed worktrees %v and sessions %v, want neither", removed, destroyed)
+	}
+}
+
+func doneWithATab(t *testing.T) (*harness, tab) {
+	t.Helper()
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
+	worker := h.waitTab("claude working")
+	h.gh.set(PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}, 42, "pr-merged")
+	h.waitStage("ENG-1", lifecycle.Done)
+	eventually(t, "the tracker told", func() bool {
+		h.tr.mu.Lock()
+		defer h.tr.mu.Unlock()
+		return slices.Contains(h.tr.status, "merged")
 	})
-	if len(h.rex.open("claude ci_debug")) != 0 {
-		t.Fatal("a Worker tab is still open after Done")
+	return h, worker
+}
+
+func (h *harness) worktreesRemoved() []string {
+	h.wt.mu.Lock()
+	defer h.wt.mu.Unlock()
+	return slices.Clone(h.wt.removed)
+}
+
+func (h *harness) sessionsDestroyed() []string {
+	h.rex.mu.Lock()
+	defer h.rex.mu.Unlock()
+	return slices.Clone(h.rex.destroyed)
+}
+
+func TestADoneTabTheUserClosesRemovesTheWorktree(t *testing.T) {
+	h, worker := doneWithATab(t)
+	if got := h.worktreesRemoved(); len(got) != 0 {
+		t.Fatalf("removed %v before the user closed the tab", got)
 	}
-	h.tr.mu.Lock()
-	defer h.tr.mu.Unlock()
-	if !slices.Equal(h.tr.status, []string{"started", "in_review", "merged"}) {
-		t.Fatalf("tracker events = %v", h.tr.status)
+	h.rex.userCloses(worker)
+	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:data"}) })
+	if v := h.task("ENG-1"); v.Stage != "Done" || v.Outcome != "merged" || v.Tab || v.Live {
+		t.Fatalf("task = %+v, want Done, merged, with no tab", v)
+	}
+}
+
+func TestADoneTabTheUserClosesKeepsASessionWithAnotherTab(t *testing.T) {
+	h, worker := doneWithATab(t)
+	if _, err := h.rex.NewWindow(context.Background(), worker.SessionID, "another tab", "/", nil, []string{"zsh"}); err != nil {
+		t.Fatal(err)
+	}
+	h.rex.userCloses(worker)
+	eventually(t, "the worktree removed", func() bool { return len(h.worktreesRemoved()) == 1 })
+	time.Sleep(150 * time.Millisecond)
+	if got := h.sessionsDestroyed(); len(got) != 0 {
+		t.Fatalf("destroyed %v while the session held another tab", got)
+	}
+}
+
+func TestClosingADoneTaskClosesItsTabAndRemovesTheWorktree(t *testing.T) {
+	h, worker := doneWithATab(t)
+	h.do(Request{Op: "close", Task: "ENG-1"})
+	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude working")) == 0 })
+	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:data"}) })
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	h.still("ENG-1", lifecycle.Done)
+	if v := h.task("ENG-1"); v.Outcome != "merged" || v.Tab {
+		t.Fatalf("task = %+v, want Done, merged, with no tab", v)
+	}
+	if got := h.worktreesRemoved(); len(got) != 1 {
+		t.Fatalf("removed %v, want one removal", got)
+	}
+}
+
+func TestACleanedUpTaskReportsNoWorktree(t *testing.T) {
+	h, worker := doneWithATab(t)
+	if v := h.task("ENG-1"); v.Worktree == "" {
+		t.Fatalf("task = %+v, want its worktree before the close", v)
+	}
+	h.rex.userCloses(worker)
+	eventually(t, "the worktree removed", func() bool { return len(h.worktreesRemoved()) == 1 })
+	eventually(t, "the removed worktree to leave the Task", func() bool { return h.task("ENG-1").Worktree == "" })
+}
+
+func TestClosingADoneTaskTwiceRemovesItsWorktreeOnce(t *testing.T) {
+	h, _ := doneWithATab(t)
+	h.do(Request{Op: "close", Task: "ENG-1"})
+	eventually(t, "the worktree removed", func() bool { return len(h.worktreesRemoved()) == 1 })
+	eventually(t, "the removed worktree to leave the Task", func() bool { return h.task("ENG-1").Worktree == "" })
+	h.do(Request{Op: "close", Task: "ENG-1"})
+	h.still("ENG-1", lifecycle.Done)
+	if got := h.worktreesRemoved(); len(got) != 1 {
+		t.Fatalf("removed %v, want one removal for two closes", got)
+	}
+}
+
+func seedDoneWithAWorktree(id string) func(*store.Store) {
+	return func(st *store.Store) {
+		r := Record{Task: lifecycle.Task{ID: id, Stage: lifecycle.Done, Outcome: lifecycle.OutcomeMerged, Policy: testPolicy},
+			Title: id, Session: "data", SessionID: "session:data", Repo: "/repos/acme/data", Branch: "b-" + id,
+			Worktree: "/worktrees/b-" + id, StageSince: time.Now()}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+}
+
+func TestRecoveryRemovesTheWorktreeOfADoneTaskWhoseCleanupNeverRan(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedDoneWithAWorktree("ENG-crash"))
+	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"b-ENG-crash"}) })
+	eventually(t, "the removed worktree to leave the Task", func() bool { return h.task("ENG-crash").Worktree == "" })
+}
+
+func TestRecoveryLeavesADoneTaskWithNoWorktreeAlone(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedDone("ENG-clean", time.Hour, false))
+	h.still("ENG-clean", lifecycle.Done)
+	if got := h.worktreesRemoved(); len(got) != 0 {
+		t.Fatalf("removed %v for a Done Task with no tab and no worktree", got)
+	}
+}
+
+func TestAddRefusesATaskWhoseDoneTaskKeepsItsTab(t *testing.T) {
+	h, _ := doneWithATab(t)
+	_, err := h.s.Handle(context.Background(), Request{Op: "add", Issue: "ENG-1"})
+	if err == nil || !strings.Contains(err.Error(), "close its tab first with lineup close ENG-1") {
+		t.Fatalf("add over a Done Task with a tab: err = %v, want a refusal that names the tab", err)
+	}
+	if v := h.task("ENG-1"); v.Stage != "Done" || !v.Tab {
+		t.Fatalf("task = %+v, want the Done Task untouched", v)
+	}
+}
+
+func TestArchiveClosesAnOpenTab(t *testing.T) {
+	h, _ := doneWithATab(t)
+	h.do(Request{Op: "archive", Task: "ENG-1"})
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); len(ids) != 0 {
+		t.Fatalf("board after archive = %v", ids)
+	}
+	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude working")) == 0 })
+	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	if v := h.task("ENG-1"); v.Outcome != "merged" {
+		t.Fatalf("task = %+v, want the merged outcome kept", v)
+	}
+}
+
+func seedDone(id string, age time.Duration, withTab bool) func(*store.Store) {
+	return func(st *store.Store) {
+		r := Record{Task: lifecycle.Task{ID: id, Stage: lifecycle.Done, Outcome: lifecycle.OutcomeMerged, Policy: testPolicy},
+			Title: id, Session: "data", Repo: "/repos/acme/data", Branch: "b-" + id, StageSince: time.Now().Add(-age)}
+		if withTab {
+			r.SessionID, r.WindowID, r.BlockID = "session:data", "window:"+id, "block:"+id
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+}
+
+func withOpenTabs(ids ...string) func(*Deps) {
+	return func(d *Deps) {
+		rex := d.Rex.(*fakeRex)
+		for _, id := range ids {
+			rex.tabs = append(rex.tabs, &tab{Window: Window{"session:data", "window:" + id, "block:" + id}, argv: []string{"claude"}})
+		}
+	}
+}
+
+func TestADoneTaskWithAnOpenTabStaysOnTheBoard(t *testing.T) {
+	seed := func(st *store.Store) {
+		seedDone("ENG-tab", 8*24*time.Hour, true)(st)
+		seedDone("ENG-bare", 8*24*time.Hour, false)(st)
+		seedDone("ENG-new", 24*time.Hour, false)(st)
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, withOpenTabs("ENG-tab"))
+	ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView))
+	slices.Sort(ids)
+	if !slices.Equal(ids, []string{"ENG-new", "ENG-tab"}) {
+		t.Fatalf("board = %v, want ENG-new and ENG-tab", ids)
+	}
+	if v := h.task("ENG-tab"); !v.Tab {
+		t.Fatalf("task = %+v, want its tab shown", v)
+	}
+}
+
+func TestRecoveryCleansUpADoneTaskWhoseTabClosedWhileTheSchedulerWasDown(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedDone("ENG-gone", 8*24*time.Hour, true))
+	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"b-ENG-gone"}) })
+	if v := h.task("ENG-gone"); v.Tab || v.Stage != "Done" {
+		t.Fatalf("task = %+v, want Done with no tab", v)
+	}
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); len(ids) != 0 {
+		t.Fatalf("board = %v, want the aged-out Task gone", ids)
+	}
+}
+
+func TestRecoveryKeepsEveryDoneTaskWhenRexCannotListBlocks(t *testing.T) {
+	seed := func(st *store.Store) {
+		seedDone("ENG-a", time.Hour, true)(st)
+		seedDone("ENG-b", time.Hour, true)(st)
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, func(d *Deps) {
+		d.Rex.(*fakeRex).blocksErr = errors.New(`exec: "rex": executable file not found in $PATH`)
+	})
+	h.still("ENG-a", lifecycle.Done)
+	if got := h.worktreesRemoved(); len(got) != 0 {
+		t.Fatalf("removed %v while Rex could not list blocks", got)
+	}
+	for _, id := range []string{"ENG-a", "ENG-b"} {
+		if v := h.task(id); !v.Tab {
+			t.Fatalf("%s = %+v, want its tab record kept", id, v)
+		}
+	}
+}
+
+func TestRecoveryKeepsADoneTaskWhoseTabIsOpen(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedDone("ENG-open", time.Hour, true), withOpenTabs("ENG-open"))
+	h.still("ENG-open", lifecycle.Done)
+	if got := h.worktreesRemoved(); len(got) != 0 {
+		t.Fatalf("removed %v for a Task whose tab is open", got)
+	}
+	if v := h.task("ENG-open"); !v.Tab {
+		t.Fatalf("task = %+v, want its tab kept", v)
 	}
 }
 
@@ -591,7 +929,7 @@ func TestThePollOpPollsNow(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PollInterval = time.Hour })
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	h.waitTab("claude working")
 	polled := func() bool {
 		h.gh.mu.Lock()
@@ -629,33 +967,52 @@ func TestFastExitBeforeNewWindowReturns(t *testing.T) {
 	h.waitTab("claude working")
 }
 
-func TestRecoveryRestartsALostWorker(t *testing.T) {
+func TestRecoveryFlagsATaskWhoseTabIsGone(t *testing.T) {
 	db := filepath.Join(t.TempDir(), "state.db")
 	seed := func(st *store.Store) {
 		r := Record{
 			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Policy: testPolicy, Left: testPolicy.Budgets},
 			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data",
-			Branch: "ada/eng-7", Worktree: "/wt/eng-7", SessionID: "session:data", WindowID: "window:gone", BlockID: "block:gone", Job: JobWorker,
+			Branch: "ada/eng-7", Worktree: "/wt/eng-7", Conversation: "conv-7", SessionID: "session:data", WindowID: "window:gone", BlockID: "block:gone", Job: JobWorker,
 		}
 		data, _ := json.Marshal(r)
 		st.Save(r.ID, data, nil)
 	}
 	h := newHarness(t, db, seed)
-	w := h.waitTab("claude working")
-	if w.cwd != "/wt/eng-7" {
-		t.Fatalf("restarted worker cwd = %s", w.cwd)
+	h.do(Request{Op: "ls"})
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-7").Flag == "tab closed" })
+	time.Sleep(100 * time.Millisecond)
+	if n := h.tabs(); n != 0 {
+		t.Fatalf("recovery opened %d tabs, want none until the user asks", n)
 	}
 	d, _ := h.s.show("ENG-7")
-	if d.Stage != "Working" || d.Flag != "" {
+	if d.Stage != "Working" || d.Group != "Needs you" || d.Tab || d.Live {
 		t.Fatalf("recovered task = %+v", d.TaskView)
 	}
-	if last := d.Events[len(d.Events)-1]; last.Signal != "worker-lost" {
-		t.Fatalf("last event = %+v, want worker-lost", last)
+	if last := d.Events[len(d.Events)-1]; last.Signal != "tab-closed" {
+		t.Fatalf("last event = %+v, want tab-closed", last)
 	}
-	var left int
-	h.s.call(func() { left = h.s.recs["ENG-7"].Left.Restarts })
-	if left != 1 {
-		t.Fatalf("restarts left = %d, want 1", left)
+}
+
+func TestRecoveryLeavesAWaitingTaskWithoutATabUnflagged(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "state.db")
+	seed := func(st *store.Store) {
+		r := Record{
+			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.ReadyToLand, Policy: testPolicy, Left: testPolicy.Budgets},
+			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data",
+			Branch: "ada/eng-7", Worktree: "/wt/eng-7", Conversation: "conv-7", SessionID: "session:data", WindowID: "window:gone", BlockID: "block:gone", Job: JobWorker,
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+	h := newHarness(t, db, seed)
+	h.do(Request{Op: "ls"})
+	eventually(t, "the tab forgotten", func() bool { return !h.task("ENG-7").Tab })
+	if v := h.task("ENG-7"); v.Flag != "" || v.Stage != "Ready to land" {
+		t.Fatalf("task = %+v, want Ready to land with no flag", v)
+	}
+	if n := h.tabs(); n != 0 {
+		t.Fatalf("recovery opened %d tabs", n)
 	}
 }
 
@@ -667,7 +1024,7 @@ func TestCloseRemovesTheWorktreeOfAFailedSetupOnly(t *testing.T) {
 
 	h.do(Request{Op: "add", Issue: "ENG-2"})
 	h.do(Request{Op: "start", Task: "ENG-2"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID, ExitCode: 1}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 1)
 	eventually(t, "setup failed", func() bool { return h.task("ENG-2").Flag == "setup failed" })
 	h.do(Request{Op: "close", Task: "ENG-2"})
 	eventually(t, "the failed setup's worktree removed", func() bool {
@@ -687,7 +1044,7 @@ func TestChecksThatPassedBeforeCIRunningStillCount(t *testing.T) {
 	key := PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 
 	h.gh.set(key, 42, "pr-open", "ci-passed")
@@ -699,7 +1056,7 @@ func TestAStopShowsTheWorkerLastLine(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 
 	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "done", Msg: "  PR #5042: \"1.0\" or \"1.0.0\"?\nsecond line"}}
@@ -956,7 +1313,7 @@ func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
 
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "done"}}
 	eventually(t, "stopped", func() bool { return h.task("ENG-1").Flag == "stopped" })
@@ -980,7 +1337,7 @@ func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
 
 	h.gh.set(key, 42, "scored-low")
 	h.waitStage("ENG-1", lifecycle.Responding)
-	h.waitTab("claude responding")
+	h.waitTyped(worker.BlockID, "prompt responding")
 	if v := h.task("ENG-1"); v.Note != "Greptile 4/5, cycle 1/2" {
 		t.Fatalf("review cycle note = %q", v.Note)
 	}
@@ -1029,54 +1386,291 @@ func (h *harness) waitSpecs(n int) WorkerSpec {
 	return got
 }
 
-func TestRecoverReplaysSteers(t *testing.T) {
+func (h *harness) closeAndFlag(worker tab) {
+	h.t.Helper()
+	h.rex.userCloses(worker)
+	eventually(h.t, "the tab closed flag", func() bool { return h.task("ENG-1").Flag == "tab closed" })
+}
+
+func (h *harness) open(id string) OpenResult {
+	h.t.Helper()
+	return h.do(Request{Op: "open", Task: id}).(OpenResult)
+}
+
+func (h *harness) openFails(id string) error {
+	h.t.Helper()
+	_, err := h.s.Handle(context.Background(), Request{Op: "open", Task: id})
+	if err == nil {
+		h.t.Fatalf("open %s: no error", id)
+	}
+	return err
+}
+
+func TestAClosedTabOpensNoTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	worker := h.working()
-	if first := h.waitSpecs(1); first.Restart || len(first.Steers) != 0 {
-		t.Fatalf("first Worker spec = %+v, want no restart", first)
+	h.closeAndFlag(worker)
+	time.Sleep(150 * time.Millisecond)
+	if n := h.tabs(); n != 2 {
+		t.Fatalf("%d tabs were opened, want the setup tab and the Worker's tab only", n)
 	}
-	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
-	h.do(Request{Op: "steer", Task: "ENG-1", Text: "skip the backfill"})
-
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
-	spec := h.waitSpecs(2)
-	if !spec.Restart || !slices.Equal(spec.Steers, []string{"use a dual write", "skip the backfill"}) {
-		t.Fatalf("restart spec = restart %v, steers %q", spec.Restart, spec.Steers)
+	v := h.task("ENG-1")
+	if v.Stage != "Working" || v.Group != "Needs you" || v.Note != "tab closed" || v.Tab || v.Live {
+		t.Fatalf("task = %+v, want Working, Needs you, tab closed, with no tab", v)
 	}
 }
 
-func TestFreshStageHasNoRestartNote(t *testing.T) {
+func TestOpenResumesTheConversation(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
-	key := PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
+	h.closeAndFlag(worker)
+
+	res := h.open("ENG-1")
+	if res.Action != OpenRestored {
+		t.Fatalf("open = %+v, want restored", res)
+	}
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	if resumed.cwd != filepath.Join(h.wt.root, "eng-1-billing") || resumed.BlockID == worker.BlockID {
+		t.Fatalf("resumed tab = %+v, want a new tab in the Task's worktree", resumed)
+	}
+	h.status(resumed.BlockID, "idle")
+	time.Sleep(100 * time.Millisecond)
+	if got := h.rex.typedInto(resumed.BlockID); len(got) != 0 {
+		t.Fatalf("typed %q into the restored Worker, want nothing: its Stage prompt arrived long ago", got)
+	}
+	eventually(t, "the restored Worker live", func() bool { return h.task("ENG-1").Live })
+	if v := h.task("ENG-1"); v.Stage != "Working" || v.Flag != "" || !v.Tab {
+		t.Fatalf("task = %+v, want Working with no flag and a tab", v)
+	}
+	h.rex.mu.Lock()
+	focused := slices.Clone(h.rex.focused)
+	h.rex.mu.Unlock()
+	if !slices.Contains(focused, resumed.BlockID) {
+		t.Fatalf("focused %v, want the restored tab %s", focused, resumed.BlockID)
+	}
+}
+
+func TestOpenStartsAFreshWorkerWithNoConversation(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	worker := h.working()
 	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
-	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "done"}}
-	eventually(t, "stopped", func() bool { return h.task("ENG-1").Flag == "stopped" })
-	h.gh.set(key, 42, "pr-open")
-	h.waitStage("ENG-1", lifecycle.CIRunning)
-	h.gh.set(key, 42, "ci-failed")
-	h.waitStage("ENG-1", lifecycle.CIDebug)
+	h.do(Request{Op: "steer", Task: "ENG-1", Text: "skip the backfill"})
+	h.s.call(func() { h.s.recs["ENG-1"].Conversation = "" })
+	h.closeAndFlag(worker)
+	if n := h.tabs(); n != 2 {
+		t.Fatalf("%d tabs after the close, want 2", n)
+	}
 
-	debugger := h.waitTab("claude ci_debug")
-	if spec := h.waitSpecs(2); spec.Stage != lifecycle.CIDebug || spec.Restart || len(spec.Steers) != 0 {
-		t.Fatalf("CI debug spec = %+v, want a fresh start with no steers", spec)
+	res := h.open("ENG-1")
+	if res.Action != OpenStarted {
+		t.Fatalf("open = %+v, want started", res)
 	}
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: debugger.BlockID}
-	if spec := h.waitSpecs(3); !spec.Restart || len(spec.Steers) != 0 {
-		t.Fatalf("CI debug restart spec = restart %v, steers %q, want a restart with no Working steers", spec.Restart, spec.Steers)
+	fresh := h.waitTab("claude working")
+	if fresh.BlockID == worker.BlockID {
+		t.Fatal("no new tab")
 	}
+	spec := h.waitSpecs(2)
+	if !spec.Restart || !slices.Equal(spec.Steers, []string{"use a dual write", "skip the backfill"}) || spec.Conversation == "" {
+		t.Fatalf("fresh spec = restart %v, steers %q, conversation %q", spec.Restart, spec.Steers, spec.Conversation)
+	}
+	eventually(t, "the fresh Worker live", func() bool { return h.task("ENG-1").Live })
+	if v := h.task("ENG-1"); v.Flag != "" {
+		t.Fatalf("flag = %q, want none", v.Flag)
+	}
+}
+
+func TestOpenStartsAFreshWorkerWhenTheConversationFileIsGone(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
+	h.closeAndFlag(worker)
+	h.hn.mu.Lock()
+	h.hn.gone = []string{first.Conversation}
+	h.hn.mu.Unlock()
+
+	res := h.open("ENG-1")
+	if res.Action != OpenStarted {
+		t.Fatalf("open = %+v, want started", res)
+	}
+	h.waitTab("claude working")
+	if n := len(h.rex.open("claude --resume " + first.Conversation)); n != 0 {
+		t.Fatalf("%d resume tabs opened for a conversation that is gone", n)
+	}
+	spec := h.lastSpec()
+	if !spec.Restart || !slices.Equal(spec.Steers, []string{"use a dual write"}) || spec.Conversation == first.Conversation || spec.Conversation == "" {
+		t.Fatalf("fresh spec = restart %v, steers %q, conversation %q, want a new conversation that replays the steer", spec.Restart, spec.Steers, spec.Conversation)
+	}
+}
+
+func TestAFreshWorkerReplaysTheSteersOfEveryStage(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
+	h.prOpens(worker)
+	h.ciFails()
+	h.waitTyped(worker.BlockID, "use a dual write", "prompt ci_debug")
+	h.do(Request{Op: "steer", Task: "ENG-1", Text: "leave the lint alone"})
+	h.s.call(func() { h.s.recs["ENG-1"].Conversation = "" })
+	h.rex.userCloses(worker)
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Flag == "tab closed" })
+
+	h.open("ENG-1")
+	h.waitTab("claude ci_debug")
+	spec := h.lastSpec()
+	if spec.Stage != lifecycle.CIDebug || !spec.Restart || !slices.Equal(spec.Steers, []string{"use a dual write", "leave the lint alone"}) {
+		t.Fatalf("fresh CI debug spec = stage %s restart %v steers %q, want both steers from the Task's life", spec.Stage, spec.Restart, spec.Steers)
+	}
+}
+
+func TestOpenFocusesALiveTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	tabs := h.tabs()
+	res := h.open("ENG-1")
+	if res.Action != OpenFocused {
+		t.Fatalf("open = %+v, want focused", res)
+	}
+	h.rex.mu.Lock()
+	focused := slices.Clone(h.rex.focused)
+	h.rex.mu.Unlock()
+	if !slices.Equal(focused, []string{worker.BlockID}) || h.tabs() != tabs {
+		t.Fatalf("focused %v, %d tabs, want the Worker's tab and no new tab", focused, h.tabs())
+	}
+}
+
+func TestOpenRefusesATaskWithNothingToOpen(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	if err := h.openFails("ENG-1"); err.Error() != "ENG-1 has not started" {
+		t.Fatalf("queued: %v", err)
+	}
+	if err := h.openFails("ENG-9"); !errors.Is(err, lifecycle.ErrUnknownTask) {
+		t.Fatalf("unknown: %v", err)
+	}
+	h, worker := doneWithATab(t)
+	h.do(Request{Op: "close", Task: "ENG-1"})
+	eventually(t, "the worktree removed", func() bool { return len(h.worktreesRemoved()) == 1 })
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	if err := h.openFails("ENG-1"); err.Error() != "ENG-1 is Done and its worktree is gone" {
+		t.Fatalf("done: %v", err)
+	}
+	if n := len(h.rex.open("claude working")); n != 0 {
+		t.Fatalf("open left %d Worker tabs", n)
+	}
+}
+
+func TestOpenFocusesADoneTaskThatKeepsItsTab(t *testing.T) {
+	h, worker := doneWithATab(t)
+	if res := h.open("ENG-1"); res.Action != OpenFocused {
+		t.Fatalf("open = %+v, want focused", res)
+	}
+	h.rex.mu.Lock()
+	defer h.rex.mu.Unlock()
+	if !slices.Equal(h.rex.focused, []string{worker.BlockID}) {
+		t.Fatalf("focused %v", h.rex.focused)
+	}
+}
+
+func TestOpenRefusesAWaitingTaskWithNoConversation(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.s.call(func() { h.s.recs["ENG-1"].Conversation = "" })
+	h.rex.userCloses(worker)
+	eventually(t, "the tab gone", func() bool { return !h.task("ENG-1").Tab })
+	if err := h.openFails("ENG-1"); err.Error() != "ENG-1 has no conversation to restore in CI running" {
+		t.Fatalf("open: %v", err)
+	}
+}
+
+func TestAPendingStageWaitsForTheRestore(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PromptWait = 300 * time.Millisecond })
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.prOpens(worker)
+	h.rex.userCloses(worker)
+	eventually(t, "the tab gone", func() bool { return !h.task("ENG-1").Tab })
+	if v := h.task("ENG-1"); v.Flag != "" {
+		t.Fatalf("flag = %q in CI running, want none: no Worker is needed there", v.Flag)
+	}
+
+	h.ciFails()
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Note == "tab closed: CI debug waits for the Worker" })
+	time.Sleep(400 * time.Millisecond)
+	if v := h.task("ENG-1"); v.Flag != "tab closed" || v.Stage != "CI debug" {
+		t.Fatalf("task = %+v, want CI debug flagged tab closed, not worker silent", v)
+	}
+	if n := h.tabs(); n != 2 {
+		t.Fatalf("%d tabs, want no new tab until the user asks", n)
+	}
+	var waiting bool
+	h.s.call(func() { waiting = h.s.recs["ENG-1"].Pending != nil })
+	if !waiting {
+		t.Fatal("the CI debug prompt is not pending")
+	}
+
+	h.open("ENG-1")
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	time.Sleep(100 * time.Millisecond)
+	if v := h.task("ENG-1"); v.Flag != "" {
+		t.Fatalf("flag = %q after the restore, want none: the wait for the Worker's first status starts at the restore", v.Flag)
+	}
+	if got := h.rex.typedInto(resumed.BlockID); len(got) != 0 {
+		t.Fatalf("typed %q before the restored Worker was idle", got)
+	}
+	h.status(resumed.BlockID, "idle")
+	h.waitTyped(resumed.BlockID, "prompt ci_debug")
+	if spec := h.lastSpec(); spec.Stage != lifecycle.CIDebug || spec.Restart || len(spec.Steers) != 0 {
+		t.Fatalf("typed spec = %+v, want a CI debug prompt with no restart note", spec)
+	}
+}
+
+func TestARerunWithNoTabWaitsForTheRestore(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.closeAndFlag(worker)
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+	eventually(t, "the waiting Stage named", func() bool { return h.task("ENG-1").Note == "tab closed: Working waits for the Worker" })
+	if n := h.tabs(); n != 2 {
+		t.Fatalf("%d tabs, want no new tab", n)
+	}
+}
+
+func TestASlowOpenKeepsAPromptThatARerunSetAgain(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	hold := make(chan struct{})
+	h.rex.mu.Lock()
+	h.rex.hold = hold
+	h.rex.mu.Unlock()
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
+	eventually(t, "the Worker command built", func() bool {
+		h.hn.mu.Lock()
+		defer h.hn.mu.Unlock()
+		return len(h.hn.specs) > 0
+	})
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+	close(hold)
+
+	worker := h.waitTab("claude working")
+	h.status(worker.BlockID, "idle")
+	h.waitTyped(worker.BlockID, "prompt working")
 }
 
 // reopenAndExit reopens a closed Review ready Worker and exits it with code 1,
 // with the given text on its screen. It returns the exited Worker's tab.
 func (h *harness) reopenAndExit(capture string) tab {
 	h.t.Helper()
-	h.readyReview()
+	reviewing := h.readyReview()
 	h.rex.mu.Lock()
 	h.rex.capture = capture
 	h.rex.mu.Unlock()
 	h.review(prURL7)
-	worker := h.waitTab("claude review_ready")
+	worker := h.waitTab("claude --resume " + reviewing.Conversation)
 	h.rex.events <- RexEvent{Kind: EvExited, ExitCode: 1, BlockID: worker.BlockID}
 	return worker
 }
@@ -1096,12 +1690,12 @@ func TestResumeFallsBackToSessionID(t *testing.T) {
 	}
 	var fallbacks int
 	for _, e := range d.Events {
-		if e.Signal == "resume-fallback" {
+		if e.Signal == replacedSignal {
 			fallbacks++
 		}
 	}
 	if fallbacks != 1 {
-		t.Fatalf("resume-fallback events = %d, want 1: %+v", fallbacks, d.Events)
+		t.Fatalf("%s events = %d, want 1: %+v", replacedSignal, fallbacks, d.Events)
 	}
 }
 
@@ -1113,11 +1707,686 @@ func TestOtherExitDoesNotFallBack(t *testing.T) {
 	h.still("pr-7", lifecycle.ReviewReady)
 	d, _ := h.s.show("pr-7")
 	for _, e := range d.Events {
-		if e.Signal == "resume-fallback" {
-			t.Fatalf("resume-fallback event for another failure: %+v", d.Events)
+		if e.Signal == replacedSignal {
+			t.Fatalf("%s event for another failure: %+v", replacedSignal, d.Events)
 		}
 	}
 	if tabs := h.rex.open("claude reviewing"); len(tabs) != 0 {
 		t.Fatalf("open Reviewing tabs = %d, want none", len(tabs))
+	}
+}
+
+func TestABuildResumeWithNoConversationStartsAFreshWorker(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.rex.mu.Lock()
+	h.rex.capture = "Error: " + claude.NoConversation + " with session ID: x"
+	h.rex.mu.Unlock()
+	h.closeAndFlag(worker)
+	h.open("ENG-1")
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	h.rex.events <- RexEvent{Kind: EvExited, ExitCode: 1, BlockID: resumed.BlockID}
+
+	fresh := h.waitTab("claude working")
+	var conversation string
+	h.s.call(func() { conversation = h.s.recs["ENG-1"].Conversation })
+	if fresh.BlockID == worker.BlockID || conversation == "" || conversation == first.Conversation {
+		t.Fatalf("fresh tab %s, conversation %q, want a new Worker in a new conversation after %q", fresh.BlockID, conversation, first.Conversation)
+	}
+	if v := h.task("ENG-1"); v.Stage != "Working" || v.Flag != "" {
+		t.Fatalf("task = %+v, want Working with no flag", v)
+	}
+}
+
+var buildKey = PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}
+
+func (h *harness) prOpens(worker tab) {
+	h.t.Helper()
+	h.status(worker.BlockID, "done")
+	eventually(h.t, "stopped", func() bool { return h.task("ENG-1").Flag == "stopped" })
+	h.gh.set(buildKey, 42, "pr-open")
+	h.waitStage("ENG-1", lifecycle.CIRunning)
+}
+
+func (h *harness) ciFails() {
+	h.t.Helper()
+	h.gh.set(buildKey, 42, "ci-failed")
+	h.waitStage("ENG-1", lifecycle.CIDebug)
+}
+
+func (h *harness) waitTyped(block string, want ...string) {
+	h.t.Helper()
+	eventually(h.t, fmt.Sprintf("%q typed into %s", want, block), func() bool { return slices.Equal(h.rex.typedInto(block), want) })
+}
+
+func (h *harness) tabs() int {
+	h.rex.mu.Lock()
+	defer h.rex.mu.Unlock()
+	return len(h.rex.tabs)
+}
+
+func (h *harness) events(id string) []string {
+	h.t.Helper()
+	d, err := h.s.show(id)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	var out []string
+	for _, e := range d.Events {
+		out = append(out, e.Signal)
+	}
+	return out
+}
+
+func TestTheNextStageTypesIntoTheSameWorker(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	opened := h.tabs()
+	h.ciFails()
+
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+	if n := h.tabs(); n != opened {
+		t.Fatalf("CI debug opened %d new tabs, want none", n-opened)
+	}
+	if v := h.task("ENG-1"); !v.Live || !v.Tab {
+		t.Fatalf("task = %+v, want the Working Worker live in its tab", v)
+	}
+	var stage lifecycle.Stage
+	var conversation string
+	h.s.call(func() { stage, conversation = h.s.recs["ENG-1"].WorkerStage, h.s.recs["ENG-1"].Conversation })
+	if stage != lifecycle.CIDebug || conversation == "" {
+		t.Fatalf("worker stage %s, conversation %q, want CI debug in the Working conversation", stage, conversation)
+	}
+}
+
+func TestABuildWorkerStartsItsConversation(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.working()
+	spec := h.waitSpecs(1)
+	var conversation string
+	h.s.call(func() { conversation = h.s.recs["ENG-1"].Conversation })
+	if spec.Conversation == "" || spec.Conversation != conversation {
+		t.Fatalf("Working spec conversation %q, record %q, want one new ID in both", spec.Conversation, conversation)
+	}
+}
+
+func TestThePromptWaitsForABusyWorker(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.status(worker.BlockID, "working")
+	h.waitWorkerState("ENG-1", "working")
+	h.ciFails()
+
+	time.Sleep(100 * time.Millisecond)
+	if got := h.rex.typedInto(worker.BlockID); len(got) != 0 {
+		t.Fatalf("typed %q into a working Worker", got)
+	}
+	h.status(worker.BlockID, "blocked")
+	time.Sleep(50 * time.Millisecond)
+	if got := h.rex.typedInto(worker.BlockID); len(got) != 0 {
+		t.Fatalf("typed %q into a blocked Worker", got)
+	}
+	h.status(worker.BlockID, "done")
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+}
+
+func TestARerunTypesThePromptAgain(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.ciFails()
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+
+	h.status(worker.BlockID, "working")
+	h.status(worker.BlockID, "idle")
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "ci_debug"})
+	h.waitTyped(worker.BlockID, "prompt ci_debug", "prompt ci_debug")
+}
+
+func TestARerunWaitsWhileTheWorkerReadsATypedPrompt(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.ciFails()
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "ci_debug"})
+	time.Sleep(300 * time.Millisecond)
+	if got := h.rex.typedInto(worker.BlockID); len(got) != 1 {
+		t.Fatalf("typed %q: the second prompt went in before the Worker reported working", got)
+	}
+	h.status(worker.BlockID, "working")
+	h.status(worker.BlockID, "idle")
+	h.waitTyped(worker.BlockID, "prompt ci_debug", "prompt ci_debug")
+}
+
+func TestAPromptThatWaitsOnASilentWorkerFlagsTheTask(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PromptWait = 100 * time.Millisecond })
+	worker := h.working()
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+
+	eventually(h.t, "the silent Worker flag", func() bool { return h.task("ENG-1").Flag == string(lifecycle.ReasonWorkerSilent) })
+	if got := h.rex.typedInto(worker.BlockID); len(got) != 0 {
+		t.Fatalf("typed %q into a Worker of unknown state", got)
+	}
+	h.status(worker.BlockID, "idle")
+	h.waitTyped(worker.BlockID, "prompt working")
+	h.status(worker.BlockID, "working")
+	eventually(h.t, "the flag clears", func() bool { return h.task("ENG-1").Flag == "" })
+}
+
+func TestAPromptThatWaitsOnAReportingWorkerRaisesNoFlag(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PromptWait = 50 * time.Millisecond })
+	worker := h.working()
+	h.status(worker.BlockID, "working")
+	h.waitWorkerState("ENG-1", "working")
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+
+	time.Sleep(300 * time.Millisecond)
+	if f := h.task("ENG-1").Flag; f != "" {
+		t.Fatalf("flag = %q, want none: the Worker reports its turn", f)
+	}
+}
+
+type failTypes struct {
+	*fakeRex
+	left atomic.Int32
+}
+
+func (f *failTypes) Type(ctx context.Context, session, block, text string) error {
+	if f.left.Add(-1) >= 0 {
+		return errors.New("rex write failed")
+	}
+	return f.fakeRex.Type(ctx, session, block, text)
+}
+
+type noPrompts struct {
+	Harness
+	empty atomic.Bool
+}
+
+func (n *noPrompts) Prompt(ctx context.Context, w WorkerSpec) (string, error) {
+	if n.empty.Load() {
+		return "", nil
+	}
+	return n.Harness.Prompt(ctx, w)
+}
+
+// gateTypes holds the first Type until release closes, then fails it.
+type gateTypes struct {
+	*fakeRex
+	started, release chan struct{}
+	once             sync.Once
+}
+
+func (g *gateTypes) Type(ctx context.Context, session, block, text string) error {
+	first := false
+	g.once.Do(func() { first = true })
+	if !first {
+		return g.fakeRex.Type(ctx, session, block, text)
+	}
+	g.started <- struct{}{}
+	<-g.release
+	return errors.New("block target not found")
+}
+
+func TestAFailedTypeOnATabThatClosedFlagsTheTask(t *testing.T) {
+	var rex *gateTypes
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) {
+		rex = &gateTypes{fakeRex: d.Rex.(*fakeRex), started: make(chan struct{}, 1), release: make(chan struct{})}
+		d.Rex = rex
+	})
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.prOpens(worker)
+	h.ciFails()
+	<-rex.started
+	h.rex.exits(worker, 0)
+	eventually(t, "the exit read", func() bool { return !h.task("ENG-1").Live })
+	close(rex.release)
+
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Note == "tab closed: CI debug waits for the Worker" })
+	var pending bool
+	h.s.call(func() { pending = h.s.recs["ENG-1"].Pending != nil })
+	if !pending {
+		t.Fatal("the CI debug prompt is not pending")
+	}
+	h.open("ENG-1")
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	h.status(resumed.BlockID, "idle")
+	h.waitTyped(resumed.BlockID, "prompt ci_debug")
+}
+
+func TestARerunAfterAFailedTypeTypesThePrompt(t *testing.T) {
+	var rex *failTypes
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) {
+		rex = &failTypes{fakeRex: d.Rex.(*fakeRex)}
+		rex.left.Store(1)
+		d.Rex = rex
+	})
+	worker := h.working()
+	h.prOpens(worker)
+	h.ciFails()
+	eventually(t, "the error flag", func() bool { return h.task("ENG-1").Flag == "error" })
+
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "ci_debug"})
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+}
+
+func TestAnEmptyPromptLeavesTheWorkerReadyForTheNextPrompt(t *testing.T) {
+	var prompts *noPrompts
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) {
+		prompts = &noPrompts{Harness: d.Harness}
+		d.Harness = prompts
+	})
+	worker := h.working()
+	h.status(worker.BlockID, "idle")
+	h.waitWorkerState("ENG-1", "idle")
+	prompts.empty.Store(true)
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+	time.Sleep(100 * time.Millisecond)
+	if got := h.rex.typedInto(worker.BlockID); len(got) != 0 {
+		t.Fatalf("typed %q for an empty prompt", got)
+	}
+
+	prompts.empty.Store(false)
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+	h.waitTyped(worker.BlockID, "prompt working")
+}
+
+func TestAWorkerThatExitsBeforeItsPromptFlagsTheTask(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.status(worker.BlockID, "working")
+	h.waitWorkerState("ENG-1", "working")
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+	h.rex.exits(worker, 0)
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Note == "tab closed: Working waits for the Worker" })
+	time.Sleep(100 * time.Millisecond)
+	if n := h.tabs(); n != 2 {
+		t.Fatalf("%d tabs, want no tab until the user asks", n)
+	}
+
+	h.open("ENG-1")
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	h.status(resumed.BlockID, "idle")
+	h.waitTyped(resumed.BlockID, "prompt working")
+}
+
+func seedPendingWorker(since time.Time) func(*store.Store) {
+	return func(st *store.Store) {
+		pending := lifecycle.Working
+		r := Record{
+			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Policy: testPolicy, Left: testPolicy.Budgets},
+			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data",
+			Branch: "ada/eng-7", Worktree: "/wt/eng-7", SessionID: "session:data", WindowID: "window:live", BlockID: "block:live",
+			Job: JobWorker, Pending: &pending, PendingSince: since,
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+}
+
+func TestARestartedSchedulerGivesAPendingWorkerAFullPromptWait(t *testing.T) {
+	cases := []struct {
+		name      string
+		since     time.Time
+		blocksErr error
+	}{
+		{"saved before the restart", time.Now().Add(-time.Hour), nil},
+		{"saved before the field existed", time.Time{}, nil},
+		{"with Rex unable to list blocks", time.Time{}, errors.New("rex is down")},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			live := &tab{Window: Window{"session:data", "window:live", "block:live"}, argv: []string{"claude", "working"}}
+			rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, blocksErr: c.blocksErr}
+			h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedPendingWorker(c.since), func(d *Deps) {
+				d.Rex = rex
+				d.PromptWait = 400 * time.Millisecond
+			})
+			time.Sleep(100 * time.Millisecond)
+			if f := h.task("ENG-7").Flag; f != "" {
+				t.Fatalf("flag = %q within 100 ms of the restart, want none", f)
+			}
+			eventually(t, "the silent Worker flag", func() bool { return h.task("ENG-7").Flag == string(lifecycle.ReasonWorkerSilent) })
+		})
+	}
+}
+
+func TestAWorkerBetweenStagesMeetsNoContract(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.status(worker.BlockID, "working")
+	h.waitWorkerState("ENG-1", "working")
+	h.ciFails()
+	before := len(h.events("ENG-1"))
+
+	h.status(worker.BlockID, "done")
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+	time.Sleep(100 * time.Millisecond)
+	if v := h.task("ENG-1"); v.Stage != "CI debug" || v.Flag != "" {
+		t.Fatalf("task = %+v, want CI debug with no flag: the done was the user's chat", v)
+	}
+	if got := h.events("ENG-1")[before:]; slices.Contains(got, "done") {
+		t.Fatalf("events after the prompt waited = %q, want no done", got)
+	}
+
+	h.status(worker.BlockID, "working")
+	h.status(worker.BlockID, "done")
+	eventually(t, "the CI debug contract checked", func() bool { return h.task("ENG-1").Flag == "stopped" })
+}
+
+func TestAStatusFromBeforeATypedPromptDoesNotCompleteTheStage(t *testing.T) {
+	for _, late := range []string{"done", "idle"} {
+		t.Run(late, func(t *testing.T) {
+			h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+			worker := h.working()
+			h.prOpens(worker)
+			h.ciFails()
+			h.waitTyped(worker.BlockID, "prompt ci_debug")
+			before := len(h.events("ENG-1"))
+
+			h.status(worker.BlockID, late)
+			time.Sleep(300 * time.Millisecond)
+			if v := h.task("ENG-1"); v.Stage != "CI debug" || v.Flag != "" {
+				t.Fatalf("task = %+v, want CI debug with no flag: the %s ended the previous turn", v, late)
+			}
+			h.waitWorkerState("ENG-1", "prompted")
+			if got := h.events("ENG-1")[before:]; slices.Contains(got, "done") {
+				t.Fatalf("events after the prompt = %q, want no done", got)
+			}
+
+			h.status(worker.BlockID, "working")
+			h.waitWorkerState("ENG-1", "working")
+			h.status(worker.BlockID, "done")
+			eventually(t, "the CI debug contract checked", func() bool { return h.task("ENG-1").Flag == "stopped" })
+		})
+	}
+}
+
+func TestAStatusFromBeforeATypedPromptDoesNotTypeTheNextPrompt(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.ciFails()
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "ci_debug"})
+
+	h.status(worker.BlockID, "done")
+	h.status(worker.BlockID, "idle")
+	time.Sleep(300 * time.Millisecond)
+	if got := h.rex.typedInto(worker.BlockID); len(got) != 1 {
+		t.Fatalf("typed %q: a status from before the first prompt released the second", got)
+	}
+	h.status(worker.BlockID, "working")
+	h.status(worker.BlockID, "idle")
+	h.waitTyped(worker.BlockID, "prompt ci_debug", "prompt ci_debug")
+}
+
+func TestAPromptTheWorkerNeverAnswersFlagsTheTask(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PromptWait = 200 * time.Millisecond })
+	worker := h.working()
+	h.prOpens(worker)
+	h.ciFails()
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+
+	eventually(t, "the silent Worker flag", func() bool { return h.task("ENG-1").Flag == string(lifecycle.ReasonWorkerSilent) })
+	h.status(worker.BlockID, "working")
+	eventually(t, "the flag clears", func() bool { return h.task("ENG-1").Flag == "" })
+}
+
+func seedPromptedWorker(since time.Time) func(*store.Store) {
+	return func(st *store.Store) {
+		r := Record{
+			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Policy: testPolicy, Left: testPolicy.Budgets},
+			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data",
+			Branch: "ada/eng-7", Worktree: "/wt/eng-7", SessionID: "session:data", WindowID: "window:live", BlockID: "block:live",
+			Job: JobWorker, WorkerState: promptedState, WorkerStage: lifecycle.Working, PendingSince: since,
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+}
+
+func TestARestartedSchedulerKeepsAPromptedWorkerPrompted(t *testing.T) {
+	live := &tab{Window: Window{"session:data", "window:live", "block:live"}, argv: []string{"claude", "working"}}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedPromptedWorker(time.Now().Add(-time.Hour)), func(d *Deps) {
+		d.Rex = rex
+		d.PromptWait = 400 * time.Millisecond
+	})
+	h.status("block:live", "done")
+	time.Sleep(100 * time.Millisecond)
+	if f := h.task("ENG-7").Flag; f != "" {
+		t.Fatalf("flag = %q within 100 ms of the restart, want none: the done may end the turn before the prompt", f)
+	}
+	eventually(t, "the silent Worker flag", func() bool { return h.task("ENG-7").Flag == string(lifecycle.ReasonWorkerSilent) })
+	h.status("block:live", "working")
+	eventually(t, "the flag clears", func() bool { return h.task("ENG-7").Flag == "" })
+}
+
+func TestARefusedOpenLeavesTheConversationSoAPromptOpensNoTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.prOpens(worker)
+	h.rex.userCloses(worker)
+	eventually(t, "the tab gone", func() bool { return !h.task("ENG-1").Tab })
+	h.hn.mu.Lock()
+	h.hn.gone = []string{first.Conversation}
+	h.hn.mu.Unlock()
+	h.openFails("ENG-1")
+	var kept string
+	h.s.call(func() { kept = h.s.recs["ENG-1"].Conversation })
+	if kept != first.Conversation {
+		t.Fatalf("a refused open changed the conversation to %q", kept)
+	}
+
+	tabs := h.tabs()
+	h.ciFails()
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Note == "tab closed: CI debug waits for the Worker" })
+	time.Sleep(300 * time.Millisecond)
+	if n := h.tabs(); n != tabs {
+		t.Fatalf("%d tabs, want %d: a prompt opened a tab with no ask from the user", n, tabs)
+	}
+}
+
+// A Task from before conversation IDs has had a Worker but holds no conversation.
+func TestAPromptOpensNoTabForATaskThatHadAWorkerButHoldsNoConversation(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.s.call(func() { h.s.recs["ENG-1"].Conversation = "" })
+	h.rex.userCloses(worker)
+	eventually(t, "the tab gone", func() bool { return !h.task("ENG-1").Tab })
+
+	tabs := h.tabs()
+	h.ciFails()
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Note == "tab closed: CI debug waits for the Worker" })
+	time.Sleep(300 * time.Millisecond)
+	if n := h.tabs(); n != tabs {
+		t.Fatalf("%d tabs, want %d: a prompt opened a tab with no ask from the user", n, tabs)
+	}
+	h.open("ENG-1")
+	h.waitTab("claude ci_debug")
+}
+
+func TestAStoredWorkerLostFlagClearsWhenTheUserOpensTheTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.closeAndFlag(worker)
+	h.s.call(func() { h.s.recs["ENG-1"].Flag = "worker lost" })
+	h.open("ENG-1")
+	eventually(t, "the restored Worker live", func() bool { return h.task("ENG-1").Live })
+	if f := h.task("ENG-1").Flag; f != "" {
+		t.Fatalf("flag = %q after the open, want none", f)
+	}
+}
+
+func TestRecoveryReplacesAStoredWorkerLostFlag(t *testing.T) {
+	seed := func(st *store.Store) {
+		r := Record{
+			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Flag: "worker lost", Policy: testPolicy, Left: testPolicy.Budgets},
+			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data", WorkerStage: lifecycle.Working,
+			Branch: "ada/eng-7", Worktree: "/wt/eng-7", Conversation: "conv-7", SessionID: "session:data", WindowID: "window:gone", BlockID: "block:gone", Job: JobWorker,
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed)
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-7").Flag == "tab closed" })
+}
+
+func TestTwoOpensAtOnceOpenOneTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.closeAndFlag(worker)
+	var wg sync.WaitGroup
+	for range 3 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			h.s.Handle(context.Background(), Request{Op: "open", Task: "ENG-1"})
+		}()
+	}
+	wg.Wait()
+	time.Sleep(200 * time.Millisecond)
+	if n := h.tabs(); n != 3 {
+		t.Fatalf("%d tabs, want the setup tab, the first Worker, and one restored Worker", n)
+	}
+}
+
+func TestOpenOfAReviewReadyTaskWithNoConversationFocusesTheNewTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReview(lifecycle.ReviewReady))
+	h.open("R-3")
+	tab := h.waitTab("claude reviewing")
+	eventually(t, "the new tab focused", func() bool {
+		h.rex.mu.Lock()
+		defer h.rex.mu.Unlock()
+		return slices.Contains(h.rex.focused, tab.BlockID)
+	})
+}
+
+// A failed resume in a Stage that waits for others has no prompt to start over
+// with, so the Task keeps its conversation.
+func TestAFailedResumeInAWaitingStageKeepsTheConversation(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.prOpens(worker)
+	h.rex.userCloses(worker)
+	eventually(t, "the tab gone", func() bool { return !h.task("ENG-1").Tab })
+	h.rex.mu.Lock()
+	h.rex.capture = "Error: " + claude.NoConversation + " with session ID: x"
+	h.rex.mu.Unlock()
+	h.open("ENG-1")
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	tabs := h.tabs()
+	h.rex.events <- RexEvent{Kind: EvExited, ExitCode: 1, BlockID: resumed.BlockID}
+	time.Sleep(300 * time.Millisecond)
+	var kept string
+	h.s.call(func() { kept = h.s.recs["ENG-1"].Conversation })
+	if kept != first.Conversation || h.tabs() != tabs {
+		t.Fatalf("conversation %q, %d tabs, want %q and %d: the failed resume must change nothing", kept, h.tabs(), first.Conversation, tabs)
+	}
+}
+
+// keptTabRestore exits the Worker with code 0 and leaves its tab open, as Rex
+// does for a program that ends within a second, then restores the Worker. It
+// returns the new tab.
+func (h *harness) keptTabRestore(id string, kept tab, conversation string) tab {
+	h.t.Helper()
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: kept.BlockID, ExitCode: 0}
+	eventually(h.t, "the Worker gone", func() bool { v := h.task(id); return !v.Live && v.Tab })
+	h.open(id)
+	reopened := h.waitNewTab("claude --resume "+conversation, kept.BlockID)
+	h.rex.mu.Lock()
+	calls := slices.Clone(h.rex.calls)
+	h.rex.mu.Unlock()
+	closeAt, newAt := slices.Index(calls, "close "+kept.WindowID), slices.Index(calls, "new "+reopened.WindowID)
+	if closeAt < 0 || newAt < 0 || closeAt > newAt {
+		h.t.Fatalf("calls %v, want the kept window %s closed before the new window %s opens", calls, kept.WindowID, reopened.WindowID)
+	}
+	var window string
+	h.s.call(func() { window = h.s.recs[id].WindowID })
+	if window != reopened.WindowID {
+		h.t.Fatalf("the Task's window is %s, want only the new window %s", window, reopened.WindowID)
+	}
+	return reopened
+}
+
+func TestOpenClosesTheKeptTabOfABuildWorkerBeforeTheNewTabOpens(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.keptTabRestore("ENG-1", worker, first.Conversation)
+	eventually(t, "the restored Worker live", func() bool { return h.task("ENG-1").Live })
+	if tabs := h.rex.open("claude working"); len(tabs) != 0 {
+		t.Fatalf("the kept tab stayed open: %+v", tabs)
+	}
+	h.do(Request{Op: "close", Task: "ENG-1"})
+	eventually(t, "the restored tab closed", func() bool { return len(h.rex.open("claude --resume "+first.Conversation)) == 0 })
+}
+
+// The user types /exit, and a rerun types the CI debug prompt into the exiting
+// Worker. The exiting Worker sends a late done, then its program exits, then
+// Rex closes its block. The prompt was lost, so the Task waits for the restore.
+func TestAPromptTypedIntoAnExitingWorkerWaitsForTheRestore(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.prOpens(worker)
+	h.ciFails()
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+
+	h.status(worker.BlockID, "done")
+	h.waitWorkerState("ENG-1", "prompted")
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: worker.BlockID, ExitCode: 0}
+	h.rex.blockCloses(worker)
+
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Note == "tab closed: CI debug waits for the Worker" })
+	var pending bool
+	h.s.call(func() { pending = h.s.recs["ENG-1"].Pending != nil })
+	if !pending {
+		t.Fatal("the CI debug prompt is not pending")
+	}
+
+	h.open("ENG-1")
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	h.status(resumed.BlockID, "idle")
+	h.waitTyped(resumed.BlockID, "prompt ci_debug")
+}
+
+// An exit and then a close of the same block still flags the Task.
+func TestABlockThatClosesAfterItsProgramExitedFlagsTheTask(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: worker.BlockID, ExitCode: 0}
+	eventually(t, "the Worker gone", func() bool { return !h.task("ENG-1").Live })
+	h.rex.blockCloses(worker)
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Flag == "tab closed" })
+}
+
+// Rex closes the setup tab after worktrunk exits. That close is not the user's.
+func TestASetupTabThatExitsAndClosesFlagsNothing(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	setup := h.waitTab("wt ada/eng-1-billing")
+	h.rex.exits(setup, 0)
+	h.rex.blockCloses(setup)
+	h.waitTab("claude working")
+	eventually(t, "a live Worker", func() bool { return h.task("ENG-1").Live })
+	if got := h.events("ENG-1"); slices.Contains(got, "tab-closed") {
+		t.Fatalf("events = %q, want no tab-closed: Rex closed the setup tab", got)
+	}
+	if f := h.task("ENG-1").Flag; f != "" {
+		t.Fatalf("flag = %q, want none", f)
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-var policy = Policy{Budgets: Budgets{CIDebug: 3, Responding: 3, Restarts: 2}}
+var policy = Policy{Budgets: Budgets{CIDebug: 3, Responding: 3}}
 
 func taskIn(stage Stage) (*Board, *Task) {
 	b := NewBoard(5)
@@ -35,31 +35,31 @@ func TestTransitions(t *testing.T) {
 		effects []Effect
 		outcome Outcome
 	}{
-		{"start", Queued, Start{}, Working, []Effect{TrackerStatus{"started"}, StartWorker{Working}}, ""},
+		{"start", Queued, Start{}, Working, []Effect{TrackerStatus{"started"}, PromptWorker{Working}}, ""},
 		{"working done with draft PR", Working, WorkerDone{ContractMet: true}, CIRunning, nil, ""},
-		{"ci failed", CIRunning, failedCI, CIDebug, []Effect{StartWorker{CIDebug}}, ""},
+		{"ci failed", CIRunning, failedCI, CIDebug, []Effect{PromptWorker{CIDebug}}, ""},
 		{"ci pending", CIRunning, pendingCI, CIRunning, nil, ""},
 		{"ci passed needs review", CIRunning, needsReview, InReview, []Effect{TrackerStatus{"in_review"}}, ""},
 		{"ci passed approved", CIRunning, approved, ReadyToLand, nil, ""},
-		{"ci running conflict", CIRunning, conflict, Responding, []Effect{StartWorker{Responding}}, ""},
+		{"ci running conflict", CIRunning, conflict, Responding, []Effect{PromptWorker{Responding}}, ""},
 		{"ci debug pushed", CIDebug, Pushed{}, CIRunning, nil, ""},
 		{"review approved", InReview, approved, ReadyToLand, nil, ""},
-		{"review commented", InReview, ReviewCommented{}, Responding, []Effect{StartWorker{Responding}}, ""},
-		{"review changes requested", InReview, ReviewChangesRequested{}, Responding, []Effect{StartWorker{Responding}}, ""},
-		{"review additional authors", InReview, ReviewAdditionalAuthors{}, Responding, []Effect{StartWorker{Responding}}, ""},
-		{"in review conflict", InReview, conflict, Responding, []Effect{StartWorker{Responding}}, ""},
+		{"review commented", InReview, ReviewCommented{}, Responding, []Effect{PromptWorker{Responding}}, ""},
+		{"review changes requested", InReview, ReviewChangesRequested{}, Responding, []Effect{PromptWorker{Responding}}, ""},
+		{"review additional authors", InReview, ReviewAdditionalAuthors{}, Responding, []Effect{PromptWorker{Responding}}, ""},
+		{"in review conflict", InReview, conflict, Responding, []Effect{PromptWorker{Responding}}, ""},
 		{"responding pushed", Responding, Pushed{}, CIRunning, nil, ""},
 		{"user merge", ReadyToLand, PRMerge{}, ReadyToLand, []Effect{Merge{}}, ""},
-		{"ready to land commented", ReadyToLand, ReviewCommented{}, Responding, []Effect{StartWorker{Responding}}, ""},
-		{"ready to land changes requested", ReadyToLand, ReviewChangesRequested{}, Responding, []Effect{StartWorker{Responding}}, ""},
-		{"ready to land conflict", ReadyToLand, conflict, Responding, []Effect{StartWorker{Responding}}, ""},
+		{"ready to land commented", ReadyToLand, ReviewCommented{}, Responding, []Effect{PromptWorker{Responding}}, ""},
+		{"ready to land changes requested", ReadyToLand, ReviewChangesRequested{}, Responding, []Effect{PromptWorker{Responding}}, ""},
+		{"ready to land conflict", ReadyToLand, conflict, Responding, []Effect{PromptWorker{Responding}}, ""},
 		{"ready to land with a new check", ReadyToLand, pendingCI, CIRunning, nil, ""},
 		{"ready to land with a new review request", ReadyToLand, needsReview, InReview, []Effect{TrackerStatus{"in_review"}}, ""},
-		{"merged by another person", Working, PRMerged{}, Done, []Effect{Cleanup{}, TrackerStatus{"merged"}}, OutcomeMerged},
-		{"merged from ready to land", ReadyToLand, PRMerged{}, Done, []Effect{Cleanup{}, TrackerStatus{"merged"}}, OutcomeMerged},
+		{"merged by another person", Working, PRMerged{}, Done, []Effect{TrackerStatus{"merged"}}, OutcomeMerged},
+		{"merged from ready to land", ReadyToLand, PRMerged{}, Done, []Effect{TrackerStatus{"merged"}}, OutcomeMerged},
 		{"closed", InReview, TaskClosed{}, Done, []Effect{Cleanup{}, TrackerStatus{"closed"}}, OutcomeClosed},
 		{"closed while queued", Queued, TaskClosed{}, Done, []Effect{Cleanup{}, TrackerStatus{"closed"}}, OutcomeClosed},
-		{"rerun ci debug", CIRunning, Rerun{CIDebug}, CIDebug, []Effect{StartWorker{CIDebug}}, ""},
+		{"rerun ci debug", CIRunning, Rerun{CIDebug}, CIDebug, []Effect{PromptWorker{CIDebug}}, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -78,6 +78,48 @@ func TestTransitions(t *testing.T) {
 				t.Errorf("outcome = %q, want %q", task.Outcome, c.outcome)
 			}
 		})
+	}
+}
+
+func TestClosingADoneTaskCleansUpOnly(t *testing.T) {
+	for _, o := range []Outcome{OutcomeMerged, OutcomeClosed} {
+		b, task := taskIn(Done)
+		task.Outcome = o
+		effects, err := b.Apply("T", TaskClosed{})
+		if err != nil {
+			t.Fatalf("%s: Apply: %v", o, err)
+		}
+		if !reflect.DeepEqual(effects, []Effect{Cleanup{}}) {
+			t.Errorf("%s: effects = %#v, want only Cleanup", o, effects)
+		}
+		if task.Stage != Done || task.Outcome != o {
+			t.Errorf("%s: stage %s outcome %q, want Done with the same outcome", o, task.Stage, task.Outcome)
+		}
+	}
+}
+
+func TestTabClosedCleansUpADoneTask(t *testing.T) {
+	b, task := taskIn(Done)
+	task.Outcome = OutcomeMerged
+	effects, err := b.Apply("T", TabClosed{})
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if !reflect.DeepEqual(effects, []Effect{Cleanup{}}) {
+		t.Errorf("effects = %#v, want only Cleanup", effects)
+	}
+	if task.Stage != Done || task.Outcome != OutcomeMerged {
+		t.Errorf("stage %s outcome %q, want Done, merged", task.Stage, task.Outcome)
+	}
+}
+
+func TestTabClosedChangesNothingInAStartedStage(t *testing.T) {
+	for _, stage := range []Stage{Queued, Working, CIRunning, CIDebug, InReview, Responding, ReadyToLand} {
+		b, task := taskIn(stage)
+		effects, err := b.Apply("T", TabClosed{})
+		if err != nil || len(effects) != 0 || task.Stage != stage {
+			t.Errorf("%s: effects %#v, err %v, stage %s, want no change", stage, effects, err, task.Stage)
+		}
 	}
 }
 
@@ -157,7 +199,6 @@ func TestUserSignalsOutsideTheirStageFail(t *testing.T) {
 	}{
 		{InReview, PRMerge{}},
 		{Working, Start{}},
-		{Done, TaskClosed{}},
 		{Queued, Rerun{Working}},
 		{Working, Rerun{InReview}},
 	}
@@ -189,7 +230,9 @@ func TestObservedSignalsOutsideTheirStageChangeNothing(t *testing.T) {
 		{ReadyToLand, ReviewAdditionalAuthors{}},
 		{Done, PRMerged{}},
 		{ReadyToLand, WorkerDone{ContractMet: true}},
-		{CIRunning, WorkerLost{}},
+		{CIRunning, TabClosed{}},
+		{ReadyToLand, TabClosed{Waits: true}},
+		{Working, TabOpened{}},
 	}
 	for _, c := range cases {
 		b, task := taskIn(c.stage)
@@ -372,7 +415,7 @@ func TestABudgetSpentOnAReviewEdgeStaysUntilTheUserActs(t *testing.T) {
 	}
 }
 
-var userPolicy = Policy{Budgets: Budgets{CIDebug: 3, Responding: 3, Restarts: 2, ReviewCycles: 1}, Bar: userBar}
+var userPolicy = Policy{Budgets: Budgets{CIDebug: 3, Responding: 3, ReviewCycles: 1}, Bar: userBar}
 
 func userTaskIn(stage Stage) (*Board, *Task) {
 	b := NewBoard(5)
@@ -390,7 +433,7 @@ func TestAnOpenThreadOnAnApprovedPRStartsResponding(t *testing.T) {
 	for _, from := range []Stage{CIRunning, InReview, ReadyToLand} {
 		b, task := userTaskIn(from)
 		effects, _ := b.Apply("T", threads(nil, Thread{Resolved: true}))
-		if task.Stage != Responding || task.Flag != "" || !reflect.DeepEqual(effects, []Effect{StartWorker{Responding}}) {
+		if task.Stage != Responding || task.Flag != "" || !reflect.DeepEqual(effects, []Effect{PromptWorker{Responding}}) {
 			t.Errorf("from %s: stage %s flag %q effects %v, want a Responding round", from, task.Stage, task.Flag, effects)
 		}
 		if task.Left.Responding != 2 || task.ReviewCycle() != nil {
@@ -489,28 +532,77 @@ func TestARoundThatAnswersEveryThreadNeedsNoPush(t *testing.T) {
 	}
 }
 
-func TestWorkerRestartBudgetIsPerStage(t *testing.T) {
-	b, task := taskIn(Working)
-	task.Left.Restarts = 2
-	for i := range 2 {
-		effects, _ := b.Apply("T", WorkerLost{})
-		if !reflect.DeepEqual(effects, []Effect{StartWorker{Working}}) {
-			t.Fatalf("restart %d: effects %v", i+1, effects)
+func TestAClosedTabFlagsOnlyAStageThatNeedsTheWorker(t *testing.T) {
+	for _, stage := range []Stage{Working, CIDebug, Responding} {
+		b, task := taskIn(stage)
+		effects, err := b.Apply("T", TabClosed{})
+		if err != nil || effects != nil || task.Stage != stage || task.Flag != ReasonTabClosed || task.FlagDetail != "" {
+			t.Errorf("tab closed in %s: stage %s flag %q detail %q effects %v err %v", stage, task.Stage, task.Flag, task.FlagDetail, effects, err)
+		}
+		if task.Group() != GroupNeedsYou {
+			t.Errorf("tab closed in %s: group %s, want Needs you", stage, task.Group())
 		}
 	}
-	effects, _ := b.Apply("T", WorkerLost{})
-	if effects != nil || task.Flag != ReasonWorkerLost {
-		t.Fatalf("third loss: flag %q effects %v", task.Flag, effects)
+	for _, stage := range []Stage{CIRunning, InReview, ReadyToLand} {
+		b, task := taskIn(stage)
+		if effects, err := b.Apply("T", TabClosed{}); err != nil || effects != nil || task.Flag != "" {
+			t.Errorf("tab closed in %s: flag %q effects %v err %v", stage, task.Flag, effects, err)
+		}
 	}
-	b.Apply("T", PROpen{})
-	b.Apply("T", Rerun{Working})
-	if effects, _ := b.Apply("T", WorkerLost{}); len(effects) != 1 {
-		t.Fatalf("a new Stage did not refill the restart budget: %v", effects)
+}
+
+func TestAClosedTabNamesTheStageThatWaits(t *testing.T) {
+	b, task := taskIn(CIDebug)
+	b.Apply("T", TabClosed{})
+	b.Apply("T", TabClosed{Waits: true})
+	if task.Flag != ReasonTabClosed || task.FlagDetail != "CI debug waits for the Worker" {
+		t.Fatalf("flag %q detail %q", task.Flag, task.FlagDetail)
+	}
+}
+
+func TestAClosedTabReplacesTheFlagOfItsWorkerOnly(t *testing.T) {
+	for _, r := range []Reason{ReasonQuestion, ReasonPermission, ReasonAuth, ReasonError, ReasonStopped, ReasonWorkerSilent} {
+		b, task := taskIn(Working)
+		task.flag(r, "detail")
+		b.Apply("T", TabClosed{})
+		if task.Flag != ReasonTabClosed || task.FlagDetail != "" {
+			t.Errorf("tab closed over %q: flag %q detail %q", r, task.Flag, task.FlagDetail)
+		}
+	}
+	for _, r := range []Reason{ReasonBudgetSpent, ReasonSetupFailed, ReasonDraft, ReasonNoBotReview} {
+		b, task := taskIn(Working)
+		task.flag(r, "detail")
+		b.Apply("T", TabClosed{})
+		if task.Flag != r || task.FlagDetail != "detail" {
+			t.Errorf("tab closed over %q: flag %q detail %q, want it kept", r, task.Flag, task.FlagDetail)
+		}
+	}
+}
+
+func TestTheTabClosedFlagStaysUntilTheUserOpensTheTab(t *testing.T) {
+	b, task := taskIn(Working)
+	b.Apply("T", TabClosed{})
+	b.Apply("T", WorkerStatus{State: "working"})
+	if task.Flag != ReasonTabClosed {
+		t.Fatalf("a working status cleared the flag: %q", task.Flag)
+	}
+	if effects, err := b.Apply("T", TabOpened{}); err != nil || effects != nil || task.Flag != "" {
+		t.Fatalf("tab opened: flag %q effects %v err %v", task.Flag, effects, err)
+	}
+	task.flag(ReasonError, "open: no tab")
+	b.Apply("T", TabOpened{})
+	if task.Flag != "" {
+		t.Fatalf("tab opened left the Worker's %q flag", task.Flag)
+	}
+	task.flag(ReasonBudgetSpent, "x")
+	b.Apply("T", TabOpened{})
+	if task.Flag != ReasonBudgetSpent {
+		t.Fatalf("tab opened cleared the %q flag", ReasonBudgetSpent)
 	}
 }
 
 var gated = Policy{
-	Budgets: Budgets{CIDebug: 3, Responding: 3, Restarts: 2, ReviewCycles: 2},
+	Budgets: Budgets{CIDebug: 3, Responding: 3, ReviewCycles: 2},
 	Bar:     LandingBar{Bot: greptile(5)},
 }
 
@@ -542,7 +634,7 @@ func TestReviewGate(t *testing.T) {
 	}{
 		{"top score goes to review", scored("abc", 5, DecisionRequired), InReview, []Effect{TrackerStatus{"in_review"}}, ""},
 		{"top score with no reviewer is ready", scored("abc", 5, DecisionNone), ReadyToLand, nil, ""},
-		{"low score starts a review cycle", scored("abc", 4, DecisionRequired), Responding, []Effect{StartWorker{Responding}}, ""},
+		{"low score starts a review cycle", scored("abc", 4, DecisionRequired), Responding, []Effect{PromptWorker{Responding}}, ""},
 		{"no score yet waits", scored("abc", -1, DecisionRequired), CIRunning, nil, ""},
 		{"pending checks wait first", PRSeen{PRFacts{Head: "abc", Score: &four, Checks: []Check{{Name: "test"}}}}, CIRunning, nil, ""},
 		{"a draft waits for the user first", PRSeen{PRFacts{Head: "abc", Draft: true, Score: &four}}, CIRunning, nil, ReasonDraft},
@@ -574,7 +666,7 @@ func TestReviewCyclesSpendTheirOwnBudget(t *testing.T) {
 	b, task := gatedIn(CIRunning)
 	for i := range 2 {
 		effects, _ := b.Apply("T", scored("abc", 4, DecisionNone))
-		if !reflect.DeepEqual(effects, []Effect{StartWorker{Responding}}) || task.Stage != Responding {
+		if !reflect.DeepEqual(effects, []Effect{PromptWorker{Responding}}) || task.Stage != Responding {
 			t.Fatalf("round %d: stage %s effects %v", i+1, task.Stage, effects)
 		}
 		if r := task.ReviewCycle(); r == nil || r.Score != 4 || r.MinScore != 5 {
@@ -633,5 +725,20 @@ func TestALateBotFlagsTheTask(t *testing.T) {
 	b.Apply("T", ReviewBotLate{})
 	if task.Stage != InReview || task.Flag != "" {
 		t.Fatalf("a Task with no gate: stage %s flag %q", task.Stage, task.Flag)
+	}
+}
+
+// A Record from before the tab closed flag can carry worker lost.
+func TestAStoredWorkerLostFlagGivesWayToTheTabFlags(t *testing.T) {
+	b, task := taskIn(Working)
+	task.flag("worker lost", "")
+	b.Apply("T", TabClosed{})
+	if task.Flag != ReasonTabClosed {
+		t.Fatalf("tab closed over worker lost: flag %q", task.Flag)
+	}
+	task.flag("worker lost", "")
+	b.Apply("T", TabOpened{})
+	if task.Flag != "" {
+		t.Fatalf("tab opened left the flag %q", task.Flag)
 	}
 }

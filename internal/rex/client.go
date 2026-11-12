@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -50,8 +51,12 @@ func (c *Client) run(ctx context.Context, args ...string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-func isNotFound(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "not found")
+var targetNotFound = regexp.MustCompile(`target "[^"]*" not found`)
+
+// IsNotFound reports whether err says that a rex target is missing. A missing
+// rex binary or a down server is not a missing target.
+func IsNotFound(err error) bool {
+	return err != nil && targetNotFound.MatchString(err.Error())
 }
 
 func (c *Client) Sessions(ctx context.Context) ([]Session, error) {
@@ -177,7 +182,7 @@ func (c *Client) Split(ctx context.Context, session, block, cwd string, argv []s
 
 func (c *Client) CloseWindow(ctx context.Context, session, windowID string) error {
 	_, err := c.run(ctx, "window", "close", "-s", session, windowID)
-	if isNotFound(err) {
+	if IsNotFound(err) {
 		return nil
 	}
 	return err
@@ -185,7 +190,7 @@ func (c *Client) CloseWindow(ctx context.Context, session, windowID string) erro
 
 func (c *Client) DestroySession(ctx context.Context, session string) error {
 	_, err := c.run(ctx, "session", "kill", session)
-	if isNotFound(err) {
+	if IsNotFound(err) {
 		return nil
 	}
 	return err
@@ -245,18 +250,42 @@ func (c *Client) ProgramStatus(ctx context.Context, session, block string) ([]St
 	return rs, nil
 }
 
-// Type types text and then Enter. Claude's prompt treats text and Enter in one
-// write as a paste, so Enter goes in a second write after a short pause.
-func (c *Client) Type(ctx context.Context, session, block, text string) error {
-	if err := c.write(ctx, session, block, text); err != nil {
-		return err
+// Type writes each part to the block, then presses Enter. Claude reads text and
+// Enter in one write as a paste, so a short pause follows each write. After a
+// failure, Type clears the input box, so a retry does not append to a half-typed
+// prompt.
+func (c *Client) Type(ctx context.Context, session, block string, parts ...string) error {
+	err := c.typeParts(ctx, session, block, append(parts, "\r"))
+	if err != nil {
+		c.clearInput(ctx, session, block, parts)
 	}
-	select {
-	case <-time.After(150 * time.Millisecond):
-	case <-ctx.Done():
-		return ctx.Err()
+	return err
+}
+
+func (c *Client) typeParts(ctx context.Context, session, block string, parts []string) error {
+	for _, part := range parts {
+		if err := c.write(ctx, session, block, part); err != nil {
+			return err
+		}
+		select {
+		case <-time.After(150 * time.Millisecond):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-	return c.write(ctx, session, block, "\r")
+	return nil
+}
+
+// Claude's Ctrl+U deletes the cursor's line, then the line break before it, so
+// each line of parts needs two presses.
+func (c *Client) clearInput(ctx context.Context, session, block string, parts []string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	for range 2 * (1 + strings.Count(strings.Join(parts, ""), "\n")) {
+		if c.write(ctx, session, block, "\x15") != nil {
+			return
+		}
+	}
 }
 
 func (c *Client) write(ctx context.Context, session, block, data string) error {

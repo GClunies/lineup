@@ -154,13 +154,23 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 	case "merge":
 		return nil, s.signal(req.Task, lifecycle.PRMerge{})
 	case "close":
-		return nil, s.signal(req.Task, lifecycle.TaskClosed{})
+		return nil, s.with(req.Task, func(r *Record) error {
+			if r.Stage == lifecycle.Done && r.WindowID == "" && r.Worktree == "" {
+				return nil
+			}
+			return s.apply(r, lifecycle.TaskClosed{}, "")
+		})
 	case "archive":
 		return nil, s.with(req.Task, func(r *Record) error {
 			if r.Stage != lifecycle.Done {
 				return &lifecycle.NotAllowedError{Signal: "archive", Stage: r.Stage}
 			}
 			if !r.Archived {
+				if r.WindowID != "" {
+					if err := s.apply(r, lifecycle.TaskClosed{}, ""); err != nil {
+						return err
+					}
+				}
 				r.Archived = true
 				s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: "archive", From: r.Stage.String(), To: r.Stage.String()})
 			}
@@ -198,6 +208,8 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 			}
 			return s.apply(r, lifecycle.WorkerStatus{State: "blocked", Kind: string(lifecycle.ReasonQuestion), Detail: q}, "")
 		})
+	case "open":
+		return s.open(req.Task)
 	case "steer", "focus", "capture":
 		return s.toWorker(ctx, req)
 	}
@@ -313,8 +325,13 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 			}
 			r.Branch = "lineup/" + strings.ToLower(r.ID) + "-" + slug
 		}
-		if old, ok := s.recs[r.ID]; ok && old.Stage != lifecycle.Done {
-			return fmt.Errorf("%s is already on the Board", r.ID)
+		if old, ok := s.recs[r.ID]; ok {
+			if old.keepsTab() {
+				return fmt.Errorf("%s is Done and keeps its tab: close its tab first with lineup close %s", r.ID, r.ID)
+			}
+			if old.Stage != lifecycle.Done {
+				return fmt.Errorf("%s is already on the Board", r.ID)
+			}
 		}
 		r.RepoLabel = sessionLabel(r.Repo, s.repos())
 		r.Session = r.RepoLabel

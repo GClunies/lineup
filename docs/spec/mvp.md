@@ -12,7 +12,7 @@ The MVP is complete when this sequence works with no manual step other than the 
 2. A Worker does the Task in the background. If the skill or the user asks for a plan first, the Worker shows it to the user in its own tab.
 3. Workers implement the change, fix CI, and answer review comments.
 4. The user merges the PR from the Board.
-5. The Scheduler closes the tab and removes the worktree.
+5. The Task goes to Done and keeps its tab and worktree. When the user closes the tab, the Scheduler removes the worktree.
 
 ## Scope
 
@@ -96,7 +96,9 @@ A Responding round that pushes nothing meets its contract when the latest poll s
 | CI debug, Responding, with a `budget spent` flag that `pr-seen` set | `pr-seen` | The Stage that the first gap leads to |
 | Ready to land | `pr-merge` (user key `m`) | Done, marked merged |
 | Any Stage | `pr-merged` outside lineup, for example by a person or by GitHub auto-merge | Done, marked merged |
-| Any Stage | `task-closed` (user key `x`, confirmed) | Done, marked closed |
+| Any Stage except Done | `task-closed` (user key `x`, confirmed) | Done, marked closed. The Scheduler closes the tab and removes the worktree. |
+| Done | `task-closed` (user key `x` on a Done Task with a tab, confirmed) | Done, with the same outcome. The Scheduler closes the tab and removes the worktree. |
+| Done | `tab-closed`: the user closed the Task's tab in Rex | Done, with the same outcome. The Scheduler removes the worktree, and the Repo session if it holds no other tab. |
 
 `pr-seen` is a level Signal. The poll sends it for each open build PR at each poll, after the other GitHub Signals. It carries the PR's current facts. A second `pr-seen` with the same facts changes nothing. A Task that is already where its first gap leads stays there.
 
@@ -169,9 +171,12 @@ A Repo where the bot does not review must not hold a Task forever. If a gated Ta
 | `budget spent` | A Loop budget reaches 0 |
 | `draft` | `pr-seen` on a draft PR with no earlier gap |
 | `no bot review` | `review-bot-late`: the review bot did not score the head commit of a passing PR |
-| `worker lost` | The tab or block is gone, and the restart budget is spent |
+| `tab closed` | The Task is in an agent Stage, and its Worker's tab or block is gone. The user closed the tab, Rex lost it, or the Rex server restarted. The detail names a Stage prompt that waits, for example `CI debug waits for the Worker`. lineup opens no tab. `lineup open <task>` restores the Worker and clears the flag. |
+| `worker silent` | `prompt-stalled`: a Stage prompt has waited 1 minute for a Worker that has sent no program status, or for a prompted Worker to report `working`. The Scheduler types nothing more into it. The flag clears when the Worker reports `working`. |
 
-When the cause clears, for example when program status goes back to `working`, the Scheduler removes the flag.
+When the cause clears, for example when program status goes back to `working`, the Scheduler removes the flag. The flag `tab closed` clears only when the user restores the Worker. A Task with no tab shows `tab closed` and never `worker silent`, because the silent wait counts only while a Worker runs. A restore starts that wait again.
+
+A closed tab sets `tab closed` over the flags that a Worker's own state set, which are `question`, `permission`, `auth`, `error`, `stopped`, and `worker silent`. It leaves the other flags as they are, because they hold with no Worker. A tab closed in a Stage that waits for others, for example CI running, sets no flag. The Worker is not needed there, and the next agent Stage finds the closed tab when its prompt waits.
 
 A gap of the Landing bar that finds its Loop budget spent sets `budget spent`, starts no Worker, and names the gap in the detail. Examples are `2 open threads (1 bot) after 3 rounds` and `test failed after 3 attempts`. The flag clears at the next poll after the gap closes, and the Task goes where its new first gap leads. A `budget spent` flag that a review Signal set stays until the user acts, for example with `lineup rerun`.
 
@@ -181,7 +186,6 @@ A gap of the Landing bar that finds its Loop budget spent sets `budget spent`, s
 |---|---|---|
 | CI debug attempts | 3 | per Task |
 | Responding rounds | 3 | per review |
-| Worker restarts | 2 | per Stage |
 | Review cycles | 3 | per Task, only with a review bot gate |
 
 These spend the Responding rounds:
@@ -228,7 +232,7 @@ The rules for this layout:
 - The Scheduler creates each Task tab with `rex window new -s <session> <label> --focus=false -- <command>`. The user stays on the Hub.
 - The label is the Task ID, or the Issue identifier, and the title. Rex refuses a label longer than 128 characters, so a longer label stops at 127 characters and ends in `…`.
 - Each Task tab names its command. A tab without a command reports exit code 0 when its shell exits, whatever the real code is.
-- If a Worker exits within about 1 s, Rex keeps its tab open so that the user can read the error. Before the Scheduler restarts that Worker, it closes the tab.
+- If a Worker exits within about 1 s, Rex keeps its tab open so that the user can read the error. The Scheduler never closes that tab by itself. A later prompt for the Task sets the flag `tab closed`. When the user runs `lineup open <task>`, the Scheduler closes the kept tab and opens a new one, because the user asked for the Worker.
 - The Scheduler creates a Repo session with the first Task in that Repo. It removes the session when the last Task tab in it closes and the session holds no other tab. A tab that the user or another Scheduler opened keeps the session.
 - If two Repos have the same folder name, the session label adds the parent folder, for example `acme-data`.
 - An ad hoc Task opens in the session `ad hoc`, or in the session that `ad_hoc_session` names. The Board still shows its Repo. The Scheduler removes this session after its last Task, as with a Repo session, so `ad_hoc_session` can't be `lineup hub`.
@@ -262,9 +266,9 @@ Rex has no key/value metadata on its objects. The store keeps the session, windo
 
 | Source | Signals |
 |---|---|
-| Rex events: `terminal.program_status_changed`, `terminal.child_exited`, `block_closed` | `done`, `blocked`, `error`, worker lost. `child_exited` comes for every exit. `block_closed` does not come when Rex keeps the tab open. |
+| Rex events: `terminal.program_status_changed`, `terminal.child_exited`, `block_closed` | `done`, `blocked`, `error`, `tab-closed`. `child_exited` comes for every exit. `block_closed` does not come when Rex keeps the tab open. A tab that the user closes sends `block_closed` and no `child_exited`. So a `block_closed` of a Worker's block means that a person or Rex closed the tab. It does not mean that the Worker exited. |
 | GitHub, one batched GraphQL query for all open Task PRs every 30 s, and one query right after a Worker reports `done` | `pr-open`, `pushed`, `review-*`, `pr-merged`, and `pr-seen` with the PR's facts at each poll |
-| The user, through Board keys or the CLI | `start`, `pr-merge`, `task-closed` |
+| The user, through Board keys or the CLI | `start`, `pr-merge`, `task-closed`, and `tab-opened`, which `lineup open` sends when it restores a Worker |
 | The Scheduler's clock, at each poll | `review-bot-late` |
 
 The GraphQL query reads these fields of each PR:
@@ -280,9 +284,9 @@ A PR whose head commit has no checks meets the check items of the Landing bar, s
 
 ### Recovery
 
-When `lineup serve` starts, it compares the store with `rex ls` and `rex session inspect`. For each Task in an agent Stage whose tab or block is gone, the Scheduler opens a new tab in the existing worktree and starts a fresh Worker for the same Stage. Each restart uses one Worker restart from the budget.
+When `lineup serve` starts, it compares the store with `rex ls` and `rex session inspect`. Each Task in an agent Stage whose tab or block is gone gets the flag `tab closed`. Recovery opens no tab, because only the user restores a closed tab. A Task whose setup tab is gone, or whose Worker never started, starts again, because it never had a Worker to restore.
 
-Recovery also runs after a Rex server restart. The Scheduler reads the Rex server's instance id every 5 s. When the id changes, every Worker is gone, so the Scheduler exits. launchd starts it again and startup recovery runs.
+Recovery also runs after a Rex server restart. The Scheduler reads the Rex server's instance id every 5 s. When the id changes, every Worker is gone, so the Scheduler exits. launchd starts it again. Startup recovery flags each Task whose Worker is gone. The user restores each one with `lineup open <task>` or with `enter` on its row.
 
 ## Start a Task
 
@@ -301,7 +305,17 @@ This sequence runs in the background. The Board shows only the Task as it change
    - The Worker command passes `--name <tab label> --remote-control <tab label>`. The tab label starts with the Task ID, so the user finds each Worker by its Task ID on claude.ai and on their phone. Each Hub agent gets the same flags, with the name `lineup-<tab>`: `lineup-work`, `lineup-plan`, `lineup-review`, and `lineup-assist`.
    - `--remote-control` takes an optional value, so the command always gives it the name. Without a value, it takes the prompt as the name.
 
-Each agent Stage after Working starts a fresh Worker in the same tab and worktree. The Worker gets its context from the Issue and the PR.
+Each Task keeps one Worker for its whole life. The Worker starts with `--session-id <conversation>`, and the Record keeps that conversation ID. Each agent Stage after Working types its prompt into the same Worker, in the same tab and worktree:
+
+- The Scheduler types the prompt only when the Worker's program status is `idle` or `done`. While the Worker is busy, for example with a message that the user typed, the prompt waits for its next `idle` or `done`.
+- The Scheduler does not check the Stage contract while a prompt waits, because a `done` then belongs to the Stage before it.
+- A Worker whose tab is gone leaves the Task flagged `tab closed`. A prompt that is due then stays pending, and the flag names its Stage. Nothing opens a tab.
+- Only a Task's first Worker opens a tab with no ask from the user. A Task that has had a Worker never gets a tab from a prompt, whether or not it holds a conversation.
+- `lineup open <task>` restores the Worker. A live tab comes to the front. A Task with no tab gets a new tab in the Worker's folder that runs `claude --resume <conversation>`, and the flag clears. A prompt that waited arrives at the restored Worker's first `idle`. The restore types nothing else, because the Stage prompt reached the Worker before the tab closed.
+- A Task with no conversation, or whose conversation file is gone, gets a fresh Worker with the Stage prompt. The prompt says that this is a restart, and it quotes every steer that the user sent to the Task, in order.
+- `open` refuses a Queued Task, with `<task> has not started`. It refuses a Done Task that has no tab, with `<task> is Done and its worktree is gone`. It refuses a Task in a Stage that waits for others when no conversation is left to resume.
+- A Worker that exited and left its tab open, as for a review's hunk pane, has no live Worker. `open` closes that tab and opens the new one in its place, so the Task's window is the live tab.
+- The Worker keeps the model and effort of Working. `skill` and `command` apply to each Stage, because the prompt carries them.
 
 ## Configuration
 
@@ -322,7 +336,6 @@ start_skills = ["kit:tdd"]
 [budgets]
 ci_debug = 3
 responding = 3
-restarts = 2
 
 [stage.default]
 model = "claude-opus-5-5"
@@ -454,18 +467,18 @@ The Board shows the build Tasks. Review Tasks show on the Reviews tab of the `re
 | Key | Action |
 |---|---|
 | `j` `k` | Move the selection |
-| `enter` | Focus the Task's tab in Rex |
+| `enter` | Focus the Task's tab in Rex. If the Task has started and has no live Worker, restore the Worker with `claude --resume`, as `lineup open` does. The hint reads `restore the Worker`. |
 | `p` | Show a live preview of the Worker's screen beside the Board |
 | `f` | Show the detail pane at full screen, and back |
 | `m` | Merge the PR (Ready to land) |
-| `x` | Close the Task, after a confirmation. On a Done Task, archive it after a confirmation. |
+| `x` | Close the Task, after a confirmation. On a Done Task with a tab, close the tab and remove the worktree, after a confirmation. On a Done Task with no tab, archive it, after a confirmation. |
 | `s` | Start a Queued Task |
 | `o` | Open the PR or the Issue in the browser |
 | `R` | Refresh now: the Scheduler polls GitHub for every started Task |
 | `z` | Zoom this tab's agent pane to full height, and back |
 | `?` | Show all keys |
 
-A Done Task leaves the Board 7 days after it ends, or when the user archives it (`x` or `lineup archive <task>`). The Scheduler keeps the Task and its events, so `lineup show <task>` still finds it. To put an archived Issue back on the Board, run `lineup add` again.
+A Task that ends keeps its tab and worktree. Only the user closes the tab: with `x` or `lineup close <task>` on the Done Task, with the tab's own close in Rex, or with `lineup archive <task>`. A Done Task leaves the Board when the user archives it. It also leaves 7 days after it ends, but only if its tab is closed. A Done Task with an open tab stays on the Board. The Scheduler refuses `lineup add` for a Done Task's ID while that Task keeps its tab. The Scheduler keeps the Task and its events, so `lineup show <task>` still finds it. To put an archived Issue back on the Board, run `lineup add` again.
 
 ## Tracker browser
 
@@ -557,10 +570,11 @@ The Orchestrator has four jobs:
 | Status | "what needs me?" | `lineup ls --json`, `lineup show <task>` |
 | Steer | "tell ENG-592 to use approach B" | `lineup steer <task> "<text>"` |
 | Override | "raise the cap to 6", "re-run CI debug" | `lineup cap 6`, `lineup rerun <task> ci_debug` |
+| Restore | "bring back ENG-592's tab" | `lineup open <task>` |
 
 The Orchestrator handles build Tasks and review Tasks. It maps each review request, `/pr-review` included, to `lineup review`. Its settings deny every GitHub write to a PR.
 
-If `lineup add` or `lineup start` meets a full WIP cap, the command fails with `wip cap full`. The Orchestrator must then ask the user in chat. It must not use `--over-cap` without the user's yes.
+If `lineup add` or `lineup start` meets a full WIP cap, the command fails with `wip cap full`. The Orchestrator must then ask the user with `AskUserQuestion`. It must not use `--over-cap` without the user's pick.
 
 ### Alerts
 
@@ -571,7 +585,7 @@ A Task alerts when it enters the Needs you group or Done. It alerts again only a
 | `lineup watch` | Prints one line for each alert of a Task of either Kind, for example `ENG-34 Working, stopped: <title>`. It keeps the alerts it printed in `alerted.json` in the state directory, so a restart repeats none of them. On its first run, Tasks that are already Done print nothing. A lock on `watch.lock` allows one watch at a time. With `--once`, it exits after the first Board that has new alerts. |
 | The boards in the `work` and `review` tabs | Each prints an OSC 777 notification for each alert of its own Tasks: build Tasks in `work`, review Tasks in `review`. Rex shows it as a desktop toast for that board's pane. A click on the toast opens that pane. The view that a board opens on makes no toast. |
 
-The Hub starts the Orchestrator with a first message that tells it to run `lineup watch --once` as a background Bash command. The command exits at the next alerts, and the exit wakes the Orchestrator. The Orchestrator tells the user what changed and what the user can say next, then starts the command again. An idle Orchestrator writes nothing to its chat.
+The Hub starts the Orchestrator with a first message that tells it to run `lineup watch --once` as a background Bash command. The command exits at the next alerts, and the exit wakes the Orchestrator. The Orchestrator starts the command again, then asks the user with `AskUserQuestion` what to do. For a Done Task with a tab, the options are Close the tab, Open the tab, and Keep it open. For a `tab closed` flag, they are Restore and Close the Task. For other alerts, it tells the user what changed and what the user can say next. An idle Orchestrator writes nothing to its chat.
 
 ## Planning
 
@@ -607,7 +621,7 @@ The Board shows cached data and refreshes it in the background.
 | The started-Task count never passes the WIP cap without a recorded override | Property-based tests with `pgregory.net/rapid` on random sequences of Signals |
 | Each started Task ends in Done or carries the Needs you flag | The same property-based tests, with every Worker made to stall or fail |
 | The Scheduler reads program status correctly | An integration test that runs `claude` in a throwaway Rex session and reads `working`, `done`, and `blocked` (`kind: permission`) |
-| Recovery restarts a lost Worker | An integration test that kills a Task tab and restarts `lineup serve` |
+| Recovery flags a lost Worker and opens no tab, and `lineup open` restores it | An integration test that kills a Task tab, restarts `lineup serve`, and runs `lineup open` |
 | The GitHub Signals are correct | Tests against recorded GraphQL responses for each PR state |
 | The poll reads the required checks, the optional checks, and the review threads correctly | Tests against recorded GraphQL responses of public repos: classic protection, a ruleset, no protection, a required check that is not reported yet, and open, replied, and resolved threads |
 | No build Task is in Ready to land while its Standing has a gap. An optional check never starts CI debug. A second `pr-seen` with the same facts changes nothing. | Property-based tests with `pgregory.net/rapid` |

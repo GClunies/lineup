@@ -3,6 +3,7 @@
 package scheduler
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,7 +16,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"uuid"
 
 	"github.com/gclunies/lineup/internal/harness/claude"
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -49,6 +49,9 @@ type Deps struct {
 	BoardCache string
 	Log        *slog.Logger
 	Now        func() time.Time
+	// PromptWait is how long a Stage prompt waits on a Worker that has sent no
+	// status before the Task gets a flag. 0 means a minute.
+	PromptWait time.Duration
 }
 
 type RexEventKind int
@@ -155,6 +158,7 @@ func (s *Scheduler) Run(ctx context.Context, events <-chan RexEvent) error {
 			}
 			s.onRex(ev)
 		case <-tick.C:
+			s.flagSilentPrompts()
 			go s.poll(ctx, nil)
 		}
 	}
@@ -170,6 +174,22 @@ func (s *Scheduler) call(f func()) {
 
 func (s *Scheduler) now() time.Time { return s.d.Now() }
 
+func (s *Scheduler) pend(r *Record, stage lifecycle.Stage) {
+	r.Pending, r.PendingSince = &stage, s.now()
+}
+
+// flagSilentPrompts flags each Task whose prompt waits too long for the Worker
+// to report. An untyped prompt stays unsent, because the Scheduler cannot tell
+// that the Worker is ready.
+func (s *Scheduler) flagSilentPrompts() {
+	wait := cmp.Or(s.d.PromptWait, time.Minute)
+	for _, r := range s.list() {
+		if r.awaitsStatus() && s.now().Sub(r.PendingSince) >= wait {
+			s.apply(r, lifecycle.PromptStalled{Stage: r.Stage}, "")
+		}
+	}
+}
+
 // apply runs one Signal through the reducer, records the change, and queues
 // the Effects on the Task's lane.
 func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error {
@@ -183,6 +203,14 @@ func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error 
 	}
 	if r.Stage != from {
 		r.StageSince = s.now()
+	}
+	for _, e := range effects {
+		if p, ok := e.(lifecycle.PromptWorker); ok {
+			s.pend(r, p.Stage)
+		}
+	}
+	if r.Pending != nil && *r.Pending != r.Stage {
+		r.Pending = nil
 	}
 	if detail == "" {
 		detail = string(r.Flag)
@@ -284,8 +312,8 @@ func (s *Scheduler) exec(ctx context.Context, id string, e lifecycle.Effect) {
 		return
 	}
 	switch e := e.(type) {
-	case lifecycle.StartWorker:
-		s.startWorker(ctx, id, e.Stage)
+	case lifecycle.PromptWorker:
+		s.deliver(ctx, id)
 	case lifecycle.Merge:
 		if r.PR == nil {
 			return
@@ -343,6 +371,9 @@ func (s *Scheduler) attach(id string, w Window, job Job) {
 		}
 		r.SessionID, r.WindowID, r.BlockID, r.Job = w.SessionID, w.WindowID, w.BlockID, job
 		r.Status, r.WorkerState = "", ""
+		if job == JobWorker && r.Pending != nil {
+			r.PendingSince = s.now()
+		}
 		s.save(r)
 		for _, o := range s.orphans[w.BlockID] {
 			s.onRex(o.ev)
@@ -373,107 +404,36 @@ func (s *Scheduler) finishSetup(ctx context.Context, id string) {
 		s.setupFailed(id, err.Error())
 		return
 	}
-	var pending *lifecycle.Stage
-	s.update(id, func(r *Record) {
-		r.Worktree = path
-		pending, r.Pending = r.Pending, nil
-	})
-	if pending != nil {
-		s.startWorker(ctx, id, *pending)
-	}
+	s.update(id, func(r *Record) { r.Worktree = path })
+	s.deliver(ctx, id)
 }
 
-func (s *Scheduler) startWorker(ctx context.Context, id string, stage lifecycle.Stage) {
-	r, ok := s.snapshot(id)
-	if !ok || r.Stage != stage {
-		return
-	}
-	switch {
-	case r.Review != nil:
-		if !s.setupReview(ctx, r) {
-			return
-		}
-		if r, ok = s.snapshot(id); !ok || r.Stage != stage {
-			return
-		}
-	case r.Job == JobSetup || r.Worktree == "":
-		s.update(id, func(r *Record) { r.Pending = &stage })
-		if r.Job != JobSetup {
-			s.setup(ctx, r)
-		}
-		return
-	}
-	if r.Review != nil && stage == lifecycle.Reviewing {
-		// A restart or a rerun reviews afresh, so it never resumes the last review.
-		r.Conversation = uuid.NewV4().String()
-		s.update(id, func(rec *Record) { rec.Conversation = r.Conversation })
-	}
-	restart, steers := s.replay(id, r.StageSince)
-	spec := WorkerSpec{
-		Restart: restart, Steers: steers,
-		Task: r.ID, Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
-		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
-		Conversation: r.Conversation, Name: r.tabLabel(), ReviewCycle: r.ReviewCycle(),
-		Bar: r.Policy.Bar, Standing: r.Standing,
-	}
-	folder := r.Worktree
-	if r.Review != nil {
-		// The PR's code never becomes the Worker's folder: its .claude
-		// settings and hooks would run.
-		spec.PRURL, folder = r.Review.URL, r.Repo
-	}
-	argv, env, err := s.d.Harness.Command(ctx, spec)
-	if err != nil {
-		s.fail(id, "worker command", err)
-		return
-	}
-	if r.Review != nil {
-		if env == nil {
-			env = map[string]string{}
-		}
-		env["XDG_STATE_HOME"] = s.d.StateHome
-	}
-	s.detach(ctx, r)
-	session, err := s.d.Rex.EnsureSession(ctx, r.Session)
-	if err != nil {
-		s.fail(id, "rex session", err)
-		return
-	}
-	w, err := s.d.Rex.NewWindow(ctx, session, r.tabLabel(), folder, env, argv)
-	if err != nil {
-		s.fail(id, "rex tab", err)
-		return
-	}
-	s.update(id, func(r *Record) { r.WorkerStage = stage })
-	s.attach(id, w, JobWorker)
-	if r.Review != nil {
-		s.openHunk(ctx, id, w.SessionID, w.BlockID, r.Worktree, r.Review.URL)
-	}
-}
+const (
+	// steerSignal names the event that records one `lineup steer`.
+	steerSignal = "steer"
+	// replacedSignal names the event that records a Worker with a new
+	// conversation in place of one whose conversation is gone.
+	replacedSignal = "worker-replaced"
+)
 
-// steerSignal names the event that records one `lineup steer`.
-const steerSignal = "steer"
-
-// replay reports whether the Stage lost a Worker since it began, and the
-// steers the user sent since. A new Stage has neither.
-func (s *Scheduler) replay(id string, since time.Time) (restart bool, steers []string) {
+// replay reports whether the Task's Worker replaces an earlier one, and the
+// steers the user sent to the Task's Workers. The Task has one conversation for
+// all its Stages, so a Worker in a new conversation needs every steer.
+func (s *Scheduler) replay(id string) (replaced bool, steers []string) {
 	events, err := s.d.Store.Events(id)
 	if err != nil {
 		s.d.Log.Warn("replay", "task", id, "err", err)
 		return false, nil
 	}
 	for _, e := range events {
-		if e.At.Before(since) {
-			continue
-		}
 		switch e.Signal {
-		case lifecycle.WorkerLost{}.Name():
-			restart = true
+		case replacedSignal:
+			replaced = true
 		case steerSignal:
 			steers = append(steers, e.Detail)
 		}
 	}
-	return restart, steers
+	return replaced, steers
 }
 
 // openHunk shows the PR in hunk beside a review Worker. A failed split leaves
@@ -502,19 +462,26 @@ func (s *Scheduler) sessionEmpty(ctx context.Context, session string) bool {
 	return len(blocks) == 0
 }
 
-// detach forgets the Task's tab before closing it, so its exit is not read as a lost Worker.
-func (s *Scheduler) detach(ctx context.Context, r Record) {
+// closeTab forgets the Task's tab before it closes it, so the tab's close is
+// not read as the user's. Only the user's own act reaches it: a close, an
+// archive, or a restore of a tab that Rex kept after its program exited.
+func (s *Scheduler) closeTab(ctx context.Context, r Record) {
 	if r.WindowID == "" {
 		return
 	}
-	s.update(r.ID, func(r *Record) { r.WindowID, r.BlockID, r.HunkBlockID, r.Job = "", "", "", JobNone })
+	s.update(r.ID, func(rec *Record) {
+		if rec.WindowID == r.WindowID {
+			rec.WindowID, rec.BlockID, rec.HunkBlockID, rec.Job = "", "", "", JobNone
+		}
+	})
 	if err := s.d.Rex.CloseWindow(ctx, r.SessionID, r.WindowID); err != nil {
 		s.d.Log.Warn("close tab", "task", r.ID, "err", err)
 	}
 }
 
+// cleanup runs only when the user ends the Task.
 func (s *Scheduler) cleanup(ctx context.Context, r Record) {
-	s.detach(ctx, r)
+	s.closeTab(ctx, r)
 	switch {
 	case r.Review != nil:
 		s.removeReviewWorktree(ctx, r)
@@ -523,6 +490,8 @@ func (s *Scheduler) cleanup(ctx context.Context, r Record) {
 	case r.Worktree != "" || r.SessionID != "":
 		if err := s.d.Worktrees.Remove(ctx, r.Repo, r.Branch); err != nil {
 			s.d.Log.Error("remove worktree", "task", r.ID, "err", err)
+		} else {
+			s.update(r.ID, func(r *Record) { r.Worktree = "" })
 		}
 	}
 	var last bool
@@ -558,8 +527,15 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		if r.Job != JobWorker {
 			return
 		}
+		if r.WorkerState == promptedState && (ev.Status.State == "idle" || ev.Status.State == "done") {
+			return
+		}
 		was := r.WorkerState
 		r.Status, r.WorkerState = ev.Status.Msg, ev.Status.State
+		if r.Pending != nil && (ev.Status.State == "idle" || ev.Status.State == "done") {
+			id := r.ID
+			s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
+		}
 		if ev.Status.State == "done" {
 			s.checkContract(r, false)
 			s.save(r)
@@ -577,7 +553,13 @@ func (s *Scheduler) onRex(ev RexEvent) {
 
 	case EvExited:
 		job := r.Job
+		if job == JobWorker {
+			s.lostPrompt(r)
+		}
 		r.Job = JobExited
+		if job == JobWorker && ev.ExitCode != 0 {
+			r.Pending = nil
+		}
 		s.save(r)
 		switch {
 		case job == JobSetup && ev.ExitCode != 0:
@@ -585,49 +567,77 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		case job == JobSetup:
 			id := r.ID
 			s.enqueue(id, func(ctx context.Context) { s.finishSetup(ctx, id) })
-		case job == JobWorker && ev.ExitCode != 0 && r.Review != nil && r.WorkerStage == lifecycle.ReviewReady:
+		case job == JobWorker && ev.ExitCode != 0 && r.WorkerState == "" && r.Conversation != "":
 			s.resumeFallback(r, ev.ExitCode)
 		case job == JobWorker && ev.ExitCode != 0:
 			s.apply(r, lifecycle.WorkerExited{Code: ev.ExitCode}, "")
+		case job == JobWorker && r.Pending != nil:
+			id := r.ID
+			s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
 		case job == JobWorker:
 			s.checkContract(r, false)
 		}
 
 	case EvClosed:
 		job := r.Job
+		if r.Stage == lifecycle.Done {
+			s.tabClosedByUser(r, "")
+			return
+		}
+		s.lostPrompt(r)
+		waits := r.Pending != nil
 		s.forgetTab(r)
 		s.save(r)
 		switch {
 		case job == JobSetup:
 			s.apply(r, lifecycle.SetupFailed{Detail: "setup tab closed"}, "")
-		case job == JobWorker:
-			s.apply(r, lifecycle.WorkerLost{}, "")
+		case job == JobWorker || job == JobExited && r.hadWorker():
+			s.apply(r, lifecycle.TabClosed{Waits: waits}, "")
 		}
 	}
 }
 
-// resumeFallback handles a review Worker that exited non-zero. Only a Review
-// ready Worker starts with --resume. If its conversation file is gone, the
-// Task reviews afresh, and the new Worker's --session-id creates the
-// conversation for later reopens. The fresh start is Reviewing, so a second
-// failure takes the normal path.
+// resumeFallback handles a Worker that exited non-zero before its first
+// status. If `claude --resume` found no conversation file, the user's restore
+// goes on with a fresh Worker in a new conversation. A Stage that needs no
+// Worker keeps its conversation, because it has no prompt to start over with.
 func (s *Scheduler) resumeFallback(r *Record, code int) {
-	id, session, block, conversation := r.ID, r.SessionID, r.BlockID, r.Conversation
+	id, session, block, stage := r.ID, r.SessionID, r.BlockID, r.Stage
 	s.enqueue(id, func(ctx context.Context) {
 		out, err := s.d.Rex.Capture(ctx, session, block)
 		s.call(func() {
 			r, ok := s.recs[id]
-			if !ok || r.Stage != lifecycle.ReviewReady {
+			if !ok || r.Stage != stage {
 				return
 			}
-			if err == nil && strings.Contains(out, claude.NoConversation) {
-				s.save(r, store.Event{TaskID: id, At: s.now(), Signal: "resume-fallback", From: r.Stage.String(), To: r.Stage.String(), Detail: conversation})
-				s.apply(r, lifecycle.Rerun{Stage: lifecycle.Reviewing}, "")
-				return
+			switch {
+			case err != nil || !strings.Contains(out, claude.NoConversation):
+				s.apply(r, lifecycle.WorkerExited{Code: code}, "")
+			case r.Stage == lifecycle.ReviewReady || r.Stage.Agent():
+				r.Conversation = ""
+				s.save(r)
+				s.restoreLater(id)
+			default:
+				s.d.Log.Warn("resume found no conversation", "task", id, "stage", r.Stage.String())
 			}
-			s.apply(r, lifecycle.WorkerExited{Code: code}, "")
 		})
 	})
+}
+
+// lostPrompt puts a typed prompt back in Pending when its Worker ended before it
+// reported working on the prompt.
+func (s *Scheduler) lostPrompt(r *Record) {
+	if r.WorkerState == promptedState && r.WorkerStage == r.Stage && r.Pending == nil {
+		s.pend(r, r.Stage)
+	}
+}
+
+// tabClosedByUser records that the user closed a Done Task's tab, and
+// cleans the Task up.
+func (s *Scheduler) tabClosedByUser(r *Record, detail string) {
+	s.forgetTab(r)
+	s.save(r)
+	s.apply(r, lifecycle.TabClosed{}, detail)
 }
 
 // forgetTab drops the Task's tab after its block is gone. The hunk pane
@@ -661,7 +671,7 @@ func (s *Scheduler) keepOrphan(ev RexEvent) {
 // Task keeps the question flag.
 func (s *Scheduler) checkContract(r *Record, question bool) {
 	id, stage, block := r.ID, r.Stage, r.BlockID
-	if !stage.Agent() {
+	if !stage.Agent() || r.Pending != nil {
 		return
 	}
 	s.enqueue(id, func(ctx context.Context) {
@@ -670,7 +680,7 @@ func (s *Scheduler) checkContract(r *Record, question bool) {
 		}
 		s.call(func() {
 			r, ok := s.recs[id]
-			if !ok || r.Stage != stage || (r.BlockID != block && r.BlockID != "") {
+			if !ok || r.Stage != stage || r.Pending != nil || (r.BlockID != block && r.BlockID != "") {
 				return
 			}
 			reviewed, met := s.contractOutput(r)
@@ -796,22 +806,44 @@ func prURL(p *PRSnapshot) string {
 	return p.URL
 }
 
-// recover compares the store with Rex. Each Task in an agent Stage whose tab
-// is gone gets a fresh Worker from its restart budget.
+// recover compares the store with Rex. Each Task in an agent Stage whose tab is
+// gone gets the tab closed flag, and no tab opens until the user asks.
 func (s *Scheduler) recover(ctx context.Context) {
 	live := map[string]map[string]bool{}
+	blocksOf := func(r *Record) (map[string]bool, bool) {
+		if blocks, ok := live[r.SessionID]; ok {
+			return blocks, true
+		}
+		blocks, err := s.d.Rex.Blocks(ctx, r.SessionID)
+		if err != nil {
+			s.d.Log.Error("recover", "task", r.ID, "err", err)
+			return nil, false
+		}
+		live[r.SessionID] = blocks
+		return blocks, true
+	}
 	for _, r := range s.list() {
+		if r.awaitsStatus() {
+			r.PendingSince = s.now()
+		}
+		if r.Stage == lifecycle.Done {
+			if r.BlockID == "" {
+				if r.Worktree != "" && !r.WorktreeKept {
+					s.apply(r, lifecycle.TabClosed{}, "recovered at start")
+				}
+				continue
+			}
+			if blocks, ok := blocksOf(r); ok && !blocks[r.BlockID] {
+				s.tabClosedByUser(r, "recovered at start")
+			}
+			continue
+		}
 		if !r.Stage.Started() || r.SessionID == "" && r.Job == JobNone && !r.Stage.Agent() {
 			continue
 		}
-		blocks, ok := live[r.SessionID]
+		blocks, ok := blocksOf(r)
 		if !ok {
-			var err error
-			if blocks, err = s.d.Rex.Blocks(ctx, r.SessionID); err != nil {
-				s.d.Log.Error("recover", "task", r.ID, "err", err)
-				continue
-			}
-			live[r.SessionID] = blocks
+			continue
 		}
 		if r.BlockID != "" && blocks[r.BlockID] {
 			if r.Job == JobWorker {
@@ -832,17 +864,15 @@ func (s *Scheduler) recover(ctx context.Context) {
 			continue
 		}
 		switch {
-		case r.Review != nil && r.Worktree == "" && r.Stage.Agent():
-			id, stage := r.ID, r.Stage
-			s.enqueue(id, func(ctx context.Context) { s.startWorker(ctx, id, stage) })
 		case job == JobSetup || r.Worktree == "" && r.Stage.Agent():
-			stage := r.Stage
-			r.Pending = &stage
-			rec := *r
-			s.enqueue(r.ID, func(ctx context.Context) { s.setup(ctx, rec) })
+			stage, id := r.Stage, r.ID
+			s.pend(r, stage)
+			s.save(r)
+			s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
 		case r.Stage.Agent():
 			s.d.Log.Info("recover worker", "task", r.ID, "stage", r.Stage.String())
-			s.apply(r, lifecycle.WorkerLost{}, "recovered at start")
+			s.lostPrompt(r)
+			s.apply(r, lifecycle.TabClosed{Waits: r.Pending != nil}, "recovered at start")
 		}
 	}
 }
@@ -875,13 +905,13 @@ func cmpString(a, b string) int {
 	return 0
 }
 
-// doneShownFor is how long a Done Task stays on the Board.
+// doneShownFor is how long a Done Task with no tab stays on the Board.
 const doneShownFor = 7 * 24 * time.Hour
 
 func (s *Scheduler) view() BoardView {
 	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap(), ReviewsPaused: s.paused}
 	for _, r := range s.list() {
-		if r.Stage == lifecycle.Done && (r.Archived || s.now().Sub(r.StageSince) > doneShownFor) {
+		if r.Stage == lifecycle.Done && (r.Archived || !r.keepsTab() && s.now().Sub(r.StageSince) > doneShownFor) {
 			continue
 		}
 		v.Tasks = append(v.Tasks, r.view())

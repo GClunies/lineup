@@ -15,12 +15,12 @@ func seen(f PRFacts) Signal { return PRSeen{f} }
 
 var anySignal = rapid.OneOf(rapid.SampledFrom([]Signal{
 	Start{}, Start{OverCap: true}, PRMerge{}, TaskClosed{},
-	Rerun{Working}, Rerun{CIDebug}, Rerun{Responding}, Rerun{Reviewing}, Reopen{},
+	Rerun{Working}, Rerun{CIDebug}, Rerun{Responding}, Rerun{Reviewing},
 	WorkerDone{ContractMet: true}, WorkerDone{ContractMet: false},
 	WorkerStatus{State: "working"}, WorkerStatus{State: "blocked", Kind: "permission"}, WorkerStatus{State: "error"},
-	WorkerExited{Code: 0}, WorkerExited{Code: 1}, WorkerLost{}, SetupFailed{},
+	WorkerExited{Code: 0}, WorkerExited{Code: 1}, SetupFailed{},
 	PROpen{}, Pushed{}, ReviewCommented{}, ReviewChangesRequested{}, ReviewAdditionalAuthors{}, PRMerged{},
-	PRReviewed{}, PRClosed{}, ReviewBotLate{},
+	PRReviewed{}, PRClosed{}, ReviewBotLate{}, TabClosed{}, TabClosed{Waits: true}, TabOpened{},
 }), rapid.Map(anyFacts, seen))
 
 // spending are the facts of a PR whose first gap spends a Loop budget under
@@ -31,8 +31,9 @@ var spending = []Signal{
 }
 
 // failure is what a Worker that never succeeds, and a world that keeps
-// rejecting its work, sends for a Task in each Stage. It leaves out the
-// failures that flag the Task at once, so only the Loop budgets can stop it.
+// rejecting its work, sends for a Task in each Stage. Only the Loop budgets
+// stop it, except in a Stage that needs the Worker, where a closed tab flags the
+// Task at once.
 func failure(t *rapid.T, s Stage, pushes bool) Signal {
 	switch s {
 	case CIRunning:
@@ -44,7 +45,7 @@ func failure(t *rapid.T, s Stage, pushes bool) Signal {
 			return Pushed{}
 		}
 	}
-	return WorkerLost{}
+	return TabClosed{}
 }
 
 // queues are the review queues of a random Board. "" is a review with no queue.
@@ -65,7 +66,6 @@ func randomBoard(t *rapid.T) (*Board, []string) {
 			Budgets: Budgets{
 				CIDebug:    rapid.IntRange(0, 3).Draw(t, "ci"),
 				Responding: rapid.IntRange(0, 3).Draw(t, "resp"),
-				Restarts:   rapid.IntRange(0, 2).Draw(t, "restarts"),
 			},
 			Bar: anyBar.Draw(t, "bar"),
 		}
@@ -164,7 +164,7 @@ func TestEveryStartedTaskEndsInDoneOrNeedsYou(t *testing.T) {
 		for range rapid.IntRange(0, 100).Draw(t, "steps") {
 			step(t, b, anyTask(t, b, ids))
 		}
-		// Budgets total at most 3+3+2 per Stage visit, so a bounded number of
+		// Budgets total at most 3+3 per Stage visit, so a bounded number of
 		// failures must reach the user.
 		const bound = 60
 		for _, id := range ids {
@@ -305,7 +305,7 @@ func TestAnOptionalCheckNeverStartsCIDebug(t *testing.T) {
 			task := anyTask(t, b, ids)
 			s, effects, _ := stepFrom(t, b, task, barSignal)
 			seen, ok := s.(PRSeen)
-			if ok && slices.Contains(effects, Effect(StartWorker{CIDebug})) && !plainGaps(task.Policy.Bar, seen.Facts)[GapFailed] {
+			if ok && slices.Contains(effects, Effect(PromptWorker{CIDebug})) && !plainGaps(task.Policy.Bar, seen.Facts)[GapFailed] {
 				t.Fatalf("%s started CI debug on facts %+v with no gating check failed under %+v", task.ID, seen.Facts, task.Policy.Bar)
 			}
 		}
@@ -356,7 +356,7 @@ func TestReviewCyclesNeverPassTheirBudget(t *testing.T) {
 		for range rapid.IntRange(0, 200).Draw(t, "steps") {
 			task := anyTask(t, b, ids)
 			s, effects, _ := stepFrom(t, b, task, barSignal)
-			if _, ok := s.(PRSeen); ok && slices.Contains(effects, Effect(StartWorker{Responding})) && task.BotScore != nil {
+			if _, ok := s.(PRSeen); ok && slices.Contains(effects, Effect(PromptWorker{Responding})) && task.BotScore != nil {
 				rounds[task.ID]++
 			}
 			if rounds[task.ID] > task.Policy.Budgets.ReviewCycles || task.Left.ReviewCycles < 0 {

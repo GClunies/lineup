@@ -40,10 +40,11 @@ const usage = `usage: lineup [command]
                                a Worker's question for the user, on the Task's row
   lineup set <task> key=value  override configuration, for example model=claude-opus-5-5
   lineup cap <n>               set the WIP cap
-  lineup rerun <task> <stage>  start a fresh Worker, for example for ci_debug
+  lineup rerun <task> <stage>  type the Stage's prompt into the Worker again, for example for ci_debug
+  lineup open <task>           focus the Task's tab, or restore its closed Worker
   lineup merge <task>
-  lineup close <task>
-  lineup archive <task>        hide a Done Task from the Board
+  lineup close <task>          end the Task, and close its tab and worktree
+  lineup archive <task>        close a Done Task's tab and worktree, and hide it from the Board
 `
 
 func main() {

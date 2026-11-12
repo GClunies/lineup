@@ -25,7 +25,6 @@ func (e *NotAllowedError) Error() string {
 type Budgets struct {
 	CIDebug    int `json:"ci_debug"`
 	Responding int `json:"responding"`
-	Restarts   int `json:"restarts"`
 	// ReviewCycles is how many Responding rounds a low review bot score can
 	// start. It is apart from Responding, which people's reviews spend.
 	ReviewCycles int `json:"review_cycles"`
@@ -204,7 +203,7 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 		}
 		t.OverCap = s.OverCap && b.Started() >= b.Cap
 		t.enter(Working)
-		return []Effect{TrackerStatus{"started"}, StartWorker{Working}}, nil
+		return []Effect{TrackerStatus{"started"}, PromptWorker{Working}}, nil
 
 	case PRMerge:
 		if t.Stage != ReadyToLand {
@@ -214,22 +213,28 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 
 	case TaskClosed:
 		if t.Stage == Done {
-			return nil, notAllowed
+			return []Effect{Cleanup{}}, nil
 		}
-		return t.finish(OutcomeClosed), nil
+		return append([]Effect{Cleanup{}}, t.finish(OutcomeClosed)...), nil
+
+	case TabClosed:
+		if t.Stage == Done {
+			return []Effect{Cleanup{}}, nil
+		}
+		t.lostTab(s)
+		return nil, nil
+
+	case TabOpened:
+		if t.Flag == ReasonTabClosed || t.Flag.Transient() {
+			t.flag("", "")
+		}
+		return nil, nil
 
 	case Rerun:
 		if !s.Stage.Agent() || !t.Kind.Has(s.Stage) || t.Stage == Queued || t.Stage == Done {
 			return nil, notAllowed
 		}
 		return t.startAgent(s.Stage), nil
-
-	case Reopen:
-		if !t.Stage.Resumable() {
-			return nil, notAllowed
-		}
-		t.flag("", "")
-		return []Effect{StartWorker{t.Stage}}, nil
 
 	case PRMerged:
 		if t.Stage == Done || t.Stage == Queued {
@@ -270,18 +275,6 @@ func (t *Task) observe(s Signal) []Effect {
 
 	case SetupFailed:
 		t.flag(ReasonSetupFailed, s.Detail)
-
-	case WorkerLost:
-		if !t.Stage.Agent() {
-			return nil
-		}
-		if t.Left.Restarts == 0 {
-			t.flag(ReasonWorkerLost, "")
-			return nil
-		}
-		t.Left.Restarts--
-		t.flag("", "")
-		return []Effect{StartWorker{t.Stage}}
 
 	case WorkerDone:
 		if !t.Stage.Agent() {
@@ -335,6 +328,11 @@ func (t *Task) observe(s Signal) []Effect {
 			t.flag(ReasonNoBotReview, fmt.Sprintf("%s did not score %s", t.Policy.Bar.Bot.Title, head[:min(7, len(head))]))
 		}
 
+	case PromptStalled:
+		if t.Stage == s.Stage && t.Flag == "" {
+			t.flag(ReasonWorkerSilent, fmt.Sprintf("the %s prompt waits: the Worker has sent no status", s.Stage))
+		}
+
 	case PRReviewed:
 		if t.Kind == KindReview {
 			return t.finish(OutcomeReviewed)
@@ -346,6 +344,20 @@ func (t *Task) observe(s Signal) []Effect {
 		}
 	}
 	return nil
+}
+
+// lostTab flags a Task in an agent Stage whose Worker has no tab. A flag that
+// the Worker's own state set gives way, because that Worker is gone. Any other
+// flag stays, because it holds without a Worker.
+func (t *Task) lostTab(s TabClosed) {
+	if !t.Stage.Agent() || t.Flag != "" && !t.Flag.Transient() && t.Flag != ReasonTabClosed {
+		return
+	}
+	var detail string
+	if s.Waits {
+		detail = t.Stage.String() + " waits for the Worker"
+	}
+	t.flag(ReasonTabClosed, detail)
 }
 
 // afterContract is the Stage that a met Stage contract leads to. The other
@@ -482,7 +494,7 @@ func (t *Task) reviewCycle() []Effect {
 
 func (t *Task) startAgent(stage Stage) []Effect {
 	t.enter(stage)
-	return []Effect{StartWorker{stage}}
+	return []Effect{PromptWorker{stage}}
 }
 
 // ready enters Ready to land. The Responding budget is per review, so a fresh
@@ -498,18 +510,15 @@ func (t *Task) finish(o Outcome) []Effect {
 	t.enter(Done)
 	t.Outcome = o
 	if t.Kind == KindReview {
-		return []Effect{Cleanup{}}
+		return nil
 	}
-	return []Effect{Cleanup{}, TrackerStatus{string(o)}}
+	return []Effect{TrackerStatus{string(o)}}
 }
 
-// enter changes the Stage, clears the flag and the review cycle's score, and
-// refills the per-Stage budget.
 func (t *Task) enter(s Stage) {
 	t.Stage = s
 	t.flag("", "")
 	t.BotScore = nil
-	t.Left.Restarts = t.Policy.Budgets.Restarts
 }
 
 func (t *Task) flag(r Reason, detail string) {

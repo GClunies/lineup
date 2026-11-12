@@ -10,8 +10,8 @@ var errRexRestarted = errors.New("rex server restarted; exiting so that recovery
 
 // watchRexServer returns errRexRestarted when the Rex server's instance id
 // differs from start. A failed read is transient and is passed to warn.
-// Exiting lets the service manager start the Scheduler again, and startup
-// recovery restarts the lost Workers.
+// Exiting lets the service manager start the Scheduler again. Startup recovery
+// then flags each lost Worker, and the user restores it.
 func watchRexServer(ctx context.Context, every time.Duration, start string, read func(context.Context) (string, error), warn func(string, ...any)) error {
 	t := time.NewTicker(every)
 	defer t.Stop()

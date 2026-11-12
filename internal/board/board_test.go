@@ -29,6 +29,7 @@ type fakeClient struct {
 	errs    map[string]error
 	capture string
 	review  scheduler.ReviewResult // the answer to each review op
+	open    scheduler.OpenResult   // the answer to each open op
 }
 
 func (f *fakeClient) Do(req scheduler.Request, out any) error {
@@ -46,6 +47,8 @@ func (f *fakeClient) Do(req scheduler.Request, out any) error {
 		*(out.(*scheduler.TaskDetail)) = scheduler.TaskDetail{TaskView: scheduler.TaskView{ID: req.Task, Stage: "Working"}, Branch: "b"}
 	case "review":
 		*(out.(*scheduler.ReviewResult)) = f.review
+	case "open":
+		*(out.(*scheduler.OpenResult)) = f.open
 	}
 	return nil
 }
@@ -187,7 +190,7 @@ func TestKeyGating(t *testing.T) {
 		{"WEB-12", "s", ""},
 		{"WEB-12", "m", ""},
 		{"ENG-590", "m", ""},
-		{"ENG-590", "enter", "focus"},
+		{"ENG-590", "enter", "open"},
 	}
 	for _, c := range cases {
 		f := &fakeClient{}
@@ -258,6 +261,45 @@ func TestXArchivesADoneTask(t *testing.T) {
 	cmd()
 	if f.calls[0].Op != "archive" || f.calls[0].Task != "ENG-560" {
 		t.Fatalf("calls = %+v", f.calls)
+	}
+}
+
+func TestXClosesTheTabOfADoneTask(t *testing.T) {
+	f := &fakeClient{}
+	v := fixture()
+	for i := range v.Tasks {
+		if v.Tasks[i].ID == "ENG-560" {
+			v.Tasks[i].Tab = true
+		}
+	}
+	m := newModel(f, v)
+	m.sel = "ENG-560"
+	if !strings.Contains(m.footer(), "x close") {
+		t.Fatalf("footer = %q, want the close hint", m.footer())
+	}
+	m, _ = press(m, "x")
+	if !strings.Contains(m.footer(), "close ENG-560's tab and worktree? (y/n)") {
+		t.Fatalf("footer = %q", m.footer())
+	}
+	_, cmd := press(m, "y")
+	cmd()
+	if len(f.calls) != 1 || f.calls[0].Op != "close" || f.calls[0].Task != "ENG-560" {
+		t.Fatalf("calls = %+v, want one close", f.calls)
+	}
+}
+
+func TestNOnTheCloseOfADoneTaskKeepsTheTab(t *testing.T) {
+	f := &fakeClient{}
+	v := fixture()
+	for i := range v.Tasks {
+		v.Tasks[i].Tab = v.Tasks[i].ID == "ENG-560"
+	}
+	m := newModel(f, v)
+	m.sel = "ENG-560"
+	m, _ = press(m, "x")
+	m, cmd := press(m, "n")
+	if cmd != nil || len(f.calls) != 0 || !strings.Contains(m.footer(), "close cancelled") {
+		t.Fatalf("n sent %+v, footer %q, want nothing sent", f.calls, m.footer())
 	}
 }
 
@@ -689,5 +731,51 @@ func TestTheDetailPaneShowsTheLandingBar(t *testing.T) {
 		"Landing bar\n  ✓ required checks passed\n  ✗ 2 open threads (1 bot)\n\n"
 	if got := formatDetail(d); got != want {
 		t.Errorf("detail %q, want %q", got, want)
+	}
+}
+
+func TestEnterRestoresAClosedWorker(t *testing.T) {
+	f := &fakeClient{open: scheduler.OpenResult{Action: scheduler.OpenRestored}}
+	v := fixture()
+	closed := tv("ENG-700", lifecycle.Working, "data", "Backfill events", "tab closed", time.Minute)
+	closed.Live, closed.Flag = false, "tab closed"
+	v.Tasks = append(v.Tasks, closed)
+	m := newModel(f, v)
+	m.sel = "ENG-700"
+	if !strings.Contains(m.footer(), "enter restore the Worker") || strings.Contains(m.footer(), "go to the Worker") {
+		t.Fatalf("footer = %q, want the restore hint", m.footer())
+	}
+	m2, cmd := press(m, "enter")
+	if cmd == nil {
+		t.Fatal("enter sent nothing")
+	}
+	m2 = run(m2, cmd)
+	if len(f.calls) != 1 || f.calls[0].Op != "open" || f.calls[0].Task != "ENG-700" {
+		t.Fatalf("calls = %+v, want one open of ENG-700", f.calls)
+	}
+	if m2.status != "open ENG-700 ok · restored" {
+		t.Fatalf("status = %q", m2.status)
+	}
+}
+
+func TestEnterOnALiveWorkerOffersTheWorker(t *testing.T) {
+	f := &fakeClient{}
+	m := newModel(f, fixture())
+	m.sel = "ENG-590"
+	if !strings.Contains(m.footer(), "enter go to the Worker") || strings.Contains(m.footer(), "restore the Worker") {
+		t.Fatalf("footer = %q, want the go-to hint", m.footer())
+	}
+}
+
+func TestEnterOnAQueuedTaskOffersNoRestore(t *testing.T) {
+	f := &fakeClient{}
+	v := fixture()
+	queued := tv("ENG-701", lifecycle.Queued, "data", "Later", "", time.Minute)
+	queued.Live = false
+	v.Tasks = append(v.Tasks, queued)
+	m := newModel(f, v)
+	m.sel = "ENG-701"
+	if strings.Contains(m.footer(), "restore the Worker") {
+		t.Fatalf("footer = %q, want no restore for a Task that has not started", m.footer())
 	}
 }

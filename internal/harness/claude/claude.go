@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -42,6 +43,21 @@ func ConfigDir(ctx context.Context, repoMain string) (string, error) {
 		return "", fmt.Errorf("direnv exec %s: %w: %s", repoMain, err, strings.TrimSpace(stderr.String()))
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// HasConversation reports whether the profile folder holds the conversation. A
+// conversation is the file projects/<folder>/<id>.jsonl, and the folder name
+// comes from the Worker's own folder, so it matches any folder.
+func HasConversation(configDir, id string) bool {
+	if configDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return true
+		}
+		configDir = filepath.Join(home, ".claude")
+	}
+	files, err := filepath.Glob(filepath.Join(configDir, "projects", "*", id+".jsonl"))
+	return err != nil || len(files) > 0
 }
 
 func stateFile(configDir string) (string, error) {
@@ -310,6 +326,35 @@ func intro(stage lifecycle.Stage, task TaskInfo) string {
 		return strings.Join(text, " ")
 	}
 	return intros[stage]
+}
+
+var slashCommand = regexp.MustCompile(`^/[\w:.-]+ `)
+
+// Input returns the writes that put text into a Worker's input box. Text with a
+// newline goes in as one bracketed paste. Claude drops the start of a long
+// unbracketed write that comes right after a turn ends. A single line stays
+// typed, because a menu reads a pasted answer as no keypress. A leading slash
+// command is typed too, because Claude runs a command only from typed keys.
+// Input drops control bytes, so Issue text cannot end the paste or press a key.
+func Input(text string) []string {
+	multi := strings.Contains(text, "\n")
+	text = strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n' || (r == '\t' && multi):
+			return r
+		case r < 0x20 || (r >= 0x7f && r <= 0x9f):
+			return -1
+		}
+		return r
+	}, text)
+	if !multi {
+		return []string{text}
+	}
+	var writes []string
+	if cmd := slashCommand.FindString(text); cmd != "" {
+		writes, text = append(writes, cmd), text[len(cmd):]
+	}
+	return append(writes, "\x1b[200~"+text+"\x1b[201~")
 }
 
 // Prompt returns the Stage prompt with the Stage contract appended. extra is

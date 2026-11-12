@@ -58,7 +58,6 @@ func (r Resolved) Policy() lifecycle.Policy {
 type budgetsFile struct {
 	CIDebug    *int `toml:"ci_debug"`
 	Responding *int `toml:"responding"`
-	Restarts   *int `toml:"restarts"`
 }
 
 // reviewBotFile is a [review_bot] table. A layer can leave out a key and
@@ -389,6 +388,8 @@ func isPair(s string) bool {
 
 var errHarnessGone = errors.New("harness is no longer a setting, lineup runs claude")
 
+const restartsHint = ". A lost Worker no longer restarts by itself, so delete the restarts line from the [budgets] table"
+
 func decodeStrict(text string, v any) error {
 	md, err := toml.Decode(text, v)
 	if err != nil {
@@ -404,7 +405,11 @@ func decodeStrict(text string, v any) error {
 		for i, k := range keys {
 			names[i] = k.String()
 		}
-		return fmt.Errorf("unknown keys: %s", strings.Join(names, ", "))
+		msg := "unknown keys: " + strings.Join(names, ", ")
+		if slices.Contains(names, "budgets.restarts") {
+			msg += restartsHint
+		}
+		return errors.New(msg)
 	}
 	return nil
 }
@@ -419,7 +424,7 @@ func (g *Global) validate(l *layer, where string) error {
 		}
 	}
 	if b := l.Budgets; b != nil {
-		for name, v := range map[string]*int{"ci_debug": b.CIDebug, "responding": b.Responding, "restarts": b.Restarts} {
+		for name, v := range map[string]*int{"ci_debug": b.CIDebug, "responding": b.Responding} {
 			if v != nil && *v < 0 {
 				return fmt.Errorf("%s: budgets.%s must not be negative", where, name)
 			}
@@ -442,6 +447,19 @@ func (g *Global) validate(l *layer, where string) error {
 		st, err := lifecycle.ParseStage(key)
 		if err != nil || !st.Agent() {
 			return fmt.Errorf("%s: stage.%s is not an agent Stage or default", where, key)
+		}
+		if st.StartsWorker() {
+			continue
+		}
+		field := ""
+		switch s := l.Stage[key]; {
+		case s.Model != nil:
+			field = "model"
+		case s.Effort != nil:
+			field = "effort"
+		}
+		if field != "" {
+			return fmt.Errorf("%s: stage.%s.%s: a Task keeps the %s of the Stage its Worker starts in", where, key, field, field)
 		}
 	}
 	return nil
@@ -555,7 +573,7 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 		WIPCap:       defaultWIPCap,
 		PR:           true,
 		PollInterval: defaultPollInterval,
-		Budgets:      lifecycle.Budgets{CIDebug: 3, Responding: 3, Restarts: 2},
+		Budgets:      lifecycle.Budgets{CIDebug: 3, Responding: 3},
 	}
 	for _, r := range matched {
 		layers = append(layers, r.layer)
@@ -587,9 +605,6 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 			}
 			if b.Responding != nil {
 				res.Budgets.Responding = *b.Responding
-			}
-			if b.Restarts != nil {
-				res.Budgets.Restarts = *b.Restarts
 			}
 		}
 	}

@@ -105,6 +105,7 @@ type Model struct {
 	mode          mode
 	pendingTask   string // Task the current prompt is about
 	pendingOp     string // close or archive, for the y/n prompt
+	pendingAsk    string
 	width, height int
 
 	preview    bool
@@ -336,11 +337,8 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.vp.GotoTop()
 		return m, m.loadDetail()
 	case "enter":
-		if ok && reopens(t) {
-			return m, m.reviewPR(t.PRURL, t.ID)
-		}
 		if ok {
-			return m, m.op("focus", scheduler.Request{Op: "focus", Task: t.ID})
+			return m, m.openTask(t.ID)
 		}
 	case "m":
 		if ok && t.StageKey == lifecycle.ReadyToLand.Key() {
@@ -349,8 +347,13 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		if ok {
 			m.mode, m.pendingTask, m.pendingOp = modeConfirm, t.ID, "close"
+			m.pendingAsk = "close " + t.ID
 			if t.Group == lifecycle.GroupDone.String() {
-				m.pendingOp = "archive"
+				if t.Tab {
+					m.pendingAsk = "close " + t.ID + "'s tab and worktree"
+				} else {
+					m.pendingOp, m.pendingAsk = "archive", "archive "+t.ID
+				}
 			}
 		}
 	case "s":
@@ -428,6 +431,15 @@ func (m Model) op(label string, req scheduler.Request) tea.Cmd {
 	c := m.client
 	return func() tea.Msg {
 		return opMsg{label: label, task: req.Task, err: c.Do(req, nil)}
+	}
+}
+
+func (m Model) openTask(id string) tea.Cmd {
+	c := m.client
+	return func() tea.Msg {
+		var res scheduler.OpenResult
+		err := c.Do(scheduler.Request{Op: "open", Task: id}, &res)
+		return opMsg{label: "open", task: id, note: string(res.Action), err: err}
 	}
 }
 

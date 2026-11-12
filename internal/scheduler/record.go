@@ -42,8 +42,8 @@ type Record struct {
 	// Review is the PR that a review Task reviews, fixed when it is added.
 	// Only a review Task has one.
 	Review *ReviewPR `json:"review,omitempty"`
-	// Conversation is the ID of the review Worker's Claude conversation. Each
-	// Reviewing Worker starts a new one, and a reopen resumes it.
+	// Conversation is the ID of the Task's Claude conversation. The Task's
+	// first Worker starts it, and every later Worker resumes it.
 	Conversation string `json:"conversation,omitempty"`
 
 	SessionID string `json:"session_id,omitempty"`
@@ -54,11 +54,14 @@ type Record struct {
 	// reaches the Task.
 	HunkBlockID string          `json:"hunk_block_id,omitempty"`
 	WorkerStage lifecycle.Stage `json:"worker_stage"`
-	// Pending is the Worker to start once setup finishes.
-	Pending *lifecycle.Stage `json:"pending,omitempty"`
-	Status  string           `json:"status,omitempty"`
+	// Pending is the Stage whose prompt the Worker has not received yet. It is
+	// nil or the Task's Stage.
+	Pending      *lifecycle.Stage `json:"pending,omitempty"`
+	PendingSince time.Time        `json:"pending_since,omitzero"`
+	Status       string           `json:"status,omitempty"`
 	// WorkerState is the Worker's last program status: working, blocked,
-	// done, idle, or error. It is "" before the Worker's first status.
+	// done, idle, or error. It is "" before the Worker's first status, and
+	// "prompted" from a typed prompt until the Worker's next status.
 	WorkerState string `json:"worker_state,omitempty"`
 
 	PR *PRSnapshot `json:"pr,omitempty"`
@@ -127,6 +130,7 @@ type TaskView struct {
 	Worktree   string         `json:"worktree,omitempty"`
 	Since      time.Time      `json:"since"`
 	Live       bool           `json:"live"`
+	Tab        bool           `json:"tab,omitempty"`
 }
 
 type BoardView struct {
@@ -150,13 +154,19 @@ func (v BoardView) OfKind(k lifecycle.Kind) BoardView {
 	return out
 }
 
+// hadWorker reports whether a Worker ever opened in a tab for the Task. A Task
+// that had one and has no tab now waits for the user, so no prompt opens a tab.
+func (r *Record) hadWorker() bool { return r.WorkerStage != lifecycle.Queued }
+
+func (r *Record) keepsTab() bool { return r.Stage == lifecycle.Done && r.WindowID != "" }
+
 func (r *Record) view() TaskView {
 	v := TaskView{
 		ID: r.ID, Kind: r.Kind, Title: r.Title, Repo: r.RepoLabel,
 		Stage: r.Stage.String(), StageKey: r.Stage.Key(), Group: r.Group().String(),
 		Flag: string(r.Flag), FlagDetail: r.FlagDetail, Outcome: string(r.Outcome),
 		OverCap: r.OverCap, Worktree: r.Worktree, Since: r.StageSince,
-		Live: r.Job == JobWorker, Skill: r.Overrides["skill"],
+		Live: r.Job == JobWorker, Tab: r.WindowID != "", Skill: r.Overrides["skill"],
 	}
 	if v.Repo == "" { // a Record from before RepoLabel, when the session was the Repo's label
 		v.Repo = r.Session

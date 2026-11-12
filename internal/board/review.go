@@ -477,8 +477,8 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch {
 		case ok && t.Live:
 			return m, m.op("focus", scheduler.Request{Op: "focus", Task: t.ID})
-		case ok && reopens(t):
-			return m, m.reviewPR(rows[i].URL, prRef(rows[i]))
+		case ok && restorable(t):
+			return m, m.openTask(t.ID)
 		}
 		return m, m.openURL(rows[i].URL)
 	case "o":
@@ -507,7 +507,7 @@ func (m Model) pollQuietly() tea.Cmd {
 
 // reviewPR starts a review Task for the PR at url now, outside every queue's
 // slots. If the PR has an open review Task, it starts that Task if it is
-// Queued, reopens its closed Worker, runs it again if it stopped for good, and
+// Queued, restores its closed Worker, runs it again if it stopped for good, and
 // otherwise focuses its tab. ref names the PR in an error.
 func (m Model) reviewPR(url, ref string) tea.Cmd {
 	c := m.client
@@ -530,11 +530,9 @@ func (m Model) reviewPR(url, ref string) tea.Cmd {
 	}
 }
 
-// reopens reports whether the review op reopens the Task's Worker, because
-// the Worker closed in a Stage that resumes it.
-func reopens(t scheduler.TaskView) bool {
+func restorable(t scheduler.TaskView) bool {
 	st, err := lifecycle.ParseStage(t.StageKey)
-	return err == nil && st.Resumable() && !t.Live
+	return err == nil && st.Started() && !t.Live
 }
 
 // reviewTasks are the review Tasks on the Board, as the queue rules see them.
@@ -542,7 +540,7 @@ func reviewTasks(tasks []scheduler.TaskView) []github.ReviewTask {
 	var out []github.ReviewTask
 	for _, t := range tasks {
 		if t.Kind == lifecycle.KindReview {
-			out = append(out, github.ReviewTask{URL: t.PRURL, Head: t.ReviewHead, Done: t.Group == lifecycle.GroupDone.String()})
+			out = append(out, github.ReviewTask{URL: t.PRURL, Head: t.ReviewHead, Done: t.Group == lifecycle.GroupDone.String() && !t.Tab})
 		}
 	}
 	return out

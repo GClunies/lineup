@@ -105,7 +105,7 @@ func TestParseReviewKey(t *testing.T) {
 	}
 }
 
-func TestReviewFromStartToReviewedAndCleanedUp(t *testing.T) {
+func TestAReviewedTaskKeepsItsTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 
@@ -161,25 +161,88 @@ func TestReviewFromStartToReviewedAndCleanedUp(t *testing.T) {
 	if v := h.task("pr-7"); v.Outcome != "reviewed" {
 		t.Fatalf("done = %+v", v)
 	}
+	if v := h.task("pr-7"); !v.Tab || v.Worktree != "/repos/acme/data.review-pr-7" {
+		t.Fatalf("reviewed task = %+v, want its tab and worktree kept", v)
+	}
+	h.still("pr-7", lifecycle.Done)
+	if len(h.rex.open("claude reviewing")) != 1 {
+		t.Fatal("the review tab closed when the review ended")
+	}
+	for _, sp := range h.rex.allSplits() {
+		if sp.closed {
+			t.Fatal("the hunk pane closed when the review ended")
+		}
+	}
+	if n := len(h.reviewsRemoved()); n != 0 || len(h.sessionsDestroyed()) != 0 {
+		t.Fatalf("the end removed %d review worktrees and sessions %v, want none", n, h.sessionsDestroyed())
+	}
+
+	h.rex.userCloses(worker)
 	eventually(t, "the review worktree removed", func() bool { return len(h.reviewsRemoved()) == 1 })
 	if got := h.reviewsRemoved()[0]; got != "/repos/acme/data.review-pr-7" {
 		t.Fatalf("removed %s", got)
 	}
-	eventually(t, "the reviews session removed", func() bool {
-		h.rex.mu.Lock()
-		defer h.rex.mu.Unlock()
-		return slices.Contains(h.rex.destroyed, "session:reviews")
-	})
-	if len(h.rex.open("claude reviewing")) != 0 {
-		t.Fatal("the review tab is still open after Done")
-	}
+	eventually(t, "the reviews session removed", func() bool { return slices.Contains(h.sessionsDestroyed(), "session:reviews") })
 	h.wt.mu.Lock()
 	defer h.wt.mu.Unlock()
 	if len(h.wt.removed) != 0 {
 		t.Fatalf("a review Task ran wt remove for %v", h.wt.removed)
 	}
-	if v := h.task("pr-7"); v.Worktree != "" || v.Note != "#7" {
+	if v := h.task("pr-7"); v.Worktree != "" || v.Note != "#7" || v.Tab {
 		t.Fatalf("done task after cleanup = %+v", v)
+	}
+}
+
+func TestClosingTheWorkerPaneOfADoneReviewClosesTheHunkTabAndRemovesTheWorktree(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	worker := h.waitTab("claude reviewing")
+	merged := openPR(7, "h1")
+	merged.State = "MERGED"
+	h.gh.setReview(merged)
+	h.status(worker.BlockID, "idle")
+	h.waitStage("pr-7", lifecycle.Done)
+
+	h.rex.blockCloses(worker)
+	eventually(t, "the hunk pane's tab closed", func() bool {
+		splits := h.rex.allSplits()
+		return len(splits) == 1 && splits[0].closed
+	})
+	eventually(t, "the review worktree removed", func() bool {
+		return slices.Equal(h.reviewsRemoved(), []string{"/repos/acme/data.review-pr-7"})
+	})
+}
+
+func TestADoneReviewWithAnOpenTabBlocksANewReviewOfThePR(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	worker := h.waitTab("claude reviewing")
+	merged := openPR(7, "h1")
+	merged.State = "MERGED"
+	h.gh.setReview(merged)
+	h.status(worker.BlockID, "idle")
+	h.waitStage("pr-7", lifecycle.Done)
+
+	h.gh.setReview(openPR(7, "h2"))
+	if _, err := h.s.Handle(context.Background(), Request{Op: "review", URL: prURL7}); err == nil || !strings.Contains(err.Error(), "close its tab first with lineup close pr-7") {
+		t.Fatalf("review of a PR whose Done review keeps its tab: err = %v, want a refusal that names the tab", err)
+	}
+	var task github.ReviewTask
+	h.s.call(func() { task, _ = h.s.recs["pr-7"].reviewTask() })
+	if task.Done {
+		t.Fatal("the queue sees a Done review that keeps its tab as ended, so it would add the PR again")
+	}
+
+	h.do(Request{Op: "close", Task: "pr-7"})
+	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude reviewing")) == 0 })
+	h.s.call(func() { task, _ = h.s.recs["pr-7"].reviewTask() })
+	if !task.Done {
+		t.Fatal("the queue still holds the PR after the tab closed")
+	}
+	if res := h.review(prURL7); res.Action != ReviewAdded {
+		t.Fatalf("review after the tab closed = %+v, want a new review", res)
 	}
 }
 
@@ -214,6 +277,7 @@ func TestTheLastReviewKeepsASessionThatHoldsOtherTabs(t *testing.T) {
 	h.gh.setReview(merged)
 	h.status(worker.BlockID, "idle")
 	h.waitStage("pr-7", lifecycle.Done)
+	h.do(Request{Op: "close", Task: "pr-7"})
 	eventually(t, "the review worktree removed", func() bool { return len(h.reviewsRemoved()) == 1 })
 	time.Sleep(150 * time.Millisecond)
 	h.rex.mu.Lock()
@@ -341,6 +405,21 @@ func TestAReviewIDNamesItsPR(t *testing.T) {
 	}
 }
 
+func TestAReviewIDKeepsADoneReviewThatHoldsItsTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	var web string
+	h.s.call(func() {
+		h.s.recs["pr-7"] = &Record{
+			Task:   lifecycle.Task{ID: "pr-7", Kind: lifecycle.KindReview, Stage: lifecycle.Done},
+			Review: &ReviewPR{Repo: "acme/data", Number: 7}, WindowID: "window:7", BlockID: "block:7",
+		}
+		web = h.s.reviewID(ReviewPR{Repo: "acme/web", Number: 7})
+	})
+	if web != "pr-7-web" {
+		t.Errorf("ID of acme/web#7 = %q, want pr-7-web beside a Done acme/data#7 that keeps its tab", web)
+	}
+}
+
 func TestADoneReviewDoesNotBlockANewOne(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
@@ -455,9 +534,10 @@ func TestALostTabInReviewReadyKeepsTheReview(t *testing.T) {
 		h.waitStage("pr-7", lifecycle.ReviewReady)
 		ev.BlockID = worker.BlockID
 		if ev.Kind == EvClosed {
-			h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
+			h.rex.userCloses(worker)
+		} else {
+			h.rex.events <- ev
 		}
-		h.rex.events <- ev
 		eventually(t, "the Worker gone", func() bool { return !h.task("pr-7").Live })
 		h.s.fill(context.Background())
 		h.still("pr-7", lifecycle.ReviewReady)
@@ -490,8 +570,7 @@ func (h *harness) readyReview() WorkerSpec {
 	spec := h.lastSpec()
 	h.status(worker.BlockID, "done")
 	h.waitStage("pr-7", lifecycle.ReviewReady)
-	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	h.rex.userCloses(worker)
 	eventually(h.t, "the Worker gone", func() bool { return !h.task("pr-7").Live })
 	return spec
 }
@@ -507,7 +586,7 @@ func TestReviewOfAClosedReviewReadyWorkerResumesItsConversation(t *testing.T) {
 	if res.ID != "pr-7" || res.Action != ReviewReopened {
 		t.Fatalf("review of the closed Worker = %+v, want pr-7 reopened", res)
 	}
-	worker := h.waitTab("claude review_ready")
+	worker := h.waitTab("claude --resume " + reviewing.Conversation)
 	if worker.cwd != "/repos/acme/data" || worker.env["XDG_STATE_HOME"] != h.stateHome {
 		t.Fatalf("reopened tab = %+v, want the main checkout and the review state folder", worker)
 	}
@@ -538,26 +617,55 @@ func TestReviewOfAReviewReadyTaskWithNoConversationReviewsAgain(t *testing.T) {
 	}
 }
 
-func TestALostTabWhileReviewingStartsAFreshWorker(t *testing.T) {
+func TestALostTabWhileReviewingFlagsTheTask(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
 	first := h.waitTab("claude reviewing")
 	firstSpec := h.lastSpec()
-	h.rex.CloseWindow(context.Background(), first.SessionID, first.WindowID)
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: first.BlockID}
-	second := h.waitTab("claude reviewing")
-	if second.BlockID == first.BlockID {
-		t.Fatal("no fresh Worker")
+	h.rex.userCloses(first)
+	eventually(t, "the tab closed flag", func() bool { return h.task("pr-7").Flag == "tab closed" })
+	time.Sleep(150 * time.Millisecond)
+	if n := len(h.rex.open("claude --resume " + firstSpec.Conversation)); n != 0 {
+		t.Fatalf("%d tabs opened by themselves, want none until the user asks", n)
 	}
-	if spec := h.lastSpec(); spec.Conversation == "" || spec.Conversation == firstSpec.Conversation {
-		t.Fatalf("restarted conversation %q, want a new one after %q", spec.Conversation, firstSpec.Conversation)
+	if v := h.task("pr-7"); v.Stage != "Reviewing" || v.Group != "Needs you" || v.Live {
+		t.Fatalf("task = %+v, want Reviewing, Needs you, with no Worker", v)
 	}
-	var left int
-	h.s.call(func() { left = h.s.recs["pr-7"].Left.Restarts })
-	if v := h.task("pr-7"); v.Stage != "Reviewing" || left != testPolicy.Budgets.Restarts-1 {
-		t.Fatalf("stage %s, restarts left %d", v.Stage, left)
+
+	res := h.open("pr-7")
+	if res.Action != OpenRestored {
+		t.Fatalf("open = %+v, want restored", res)
 	}
+	second := h.waitTab("claude --resume " + firstSpec.Conversation)
+	if second.cwd != "/repos/acme/data" || second.env["XDG_STATE_HOME"] != h.stateHome {
+		t.Fatalf("restored tab = %+v, want the main checkout and the review state folder", second)
+	}
+	h.status(second.BlockID, "idle")
+	time.Sleep(100 * time.Millisecond)
+	if got := h.rex.typedInto(second.BlockID); len(got) != 0 {
+		t.Fatalf("typed %q into the restored review Worker", got)
+	}
+	eventually(t, "the restored Worker live", func() bool { return h.task("pr-7").Live })
+	if v := h.task("pr-7"); v.Stage != "Reviewing" || v.Flag != "" {
+		t.Fatalf("restored task = %+v", v)
+	}
+}
+
+func TestReviewOfAReviewingTaskWhoseTabClosedReopensItsWorker(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	first := h.waitTab("claude reviewing")
+	conversation := h.lastSpec().Conversation
+	h.rex.userCloses(first)
+	eventually(t, "the tab closed flag", func() bool { return h.task("pr-7").Flag == "tab closed" })
+
+	if res := h.review(prURL7); res.ID != "pr-7" || res.Action != ReviewReopened {
+		t.Fatalf("review = %+v, want pr-7 reopened", res)
+	}
+	h.waitTab("claude --resume " + conversation)
+	eventually(t, "the reopened Worker live", func() bool { v := h.task("pr-7"); return v.Live && v.Flag == "" })
 }
 
 func seedReview(stage lifecycle.Stage) func(*store.Store) {
@@ -593,10 +701,28 @@ func TestRecoveryWithNoTabInReviewReadyKeepsTheReview(t *testing.T) {
 	}
 }
 
-func TestRecoveryWithNoTabWhileReviewingStartsAFreshWorker(t *testing.T) {
+func TestRecoveryRemovesTheWorktreeOfADoneReviewWhoseCleanupNeverRan(t *testing.T) {
+	seed := func(st *store.Store) {
+		seedReviewTab(lifecycle.Done, "", "", "")(st)
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed)
+	eventually(t, "the review worktree removed", func() bool {
+		return slices.Equal(h.reviewsRemoved(), []string{"/repos/acme/data.review-pr-7"})
+	})
+	eventually(t, "the removed worktree to leave the review", func() bool { return h.task("R-3").Worktree == "" })
+}
+
+func TestRecoveryWithNoTabWhileReviewingFlagsTheTask(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReview(lifecycle.Reviewing))
+	eventually(t, "the tab closed flag", func() bool { return h.task("R-3").Flag == "tab closed" })
+	h.still("R-3", lifecycle.Reviewing)
+	if n := h.tabs(); n != 0 {
+		t.Fatalf("recovery opened %d tabs, want none until the user asks", n)
+	}
+
+	h.open("R-3")
 	if w := h.waitTab("claude reviewing"); w.cwd != "/repos/acme/data" {
-		t.Fatalf("recovered worker cwd = %s", w.cwd)
+		t.Fatalf("opened worker cwd = %s", w.cwd)
 	}
 }
 
@@ -652,43 +778,49 @@ func (h *harness) waitNewTab(cmd, old string) tab {
 	return tabs[0]
 }
 
-func TestEachReviewWorkerStartOpensThePRInHunkBesideIt(t *testing.T) {
+func TestEachReviewWorkerTabOpensThePRInHunkBesideIt(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
 	started := h.waitTab("claude reviewing")
+	conversation := h.lastSpec().Conversation
 	pane := h.waitSplit(1)
 	if pane.anchor != started.BlockID || pane.window != started.WindowID || pane.cwd != "/repos/acme/data.review-pr-7" || !slices.Equal(pane.argv, hunkPR7) {
 		t.Fatalf("hunk pane = %+v, want hunk on %s beside block %s in the review worktree", pane, prURL7, started.BlockID)
 	}
 
-	h.rex.CloseWindow(context.Background(), started.SessionID, started.WindowID)
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: started.BlockID}
-	restarted := h.waitNewTab("claude reviewing", started.BlockID)
-	if pane := h.waitSplit(2); pane.anchor != restarted.BlockID {
-		t.Fatalf("restart: hunk pane beside %s, want %s", pane.anchor, restarted.BlockID)
+	h.rex.userCloses(started)
+	eventually(t, "the tab closed flag", func() bool { return h.task("pr-7").Flag == "tab closed" })
+	h.open("pr-7")
+	resumed := h.waitTab("claude --resume " + conversation)
+	if pane := h.waitSplit(2); pane.anchor != resumed.BlockID {
+		t.Fatalf("resume: hunk pane beside %s, want %s", pane.anchor, resumed.BlockID)
 	}
+	h.status(resumed.BlockID, "idle")
+	h.status(resumed.BlockID, "working")
+	h.status(resumed.BlockID, "idle")
 
 	h.do(Request{Op: "rerun", Task: "pr-7", Stage: "reviewing"})
-	rerun := h.waitNewTab("claude reviewing", restarted.BlockID)
-	if pane := h.waitSplit(3); pane.anchor != rerun.BlockID {
-		t.Fatalf("rerun: hunk pane beside %s, want %s", pane.anchor, rerun.BlockID)
+	h.waitTyped(resumed.BlockID, "prompt reviewing")
+	time.Sleep(50 * time.Millisecond)
+	if n := len(h.rex.allSplits()); n != 2 {
+		t.Fatalf("%d hunk panes after a rerun in the same tab, want 2", n)
 	}
 
 	h.writeFindings(7, "h1")
-	h.status(rerun.BlockID, "done")
+	h.status(resumed.BlockID, "working")
+	h.status(resumed.BlockID, "done")
 	h.waitStage("pr-7", lifecycle.ReviewReady)
-	h.rex.CloseWindow(context.Background(), rerun.SessionID, rerun.WindowID)
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: rerun.BlockID}
+	h.rex.userCloses(resumed)
 	eventually(t, "the Worker gone", func() bool { return !h.task("pr-7").Live })
 	h.review(prURL7)
-	reopened := h.waitTab("claude review_ready")
-	if pane := h.waitSplit(4); pane.anchor != reopened.BlockID || !slices.Equal(pane.argv, hunkPR7) {
+	reopened := h.waitNewTab("claude --resume "+conversation, resumed.BlockID)
+	if pane := h.waitSplit(3); pane.anchor != reopened.BlockID || !slices.Equal(pane.argv, hunkPR7) {
 		t.Fatalf("reopen: hunk pane = %+v, want hunk beside %s", pane, reopened.BlockID)
 	}
 	h.still("pr-7", lifecycle.ReviewReady)
-	if n := len(h.rex.allSplits()); n != 4 {
-		t.Fatalf("%d hunk panes for 4 Worker starts", n)
+	if n := len(h.rex.allSplits()); n != 3 {
+		t.Fatalf("%d hunk panes for 3 Worker tabs", n)
 	}
 }
 
@@ -696,7 +828,7 @@ func TestABuildWorkerOpensNoHunkPane(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	h.waitTab("claude working")
 	eventually(t, "the Worker live", func() bool { return h.task("ENG-1").Live })
 	if ss := h.rex.allSplits(); len(ss) != 0 {
@@ -766,17 +898,13 @@ func TestHunkPaneEventsLeaveTheReviewAsItWas(t *testing.T) {
 		t.Fatalf("Worker tabs %+v, want the first Worker only", tabs)
 	}
 
-	// Closing the whole tab closes both blocks and restarts the Worker once.
-	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	conversation := h.lastSpec().Conversation
+	h.rex.userCloses(worker)
 	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: pane.BlockID}
-	h.waitNewTab("claude reviewing", worker.BlockID)
+	eventually(t, "the tab closed flag", func() bool { return h.task("pr-7").Flag == "tab closed" })
 	h.still("pr-7", lifecycle.Reviewing)
-	var left int
-	h.s.call(func() { left = h.s.recs["pr-7"].Left.Restarts })
-	if left != testPolicy.Budgets.Restarts-1 {
-		t.Fatalf("restarts left %d, want one restart", left)
-	}
+	h.open("pr-7")
+	h.waitTab("claude --resume " + conversation)
 }
 
 // The hunk pane holds a tab open after its Worker's block closes.
@@ -790,7 +918,7 @@ func TestAClosedReviewWorkerClosesItsHunkPane(t *testing.T) {
 	h.status(worker.BlockID, "done")
 	h.waitStage("pr-7", lifecycle.ReviewReady)
 
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	h.rex.blockCloses(worker)
 	eventually(t, "the hunk pane closed", func() bool { return h.rex.allSplits()[0].closed })
 	if v := h.task("pr-7"); v.Live || v.Stage != "Review ready" || v.Flag != "" {
 		t.Fatalf("task = %+v, want Review ready with no Worker", v)
@@ -877,8 +1005,7 @@ func TestLaterStatusesKeepAReviewReadyFromAQuestion(t *testing.T) {
 			t.Fatalf("after %s: flag %q, want none", state, v.Flag)
 		}
 	}
-	h.rex.CloseWindow(context.Background(), worker.SessionID, worker.WindowID)
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
+	h.rex.userCloses(worker)
 	eventually(t, "the Worker gone", func() bool { return !h.task("pr-7").Live })
 	if res := h.review(prURL7); res.Action != ReviewReopened {
 		t.Fatalf("review after the tab closed = %+v, want reopened", res)
@@ -890,9 +1017,62 @@ func TestABuildWorkerQuestionOnlyFlagsTheTask(t *testing.T) {
 	h.gh.set(PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}, 42)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: h.waitTab("wt ada/eng-1-billing").BlockID}
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "blocked", Kind: "question"}}
 	eventually(t, "the question flag", func() bool { return h.task("ENG-1").Flag == "question" })
 	h.still("ENG-1", lifecycle.Working)
+}
+
+func TestARerunReviewKeepsTheConversation(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.writeFindings(7, "h1")
+	h.review(prURL7)
+	worker := h.waitTab("claude reviewing")
+	conversation := h.lastSpec().Conversation
+	h.status(worker.BlockID, "done")
+	h.waitStage("pr-7", lifecycle.ReviewReady)
+
+	h.do(Request{Op: "rerun", Task: "pr-7", Stage: "reviewing"})
+	h.waitTyped(worker.BlockID, "prompt reviewing")
+	if spec := h.lastSpec(); spec.Stage != lifecycle.Reviewing || spec.Conversation != conversation || spec.PRURL != prURL7 {
+		t.Fatalf("rerun spec = %+v, want Reviewing in conversation %s", spec, conversation)
+	}
+	var got string
+	h.s.call(func() { got = h.s.recs["pr-7"].Conversation })
+	if got != conversation || len(h.rex.open("claude reviewing")) != 1 {
+		t.Fatalf("conversation %q after the rerun, want %q in the one tab", got, conversation)
+	}
+}
+
+// The hunk pane keeps a review tab open after its Worker exits. The restore
+// closes that tab first, so the Task's window is the new tab and a close
+// reaches it.
+func TestOpenClosesATabThatRexKeptAfterTheWorkerExited(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.writeFindings(7, "h1")
+	h.review(prURL7)
+	old := h.waitTab("claude reviewing")
+	conversation := h.lastSpec().Conversation
+	h.waitSplit(1)
+	h.status(old.BlockID, "done")
+	h.waitStage("pr-7", lifecycle.ReviewReady)
+	h.keptTabRestore("pr-7", old, conversation)
+	if tabs := h.rex.open("claude reviewing"); len(tabs) != 0 {
+		t.Fatalf("the kept tab stayed open: %+v", tabs)
+	}
+
+	h.do(Request{Op: "close", Task: "pr-7"})
+	eventually(t, "the reopened tab closed", func() bool { return len(h.rex.open("claude --resume "+conversation)) == 0 })
+}
+
+func TestOpenOfAReviewReadyTaskWithNoConversationReviewsAgain(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReview(lifecycle.ReviewReady))
+	res := h.open("R-3")
+	if res.Action != OpenStarted || res.Stage != "Reviewing" {
+		t.Fatalf("open = %+v, want a started review in Reviewing", res)
+	}
+	h.waitTab("claude reviewing")
 }
