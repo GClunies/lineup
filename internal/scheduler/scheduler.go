@@ -178,14 +178,14 @@ func (s *Scheduler) pend(r *Record, stage lifecycle.Stage) {
 	r.Pending, r.PendingSince = &stage, s.now()
 }
 
-// flagSilentPrompts flags each Task whose Stage prompt waits on a Worker with no
-// status. The prompt stays unsent, because the Scheduler cannot tell that the
-// Worker is ready.
+// flagSilentPrompts flags each Task whose prompt waits too long for the Worker
+// to report. An untyped prompt stays unsent, because the Scheduler cannot tell
+// that the Worker is ready.
 func (s *Scheduler) flagSilentPrompts() {
 	wait := cmp.Or(s.d.PromptWait, time.Minute)
 	for _, r := range s.list() {
-		if r.Pending != nil && r.Job == JobWorker && r.WorkerState == "" && s.now().Sub(r.PendingSince) >= wait {
-			s.apply(r, lifecycle.PromptStalled{Stage: *r.Pending}, "")
+		if r.awaitsStatus() && s.now().Sub(r.PendingSince) >= wait {
+			s.apply(r, lifecycle.PromptStalled{Stage: r.Stage}, "")
 		}
 	}
 }
@@ -513,6 +513,9 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		if r.Job != JobWorker {
 			return
 		}
+		if r.WorkerState == promptedState && (ev.Status.State == "idle" || ev.Status.State == "done") {
+			return
+		}
 		was := r.WorkerState
 		r.Status, r.WorkerState = ev.Status.Msg, ev.Status.State
 		if r.Pending != nil && (ev.Status.State == "idle" || ev.Status.State == "done") {
@@ -796,7 +799,7 @@ func (s *Scheduler) recover(ctx context.Context) {
 		return blocks, true
 	}
 	for _, r := range s.list() {
-		if r.Pending != nil && r.Job == JobWorker && r.WorkerState == "" {
+		if r.awaitsStatus() {
 			r.PendingSince = s.now()
 		}
 		if r.Stage == lifecycle.Done {

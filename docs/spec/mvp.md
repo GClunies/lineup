@@ -172,7 +172,7 @@ A Repo where the bot does not review must not hold a Task forever. If a gated Ta
 | `draft` | `pr-seen` on a draft PR with no earlier gap |
 | `no bot review` | `review-bot-late`: the review bot did not score the head commit of a passing PR |
 | `worker lost` | The tab or block is gone, and the restart budget is spent |
-| `worker silent` | `prompt-stalled`: a Stage prompt has waited 1 minute on a Worker that has sent no program status. The Scheduler types nothing into it. The flag clears when the Worker reports `working`. |
+| `worker silent` | `prompt-stalled`: a Stage prompt has waited 1 minute for a Worker that has sent no program status, or for a prompted Worker to report `working`. The Scheduler types nothing more into it. The flag clears when the Worker reports `working`. |
 
 When the cause clears, for example when program status goes back to `working`, the Scheduler removes the flag.
 

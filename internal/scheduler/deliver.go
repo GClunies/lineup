@@ -153,10 +153,16 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 	}
 }
 
-// promptedState is the WorkerState from a typed prompt until the Worker reports.
-// It is busy, and it is not "working", so the first working report is a return
-// to working that clears a flag.
+// promptedState is the WorkerState from a typed prompt until the Worker reports
+// working, blocked, or error. A done or idle in it ended the turn before the
+// prompt, so onRex drops it. It is not "working", so the first working report
+// clears a flag.
 const promptedState = "prompted"
+
+// awaitsStatus reports whether a prompt waits for the Worker to report.
+func (r *Record) awaitsStatus() bool {
+	return r.Job == JobWorker && (r.WorkerState == promptedState || r.WorkerState == "" && r.Pending != nil)
+}
 
 // typePrompt claims Pending and marks the Worker prompted before it types, so a
 // rerun during the Type sets Pending again and waits for the Worker.
@@ -174,7 +180,7 @@ func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.St
 		if claimed = rec.Pending != nil && *rec.Pending == stage && rec.BlockID == r.BlockID; claimed {
 			rec.Pending, rec.WorkerStage = nil, stage
 			if prompt != "" {
-				was, rec.WorkerState = rec.WorkerState, promptedState
+				was, rec.WorkerState, rec.PendingSince = rec.WorkerState, promptedState, s.now()
 			}
 		}
 	})

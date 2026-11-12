@@ -1764,3 +1764,92 @@ func TestAWorkerBetweenStagesMeetsNoContract(t *testing.T) {
 	h.status(worker.BlockID, "done")
 	eventually(t, "the CI debug contract checked", func() bool { return h.task("ENG-1").Flag == "stopped" })
 }
+
+func TestAStatusFromBeforeATypedPromptDoesNotCompleteTheStage(t *testing.T) {
+	for _, late := range []string{"done", "idle"} {
+		t.Run(late, func(t *testing.T) {
+			h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+			worker := h.working()
+			h.prOpens(worker)
+			h.ciFails()
+			h.waitTyped(worker.BlockID, "prompt ci_debug")
+			before := len(h.events("ENG-1"))
+
+			h.status(worker.BlockID, late)
+			time.Sleep(300 * time.Millisecond)
+			if v := h.task("ENG-1"); v.Stage != "CI debug" || v.Flag != "" {
+				t.Fatalf("task = %+v, want CI debug with no flag: the %s ended the previous turn", v, late)
+			}
+			h.waitWorkerState("ENG-1", "prompted")
+			if got := h.events("ENG-1")[before:]; slices.Contains(got, "done") {
+				t.Fatalf("events after the prompt = %q, want no done", got)
+			}
+
+			h.status(worker.BlockID, "working")
+			h.waitWorkerState("ENG-1", "working")
+			h.status(worker.BlockID, "done")
+			eventually(t, "the CI debug contract checked", func() bool { return h.task("ENG-1").Flag == "stopped" })
+		})
+	}
+}
+
+func TestAStatusFromBeforeATypedPromptDoesNotTypeTheNextPrompt(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	h.prOpens(worker)
+	h.ciFails()
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "ci_debug"})
+
+	h.status(worker.BlockID, "done")
+	h.status(worker.BlockID, "idle")
+	time.Sleep(300 * time.Millisecond)
+	if got := h.rex.typedInto(worker.BlockID); len(got) != 1 {
+		t.Fatalf("typed %q: a status from before the first prompt released the second", got)
+	}
+	h.status(worker.BlockID, "working")
+	h.status(worker.BlockID, "idle")
+	h.waitTyped(worker.BlockID, "prompt ci_debug", "prompt ci_debug")
+}
+
+func TestAPromptTheWorkerNeverAnswersFlagsTheTask(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PromptWait = 200 * time.Millisecond })
+	worker := h.working()
+	h.prOpens(worker)
+	h.ciFails()
+	h.waitTyped(worker.BlockID, "prompt ci_debug")
+
+	eventually(t, "the silent Worker flag", func() bool { return h.task("ENG-1").Flag == string(lifecycle.ReasonWorkerSilent) })
+	h.status(worker.BlockID, "working")
+	eventually(t, "the flag clears", func() bool { return h.task("ENG-1").Flag == "" })
+}
+
+func seedPromptedWorker(since time.Time) func(*store.Store) {
+	return func(st *store.Store) {
+		r := Record{
+			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Policy: testPolicy, Left: testPolicy.Budgets},
+			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data",
+			Branch: "ada/eng-7", Worktree: "/wt/eng-7", SessionID: "session:data", WindowID: "window:live", BlockID: "block:live",
+			Job: JobWorker, WorkerState: promptedState, WorkerStage: lifecycle.Working, PendingSince: since,
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+}
+
+func TestARestartedSchedulerKeepsAPromptedWorkerPrompted(t *testing.T) {
+	live := &tab{Window: Window{"session:data", "window:live", "block:live"}, argv: []string{"claude", "working"}}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedPromptedWorker(time.Now().Add(-time.Hour)), func(d *Deps) {
+		d.Rex = rex
+		d.PromptWait = 400 * time.Millisecond
+	})
+	h.status("block:live", "done")
+	time.Sleep(100 * time.Millisecond)
+	if f := h.task("ENG-7").Flag; f != "" {
+		t.Fatalf("flag = %q within 100 ms of the restart, want none: the done may end the turn before the prompt", f)
+	}
+	eventually(t, "the silent Worker flag", func() bool { return h.task("ENG-7").Flag == string(lifecycle.ReasonWorkerSilent) })
+	h.status("block:live", "working")
+	eventually(t, "the flag clears", func() bool { return h.task("ENG-7").Flag == "" })
+}
