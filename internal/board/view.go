@@ -40,8 +40,12 @@ func (m Model) View() string {
 		}
 		return boardHelp
 	}
+	foot := m.footer()
+	h := max(m.height-2-lipgloss.Height(foot), 1)
 	var body string
 	switch {
+	case m.mode == modeDests:
+		body = m.destList()
 	case m.view == viewTracker:
 		body = m.trackerBody()
 	case m.view == viewReview:
@@ -53,10 +57,9 @@ func (m Model) View() string {
 	case m.detail:
 		body = m.vp.View()
 	default:
-		body = m.taskBody(max(m.height-3, 1))
+		body = m.taskBody(h)
 	}
 	lines := strings.Split(body, "\n")
-	h := max(m.height-3, 1)
 	if len(lines) > h && !m.detail && !(m.view == viewTracker && m.tr.lvl == lvlDetail) {
 		lines = m.window(lines, h)
 	}
@@ -64,7 +67,7 @@ func (m Model) View() string {
 		lines = append(lines, "")
 	}
 	return m.header() + "\n" + dim.Render(strings.Repeat("─", max(m.width, 1))) + "\n" +
-		strings.Join(lines[:h], "\n") + "\n" + m.footer()
+		strings.Join(lines[:h], "\n") + "\n" + foot
 }
 
 // window keeps the selected row on screen.
@@ -137,6 +140,14 @@ func (m Model) footer() string {
 		return ansi.Truncate(m.trackerFooter(), m.width, "…")
 	}
 	switch m.mode {
+	case modeBox:
+		lines := strings.Split(m.boxFooter(), "\n")
+		for i, l := range lines {
+			lines[i] = ansi.Truncate(l, m.width, "…")
+		}
+		return strings.Join(lines, "\n")
+	case modeDests:
+		s = dim.Render(" type to filter  up/down move  enter pick  esc back")
 	case modeConfirm:
 		s = bad.Render(" " + m.pendingAsk + "? (y/n)")
 	case modeCap:
@@ -177,6 +188,8 @@ func (m Model) boardHints() []hint {
 	tail := []hint{{"z", "agent"}, {"R", "refresh now"}, {"q", "quit"}, {"?", "all keys"}}
 	if m.view == viewReview {
 		tail = append([]hint{{"tab", "next view"}, {"< >", "move the tab"}}, tail...)
+	} else {
+		tail = append([]hint{{"n", "new Issue"}}, tail...)
 	}
 	if m.detail {
 		return []hint{{"f", "back"}, {"j/k", "scroll"}, {"?", "all keys"}}
@@ -362,6 +375,8 @@ const boardHelp = `
    s        start a Queued Task, or start a Task from a Ready or
             Backlog Issue; pick or type a skill, or just go
    o        open the PR or the Issue; a local Issue opens in $EDITOR
+   n        capture a new Issue in the Local Tracker; tab picks a
+            Linear team or Project instead
    R        refresh now: poll GitHub for every started Task
    z        zoom the agent pane
    1 2 3    show the plan, work, or review view
