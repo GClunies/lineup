@@ -478,3 +478,19 @@ func TestInputDropsTheBytesThatActAsKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestHasConversationFindsTheFileInAnyProjectFolder(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "projects", "-tmp-wt-adhoc-1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "projects", "-tmp-wt-adhoc-1", "abc.jsonl"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !HasConversation(dir, "abc") {
+		t.Error("a conversation that the profile holds was not found")
+	}
+	if HasConversation(dir, "def") {
+		t.Error("a conversation that the profile lacks was found")
+	}
+}

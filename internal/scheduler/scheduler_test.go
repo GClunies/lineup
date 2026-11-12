@@ -442,6 +442,8 @@ func (w *fakeWorktrees) Remove(_ context.Context, _, branch string) error {
 
 type fakeHarness struct {
 	mu sync.Mutex
+	// gone lists the conversations that HasConversation does not find.
+	gone []string
 	// trusted lists each folder that Prepare trusted.
 	trusted []string
 	specs   []WorkerSpec
@@ -452,6 +454,12 @@ func (h *fakeHarness) Prepare(_ context.Context, _, worktree string) error {
 	defer h.mu.Unlock()
 	h.trusted = append(h.trusted, worktree)
 	return nil
+}
+
+func (h *fakeHarness) HasConversation(_ context.Context, w WorkerSpec) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return !slices.Contains(h.gone, w.Conversation)
 }
 
 func (h *fakeHarness) Prompt(_ context.Context, w WorkerSpec) (string, error) {
@@ -1466,6 +1474,30 @@ func TestOpenStartsAFreshWorkerWithNoConversation(t *testing.T) {
 	eventually(t, "the fresh Worker live", func() bool { return h.task("ENG-1").Live })
 	if v := h.task("ENG-1"); v.Flag != "" {
 		t.Fatalf("flag = %q, want none", v.Flag)
+	}
+}
+
+func TestOpenStartsAFreshWorkerWhenTheConversationFileIsGone(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
+	h.closeAndFlag(worker)
+	h.hn.mu.Lock()
+	h.hn.gone = []string{first.Conversation}
+	h.hn.mu.Unlock()
+
+	res := h.open("ENG-1")
+	if res.Action != OpenStarted {
+		t.Fatalf("open = %+v, want started", res)
+	}
+	h.waitTab("claude working")
+	if n := len(h.rex.open("claude --resume " + first.Conversation)); n != 0 {
+		t.Fatalf("%d resume tabs opened for a conversation that is gone", n)
+	}
+	spec := h.lastSpec()
+	if !spec.Restart || !slices.Equal(spec.Steers, []string{"use a dual write"}) || spec.Conversation == first.Conversation || spec.Conversation == "" {
+		t.Fatalf("fresh spec = restart %v, steers %q, conversation %q, want a new conversation that replays the steer", spec.Restart, spec.Steers, spec.Conversation)
 	}
 }
 

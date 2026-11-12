@@ -136,6 +136,10 @@ type Harness interface {
 	// Command starts a Worker in a new tab. A prompt starts the conversation
 	// w.Conversation with it. No prompt resumes w.Conversation.
 	Command(ctx context.Context, w WorkerSpec, prompt string) (argv []string, env map[string]string, err error)
+	// HasConversation reports whether the Harness still holds w.Conversation, so a
+	// resume finds it. A resume of a missing conversation exits after a few seconds,
+	// and Rex then closes the tab with its error.
+	HasConversation(ctx context.Context, w WorkerSpec) bool
 }
 
 // The kinds of Tracker that an Issue can come from.

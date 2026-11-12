@@ -62,7 +62,12 @@ func (s *Scheduler) restore(ctx context.Context, id string, focus bool) (OpenRes
 		return res, s.d.Rex.Focus(ctx, r.SessionID, r.WindowID, r.BlockID)
 	case r.Review == nil && r.Worktree == "":
 		return res, fmt.Errorf("%s has no worktree yet", id)
-	case r.Conversation == "" && r.Stage != lifecycle.ReviewReady && !r.Stage.Agent():
+	}
+	if r.Conversation != "" && !s.d.Harness.HasConversation(ctx, WorkerSpec{Repo: r.Repo, Conversation: r.Conversation}) {
+		s.update(id, func(rec *Record) { rec.Conversation = "" })
+		r.Conversation = ""
+	}
+	if r.Conversation == "" && r.Stage != lifecycle.ReviewReady && !r.Stage.Agent() {
 		return res, fmt.Errorf("%s has no conversation to restore in %s", id, r.Stage)
 	}
 	s.closeTab(ctx, r)

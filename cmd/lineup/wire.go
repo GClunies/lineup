@@ -300,6 +300,15 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec, prompt
 	return argv, env, nil
 }
 
+// HasConversation reports true when it cannot look, so a resume still tries.
+func (p harnessPort) HasConversation(ctx context.Context, w scheduler.WorkerSpec) bool {
+	dir, err := claude.ConfigDir(ctx, w.Repo)
+	if err != nil {
+		return true
+	}
+	return claude.HasConversation(dir, w.Conversation)
+}
+
 // issueTracker is one Tracker behind the mux.
 type issueTracker interface {
 	Lookup(ctx context.Context, identifier string) (scheduler.Issue, error)

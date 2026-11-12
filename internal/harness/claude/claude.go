@@ -45,6 +45,21 @@ func ConfigDir(ctx context.Context, repoMain string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// HasConversation reports whether the profile folder holds the conversation. A
+// conversation is the file projects/<folder>/<id>.jsonl, and the folder name
+// comes from the Worker's own folder, so it matches any folder.
+func HasConversation(configDir, id string) bool {
+	if configDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return true
+		}
+		configDir = filepath.Join(home, ".claude")
+	}
+	files, err := filepath.Glob(filepath.Join(configDir, "projects", "*", id+".jsonl"))
+	return err != nil || len(files) > 0
+}
+
 func stateFile(configDir string) (string, error) {
 	if configDir != "" {
 		return filepath.Join(configDir, ".claude.json"), nil
