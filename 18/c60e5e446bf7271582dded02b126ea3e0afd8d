@@ -1,0 +1,23 @@
+internal/lifecycle/stage.go
+  s_535d8965140e10::t_de0e75dba8bb32 174-175
+internal/rex/client.go
+  s_535d8965140e10::t_090f94701a10a2 253-254
+internal/scheduler/scheduler.go
+  s_535d8965140e10::t_11943eb6826e8d 181-183,459-460
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "18c60e5e446bf7271582dded02b126ea3e0afd8d",
+  "prompts": {},
+  "sessions": {
+    "s_535d8965140e10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b9e1685c-5022-4378-9e4e-03f300532e37",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
