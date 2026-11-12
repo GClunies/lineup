@@ -1911,6 +1911,51 @@ func (n *noPrompts) Prompt(ctx context.Context, w WorkerSpec) (string, error) {
 	return n.Harness.Prompt(ctx, w)
 }
 
+// gateTypes holds the first Type until release closes, then fails it.
+type gateTypes struct {
+	*fakeRex
+	started, release chan struct{}
+	once             sync.Once
+}
+
+func (g *gateTypes) Type(ctx context.Context, session, block, text string) error {
+	first := false
+	g.once.Do(func() { first = true })
+	if !first {
+		return g.fakeRex.Type(ctx, session, block, text)
+	}
+	g.started <- struct{}{}
+	<-g.release
+	return errors.New("block target not found")
+}
+
+func TestAFailedTypeOnATabThatClosedFlagsTheTask(t *testing.T) {
+	var rex *gateTypes
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) {
+		rex = &gateTypes{fakeRex: d.Rex.(*fakeRex), started: make(chan struct{}, 1), release: make(chan struct{})}
+		d.Rex = rex
+	})
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.prOpens(worker)
+	h.ciFails()
+	<-rex.started
+	h.rex.exits(worker, 0)
+	eventually(t, "the exit read", func() bool { return !h.task("ENG-1").Live })
+	close(rex.release)
+
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Note == "tab closed: CI debug waits for the Worker" })
+	var pending bool
+	h.s.call(func() { pending = h.s.recs["ENG-1"].Pending != nil })
+	if !pending {
+		t.Fatal("the CI debug prompt is not pending")
+	}
+	h.open("ENG-1")
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	h.status(resumed.BlockID, "idle")
+	h.waitTyped(resumed.BlockID, "prompt ci_debug")
+}
+
 func TestARerunAfterAFailedTypeTypesThePrompt(t *testing.T) {
 	var rex *failTypes
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) {

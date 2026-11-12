@@ -197,6 +197,7 @@ func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.St
 		return
 	}
 	if err := s.d.Rex.Type(ctx, r.SessionID, r.BlockID, prompt); err != nil {
+		var gone bool
 		s.update(r.ID, func(rec *Record) {
 			if rec.WorkerState == promptedState {
 				rec.WorkerState = was
@@ -204,7 +205,13 @@ func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.St
 			if rec.Pending == nil && rec.Stage == stage {
 				s.pend(rec, stage)
 			}
+			gone = rec.BlockID != r.BlockID || rec.Job != JobWorker
 		})
+		// The tab closed during the Type, so the write had no target.
+		if gone {
+			s.deliver(ctx, r.ID)
+			return
+		}
 		s.fail(r.ID, "type prompt", err)
 	}
 }
