@@ -25,7 +25,6 @@ func (e *NotAllowedError) Error() string {
 type Budgets struct {
 	CIDebug    int `json:"ci_debug"`
 	Responding int `json:"responding"`
-	Restarts   int `json:"restarts"`
 	// ReviewCycles is how many Responding rounds a low review bot score can
 	// start. It is apart from Responding, which people's reviews spend.
 	ReviewCycles int `json:"review_cycles"`
@@ -222,6 +221,13 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 		if t.Stage == Done {
 			return []Effect{Cleanup{}}, nil
 		}
+		t.lostTab(s)
+		return nil, nil
+
+	case TabOpened:
+		if t.Flag == ReasonTabClosed || t.Flag.Transient() {
+			t.flag("", "")
+		}
 		return nil, nil
 
 	case Rerun:
@@ -229,13 +235,6 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 			return nil, notAllowed
 		}
 		return t.startAgent(s.Stage), nil
-
-	case Reopen:
-		if !t.Stage.Resumable() {
-			return nil, notAllowed
-		}
-		t.flag("", "")
-		return []Effect{PromptWorker{t.Stage}}, nil
 
 	case PRMerged:
 		if t.Stage == Done || t.Stage == Queued {
@@ -276,18 +275,6 @@ func (t *Task) observe(s Signal) []Effect {
 
 	case SetupFailed:
 		t.flag(ReasonSetupFailed, s.Detail)
-
-	case WorkerLost:
-		if !t.Stage.Agent() {
-			return nil
-		}
-		if t.Left.Restarts == 0 {
-			t.flag(ReasonWorkerLost, "")
-			return nil
-		}
-		t.Left.Restarts--
-		t.flag("", "")
-		return []Effect{PromptWorker{t.Stage}}
 
 	case WorkerDone:
 		if !t.Stage.Agent() {
@@ -357,6 +344,20 @@ func (t *Task) observe(s Signal) []Effect {
 		}
 	}
 	return nil
+}
+
+// lostTab flags a Task in an agent Stage whose Worker has no tab. A flag that
+// the Worker's own state set gives way, because that Worker is gone. Any other
+// flag stays, because it holds without a Worker.
+func (t *Task) lostTab(s TabClosed) {
+	if !t.Stage.Agent() || t.Flag != "" && !t.Flag.Transient() && t.Flag != ReasonTabClosed {
+		return
+	}
+	var detail string
+	if s.Waits {
+		detail = t.Stage.String() + " waits for the Worker"
+	}
+	t.flag(ReasonTabClosed, detail)
 }
 
 // afterContract is the Stage that a met Stage contract leads to. The other
@@ -514,13 +515,10 @@ func (t *Task) finish(o Outcome) []Effect {
 	return []Effect{TrackerStatus{string(o)}}
 }
 
-// enter changes the Stage, clears the flag and the review cycle's score, and
-// refills the per-Stage budget.
 func (t *Task) enter(s Stage) {
 	t.Stage = s
 	t.flag("", "")
 	t.BotScore = nil
-	t.Left.Restarts = t.Policy.Budgets.Restarts
 }
 
 func (t *Task) flag(r Reason, detail string) {

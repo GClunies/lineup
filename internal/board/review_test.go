@@ -272,10 +272,11 @@ func TestReviewEnterFocusesTheJoinedTaskOrOpensThePR(t *testing.T) {
 	}
 }
 
-func TestReviewEnterOpensThePRWhenTheTaskHasNoWorker(t *testing.T) {
+func TestReviewEnterOpensThePRWhenTheTaskHasEnded(t *testing.T) {
 	e := newRvEnv(t)
 	b := reviewBoard()
 	b.Tasks[0].Live = false
+	b.Tasks[0].Stage, b.Tasks[0].StageKey, b.Tasks[0].Group = lifecycle.Done.String(), lifecycle.Done.Key(), lifecycle.GroupDone.String()
 	e.m.setBoard(b)
 	e.open()
 	e.press("tab")
@@ -637,18 +638,18 @@ func TestReviewEnterReopensAClosedReviewWorker(t *testing.T) {
 	e.m.setBoard(b)
 	e.open()
 	e.press("tab", "tab")
-	if !strings.Contains(e.m.View(), "reopen the Worker") {
-		t.Fatalf("the footer does not offer the reopen:\n%s", e.m.View())
+	if !strings.Contains(e.m.View(), "restore the Worker") {
+		t.Fatalf("the footer does not offer the restore:\n%s", e.m.View())
 	}
-	e.sched.review = scheduler.ReviewResult{TaskView: ready, Action: scheduler.ReviewReopened}
+	e.sched.open = scheduler.OpenResult{TaskView: ready, Action: scheduler.OpenRestored}
 	e.press("enter")
-	if c := e.sched.calls; len(c) != 1 || c[0].Op != "review" || c[0].URL != urlBase {
-		t.Fatalf("enter sent %+v, want review %s alone", c, urlBase)
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "open" || c[0].Task != "R-12" {
+		t.Fatalf("enter sent %+v, want open R-12 alone", c)
 	}
 	if len(e.opened) != 0 {
 		t.Fatalf("enter opened %v", e.opened)
 	}
-	if l := line(e.m.View(), "review R-12"); !strings.Contains(l, "reopened") {
+	if l := line(e.m.View(), "open R-12"); !strings.Contains(l, "restored") {
 		t.Fatalf("status line = %q", l)
 	}
 }
@@ -668,8 +669,8 @@ func TestTheReviewsTabListsOnlyTheReviewTasks(t *testing.T) {
 		t.Fatalf("the footer lacks the Board's keys: %q", f)
 	}
 	e.press("enter")
-	if c := e.sched.calls; len(c) != 1 || c[0].Op != "focus" || c[0].Task != "R-10" {
-		t.Fatalf("enter sent %+v, want focus R-10", c)
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "open" || c[0].Task != "R-10" {
+		t.Fatalf("enter sent %+v, want open R-10", c)
 	}
 	e.press("x", "y")
 	if c := e.sched.calls[1:]; len(c) != 1 || c[0].Op != "close" || c[0].Task != "R-10" {
@@ -705,15 +706,15 @@ func TestTheReviewsTabReopensAClosedReviewWorker(t *testing.T) {
 	ready.Live = false
 	e.m.setBoard(scheduler.BoardView{Tasks: []scheduler.TaskView{ready}})
 	e.open()
-	if !strings.Contains(e.m.View(), "reopen the Worker") {
-		t.Fatalf("the hints do not offer the reopen:\n%s", e.m.View())
+	if !strings.Contains(e.m.View(), "restore the Worker") {
+		t.Fatalf("the hints do not offer the restore:\n%s", e.m.View())
 	}
-	e.sched.review = scheduler.ReviewResult{TaskView: ready, Action: scheduler.ReviewReopened}
+	e.sched.open = scheduler.OpenResult{TaskView: ready, Action: scheduler.OpenRestored}
 	e.press("enter")
-	if c := e.sched.calls; len(c) != 1 || c[0].Op != "review" || c[0].URL != urlBase {
-		t.Fatalf("enter sent %+v, want review %s alone", c, urlBase)
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "open" || c[0].Task != "R-12" {
+		t.Fatalf("enter sent %+v, want open R-12 alone", c)
 	}
-	if l := line(e.m.View(), "review R-12"); !strings.Contains(l, "reopened") {
+	if l := line(e.m.View(), "open R-12"); !strings.Contains(l, "restored") {
 		t.Fatalf("status line = %q", l)
 	}
 }
@@ -749,5 +750,21 @@ func TestAQueueTabLeavesOutThePRsOfAnEarlierQueueInTheConfig(t *testing.T) {
 	}
 	if got, _ := r.list(first); len(got) != 1 || got[0].Number != 1 {
 		t.Errorf("first queue lists %v, want #1", got)
+	}
+}
+
+func TestReviewEnterRestoresAStartedTaskWithNoWorker(t *testing.T) {
+	e := newRvEnv(t)
+	b := reviewBoard()
+	b.Tasks[0].Live = false
+	e.m.setBoard(b)
+	e.open()
+	e.press("tab")
+	if !strings.Contains(e.m.View(), "restore the Worker") {
+		t.Errorf("the footer does not offer the restore:\n%s", e.m.View())
+	}
+	e.press("enter")
+	if c := e.sched.calls; len(c) != 1 || c[0].Op != "open" || c[0].Task != b.Tasks[0].ID || len(e.opened) != 0 {
+		t.Fatalf("enter on a started Task with no Worker: opened %v, calls %+v, want open %s", e.opened, c, b.Tasks[0].ID)
 	}
 }

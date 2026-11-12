@@ -93,21 +93,17 @@ var stages = [...]struct {
 	owner Owner
 	group Group
 	kinds kindSet
-	// resumesWorker marks a Stage whose Worker the user can reopen by
-	// resuming its conversation. Review ready waits for the user's decisions
-	// in that conversation, so a closed tab loses nothing.
-	resumesWorker bool
 }{
-	Queued:      {"Queued", "queued", OwnerUser, GroupQueued, build | review, false},
-	Working:     {"Working", "working", OwnerAgent, GroupWorking, build, false},
-	CIRunning:   {"CI running", "ci_running", OwnerCI, GroupWaiting, build, false},
-	CIDebug:     {"CI debug", "ci_debug", OwnerAgent, GroupWorking, build, false},
-	InReview:    {"In review", "in_review", OwnerReviewers, GroupWaiting, build, false},
-	Responding:  {"Responding", "responding", OwnerAgent, GroupWorking, build, false},
-	ReadyToLand: {"Ready to land", "ready_to_land", OwnerUser, GroupNeedsYou, build, false},
-	Done:        {"Done", "done", OwnerNone, GroupDone, build | review, false},
-	Reviewing:   {"Reviewing", "reviewing", OwnerAgent, GroupWorking, review, false},
-	ReviewReady: {"Review ready", "review_ready", OwnerUser, GroupNeedsYou, review, true},
+	Queued:      {"Queued", "queued", OwnerUser, GroupQueued, build | review},
+	Working:     {"Working", "working", OwnerAgent, GroupWorking, build},
+	CIRunning:   {"CI running", "ci_running", OwnerCI, GroupWaiting, build},
+	CIDebug:     {"CI debug", "ci_debug", OwnerAgent, GroupWorking, build},
+	InReview:    {"In review", "in_review", OwnerReviewers, GroupWaiting, build},
+	Responding:  {"Responding", "responding", OwnerAgent, GroupWorking, build},
+	ReadyToLand: {"Ready to land", "ready_to_land", OwnerUser, GroupNeedsYou, build},
+	Done:        {"Done", "done", OwnerNone, GroupDone, build | review},
+	Reviewing:   {"Reviewing", "reviewing", OwnerAgent, GroupWorking, review},
+	ReviewReady: {"Review ready", "review_ready", OwnerUser, GroupNeedsYou, review},
 }
 
 // Stages lists every Stage of every Kind.
@@ -131,10 +127,6 @@ func (s Stage) Agent() bool { return stages[s].owner == OwnerAgent }
 // Started reports whether a Task in the Stage has started: it counts toward
 // the WIP cap for a build Task, and toward its queue's slots for a review Task.
 func (s Stage) Started() bool { return s != Queued && s != Done }
-
-// Resumable reports whether the user can reopen the Stage's Worker by
-// resuming its conversation.
-func (s Stage) Resumable() bool { return stages[s].resumesWorker }
 
 // MarshalText saves the Stage by its key, so that the store does not depend on
 // the order of the constants.
@@ -170,7 +162,9 @@ const (
 	ReasonSetupFailed Reason = "setup failed"
 	ReasonStopped     Reason = "stopped"
 	ReasonBudgetSpent Reason = "budget spent"
-	ReasonWorkerLost  Reason = "worker lost"
+	// ReasonTabClosed is a Worker that the user closed the tab of, or that Rex
+	// lost, in a Stage that needs it. lineup opens no tab until the user asks.
+	ReasonTabClosed Reason = "tab closed"
 	// ReasonWorkerSilent is a Stage prompt that waits on a Worker that has sent
 	// no status.
 	ReasonWorkerSilent Reason = "worker silent"

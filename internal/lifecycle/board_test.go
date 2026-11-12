@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-var policy = Policy{Budgets: Budgets{CIDebug: 3, Responding: 3, Restarts: 2}}
+var policy = Policy{Budgets: Budgets{CIDebug: 3, Responding: 3}}
 
 func taskIn(stage Stage) (*Board, *Task) {
 	b := NewBoard(5)
@@ -230,7 +230,9 @@ func TestObservedSignalsOutsideTheirStageChangeNothing(t *testing.T) {
 		{ReadyToLand, ReviewAdditionalAuthors{}},
 		{Done, PRMerged{}},
 		{ReadyToLand, WorkerDone{ContractMet: true}},
-		{CIRunning, WorkerLost{}},
+		{CIRunning, TabClosed{}},
+		{ReadyToLand, TabClosed{Waits: true}},
+		{Working, TabOpened{}},
 	}
 	for _, c := range cases {
 		b, task := taskIn(c.stage)
@@ -413,7 +415,7 @@ func TestABudgetSpentOnAReviewEdgeStaysUntilTheUserActs(t *testing.T) {
 	}
 }
 
-var userPolicy = Policy{Budgets: Budgets{CIDebug: 3, Responding: 3, Restarts: 2, ReviewCycles: 1}, Bar: userBar}
+var userPolicy = Policy{Budgets: Budgets{CIDebug: 3, Responding: 3, ReviewCycles: 1}, Bar: userBar}
 
 func userTaskIn(stage Stage) (*Board, *Task) {
 	b := NewBoard(5)
@@ -530,28 +532,77 @@ func TestARoundThatAnswersEveryThreadNeedsNoPush(t *testing.T) {
 	}
 }
 
-func TestWorkerRestartBudgetIsPerStage(t *testing.T) {
-	b, task := taskIn(Working)
-	task.Left.Restarts = 2
-	for i := range 2 {
-		effects, _ := b.Apply("T", WorkerLost{})
-		if !reflect.DeepEqual(effects, []Effect{PromptWorker{Working}}) {
-			t.Fatalf("restart %d: effects %v", i+1, effects)
+func TestAClosedTabFlagsOnlyAStageThatNeedsTheWorker(t *testing.T) {
+	for _, stage := range []Stage{Working, CIDebug, Responding} {
+		b, task := taskIn(stage)
+		effects, err := b.Apply("T", TabClosed{})
+		if err != nil || effects != nil || task.Stage != stage || task.Flag != ReasonTabClosed || task.FlagDetail != "" {
+			t.Errorf("tab closed in %s: stage %s flag %q detail %q effects %v err %v", stage, task.Stage, task.Flag, task.FlagDetail, effects, err)
+		}
+		if task.Group() != GroupNeedsYou {
+			t.Errorf("tab closed in %s: group %s, want Needs you", stage, task.Group())
 		}
 	}
-	effects, _ := b.Apply("T", WorkerLost{})
-	if effects != nil || task.Flag != ReasonWorkerLost {
-		t.Fatalf("third loss: flag %q effects %v", task.Flag, effects)
+	for _, stage := range []Stage{CIRunning, InReview, ReadyToLand} {
+		b, task := taskIn(stage)
+		if effects, err := b.Apply("T", TabClosed{}); err != nil || effects != nil || task.Flag != "" {
+			t.Errorf("tab closed in %s: flag %q effects %v err %v", stage, task.Flag, effects, err)
+		}
 	}
-	b.Apply("T", PROpen{})
-	b.Apply("T", Rerun{Working})
-	if effects, _ := b.Apply("T", WorkerLost{}); len(effects) != 1 {
-		t.Fatalf("a new Stage did not refill the restart budget: %v", effects)
+}
+
+func TestAClosedTabNamesTheStageThatWaits(t *testing.T) {
+	b, task := taskIn(CIDebug)
+	b.Apply("T", TabClosed{})
+	b.Apply("T", TabClosed{Waits: true})
+	if task.Flag != ReasonTabClosed || task.FlagDetail != "CI debug waits for the Worker" {
+		t.Fatalf("flag %q detail %q", task.Flag, task.FlagDetail)
+	}
+}
+
+func TestAClosedTabReplacesTheFlagOfItsWorkerOnly(t *testing.T) {
+	for _, r := range []Reason{ReasonQuestion, ReasonPermission, ReasonAuth, ReasonError, ReasonStopped, ReasonWorkerSilent} {
+		b, task := taskIn(Working)
+		task.flag(r, "detail")
+		b.Apply("T", TabClosed{})
+		if task.Flag != ReasonTabClosed || task.FlagDetail != "" {
+			t.Errorf("tab closed over %q: flag %q detail %q", r, task.Flag, task.FlagDetail)
+		}
+	}
+	for _, r := range []Reason{ReasonBudgetSpent, ReasonSetupFailed, ReasonDraft, ReasonNoBotReview} {
+		b, task := taskIn(Working)
+		task.flag(r, "detail")
+		b.Apply("T", TabClosed{})
+		if task.Flag != r || task.FlagDetail != "detail" {
+			t.Errorf("tab closed over %q: flag %q detail %q, want it kept", r, task.Flag, task.FlagDetail)
+		}
+	}
+}
+
+func TestTheTabClosedFlagStaysUntilTheUserOpensTheTab(t *testing.T) {
+	b, task := taskIn(Working)
+	b.Apply("T", TabClosed{})
+	b.Apply("T", WorkerStatus{State: "working"})
+	if task.Flag != ReasonTabClosed {
+		t.Fatalf("a working status cleared the flag: %q", task.Flag)
+	}
+	if effects, err := b.Apply("T", TabOpened{}); err != nil || effects != nil || task.Flag != "" {
+		t.Fatalf("tab opened: flag %q effects %v err %v", task.Flag, effects, err)
+	}
+	task.flag(ReasonError, "open: no tab")
+	b.Apply("T", TabOpened{})
+	if task.Flag != "" {
+		t.Fatalf("tab opened left the Worker's %q flag", task.Flag)
+	}
+	task.flag(ReasonBudgetSpent, "x")
+	b.Apply("T", TabOpened{})
+	if task.Flag != ReasonBudgetSpent {
+		t.Fatalf("tab opened cleared the %q flag", ReasonBudgetSpent)
 	}
 }
 
 var gated = Policy{
-	Budgets: Budgets{CIDebug: 3, Responding: 3, Restarts: 2, ReviewCycles: 2},
+	Budgets: Budgets{CIDebug: 3, Responding: 3, ReviewCycles: 2},
 	Bar:     LandingBar{Bot: greptile(5)},
 }
 

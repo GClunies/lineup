@@ -208,6 +208,8 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 			}
 			return s.apply(r, lifecycle.WorkerStatus{State: "blocked", Kind: string(lifecycle.ReasonQuestion), Detail: q}, "")
 		})
+	case "open":
+		return s.open(req.Task)
 	case "steer", "focus", "capture":
 		return s.toWorker(ctx, req)
 	}

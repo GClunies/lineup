@@ -220,8 +220,8 @@ func (m Model) reviewFooter() string {
 		switch t, joined := m.joinPR()[pr.URL]; {
 		case joined && t.Live:
 			hs = append(hs, hint{"enter", "go to the Worker"})
-		case joined && reopens(t):
-			hs = append(hs, hint{"enter", "reopen the Worker"})
+		case joined && restorable(t):
+			hs = append(hs, hint{"enter", "restore the Worker"})
 		}
 		hs = append(hs, hint{"o", "open the PR"}, hint{"r", "review now"})
 	}
@@ -243,11 +243,11 @@ const reviewHelp = `
    j k      move the selection
    /        fuzzy search in this list
    enter    go to the Worker's tab of the Task in the TASK column,
-            reopen its Worker in Review ready, or open the PR when no
-            Worker runs for it
+            restore its closed Worker, or open the PR when the PR has
+            no started Task
    o        open the PR in the browser
    r        start a review Task for this PR now, outside every queue's
-            slots, or reopen its closed Worker in Review ready
+            slots, or reopen its closed Worker
    R        refresh now: search GitHub again and poll every started
             Task; lineup also refreshes every 2 minutes
    z        zoom the agent pane
@@ -266,8 +266,7 @@ const reviewTasksHelp = `
    tab      next view       shift+tab  previous view
    < >      move this view's tab left or right; lineup keeps the order
    j k      move the selection
-   enter    focus the Task's tab in Rex, or reopen its closed Worker
-            in Review ready
+   enter    focus the Task's tab in Rex, or restore its closed Worker
    p        live preview of the Worker's screen
    f        detail pane at full screen, and back
    x        close the Task, or its tab and worktree when it is Done,

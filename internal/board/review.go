@@ -477,8 +477,8 @@ func (m Model) reviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch {
 		case ok && t.Live:
 			return m, m.op("focus", scheduler.Request{Op: "focus", Task: t.ID})
-		case ok && reopens(t):
-			return m, m.reviewPR(rows[i].URL, prRef(rows[i]))
+		case ok && restorable(t):
+			return m, m.openTask(t.ID)
 		}
 		return m, m.openURL(rows[i].URL)
 	case "o":
@@ -530,11 +530,9 @@ func (m Model) reviewPR(url, ref string) tea.Cmd {
 	}
 }
 
-// reopens reports whether the review op reopens the Task's Worker, because
-// the Worker closed in a Stage that resumes it.
-func reopens(t scheduler.TaskView) bool {
+func restorable(t scheduler.TaskView) bool {
 	st, err := lifecycle.ParseStage(t.StageKey)
-	return err == nil && st.Resumable() && !t.Live
+	return err == nil && st.Started() && !t.Live
 }
 
 // reviewTasks are the review Tasks on the Board, as the queue rules see them.

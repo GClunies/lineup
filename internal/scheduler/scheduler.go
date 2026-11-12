@@ -408,29 +408,32 @@ func (s *Scheduler) finishSetup(ctx context.Context, id string) {
 	s.deliver(ctx, id)
 }
 
-// steerSignal names the event that records one `lineup steer`.
-const steerSignal = "steer"
+const (
+	// steerSignal names the event that records one `lineup steer`.
+	steerSignal = "steer"
+	// replacedSignal names the event that records a Worker with a new
+	// conversation in place of one whose conversation is gone.
+	replacedSignal = "worker-replaced"
+)
 
-// replay reports whether the Stage lost a Worker since it began, and the
-// steers the user sent since. A new Stage has neither.
-func (s *Scheduler) replay(id string, since time.Time) (restart bool, steers []string) {
+// replay reports whether the Task's Worker replaces an earlier one, and the
+// steers the user sent to the Task's Workers. The Task has one conversation for
+// all its Stages, so a Worker in a new conversation needs every steer.
+func (s *Scheduler) replay(id string) (replaced bool, steers []string) {
 	events, err := s.d.Store.Events(id)
 	if err != nil {
 		s.d.Log.Warn("replay", "task", id, "err", err)
 		return false, nil
 	}
 	for _, e := range events {
-		if e.At.Before(since) {
-			continue
-		}
 		switch e.Signal {
-		case lifecycle.WorkerLost{}.Name():
-			restart = true
+		case replacedSignal:
+			replaced = true
 		case steerSignal:
 			steers = append(steers, e.Detail)
 		}
 	}
-	return restart, steers
+	return replaced, steers
 }
 
 // openHunk shows the PR in hunk beside a review Worker. A failed split leaves
@@ -459,15 +462,26 @@ func (s *Scheduler) sessionEmpty(ctx context.Context, session string) bool {
 	return len(blocks) == 0
 }
 
-// cleanup forgets the Task's tab before it closes it, so the tab's close is not
-// read as a lost Worker.
-func (s *Scheduler) cleanup(ctx context.Context, r Record) {
-	if r.WindowID != "" {
-		s.update(r.ID, func(r *Record) { r.WindowID, r.BlockID, r.HunkBlockID, r.Job = "", "", "", JobNone })
-		if err := s.d.Rex.CloseWindow(ctx, r.SessionID, r.WindowID); err != nil {
-			s.d.Log.Warn("close tab", "task", r.ID, "err", err)
-		}
+// closeTab forgets the Task's tab before it closes it, so the tab's close is
+// not read as the user's. Only the user's own act reaches it: a close, an
+// archive, or a restore of a tab that Rex kept after its program exited.
+func (s *Scheduler) closeTab(ctx context.Context, r Record) {
+	if r.WindowID == "" {
+		return
 	}
+	s.update(r.ID, func(rec *Record) {
+		if rec.WindowID == r.WindowID {
+			rec.WindowID, rec.BlockID, rec.HunkBlockID, rec.Job = "", "", "", JobNone
+		}
+	})
+	if err := s.d.Rex.CloseWindow(ctx, r.SessionID, r.WindowID); err != nil {
+		s.d.Log.Warn("close tab", "task", r.ID, "err", err)
+	}
+}
+
+// cleanup runs only when the user ends the Task.
+func (s *Scheduler) cleanup(ctx context.Context, r Record) {
+	s.closeTab(ctx, r)
 	switch {
 	case r.Review != nil:
 		s.removeReviewWorktree(ctx, r)
@@ -567,20 +581,22 @@ func (s *Scheduler) onRex(ev RexEvent) {
 			s.tabClosedByUser(r, "")
 			return
 		}
+		waits := r.Pending != nil
 		s.forgetTab(r)
 		s.save(r)
 		switch {
 		case job == JobSetup:
 			s.apply(r, lifecycle.SetupFailed{Detail: "setup tab closed"}, "")
 		case job == JobWorker:
-			s.apply(r, lifecycle.WorkerLost{}, "")
+			s.apply(r, lifecycle.TabClosed{Waits: waits}, "")
 		}
 	}
 }
 
 // resumeFallback handles a Worker that exited non-zero before its first
-// status. If `claude --resume` found no conversation file, the Task starts a
-// fresh Worker with a new conversation. A Review ready Task reviews afresh.
+// status. If `claude --resume` found no conversation file, the Task gets a
+// fresh Worker with a new conversation when its Stage needs one. A Review ready
+// Task reviews afresh.
 func (s *Scheduler) resumeFallback(r *Record, code int) {
 	id, session, block, conversation, stage := r.ID, r.SessionID, r.BlockID, r.Conversation, r.Stage
 	s.enqueue(id, func(ctx context.Context) {
@@ -595,14 +611,15 @@ func (s *Scheduler) resumeFallback(r *Record, code int) {
 				return
 			}
 			r.Conversation = ""
-			s.save(r, store.Event{TaskID: id, At: s.now(), Signal: "resume-fallback", From: r.Stage.String(), To: r.Stage.String(), Detail: conversation})
-			if r.Stage == lifecycle.ReviewReady {
+			s.save(r, store.Event{TaskID: id, At: s.now(), Signal: replacedSignal, From: r.Stage.String(), To: r.Stage.String(), Detail: conversation})
+			switch {
+			case r.Stage == lifecycle.ReviewReady:
 				s.apply(r, lifecycle.Rerun{Stage: lifecycle.Reviewing}, "")
-				return
+			case r.Stage.Agent():
+				s.pend(r, stage)
+				s.save(r)
+				s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
 			}
-			s.pend(r, stage)
-			s.save(r)
-			s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
 		})
 	})
 }
@@ -781,9 +798,8 @@ func prURL(p *PRSnapshot) string {
 	return p.URL
 }
 
-// recover compares the store with Rex. Each Task in an agent Stage whose tab
-// is gone resumes its conversation in a new tab. Each resume spends one restart
-// from its budget.
+// recover compares the store with Rex. Each Task in an agent Stage whose tab is
+// gone gets the tab closed flag, and no tab opens until the user asks.
 func (s *Scheduler) recover(ctx context.Context) {
 	live := map[string]map[string]bool{}
 	blocksOf := func(r *Record) (map[string]bool, bool) {
@@ -847,7 +863,7 @@ func (s *Scheduler) recover(ctx context.Context) {
 			s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
 		case r.Stage.Agent():
 			s.d.Log.Info("recover worker", "task", r.ID, "stage", r.Stage.String())
-			s.apply(r, lifecycle.WorkerLost{}, "recovered at start")
+			s.apply(r, lifecycle.TabClosed{Waits: r.Pending != nil}, "recovered at start")
 		}
 	}
 }

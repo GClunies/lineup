@@ -31,6 +31,7 @@ var clientCommands = map[string]func(c scheduler.Client, args []string, out io.W
 	"set":     cmdSet,
 	"cap":     cmdCap,
 	"rerun":   cmdRerun,
+	"open":    cmdOpen,
 	"merge":   simple("merge"),
 	"close":   simple("close"),
 	"archive": simple("archive"),
@@ -319,6 +320,20 @@ func cmdRerun(c scheduler.Client, args []string, out io.Writer) error {
 		return fmt.Errorf("%w: lineup rerun <task> <stage>, for example ci_debug", errUsage)
 	}
 	return c.Do(scheduler.Request{Op: "rerun", Task: args[0], Stage: args[1]}, nil)
+}
+
+// cmdOpen brings the Task's live tab to the front. If the Task has no tab, it
+// opens a new one that resumes the Task's conversation.
+func cmdOpen(c scheduler.Client, args []string, out io.Writer) error {
+	if len(args) != 1 {
+		return fmt.Errorf("%w: lineup open <task>", errUsage)
+	}
+	var res scheduler.OpenResult
+	if err := c.Do(scheduler.Request{Op: "open", Task: args[0]}, &res); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "%s %s: %s\n", res.ID, res.Action, res.Title)
+	return nil
 }
 
 func simple(op string) func(scheduler.Client, []string, io.Writer) error {

@@ -185,8 +185,8 @@ func (m Model) boardHints() []hint {
 	switch {
 	case t.Live:
 		hs = append(hs, hint{"enter", "go to the Worker"}, hint{"p", "preview"})
-	case reopens(t):
-		hs = append(hs, hint{"enter", "reopen the Worker"})
+	case restorable(t):
+		hs = append(hs, hint{"enter", "restore the Worker"})
 	}
 	switch {
 	case t.PRURL != "":
@@ -316,7 +316,7 @@ const boardHelp = `
  lineup board keys
 
    j k      move the selection
-   enter    focus the Task's tab in Rex
+   enter    focus the Task's tab in Rex, or restore its closed Worker
    p        live preview of the Worker's screen
    f        detail pane at full screen, and back
    m        merge the PR            (Ready to land)

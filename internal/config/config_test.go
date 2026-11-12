@@ -55,7 +55,7 @@ func TestMissingFileMeansDefaults(t *testing.T) {
 	if r.WIPCap != 5 || r.PollInterval != 30*time.Second {
 		t.Errorf("defaults wrong: %+v", r)
 	}
-	if r.Budgets != (lifecycle.Budgets{CIDebug: 3, Responding: 3, Restarts: 2}) {
+	if r.Budgets != (lifecycle.Budgets{CIDebug: 3, Responding: 3}) {
 		t.Errorf("budgets = %+v", r.Budgets)
 	}
 	want := StageConfig{Model: "claude-opus-5-5", Effort: "high"}
@@ -131,7 +131,7 @@ func TestInvalidValuesFailAtLoad(t *testing.T) {
 	for name, text := range map[string]string{
 		"cap":        "wip_cap = 0\n",
 		"interval":   "poll_interval = \"soon\"\n",
-		"budget":     "[budgets]\nrestarts = -1\n",
+		"budget":     "[budgets]\nci_debug = -1\n",
 		"stage":      "[stage.queued]\nmodel = \"x\"\n",
 		"user stage": "[stage.review_ready]\nmodel = \"x\"\n",
 		"event":      "[linear.w.status.ENG]\nbogus = \"x\"\n",
@@ -140,6 +140,13 @@ func TestInvalidValuesFailAtLoad(t *testing.T) {
 		if _, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), text)); err == nil {
 			t.Errorf("%s: no error", name)
 		}
+	}
+}
+
+func TestARestartsBudgetIsAnUnknownKey(t *testing.T) {
+	_, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), "[budgets]\nrestarts = 2\n"))
+	if err == nil || !strings.Contains(err.Error(), "unknown keys: budgets.restarts") {
+		t.Fatalf("err = %v, want unknown keys: budgets.restarts", err)
 	}
 }
 

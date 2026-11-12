@@ -20,9 +20,6 @@ type TaskClosed struct{}
 // Task's Worker again.
 type Rerun struct{ Stage Stage }
 
-// Reopen starts the Task's Worker again in its Stage, in the same conversation.
-type Reopen struct{}
-
 // Worker signals.
 
 // WorkerDone means the Worker reported done. The Scheduler checks the Stage
@@ -40,12 +37,17 @@ type WorkerStatus struct {
 	Detail string
 }
 
-// TabClosed means the user closed the Task's tab in Rex. A Done Task then
-// cleans up. In every other Stage the Worker's Signals carry the news.
-type TabClosed struct{}
+// TabClosed means the Task's tab is gone: the user closed it, or Rex lost it. A
+// Done Task then cleans up. A Task in an agent Stage gets the tab closed flag,
+// and a Task in a Stage that waits for others changes nothing. Waits is true
+// when the Stage's prompt waits for a Worker that has no tab.
+type TabClosed struct{ Waits bool }
+
+// TabOpened means the user restored the Task's Worker in a tab. The old
+// Worker's flags go, such as tab closed.
+type TabOpened struct{}
 
 type WorkerExited struct{ Code int }
-type WorkerLost struct{}
 type SetupFailed struct{ Detail string }
 
 // GitHub signals.
@@ -84,12 +86,11 @@ func (Start) Name() string                   { return "start" }
 func (PRMerge) Name() string                 { return "pr-merge" }
 func (TaskClosed) Name() string              { return "task-closed" }
 func (TabClosed) Name() string               { return "tab-closed" }
+func (TabOpened) Name() string               { return "tab-opened" }
 func (Rerun) Name() string                   { return "rerun" }
-func (Reopen) Name() string                  { return "reopen" }
 func (WorkerDone) Name() string              { return "done" }
 func (WorkerStatus) Name() string            { return "status" }
 func (WorkerExited) Name() string            { return "exited" }
-func (WorkerLost) Name() string              { return "worker-lost" }
 func (SetupFailed) Name() string             { return "setup-failed" }
 func (PROpen) Name() string                  { return "pr-open" }
 func (Pushed) Name() string                  { return "pushed" }
@@ -107,12 +108,11 @@ func (Start) signal()                   {}
 func (PRMerge) signal()                 {}
 func (TaskClosed) signal()              {}
 func (TabClosed) signal()               {}
+func (TabOpened) signal()               {}
 func (Rerun) signal()                   {}
-func (Reopen) signal()                  {}
 func (WorkerDone) signal()              {}
 func (WorkerStatus) signal()            {}
 func (WorkerExited) signal()            {}
-func (WorkerLost) signal()              {}
 func (SetupFailed) signal()             {}
 func (PROpen) signal()                  {}
 func (Pushed) signal()                  {}

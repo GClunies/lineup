@@ -215,9 +215,9 @@ func (r *Record) reviewTask() (t github.ReviewTask, ok bool) {
 }
 
 // startOpenReview finds the open review Task of the PR. It starts the Task if
-// it is Queued, and reopens its Worker if the Worker closed in Review ready. It
-// runs the Task again if no Worker will, because its flag never clears by
-// itself. Only the loop calls it.
+// it is Queued, and reopens its Worker if the Worker closed in Review ready or
+// in a Stage that needs it. It runs the Task again if no Worker will, because
+// its flag never clears by itself. Only the loop calls it.
 func (s *Scheduler) startOpenReview(key ReviewKey) (ReviewResult, bool, error) {
 	for _, r := range s.list() {
 		if r.Review != nil && r.keepsTab() && r.Review.is(key) {
@@ -231,11 +231,17 @@ func (s *Scheduler) startOpenReview(key ReviewKey) (ReviewResult, bool, error) {
 		switch {
 		case r.Stage == lifecycle.Queued:
 			action, err = ReviewStarted, s.apply(r, lifecycle.Start{}, "")
-		case r.Stage.Resumable() && r.Job != JobWorker && r.Conversation == "":
+		case r.Stage == lifecycle.ReviewReady && r.Job != JobWorker && r.Conversation == "":
 			// A Task from before conversation IDs has no conversation to resume.
 			action, err = ReviewRestarted, s.apply(r, lifecycle.Rerun{Stage: lifecycle.Reviewing}, "")
-		case r.Stage.Resumable() && r.Job != JobWorker:
-			action, err = ReviewReopened, s.apply(r, lifecycle.Reopen{}, "")
+		case r.Stage == lifecycle.ReviewReady && r.Job != JobWorker || r.Flag == lifecycle.ReasonTabClosed:
+			id := r.ID
+			s.enqueue(id, func(ctx context.Context) {
+				if _, err := s.restore(ctx, id, false); err != nil {
+					s.d.Log.Warn("reopen review", "task", id, "err", err)
+				}
+			})
+			action = ReviewReopened
 		case r.Flag != "" && !r.Flag.Transient():
 			action, err = ReviewRestarted, s.apply(r, lifecycle.Rerun{Stage: lifecycle.Reviewing}, "")
 		}

@@ -24,7 +24,7 @@ const (
 	wait delivery = iota
 	setUp
 	open
-	resume
+	flagTab
 	typePrompt
 )
 
@@ -32,7 +32,7 @@ var deliveries = [...]delivery{
 	noWorktree:  setUp,
 	settingUp:   wait,
 	noWorker:    open,
-	lostWorker:  resume,
+	lostWorker:  flagTab,
 	busyWorker:  wait,
 	readyWorker: typePrompt,
 }
@@ -72,17 +72,21 @@ func (s *Scheduler) deliver(ctx context.Context, id string) {
 		s.setup(ctx, r)
 	case open:
 		s.openWorker(ctx, r, stage, true)
-	case resume:
-		s.openWorker(ctx, r, stage, false)
+	case flagTab:
+		s.call(func() {
+			if rec, ok := s.recs[r.ID]; ok && rec.Pending != nil && *rec.Pending == stage {
+				s.apply(rec, lifecycle.TabClosed{Waits: true}, "")
+			}
+		})
 	case typePrompt:
 		s.typePrompt(ctx, r, stage)
 	}
 }
 
 func (s *Scheduler) spec(r Record, stage lifecycle.Stage) WorkerSpec {
-	restart, steers := s.replay(r.ID, r.StageSince)
+	replaced, steers := s.replay(r.ID)
 	spec := WorkerSpec{
-		Restart: restart, Steers: steers,
+		Restart: replaced, Steers: steers,
 		Task: r.ID, Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
 		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
 		Conversation: r.Conversation, Name: r.tabLabel(), ReviewCycle: r.ReviewCycle(),
@@ -94,14 +98,15 @@ func (s *Scheduler) spec(r Record, stage lifecycle.Stage) WorkerSpec {
 	return spec
 }
 
-func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.Stage, fresh bool) {
+// openWorker opens a tab for the Task's Worker and reports whether it did.
+func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.Stage, fresh bool) bool {
 	if r.Review != nil {
 		if !s.setupReview(ctx, r) {
-			return
+			return false
 		}
 		var ok bool
 		if r, ok = s.snapshot(r.ID); !ok || r.Stage != stage {
-			return
+			return false
 		}
 	}
 	spec := s.spec(r, stage)
@@ -111,7 +116,7 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 		var err error
 		if prompt, err = s.d.Harness.Prompt(ctx, spec); err != nil {
 			s.fail(r.ID, "worker prompt", err)
-			return
+			return false
 		}
 	}
 	folder := r.Worktree
@@ -123,7 +128,7 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 	argv, env, err := s.d.Harness.Command(ctx, spec, prompt)
 	if err != nil {
 		s.fail(r.ID, "worker command", err)
-		return
+		return false
 	}
 	if r.Review != nil {
 		if env == nil {
@@ -134,23 +139,27 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 	session, err := s.d.Rex.EnsureSession(ctx, r.Session)
 	if err != nil {
 		s.fail(r.ID, "rex session", err)
-		return
+		return false
 	}
 	w, err := s.d.Rex.NewWindow(ctx, session, r.tabLabel(), folder, env, argv)
 	if err != nil {
 		s.fail(r.ID, "rex tab", err)
-		return
+		return false
 	}
-	s.update(r.ID, func(r *Record) {
-		r.Conversation, r.WorkerStage = spec.Conversation, stage
-		if fresh {
-			r.Pending = nil
+	since := r.PendingSince
+	s.update(r.ID, func(rec *Record) {
+		rec.Conversation, rec.WorkerStage = spec.Conversation, stage
+		// A rerun during a slow open set the prompt again, and the new Worker has
+		// not got it.
+		if fresh && rec.Pending != nil && *rec.Pending == stage && rec.PendingSince.Equal(since) {
+			rec.Pending = nil
 		}
 	})
 	s.attach(r.ID, w, JobWorker)
 	if r.Review != nil {
 		s.openHunk(ctx, r.ID, w.SessionID, w.BlockID, r.Worktree, r.Review.URL)
 	}
+	return true
 }
 
 // promptedState is the WorkerState from a typed prompt until the Worker reports
@@ -168,7 +177,7 @@ func (r *Record) awaitsStatus() bool {
 // rerun during the Type sets Pending again and waits for the Worker.
 func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.Stage) {
 	spec := s.spec(r, stage)
-	spec.Steers = nil
+	spec.Restart, spec.Steers = false, nil
 	prompt, err := s.d.Harness.Prompt(ctx, spec)
 	if err != nil {
 		s.fail(r.ID, "worker prompt", err)

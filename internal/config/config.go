@@ -58,7 +58,6 @@ func (r Resolved) Policy() lifecycle.Policy {
 type budgetsFile struct {
 	CIDebug    *int `toml:"ci_debug"`
 	Responding *int `toml:"responding"`
-	Restarts   *int `toml:"restarts"`
 }
 
 // reviewBotFile is a [review_bot] table. A layer can leave out a key and
@@ -419,7 +418,7 @@ func (g *Global) validate(l *layer, where string) error {
 		}
 	}
 	if b := l.Budgets; b != nil {
-		for name, v := range map[string]*int{"ci_debug": b.CIDebug, "responding": b.Responding, "restarts": b.Restarts} {
+		for name, v := range map[string]*int{"ci_debug": b.CIDebug, "responding": b.Responding} {
 			if v != nil && *v < 0 {
 				return fmt.Errorf("%s: budgets.%s must not be negative", where, name)
 			}
@@ -568,7 +567,7 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 		WIPCap:       defaultWIPCap,
 		PR:           true,
 		PollInterval: defaultPollInterval,
-		Budgets:      lifecycle.Budgets{CIDebug: 3, Responding: 3, Restarts: 2},
+		Budgets:      lifecycle.Budgets{CIDebug: 3, Responding: 3},
 	}
 	for _, r := range matched {
 		layers = append(layers, r.layer)
@@ -600,9 +599,6 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 			}
 			if b.Responding != nil {
 				res.Budgets.Responding = *b.Responding
-			}
-			if b.Restarts != nil {
-				res.Budgets.Restarts = *b.Restarts
 			}
 		}
 	}

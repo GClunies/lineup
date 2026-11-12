@@ -337,11 +337,8 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.vp.GotoTop()
 		return m, m.loadDetail()
 	case "enter":
-		if ok && reopens(t) {
-			return m, m.reviewPR(t.PRURL, t.ID)
-		}
 		if ok {
-			return m, m.op("focus", scheduler.Request{Op: "focus", Task: t.ID})
+			return m, m.openTask(t.ID)
 		}
 	case "m":
 		if ok && t.StageKey == lifecycle.ReadyToLand.Key() {
@@ -434,6 +431,15 @@ func (m Model) op(label string, req scheduler.Request) tea.Cmd {
 	c := m.client
 	return func() tea.Msg {
 		return opMsg{label: label, task: req.Task, err: c.Do(req, nil)}
+	}
+}
+
+func (m Model) openTask(id string) tea.Cmd {
+	c := m.client
+	return func() tea.Msg {
+		var res scheduler.OpenResult
+		err := c.Do(scheduler.Request{Op: "open", Task: id}, &res)
+		return opMsg{label: "open", task: id, note: string(res.Action), err: err}
 	}
 }
 
