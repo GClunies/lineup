@@ -539,7 +539,6 @@ func (m Model) reviewPR(url, ref string) tea.Cmd {
 	}
 }
 
-// Ops of a skip. The y/n prompt of a skip keeps the op in pendingOp.
 const (
 	opSkip   = "reviews-skip"
 	opUnskip = "reviews-unskip"
@@ -560,6 +559,7 @@ func (m Model) toggleSkip(url, ref string) (tea.Model, tea.Cmd) {
 	return m, m.skipOp(opSkip, url, ref)
 }
 
+// skipOp sends the skip or unskip to the Scheduler and reports it as an opMsg.
 func (m Model) skipOp(op, url, ref string) tea.Cmd {
 	c := m.client
 	label := strings.TrimPrefix(op, "reviews-")

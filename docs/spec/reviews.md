@@ -184,7 +184,7 @@ The queue can pick a PR in code that the user does not know, or has no time to l
 - A skip keys on the PR alone, `owner/repo#number`. It holds at every head, in every queue, and across a restart of the Scheduler. The URL of a skip ignores case.
 - A skip writes nothing to GitHub. lineup reads the PR once, to take its URL and title and to check that it is open.
 - If the PR has an open review Task, the skip ends that Task in the same loop call, as `x` does: the Task goes to Done, the Scheduler closes its tab, and it removes the review worktree. The Task's outcome is `skipped`. A Done review that keeps its tab stays as it is. Only the user closes that tab.
-- A Task that a skip ended holds nothing. If it held the PR at its head, the PR would leave its `Q:` tab right after the skip, and an unskip would leave the PR out until the author pushes. An unskip lets the next fill add the PR again at the same head.
+- A Task that a skip ended holds nothing. So the PR stays on its `Q:` tab after the skip, and an unskip lets the next fill add the PR again at the same head.
 - A skip and an unskip are idempotent. A second skip changes nothing, except that it ends a review Task that is still open. An unskip of a PR that is not skipped is not an error.
 - `r` and `lineup review` review a skipped PR, and keep the skip. While that review Task is open it holds the PR. When it ends, the skip holds the PR again.
 - A skip never expires. The user unskips a PR that merged or closed with `lineup reviews unskip <PR>`.

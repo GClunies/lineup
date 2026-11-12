@@ -938,7 +938,7 @@ func TestSKeyAsksBeforeItClosesAnOpenReview(t *testing.T) {
 	b.Tasks[0].ID = "pr-4945"
 	e.m.setBoard(b)
 	e.open()
-	e.press("tab") // My PRs, on data#4945 with its open review
+	e.press("tab")
 	e.press("S")
 	if len(e.sched.calls) != 0 {
 		t.Fatalf("S on a PR with an open review sent %+v before the answer", e.sched.calls)
@@ -961,7 +961,7 @@ func TestSKeyAsksBeforeItClosesAnOpenReview(t *testing.T) {
 
 func TestSKeyOnTheReviewsTabSkipsTheTasksPR(t *testing.T) {
 	e := newRvEnv(t)
-	e.open() // Reviews, on R-10
+	e.open()
 	e.press("S")
 	if f := line(e.m.View(), "(y/n)"); !strings.Contains(f, "skip data#4955 and close R-10?") {
 		t.Fatalf("prompt = %q", f)
@@ -991,7 +991,7 @@ func TestEveryPRTabMarksASkippedPRAndKeepsItsRow(t *testing.T) {
 	b.Skips = []github.Skip{{URL: urlBase}}
 	e.m.setBoard(b)
 	e.open()
-	e.press("tab", "tab") // Requested
+	e.press("tab", "tab")
 	l := line(e.m.View(), "data#4955")
 	if !strings.Contains(l, "skipped") {
 		t.Fatalf("the Requested row of a skipped PR = %q, want skipped in TASK", l)

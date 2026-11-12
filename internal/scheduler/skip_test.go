@@ -362,7 +362,7 @@ func TestASecondSkipEndsATaskThatSurvivedACrashAfterTheStoreWrite(t *testing.T) 
 	}
 	h.s.call(func() {
 		rows, _ := h.s.d.Store.Skips()
-		h.s.skips = []github.Skip{github.Skip(rows[0])} // the state after a restart
+		h.s.skips = []github.Skip{github.Skip(rows[0])}
 	})
 	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Reviewing"}) {
 		t.Fatalf("reviews %v, want pr-7 still open", got)
