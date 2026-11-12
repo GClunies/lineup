@@ -185,7 +185,10 @@ type Issue struct {
 	Assignee    *Person  `json:"assignee"`
 	// Blockers are the open Issues that block this one through a "blocks"
 	// relation, in any Project. Linear's first 20 relations are read.
-	Blockers          []Ref     `json:"blockers,omitempty"`
+	Blockers []Ref `json:"blockers,omitempty"`
+	// Unblocked is true when one or more "blocks" relations point at the
+	// Issue and every one of their Issues is done or canceled.
+	Unblocked         bool      `json:"unblocked,omitempty"`
 	PrioritySortOrder float64   `json:"prioritySortOrder"`
 	Estimate          float64   `json:"estimate"` // 0 is no estimate
 	CreatedAt         time.Time `json:"createdAt"`
@@ -253,11 +256,17 @@ type issueWire struct {
 
 func (w issueWire) issue() Issue {
 	is := w.Issue
+	closed := 0
 	for _, r := range w.InverseRelations.Nodes {
-		if r.Type == "blocks" && isOpen(r.Issue.State.Type) {
+		switch {
+		case r.Type != "blocks":
+		case isOpen(r.Issue.State.Type):
 			is.Blockers = append(is.Blockers, r.Issue.Ref)
+		default:
+			closed++
 		}
 	}
+	is.Unblocked = closed > 0 && len(is.Blockers) == 0
 	is.Labels = w.Labels.Nodes
 	for _, a := range w.Attachments.Nodes {
 		// metadata is free-form JSON, so one odd attachment must not fail the list.

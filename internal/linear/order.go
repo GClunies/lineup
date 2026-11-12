@@ -7,11 +7,24 @@ import (
 )
 
 // Order returns issues in the tracker browser's order: dependency level
-// first, then natural ID order (ENG-9 before ENG-10). An Issue with no open
-// blocker has level 0. Any other Issue sits one level above its highest open
-// blocker. A blocker outside issues counts as level 0. A cycle is cut at the
-// edge that closes it, as in herdr-linear's graph.go. The input is unchanged.
+// first, then natural ID order (ENG-9 before ENG-10). The input is unchanged.
 func Order(issues []Issue) []Issue {
+	lv := Levels(issues)
+	out := append([]Issue(nil), issues...)
+	sort.SliceStable(out, func(i, j int) bool {
+		if a, b := lv[out[i].ID], lv[out[j].ID]; a != b {
+			return a < b
+		}
+		return NaturalLess(out[i].Identifier, out[j].Identifier)
+	})
+	return out
+}
+
+// Levels returns the dependency level of each Issue, by ID. An Issue with no
+// open blocker has level 0. Any other Issue sits one level above its highest
+// open blocker. A blocker outside issues counts as level 0. A cycle is cut at
+// the edge that closes it, as in herdr-linear's graph.go.
+func Levels(issues []Issue) map[string]int {
 	at := make(map[string]int, len(issues))
 	for i, is := range issues {
 		at[is.ID] = i
@@ -44,21 +57,11 @@ func Order(issues []Issue) []Issue {
 		}
 		return level[i]
 	}
-	for i := range issues {
-		levelOf(i)
-	}
-	out := append([]Issue(nil), issues...)
 	lv := make(map[string]int, len(issues))
 	for i, is := range issues {
-		lv[is.ID] = level[i]
+		lv[is.ID] = levelOf(i)
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if a, b := lv[out[i].ID], lv[out[j].ID]; a != b {
-			return a < b
-		}
-		return naturalLess(out[i].Identifier, out[j].Identifier)
-	})
-	return out
+	return lv
 }
 
 // breakCycles drops each edge that closes a cycle (a back edge of a depth
@@ -88,8 +91,8 @@ func breakCycles(succ [][]int) {
 	}
 }
 
-// naturalLess orders identifiers by team key, then by number as a number.
-func naturalLess(a, b string) bool {
+// NaturalLess orders identifiers by team key, then by number as a number.
+func NaturalLess(a, b string) bool {
 	ka, na, oka := splitID(a)
 	kb, nb, okb := splitID(b)
 	if !oka || !okb {
@@ -124,8 +127,8 @@ func rankOf(ranks map[string]int, typ string) int {
 	return len(ranks)
 }
 
-// priorityRank puts urgent (1) first and no priority (0) after low (4).
-func priorityRank(p int) int {
+// PriorityRank puts urgent (1) first and no priority (0) after low (4).
+func PriorityRank(p int) int {
 	if p == 0 {
 		return 5
 	}
@@ -167,7 +170,7 @@ func ViewOrder(issues []Issue) []Issue {
 			rankOf(issueStateRank, a.State.Type)-rankOf(issueStateRank, b.State.Type),
 			cmpFloat(b.State.Position, a.State.Position),
 			strings.Compare(a.State.Name, b.State.Name),
-			priorityRank(a.Priority)-priorityRank(b.Priority),
+			PriorityRank(a.Priority)-PriorityRank(b.Priority),
 			cmpFloat(a.PrioritySortOrder, b.PrioritySortOrder),
 		) < 0
 	})
@@ -199,7 +202,7 @@ func ProjectOrder(ps []ProjectInfo) []ProjectInfo {
 			rankOf(projectStateRank, a.StatusType)-rankOf(projectStateRank, b.StatusType),
 			cmpFloat(b.StatusPosition, a.StatusPosition),
 			strings.Compare(a.Status, b.Status),
-			priorityRank(a.Priority)-priorityRank(b.Priority),
+			PriorityRank(a.Priority)-PriorityRank(b.Priority),
 			cmpFloat(a.PrioritySortOrder, b.PrioritySortOrder),
 		) < 0
 	})

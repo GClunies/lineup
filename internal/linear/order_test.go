@@ -70,6 +70,19 @@ func TestOrder(t *testing.T) {
 	}
 }
 
+func TestLevelsGivesEachIssueItsDependencyLevel(t *testing.T) {
+	got := Levels([]Issue{iss("ENG-4", "ENG-2", "ENG-3"), iss("ENG-3", "ENG-1"), iss("ENG-2"), iss("ENG-1"), iss("ENG-5", "WEB-9")})
+	want := map[string]int{"ENG-1": 0, "ENG-2": 0, "ENG-3": 1, "ENG-4": 2, "ENG-5": 0}
+	if len(got) != len(want) {
+		t.Fatalf("levels %v, want %v", got, want)
+	}
+	for id, l := range want {
+		if got[id] != l {
+			t.Errorf("level of %s = %d, want %d", id, got[id], l)
+		}
+	}
+}
+
 func TestBlockedBy(t *testing.T) {
 	if got := BlockedBy(iss("ENG-1", "ENG-590", "ENG-7")); strings.Join(got, ",") != "ENG-590,ENG-7" {
 		t.Fatalf("%v", got)
@@ -87,8 +100,8 @@ func TestNaturalLess(t *testing.T) {
 		{"ENG-9", "ENG-10", true}, {"ENG-10", "ENG-9", false}, {"ENG-10", "ENG-100", true},
 		{"AB-5", "ENG-1", true}, {"ENG-1", "ENG-1", false}, {"odd", "ENG-1", false}, {"ENG-1", "odd", true},
 	} {
-		if got := naturalLess(tc.a, tc.b); got != tc.want {
-			t.Errorf("naturalLess(%s, %s) = %v", tc.a, tc.b, got)
+		if got := NaturalLess(tc.a, tc.b); got != tc.want {
+			t.Errorf("NaturalLess(%s, %s) = %v", tc.a, tc.b, got)
 		}
 	}
 }
