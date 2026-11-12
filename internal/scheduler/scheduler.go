@@ -178,9 +178,9 @@ func (s *Scheduler) pend(r *Record, stage lifecycle.Stage) {
 	r.Pending, r.PendingSince = &stage, s.now()
 }
 
-// flagSilentPrompts flags each Task whose Stage prompt waits on a Worker that
-// has never reported a program status. The prompt stays unsent, because the
-// Scheduler cannot tell that the Worker is ready for it.
+// flagSilentPrompts flags each Task whose Stage prompt waits on a Worker with no
+// status. The prompt stays unsent, because the Scheduler cannot tell that the
+// Worker is ready.
 func (s *Scheduler) flagSilentPrompts() {
 	wait := cmp.Or(s.d.PromptWait, time.Minute)
 	for _, r := range s.list() {
@@ -456,8 +456,8 @@ func (s *Scheduler) sessionEmpty(ctx context.Context, session string) bool {
 	return len(blocks) == 0
 }
 
-// cleanup runs only when the user closes a Task. It forgets the Task's tab
-// before it closes it, so the tab's close is not read as a lost Worker.
+// cleanup forgets the Task's tab before it closes it, so the tab's close is not
+// read as a lost Worker.
 func (s *Scheduler) cleanup(ctx context.Context, r Record) {
 	if r.WindowID != "" {
 		s.update(r.ID, func(r *Record) { r.WindowID, r.BlockID, r.HunkBlockID, r.Job = "", "", "", JobNone })

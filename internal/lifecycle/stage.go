@@ -171,9 +171,8 @@ const (
 	ReasonStopped     Reason = "stopped"
 	ReasonBudgetSpent Reason = "budget spent"
 	ReasonWorkerLost  Reason = "worker lost"
-	// ReasonWorkerSilent is a Stage prompt that waits on a Worker that has
-	// never reported a program status, so the Scheduler cannot tell when it is
-	// ready.
+	// ReasonWorkerSilent is a Stage prompt that waits on a Worker that has sent
+	// no status.
 	ReasonWorkerSilent Reason = "worker silent"
 	// ReasonDraft is a passing PR that is a draft. lineup never marks a PR
 	// ready, so it waits for the user to.

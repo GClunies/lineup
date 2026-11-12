@@ -250,10 +250,8 @@ func (c *Client) ProgramStatus(ctx context.Context, session, block string) ([]St
 	return rs, nil
 }
 
-// Type types text and then Enter. Claude's prompt treats text and Enter in one
-// write as a paste, so Enter goes in a second write after a short pause.
-// Type writes each part to the block, then presses Enter. A pause follows each
-// part, so that Claude reads the parts as separate input.
+// Type writes each part to the block, then presses Enter. Claude reads text and
+// Enter in one write as a paste, so a short pause follows each write.
 func (c *Client) Type(ctx context.Context, session, block string, parts ...string) error {
 	for _, part := range append(parts, "\r") {
 		if err := c.write(ctx, session, block, part); err != nil {
