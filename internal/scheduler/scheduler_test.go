@@ -2372,3 +2372,21 @@ func TestABlockThatClosesAfterItsProgramExitedFlagsTheTask(t *testing.T) {
 	h.rex.blockCloses(worker)
 	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Flag == "tab closed" })
 }
+
+// Rex closes the setup tab after worktrunk exits. That close is not the user's.
+func TestASetupTabThatExitsAndClosesFlagsNothing(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	setup := h.waitTab("wt ada/eng-1-billing")
+	h.rex.exits(setup, 0)
+	h.rex.blockCloses(setup)
+	h.waitTab("claude working")
+	eventually(t, "a live Worker", func() bool { return h.task("ENG-1").Live })
+	if got := h.events("ENG-1"); slices.Contains(got, "tab-closed") {
+		t.Fatalf("events = %q, want no tab-closed: Rex closed the setup tab", got)
+	}
+	if f := h.task("ENG-1").Flag; f != "" {
+		t.Fatalf("flag = %q, want none", f)
+	}
+}

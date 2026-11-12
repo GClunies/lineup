@@ -591,7 +591,7 @@ func (s *Scheduler) onRex(ev RexEvent) {
 		switch {
 		case job == JobSetup:
 			s.apply(r, lifecycle.SetupFailed{Detail: "setup tab closed"}, "")
-		case job == JobWorker || job == JobExited:
+		case job == JobWorker || job == JobExited && r.hadWorker():
 			s.apply(r, lifecycle.TabClosed{Waits: waits}, "")
 		}
 	}
