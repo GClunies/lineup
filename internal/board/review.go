@@ -558,10 +558,8 @@ func (m Model) toggleSkip(url, ref string) (tea.Model, tea.Cmd) {
 		m.pendingAsk = "skip " + ref + " and close " + t.ID
 		return m, nil
 	}
-	return m, m.skipCmd(url, ref)
+	return m, m.skipOp(opSkip, url, ref)
 }
-
-func (m Model) skipCmd(url, ref string) tea.Cmd { return m.skipOp(opSkip, url, ref) }
 
 func (m Model) skipOp(op, url, ref string) tea.Cmd {
 	c := m.client

@@ -234,7 +234,7 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case modeConfirm:
 		m.mode = modeNormal
 		if k == "y" && m.pendingOp == opSkip {
-			return m, m.skipCmd(m.pendingURL, m.pendingRef)
+			return m, m.skipOp(opSkip, m.pendingURL, m.pendingRef)
 		}
 		if k == "y" {
 			return m, m.op(m.pendingOp, scheduler.Request{Op: m.pendingOp, Task: m.pendingTask})
