@@ -1,6 +1,6 @@
 # One board: the user's own Issues on the work view
 
-Status: planned. This spec adds the user's own Issues to the `2 work` view, a quick capture, and a promote from the Local Tracker to Linear. The decisions behind it are in `docs/adr/0019-the-board-holds-my-issues.md` and `docs/adr/0020-capture-defaults-to-the-local-tracker.md`.
+Status: built. This spec adds the user's own Issues to the `2 work` view, a quick capture, and a promote from the Local Tracker to Linear. The decisions behind it are in `docs/adr/0019-the-board-holds-my-issues.md` and `docs/adr/0020-capture-defaults-to-the-local-tracker.md`.
 
 ## Goal
 

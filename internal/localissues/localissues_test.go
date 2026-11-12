@@ -133,6 +133,33 @@ func TestSetStatusKeepsTheRestOfTheFile(t *testing.T) {
 	}
 }
 
+func TestPromoteCancelsTheIssueAndEndsTheBodyWithTheLinearID(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	rapid.Check(t, func(t *rapid.T) {
+		want := genIssue(t)
+		want.N = 7
+		os.WriteFile(s.path(7), want.Marshal(), 0o644)
+		if err := s.Promote("local-7", "ENG-612"); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.Get("local-7")
+		if err != nil {
+			t.Fatalf("parse after Promote: %v", err)
+		}
+		body := want.Body
+		if body != "" && !strings.HasSuffix(body, "\n") {
+			body += "\n"
+		}
+		if body != "" {
+			body += "\n"
+		}
+		want.Status, want.Body = Canceled, body+"Promoted to ENG-612.\n"
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("after Promote\n got %#v\nwant %#v", got, want)
+		}
+	})
+}
+
 func TestBranchAndParseID(t *testing.T) {
 	is := Issue{N: 7, Title: "Retry failed loads before alerting!"}
 	if got := is.Branch(); got != "local-7-retry-failed-loads-before-alerting" {

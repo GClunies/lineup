@@ -44,7 +44,7 @@ func (m Model) View() string {
 	h := max(m.height-2-lipgloss.Height(foot), 1)
 	var body string
 	switch {
-	case m.mode == modeDests:
+	case m.mode == modeDests || m.mode == modePromote:
 		body = m.destList()
 	case m.view == viewTracker:
 		body = m.trackerBody()
@@ -165,6 +165,8 @@ func (m Model) footer() string {
 		return strings.Join(lines, "\n")
 	case modeDests:
 		s = dim.Render(" type to filter  up/down move  enter pick  esc back")
+	case modePromote:
+		s = " promote " + bold.Render(m.box.promote) + " to Linear" + dim.Render("   type to filter  up/down move  enter promote  esc cancel")
 	case modeConfirm:
 		s = bad.Render(" " + m.pendingAsk + "? (y/n)")
 	case modeCap:
@@ -212,11 +214,11 @@ func (m Model) boardHints() []hint {
 		return []hint{{"f", "back"}, {"j/k", "scroll"}, {"?", "all keys"}}
 	}
 	if r, ok := m.currentIssue(); ok {
-		open := "open the Issue"
-		if r.lin == nil {
-			open = "edit the Issue"
+		hs := []hint{{"s", "start"}, {"o", "open the Issue"}}
+		if r.loc != nil {
+			hs = []hint{{"s", "start"}, {"o", "edit the Issue"}, {"P", "promote to Linear"}}
 		}
-		return append([]hint{{"s", "start"}, {"o", open}, {"j/k", "move"}}, tail...)
+		return append(append(hs, hint{"j/k", "move"}), tail...)
 	}
 	t, ok := m.current()
 	if !ok && m.kind == lifecycle.KindReview {
@@ -392,6 +394,8 @@ const boardHelp = `
    s        start a Queued Task, or start a Task from a Ready or
             Backlog Issue; pick or type a skill, or just go
    o        open the PR or the Issue; a local Issue opens in $EDITOR
+   P        promote a local Issue: pick a Linear team or Project; lineup
+            creates the Issue there and cancels the local one
    n        capture a new Issue in the Local Tracker; tab picks a
             Linear team or Project instead
    R        refresh now: poll GitHub for every started Task
