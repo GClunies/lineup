@@ -171,7 +171,7 @@ A Repo where the bot does not review must not hold a Task forever. If a gated Ta
 | `budget spent` | A Loop budget reaches 0 |
 | `draft` | `pr-seen` on a draft PR with no earlier gap |
 | `no bot review` | `review-bot-late`: the review bot did not score the head commit of a passing PR |
-| `tab closed` | The Task is in an agent Stage and its Worker's tab or block is gone: the user closed the tab, Rex lost it, or the Rex server restarted. The detail names a Stage prompt that waits, for example `CI debug waits for the Worker`. lineup opens no tab. `lineup open <task>` restores the Worker and clears the flag. |
+| `tab closed` | The Task is in an agent Stage, and its Worker's tab or block is gone. The user closed the tab, Rex lost it, or the Rex server restarted. The detail names a Stage prompt that waits, for example `CI debug waits for the Worker`. lineup opens no tab. `lineup open <task>` restores the Worker and clears the flag. |
 | `worker silent` | `prompt-stalled`: a Stage prompt has waited 1 minute for a Worker that has sent no program status, or for a prompted Worker to report `working`. The Scheduler types nothing more into it. The flag clears when the Worker reports `working`. |
 
 When the cause clears, for example when program status goes back to `working`, the Scheduler removes the flag. The flag `tab closed` clears only when the user restores the Worker. A Task with no tab shows `tab closed` and never `worker silent`, because the silent wait counts only while a Worker runs. A restore starts that wait again.
@@ -266,7 +266,7 @@ Rex has no key/value metadata on its objects. The store keeps the session, windo
 
 | Source | Signals |
 |---|---|
-| Rex events: `terminal.program_status_changed`, `terminal.child_exited`, `block_closed` | `done`, `blocked`, `error`, `tab-closed`. `child_exited` comes for every exit. `block_closed` does not come when Rex keeps the tab open. A tab that the user closes sends `block_closed` and no `child_exited`, so a `block_closed` of a Worker's block means that a person or Rex closed the tab, and not that the Worker exited. |
+| Rex events: `terminal.program_status_changed`, `terminal.child_exited`, `block_closed` | `done`, `blocked`, `error`, `tab-closed`. `child_exited` comes for every exit. `block_closed` does not come when Rex keeps the tab open. A tab that the user closes sends `block_closed` and no `child_exited`. So a `block_closed` of a Worker's block means that a person or Rex closed the tab. It does not mean that the Worker exited. |
 | GitHub, one batched GraphQL query for all open Task PRs every 30 s, and one query right after a Worker reports `done` | `pr-open`, `pushed`, `review-*`, `pr-merged`, and `pr-seen` with the PR's facts at each poll |
 | The user, through Board keys or the CLI | `start`, `pr-merge`, `task-closed`, and `tab-opened`, which `lineup open` sends when it restores a Worker |
 | The Scheduler's clock, at each poll | `review-bot-late` |
@@ -286,7 +286,7 @@ A PR whose head commit has no checks meets the check items of the Landing bar, s
 
 When `lineup serve` starts, it compares the store with `rex ls` and `rex session inspect`. Each Task in an agent Stage whose tab or block is gone gets the flag `tab closed`. Recovery opens no tab, because only the user restores a closed tab. A Task whose setup tab is gone, or whose Worker never started, starts again, because it never had a Worker to restore.
 
-Recovery also runs after a Rex server restart. The Scheduler reads the Rex server's instance id every 5 s. When the id changes, every Worker is gone, so the Scheduler exits. launchd starts it again and startup recovery flags each Task whose Worker is gone. The user restores each one with `lineup open <task>` or with `enter` on its row.
+Recovery also runs after a Rex server restart. The Scheduler reads the Rex server's instance id every 5 s. When the id changes, every Worker is gone, so the Scheduler exits. launchd starts it again. Startup recovery flags each Task whose Worker is gone. The user restores each one with `lineup open <task>` or with `enter` on its row.
 
 ## Start a Task
 
@@ -310,6 +310,7 @@ Each Task keeps one Worker for its whole life. The Worker starts with `--session
 - The Scheduler types the prompt only when the Worker's program status is `idle` or `done`. While the Worker is busy, for example with a message that the user typed, the prompt waits for its next `idle` or `done`.
 - The Scheduler does not check the Stage contract while a prompt waits, because a `done` then belongs to the Stage before it.
 - A Worker whose tab is gone leaves the Task flagged `tab closed`. A prompt that is due then stays pending, and the flag names its Stage. Nothing opens a tab.
+- Only a Task's first Worker opens a tab with no ask from the user. A Task that has had a Worker never gets a tab from a prompt, whether or not it holds a conversation.
 - `lineup open <task>` restores the Worker. A live tab comes to the front. A Task with no tab gets a new tab in the Worker's folder that runs `claude --resume <conversation>`, and the flag clears. A prompt that waited arrives at the restored Worker's first `idle`. The restore types nothing else, because the Stage prompt reached the Worker before the tab closed.
 - A Task with no conversation, or whose conversation file is gone, gets a fresh Worker with the Stage prompt. The prompt says that this is a restart, and it quotes every steer that the user sent to the Task, in order.
 - `open` refuses a Queued Task, with `<task> has not started`. It refuses a Done Task that has no tab, with `<task> is Done and its worktree is gone`. It refuses a Task in a Stage that waits for others when no conversation is left to resume.

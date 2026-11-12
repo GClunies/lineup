@@ -89,7 +89,15 @@ An observed event that moves a Task from one Stage to another, for example `pr-o
 _Avoid_: Trigger, transition, state
 
 **Needs you**:
-A flag on a Task, in any Stage, that says the user must act and gives the reason: a question, a permission, an auth request, an error, a Worker that stopped before its Stage contract, a closed tab in a Stage that needs the Worker, a draft PR that passed CI, a review bot that did not score a passing PR, or a spent Loop budget.
+A flag on a Task, in any Stage, that says the user must act and gives the reason. The reasons are:
+
+- a question, a permission, or an auth request
+- an error
+- a Worker that stopped before its Stage contract
+- a closed tab in a Stage that needs the Worker
+- a draft PR that passed CI
+- a review bot that did not score a passing PR
+- a spent Loop budget
 _Avoid_: Blocked, waiting, attention state
 
 **Ready to land**:

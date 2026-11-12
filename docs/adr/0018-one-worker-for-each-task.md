@@ -18,5 +18,5 @@ The user wants to control their Rex tabs. A fresh Worker for each Stage closed t
 - A Worker is `prompted` from the typed prompt until its next `working`, `blocked`, or `error`. The Scheduler drops a `done` or `idle` in that state, because it ended the turn before the prompt. After 1 minute the Task gets `worker silent`.
 - A Stage prompt with a skill starts with `/skill`. Claude runs a slash command only from typed keys, so the Scheduler types `/skill` and pastes the rest of the prompt. A text with no newline is typed, because a menu reads a pasted answer as no keypress.
 - A build Task gets a conversation ID at its first Worker. A rerun of Reviewing keeps the review Task's conversation.
-- A Worker whose tab is gone resumes its conversation with `claude --resume` in a new tab, then gets the Stage prompt at its first `idle`.
+- A Worker whose tab is gone leaves the Task flagged `tab closed`, and a due prompt stays pending. The user's `lineup open` resumes the conversation with `claude --resume` in a new tab. The pending prompt then arrives at the Worker's first `idle`.
 - A Worker's context grows over the Task's life. Claude Code compacts it by itself.

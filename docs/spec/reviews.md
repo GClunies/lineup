@@ -125,7 +125,7 @@ On a PR tab:
 | `/` | Fuzzy search the rows |
 | `enter` | Focus the Worker's tab of the joined Task. If the joined Task has started and has no live Worker, restore the Worker with `lineup open`. If the PR has no started Task, open the PR in the browser. |
 | `o` | Open the PR in the browser |
-| `r` | Start a review Task for this PR now, outside every queue's slots. If the PR has an open review Task, start it if it is Queued, reopen its Worker if the Worker closed in Review ready or in a Reviewing Task that carries the flag `tab closed`, or run it again if it stopped for good. Else focus its tab. |
+| `r` | Start a review Task for this PR now, outside every queue's slots. If the PR has an open review Task, start it if it is Queued. Restore its Worker if the Worker closed in Review ready, or in Reviewing with the flag `tab closed`. Run it again if it stopped for good. Else focus its tab. |
 | `R` | Refresh now: search every PR tab again, and ask the Scheduler to poll every started Task |
 | `z` | Go to the Orchestrator in the `work` tab |
 | `?` | Show all keys |
@@ -206,7 +206,7 @@ The Scheduler reads the queues and their slots when it starts. After a change to
 
 A review Task is a Task with Kind `review`. Its ID has the form `pr-<number>`, for example `pr-4955`. If a Task with that ID for another repository's PR is live or keeps its tab, the ID adds the repository's name, for example `pr-4955-web`. A new review of a PR whose review Task is Done takes the same ID. The Task keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `r` or `lineup review` has no queue. A Done review that keeps its tab holds its PR. Until the user closes the tab, the queue adds no review of the PR, and `lineup review` refuses it.
 
-`lineup review` and `r` read the URL as `owner/repo#number`. If a review Task for that PR is open, they add nothing. They start that Task if it is Queued. They reopen its Worker if the Worker closed in Review ready, or in Reviewing with the flag `tab closed`. They run it again if it stopped for good, for example after a failed setup. If it runs, they focus its tab. They refuse a PR from a fork, and a PR that is closed or merged.
+`lineup review` and `r` read the URL as `owner/repo#number`. If a review Task for that PR is open, they add nothing. They start that Task if it is Queued. They restore its Worker if the Worker closed in Review ready, or in Reviewing with the flag `tab closed`. They run it again if it stopped for good, for example after a failed setup. If it runs, they focus its tab. They refuse a PR from a fork, and a PR that is closed or merged.
 
 ### Stages
 
@@ -261,7 +261,7 @@ If the PR's head moves after Review ready, the row shows the note `head moved`. 
 | Prompt | `/pr-review <PR URL>`, the review worktree, then the review contract |
 | Harness, model, effort | `[stage.reviewing]`, else `[stage.default]`. The Worker gets `--add-dir <review worktree>`, so it reads the PR's code with no permission prompt. |
 | Conversation | The first Reviewing Worker starts a Claude conversation with `--session-id <uuid>`, and the Task's Record keeps the ID. A rerun of Reviewing types the review prompt into the same Worker and keeps the conversation. `lineup open` resumes it. If the conversation file is gone, the Worker starts a new conversation. |
-| Reopened Worker | `claude --resume <uuid>` with no prompt, the Reviewing model and effort, and `--add-dir <review worktree>`. Setup runs again first. If the Task has no conversation ID, for example a Task from before conversation IDs, the reopen runs the review again in Reviewing. A Worker that exited and left its tab open for the hunk pane has that tab closed first, so the Task's window is the new tab. |
+| Restored Worker | `claude --resume <uuid>` with no prompt, the Reviewing model and effort, and `--add-dir <review worktree>`. Setup runs again first. If the Task has no conversation ID, the restore runs the review again in Reviewing. A Task from before conversation IDs is one example. A Worker that exited and left its tab open for the hunk pane has that tab closed first. So the Task's window is the new tab. |
 | Hunk pane | `hunk gh pr <PR URL>` in the review worktree, to the right of the Worker in its tab, with half of the tab. See **The hunk pane** below. |
 
 If no `[[repos]]` checkout has the PR's repository as its `origin`, the add fails and names the repository.
@@ -276,7 +276,7 @@ The lock keeps two starts from fetching into one checkout at once. A fetch from 
 
 **Cleanup.** A review Task that ends keeps its tab, its hunk pane, and its review worktree. The user ends them by closing the Task's tab, or with `x` or `lineup close <task>`. Then lineup closes the tab if it is open and fetches. It removes the review worktree if the worktree holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
 
-**The hunk pane.** Each review Worker gets the PR's diff beside it, so the user reads the diff next to the review. lineup splits the Worker's tab when it opens the tab: on the first start and on each restore. A rerun types into the same tab, so it keeps its pane. The Worker keeps the focus. The pane runs this command:
+**The hunk pane.** Each review Worker gets the PR's diff beside it, so the user reads the diff next to the review. lineup splits the Worker's tab when it opens the tab. That happens on the first start and on each restore. A rerun types into the same tab, so it keeps its pane. The Worker keeps the focus. The pane runs this command:
 
 ```
 sh -c 'GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"' hunk <PR URL>
@@ -332,7 +332,7 @@ The skills live in the dotfiles repository, `~/.agents/skills`.
 
 | Command | Effect |
 |---|---|
-| `lineup review <PR URL>` | Adds and starts a review Task with no queue, or reopens the closed Worker of an open review Task |
+| `lineup review <PR URL>` | Adds and starts a review Task with no queue, or restores the closed Worker of an open review Task |
 | `lineup open <task>` | Focuses the review Task's tab, or restores its closed Worker |
 | `lineup reviews` | Lists each queue with its slots, started reviews, and ranked PRs. When `review.slots` is set, it prints `Reviews: <started>/<slots> started` first. `--json` has `slots` when it is set, and always has `started`, the started review Tasks of all queues |
 | `lineup reviews pause` / `resume` | Stops or restarts every queue fill |
@@ -369,7 +369,7 @@ The `review` Hub tab holds one pane, `REVIEWS`, which runs `lineup board --revie
 5. **Fill.** Two fills in the same state start the same Tasks once. A paused queue starts nothing. Table tests for the shared slots: an earlier queue's PR is added above an older later-queue PR, a PR that two queues match is added once in the first queue, the shared count caps the started reviews of all queues, and a full queue leaves a new PR of the first queue waiting until a slot frees.
 6. **Review poll.** Against recorded responses, `pr-reviewed`, `pr-merged`, and `pr-closed` fire as the table says, wait while the Worker works, and fire on the next poll after the Worker stops. A pending review does not fire `pr-reviewed`.
 7. **Setup and cleanup.** Two review starts in one Repo fetch one after the other. Cleanup removes a clean review worktree and keeps one with an unpushed commit. A review Task never calls `wt remove`.
-8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then reopens the Worker in the same conversation. A closed tab in Reviewing flags the Task `tab closed` and opens no tab, and `lineup open` or `lineup review` then resumes the Worker. Recovery with no tab in Review ready leaves the Task as it is, and in Reviewing it sets the flag. The events of the hunk pane leave the Task as it is. A closed Worker block closes the hunk pane with its tab.
+8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then restores the Worker in the same conversation. A closed tab in Reviewing flags the Task `tab closed` and opens no tab, and `lineup open` or `lineup review` then resumes the Worker. Recovery with no tab in Review ready leaves the Task as it is, and in Reviewing it sets the flag. The events of the hunk pane leave the Task as it is. A closed Worker block closes the hunk pane with its tab.
 9. **Config.** Load and validation: an unknown key, an empty filter list, a bad team or repository form, a duplicate name, and `slots` below 1 each fail at load.
 10. **Board.** A render test of the review view with a build Task and a review Task on PRs. Only the review Task joins. `enter` on a joined row sends `focus` for that Task when its Worker is live, and `open` when it is not. The Reviews tab lists only the review Task. Typing `q` in the search does not quit.
 11. **Speed.** The review view's first paint from the cache meets the Board's 100 ms budget.
