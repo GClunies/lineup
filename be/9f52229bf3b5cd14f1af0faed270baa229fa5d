@@ -1,0 +1,27 @@
+docs/spec/reviews.md
+  s_425b607edf0515::t_db3914419a1401 116,126,128,209,233,235,242-243,263-264,279,336,372,374,379
+docs/spec/mvp.md
+  s_425b607edf0515::t_c0400b64943bbe 174,177-179,235,269,271,287,289,312-316,469,572,623
+docs/adr/0008-scheduler-runs-as-a-launchd-agent.md
+  s_425b607edf0515::t_54e6903d778282 8
+docs/adr/0012-a-review-is-a-task-kind.md
+  s_425b607edf0515::t_9460878be3ced4 14
+GLOSSARY.md
+  s_425b607edf0515::t_67e3a710e4e513 92,116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "be9f52229bf3b5cd14f1af0faed270baa229fa5d",
+  "prompts": {},
+  "sessions": {
+    "s_425b607edf0515": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "766ac254-3905-4d3c-8f8a-f4da8bc9c252",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
