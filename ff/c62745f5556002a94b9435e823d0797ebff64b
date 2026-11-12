@@ -1,0 +1,21 @@
+internal/scheduler/review_test.go
+  s_425b607edf0515::t_ee5d70c2977252 1062
+internal/scheduler/scheduler_test.go
+  s_425b607edf0515::t_4ddc4685f4bb1f 58-59,88,115,2210-2246
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ffc62745f5556002a94b9435e823d0797ebff64b",
+  "prompts": {},
+  "sessions": {
+    "s_425b607edf0515": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "766ac254-3905-4d3c-8f8a-f4da8bc9c252",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
