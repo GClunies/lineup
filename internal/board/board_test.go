@@ -18,6 +18,7 @@ import (
 
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/linear"
+	"github.com/gclunies/lineup/internal/localissues"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
@@ -539,9 +540,26 @@ func writeCache(tb testing.TB, n int) string {
 	return p
 }
 
-func firstPaint(path string) {
+// mineFixture is n Issue rows: Linear Issues in Ready and Backlog, half of
+// them blocked by the one before, and n/2 local Issues.
+func mineFixture(n int) []tea.Msg {
+	var lin []linear.Issue
+	var loc []localissues.Issue
+	types := []string{"unstarted", "backlog", "triage"}
+	for i := range n / 2 {
+		is := mineIssue(fmt.Sprintf("ENG-%d", 1000+i), types[i%len(types)], i%5)
+		if i%2 == 1 {
+			is.Blockers = []linear.Ref{{ID: "id-" + fmt.Sprintf("ENG-%d", 999+i), Identifier: fmt.Sprintf("ENG-%d", 999+i)}}
+		}
+		lin = append(lin, is)
+		loc = append(loc, localIssue(i+1, []localissues.Status{localissues.Todo, localissues.Backlog}[i%2]))
+	}
+	return []tea.Msg{mineIssuesMsg{ws: acme, issues: lin, live: true}, mineLocalMsg{issues: loc}}
+}
+
+func firstPaint(path string, mine []tea.Msg) {
 	v, _ := LoadCache(path)
-	m := New(v, Options{Client: &fakeClient{}})
+	m := feed(New(v, Options{Client: &fakeClient{}}), mine...)
 	m.width, m.height = 120, 40
 	_ = m.View()
 }
@@ -549,8 +567,9 @@ func firstPaint(path string) {
 func BenchmarkFirstPaint(b *testing.B) {
 	path := writeCache(b, 50)
 	b.ResetTimer()
+	mine := mineFixture(200)
 	for i := 0; i < b.N; i++ {
-		firstPaint(path)
+		firstPaint(path, mine)
 	}
 }
 
@@ -581,12 +600,16 @@ func median(n int, f func()) time.Duration {
 
 func TestSpeedBudget(t *testing.T) {
 	path := writeCache(t, 50)
-	if got := median(21, func() { firstPaint(path) }); got > 100*time.Millisecond {
+	mine := mineFixture(200)
+	if got := len(feed(New(scheduler.BoardView{}, Options{Client: &fakeClient{}}), mine...).issues); got != 200 {
+		t.Fatalf("the fixture makes %d Issue rows, want 200", got)
+	}
+	if got := median(21, func() { firstPaint(path, mine) }); got > 100*time.Millisecond {
 		t.Errorf("first paint median %v, budget 100ms", got)
 	} else {
 		t.Logf("first paint median %v", got)
 	}
-	m := newModel(&fakeClient{}, cacheFixture(50))
+	m := feed(newModel(&fakeClient{}, cacheFixture(50)), mine...)
 	m.width, m.height = 120, 40
 	key := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}
 	if got := median(101, func() {

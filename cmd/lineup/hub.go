@@ -508,6 +508,7 @@ func runBoard(args []string) error {
 		opts.StartSkills = g.StartSkills()
 		opts.Tracker.Repos = g.Checkouts
 		opts.Tracker.Sources = boardSources(g, stateDir())
+		opts.LocalIssues = g.LocalIssuesDir()
 		opts.Reviews.Views = reviewViews(g)
 	}
 	opts.Notify = func(text string) { board.Toast(os.Stdout, text) }
