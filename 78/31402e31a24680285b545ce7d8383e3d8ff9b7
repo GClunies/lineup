@@ -1,0 +1,73 @@
+internal/lifecycle/stage.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 97-106,165-167
+internal/config/config.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 421,570
+internal/scheduler/scheduler_test.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 57-59,61,77-82,169-174,501,562,958,964,970-974,977,980-981,983-1003,1377-1411,1416,1418-1421,1423-1424,1427-1439,1443,1449-1452,1454-1461,1466-1469,1472,1479-1498,1500-1557,1559-1587,1590-1602,1606-1627,1657,1662,1674,1690-1691,1919-1920,1922,1927,1934-1935
+  s_425b607edf0515::t_ca2ff8b09ee1b0 1675,1929-1930,1932-1933,1936
+internal/lifecycle/property_test.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 18,21,23,34-36,48,167
+internal/lifecycle/signal.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 40-48,89,111
+internal/scheduler/review_test.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 620,627-639,641-643,645-647,649-665,667-668,715,717-723,725,793-794,804,904,906-907,1048-1090
+internal/board/review.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 480-481,533,535
+cmd/lineup/open_test.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 1-58
+cmd/lineup/main.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 44,46-47
+internal/board/review_view.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 223-224,246-247,250,269
+internal/lifecycle/board_test.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 11,233-235,418,535-549,552-559,561-600,605
+internal/config/config_test.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 58,134,146-149
+  s_425b607edf0515::t_1ea59112571a57 150-152
+internal/lifecycle/board.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 224-230,349-360
+  s_425b607edf0515::t_485bda092c5ee5 361-362
+internal/lifecycle/review_test.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 37-38,125
+cmd/lineup/cli.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 34,325-336
+  s_425b607edf0515::t_249cebb6009eeb 337-338
+internal/board/review_test.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 275,279,641-642,644,646-647,652,672-673,709-710,712,714-715,717,755-769
+  s_425b607edf0515::t_8c9bf6988d8a1d 770
+internal/board/view.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 188-189,319
+internal/scheduler/review.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 218-220,234,237-244
+internal/scheduler/api.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 211-212
+internal/scheduler/deliver.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 27,35,75-80,87,89,101-102,105,109,119,131,142,147,149-152
+  s_425b607edf0515::t_3e6bfe03917af9 153-155,162,174
+internal/scheduler/open.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 1-114
+internal/scheduler/scheduler.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 411-417,419-422,430-431,436,465-474,476-478,480-484,581,588,594-596,611-613,615-618,798-799
+  s_425b607edf0515::t_79da5dfc33b734 863
+internal/board/board_test.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 32,50-51,193,736-781
+internal/board/model.go
+  s_425b607edf0515::t_1ecbb0ebe28b1e 341,437-442
+  s_425b607edf0515::t_dc771a51a17773 443-445
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7831402e31a24680285b545ce7d8383e3d8ff9b7",
+  "prompts": {},
+  "sessions": {
+    "s_425b607edf0515": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "766ac254-3905-4d3c-8f8a-f4da8bc9c252",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
