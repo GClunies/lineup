@@ -1,0 +1,45 @@
+internal/scheduler/deliver.go
+  s_fbf078b73c809c::t_151876dd8b98ff 162
+  s_f998517c7228bf::t_ed1916e86d5c96 161,172,175-178,186-188
+internal/rex/client.go
+  s_fbf078b73c809c::t_ee6d163909e913 279-280
+  s_37f5a9c8549f2f::t_fb69e11302c7e5 254-256,258-266,281-290
+internal/rex/client_test.go
+  s_fbf078b73c809c::t_63bd7aa7cb0c72 102-117
+internal/scheduler/scheduler.go
+  s_fbf078b73c809c::t_7da58b7afa983f 374-376,799-801
+internal/scheduler/scheduler_test.go
+  s_f998517c7228bf::t_6e01aba5a1bcff 13,1625-1743
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2339f3379281fe5789f9190ab3c8a748a57df552",
+  "prompts": {},
+  "sessions": {
+    "s_37f5a9c8549f2f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "652dc657-2028-48b3-9180-ecd0edc97b65",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_f998517c7228bf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "827c72c1-5f7f-4717-931d-fdd108ba448b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_fbf078b73c809c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "77606f4d-ba44-42b1-ae17-745f3eb11f87",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
