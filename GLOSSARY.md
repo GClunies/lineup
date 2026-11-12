@@ -89,7 +89,7 @@ An observed event that moves a Task from one Stage to another, for example `pr-o
 _Avoid_: Trigger, transition, state
 
 **Needs you**:
-A flag on a Task, in any Stage, that says the user must act and gives the reason: a question, a permission, an auth request, an error, a Worker that stopped before its Stage contract, a draft PR that passed CI, a review bot that did not score a passing PR, or a spent Loop budget.
+A flag on a Task, in any Stage, that says the user must act and gives the reason: a question, a permission, an auth request, an error, a Worker that stopped before its Stage contract, a closed tab in a Stage that needs the Worker, a draft PR that passed CI, a review bot that did not score a passing PR, or a spent Loop budget.
 _Avoid_: Blocked, waiting, attention state
 
 **Ready to land**:
@@ -113,7 +113,7 @@ A thread of review comments on a line of a PR. Under the default Landing bar, a 
 _Avoid_: Conversation, comment
 
 **Loop budget**:
-The most automatic attempts that a Stage gets before the Task gets the Needs you flag, for example 3 CI debug attempts.
+The most automatic attempts that a Stage gets before the Task gets the Needs you flag, for example 3 CI debug attempts. A lost Worker spends no budget, because lineup opens no tab by itself.
 _Avoid_: Retry limit, max attempts
 
 **Review bot**:
