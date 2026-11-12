@@ -1,0 +1,21 @@
+cmd/lineup/cli.go
+  s_490b26d3044ac3::t_6d8c45d0bc4b45 233-234,236-238
+cmd/lineup/review_test.go
+  s_490b26d3044ac3::t_174482e16de1ee 421-422,432
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f48e27548a8910065781254badb7d868acdffc1e",
+  "prompts": {},
+  "sessions": {
+    "s_490b26d3044ac3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6fe89f94-e7ea-40ef-8491-3e121004251f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
