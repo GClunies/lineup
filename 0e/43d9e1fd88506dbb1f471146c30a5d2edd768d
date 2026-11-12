@@ -1,0 +1,29 @@
+docs/spec/reviews.md
+  s_5f2f14dbbc6dda::t_33f5e545d5daa6 173-174
+internal/github/client.go
+  s_5f2f14dbbc6dda::t_abdc4ec00551ba 37-44
+internal/github/queue.go
+  s_5f2f14dbbc6dda::t_64f39ed7c896b2 56-57,60,65-88
+internal/github/queue_test.go
+  s_5f2f14dbbc6dda::t_12c9c477d2b596 61-103,184-191,193
+internal/github/review.go
+  s_5f2f14dbbc6dda::t_72003ff57c1aa6 137-138,260-269,272-277,310-315,317,319-322
+internal/github/testdata/queue_search.json
+  s_5f2f14dbbc6dda::t_300bae243f6694 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e43d9e1fd88506dbb1f471146c30a5d2edd768d",
+  "prompts": {},
+  "sessions": {
+    "s_5f2f14dbbc6dda": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b4d049e6-edf9-47a7-9ae1-2b1c7426af38",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
