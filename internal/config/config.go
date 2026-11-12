@@ -388,6 +388,8 @@ func isPair(s string) bool {
 
 var errHarnessGone = errors.New("harness is no longer a setting, lineup runs claude")
 
+const restartsHint = ". A lost Worker no longer restarts by itself, so delete the restarts line from the [budgets] table"
+
 func decodeStrict(text string, v any) error {
 	md, err := toml.Decode(text, v)
 	if err != nil {
@@ -403,7 +405,11 @@ func decodeStrict(text string, v any) error {
 		for i, k := range keys {
 			names[i] = k.String()
 		}
-		return fmt.Errorf("unknown keys: %s", strings.Join(names, ", "))
+		msg := "unknown keys: " + strings.Join(names, ", ")
+		if slices.Contains(names, "budgets.restarts") {
+			msg += restartsHint
+		}
+		return errors.New(msg)
 	}
 	return nil
 }

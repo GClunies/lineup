@@ -670,3 +670,10 @@ func TestBadLandingBarFailsAtLoad(t *testing.T) {
 		t.Errorf("the Repo file: err = %v", err)
 	}
 }
+
+func TestTheRestartsHintTellsTheUserToDeleteTheLine(t *testing.T) {
+	_, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), "[budgets]\nci_debug = 3\nrestarts = 2\n"))
+	if err == nil || !strings.Contains(err.Error(), "delete the restarts line from the [budgets] table") {
+		t.Fatalf("err = %v, want a hint that names the restarts line", err)
+	}
+}
