@@ -418,6 +418,8 @@ func TestLineupReviewsSkipAndUnskip(t *testing.T) {
 		{[]string{"skip", "umbrella/data#4945"}, scheduler.SkipResult{Skip: skipped, Changed: true, Closed: "pr-4945"},
 			"Skipped umbrella/data#4945: Write the usage logs again. No queue picks it until you run lineup reviews unskip umbrella/data#4945.\nClosed pr-4945.\n"},
 		{[]string{"skip", "umbrella/data#4945"}, scheduler.SkipResult{Skip: skipped}, "umbrella/data#4945 is already skipped.\n"},
+		{[]string{"skip", "https://github.com/Umbrella/Data/pull/4945/files"}, scheduler.SkipResult{Skip: skipped, Changed: true},
+			"Skipped umbrella/data#4945: Write the usage logs again. No queue picks it until you run lineup reviews unskip umbrella/data#4945.\n"},
 		{[]string{"unskip", "umbrella/data#4945"}, scheduler.SkipResult{Skip: skipped, Changed: true}, "Unskipped umbrella/data#4945. The queues can pick it again.\n"},
 		{[]string{"unskip", "umbrella/data#4945"}, scheduler.SkipResult{}, "umbrella/data#4945 is not skipped.\n"},
 	}
@@ -427,7 +429,7 @@ func TestLineupReviewsSkipAndUnskip(t *testing.T) {
 		if err := cmdReviews(c1, c.args, &out); err != nil {
 			t.Fatal(err)
 		}
-		if reqs := got(); len(reqs) != 1 || reqs[0].Op != "reviews-"+c.args[0] || reqs[0].URL != "umbrella/data#4945" {
+		if reqs := got(); len(reqs) != 1 || reqs[0].Op != "reviews-"+c.args[0] || reqs[0].URL != c.args[1] {
 			t.Fatalf("requests = %+v", reqs)
 		}
 		if out.String() != c.want {

@@ -230,8 +230,12 @@ func cmdReviews(c scheduler.Client, args []string, out io.Writer) error {
 	return nil
 }
 
-// printSkip says what a skip or an unskip did. pr is the PR as the user typed it.
+// printSkip says what a skip or an unskip did. It names the PR as owner/repo#n,
+// in GitHub's spelling when the Scheduler found the PR, else as the user typed it.
 func printSkip(out io.Writer, verb, pr string, res scheduler.SkipResult) {
+	if key, err := scheduler.ParseReviewKey(res.URL); err == nil {
+		pr = fmt.Sprintf("%s#%d", key.Repo, key.Number)
+	}
 	switch {
 	case verb == "skip" && !res.Changed:
 		fmt.Fprintf(out, "%s is already skipped.\n", pr)
