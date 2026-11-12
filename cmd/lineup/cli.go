@@ -206,8 +206,8 @@ func cmdReviews(c scheduler.Client, args []string, out io.Writer) error {
 			return err
 		}
 	}
-	for _, s := range v.Skipped {
-		fmt.Fprintln(out, "Skipped: "+s)
+	for _, s := range v.Unmapped {
+		fmt.Fprintln(out, "Unmapped: "+s)
 	}
 	return nil
 }

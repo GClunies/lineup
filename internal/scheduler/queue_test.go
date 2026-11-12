@@ -91,7 +91,7 @@ func TestPlanFill(t *testing.T) {
 			fillInput{Queues: q(1), Records: []*Record{reviewRec("R-1", "old", "/repos/b", lifecycle.Queued, b3), reviewRec("R-2", "old", "/repos/c", lifecycle.Reviewing, c4)},
 				Found: map[string][]github.PullRequest{"q": {a1}, "old": {a2}}},
 			nil, []string{"q acme/a#1 in /repos/a"}},
-		{"a PR with no [[repos]] checkout is skipped",
+		{"a PR with no [[repos]] checkout is left out",
 			fillInput{Queues: q(1), Found: map[string][]github.PullRequest{"q": {x9, a1}}},
 			nil, []string{"q acme/a#1 in /repos/a"}},
 		{"two queues that find one PR add it once",
@@ -279,7 +279,7 @@ func TestOnlyAFullPollFills(t *testing.T) {
 	}
 }
 
-func TestAFillSkipsAPRWithNoCheckout(t *testing.T) {
+func TestAFillLeavesOutAPRWithNoCheckout(t *testing.T) {
 	h := queueHarness(t, authorQueue("q", 1, "hopper"))
 	h.gh.found = map[string][]github.PullRequest{"q": {queuePR("acme/other", 9, 99), queuePR("acme/data", 7, 30)}}
 	h.s.fill(context.Background())
@@ -287,8 +287,8 @@ func TestAFillSkipsAPRWithNoCheckout(t *testing.T) {
 		t.Fatalf("reviews %v, want #7: acme/other has no checkout", got)
 	}
 	v := h.do(Request{Op: "reviews"}).(ReviewsView)
-	if len(v.Skipped) != 1 || !strings.Contains(v.Skipped[0], "acme/other") {
-		t.Fatalf("skipped %q, want acme/other named", v.Skipped)
+	if len(v.Unmapped) != 1 || !strings.Contains(v.Unmapped[0], "acme/other") {
+		t.Fatalf("unmapped %q, want acme/other named", v.Unmapped)
 	}
 }
 

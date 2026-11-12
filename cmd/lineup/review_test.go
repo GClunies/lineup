@@ -327,7 +327,7 @@ func TestLineupReviewsListsEachQueue(t *testing.T) {
 				{PR: github.PullRequest{Repo: "umbrella/data", Number: 4919, Title: "Move the CSV readers", Author: "noether"}},
 			},
 		}},
-		Skipped: []string{"no Repo mapping for umbrella/infra: no [[repos]] checkout has it as its origin"},
+		Unmapped: []string{"no Repo mapping for umbrella/infra: no [[repos]] checkout has it as its origin"},
 	}
 	c, got := fakeScheduler(t, map[string]scheduler.Response{"reviews": reviewsReply(t, view)})
 	var out bytes.Buffer
@@ -345,7 +345,7 @@ func TestLineupReviewsListsEachQueue(t *testing.T) {
 		{"R-12", "Review ready", "data#4955 Pull the base images"},
 		{"1", "re-review", "data#4960 Write the usage logs", "hopper"},
 		{"2", "data#4919 Move the CSV readers", "noether"},
-		{"Skipped", "umbrella/infra"},
+		{"Unmapped", "umbrella/infra"},
 	}
 	if len(lines) != len(want) {
 		t.Fatalf("out =\n%s", out.String())

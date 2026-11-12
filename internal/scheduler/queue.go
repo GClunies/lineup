@@ -37,8 +37,8 @@ func (s *Scheduler) fill(ctx context.Context) {
 		s.d.Log.Error("review queues", "err", err)
 		return
 	}
-	if len(rows.Skipped) > 0 {
-		s.d.Log.Warn("review queues skip PRs", "why", strings.Join(rows.Skipped, "; "))
+	if len(rows.Unmapped) > 0 {
+		s.d.Log.Warn("review queues leave out PRs", "why", strings.Join(rows.Unmapped, "; "))
 	}
 	s.call(func() { s.applyFill(planFill(s.fillInput(rows))) })
 }
@@ -47,9 +47,9 @@ func (s *Scheduler) fill(ctx context.Context) {
 // the Repo of each GitHub repository that has a candidate, and why the other
 // repositories have none.
 type queueRows struct {
-	Found   map[string][]github.PullRequest
-	Repos   map[string]queueRepo
-	Skipped []string
+	Found    map[string][]github.PullRequest
+	Repos    map[string]queueRepo
+	Unmapped []string
 }
 
 // readQueues searches every queue in one SearchPRs pass, then finds the Repo
@@ -83,7 +83,7 @@ func (s *Scheduler) readQueues(ctx context.Context) (queueRows, error) {
 			tried[slug] = true
 			repo, policy, err := s.reviewRepo(c.PR.Repo)
 			if err != nil {
-				rows.Skipped = append(rows.Skipped, err.Error())
+				rows.Unmapped = append(rows.Unmapped, err.Error())
 				continue
 			}
 			rows.Repos[slug] = queueRepo{Repo: repo, Policy: policy}
@@ -141,14 +141,14 @@ func (s *Scheduler) pauseReviews(paused bool) error {
 
 // ReviewsView is the review queues as `lineup reviews` shows them. Slots is
 // review.slots, or 0 when it is not set. Started counts the started review
-// Tasks of all queues. Skipped says why the PRs of some repositories never
+// Tasks of all queues. Unmapped says why the PRs of some repositories never
 // start.
 type ReviewsView struct {
-	Paused  bool        `json:"paused"`
-	Slots   int         `json:"slots,omitempty"`
-	Started int         `json:"started"`
-	Queues  []QueueView `json:"queues"`
-	Skipped []string    `json:"skipped,omitempty"`
+	Paused   bool        `json:"paused"`
+	Slots    int         `json:"slots,omitempty"`
+	Started  int         `json:"started"`
+	Queues   []QueueView `json:"queues"`
+	Unmapped []string    `json:"unmapped,omitempty"`
 }
 
 // QueueView is one queue: its started review Tasks, and the PRs that wait,
@@ -167,7 +167,7 @@ func (s *Scheduler) reviews(ctx context.Context) (ReviewsView, error) {
 	if err != nil {
 		return ReviewsView{}, err
 	}
-	v := ReviewsView{Queues: []QueueView{}, Skipped: rows.Skipped}
+	v := ReviewsView{Queues: []QueueView{}, Unmapped: rows.Unmapped}
 	s.call(func() {
 		in := s.fillInput(rows)
 		ranked := planFill(in).Ranked
