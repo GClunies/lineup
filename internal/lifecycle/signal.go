@@ -61,6 +61,10 @@ type PRSeen struct{ Facts PRFacts }
 // long enough that a review bot that reviews the head would have scored it.
 type ReviewBotLate struct{}
 
+// PromptStalled is the Scheduler's timer: the prompt for Stage has waited too
+// long on a Worker that has never reported a program status.
+type PromptStalled struct{ Stage Stage }
+
 type ReviewCommented struct{}
 type ReviewChangesRequested struct{}
 type ReviewAdditionalAuthors struct{}
@@ -95,6 +99,7 @@ func (ReviewChangesRequested) Name() string  { return "review-changes-requested"
 func (ReviewAdditionalAuthors) Name() string { return "review-additional-authors" }
 func (PRMerged) Name() string                { return "pr-merged" }
 func (ReviewBotLate) Name() string           { return "review-bot-late" }
+func (PromptStalled) Name() string           { return "prompt-stalled" }
 func (PRReviewed) Name() string              { return "pr-reviewed" }
 func (PRClosed) Name() string                { return "pr-closed" }
 
@@ -117,6 +122,7 @@ func (ReviewChangesRequested) signal()  {}
 func (ReviewAdditionalAuthors) signal() {}
 func (PRMerged) signal()                {}
 func (ReviewBotLate) signal()           {}
+func (PromptStalled) signal()           {}
 func (PRReviewed) signal()              {}
 func (PRClosed) signal()                {}
 

@@ -3,6 +3,7 @@
 package scheduler
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -48,6 +49,9 @@ type Deps struct {
 	BoardCache string
 	Log        *slog.Logger
 	Now        func() time.Time
+	// PromptWait is how long a Stage prompt waits on a Worker that has sent no
+	// status before the Task gets a flag. 0 means a minute.
+	PromptWait time.Duration
 }
 
 type RexEventKind int
@@ -154,6 +158,7 @@ func (s *Scheduler) Run(ctx context.Context, events <-chan RexEvent) error {
 			}
 			s.onRex(ev)
 		case <-tick.C:
+			s.flagSilentPrompts()
 			go s.poll(ctx, nil)
 		}
 	}
@@ -168,6 +173,22 @@ func (s *Scheduler) call(f func()) {
 }
 
 func (s *Scheduler) now() time.Time { return s.d.Now() }
+
+func (s *Scheduler) pend(r *Record, stage lifecycle.Stage) {
+	r.Pending, r.PendingSince = &stage, s.now()
+}
+
+// flagSilentPrompts flags each Task whose Stage prompt waits on a Worker that
+// has never reported a program status. The prompt stays unsent, because the
+// Scheduler cannot tell that the Worker is ready for it.
+func (s *Scheduler) flagSilentPrompts() {
+	wait := cmp.Or(s.d.PromptWait, time.Minute)
+	for _, r := range s.list() {
+		if r.Pending != nil && r.Job == JobWorker && r.WorkerState == "" && s.now().Sub(r.PendingSince) >= wait {
+			s.apply(r, lifecycle.PromptStalled{Stage: *r.Pending}, "")
+		}
+	}
+}
 
 // apply runs one Signal through the reducer, records the change, and queues
 // the Effects on the Task's lane.
@@ -185,7 +206,7 @@ func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error 
 	}
 	for _, e := range effects {
 		if p, ok := e.(lifecycle.PromptWorker); ok {
-			r.Pending = &p.Stage
+			s.pend(r, p.Stage)
 		}
 	}
 	if r.Pending != nil && *r.Pending != r.Stage {
@@ -573,7 +594,7 @@ func (s *Scheduler) resumeFallback(r *Record, code int) {
 				s.apply(r, lifecycle.Rerun{Stage: lifecycle.Reviewing}, "")
 				return
 			}
-			r.Pending = &stage
+			s.pend(r, stage)
 			s.save(r)
 			s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
 		})
@@ -812,7 +833,7 @@ func (s *Scheduler) recover(ctx context.Context) {
 		switch {
 		case job == JobSetup || r.Worktree == "" && r.Stage.Agent():
 			stage, id := r.Stage, r.ID
-			r.Pending = &stage
+			s.pend(r, stage)
 			s.save(r)
 			s.enqueue(id, func(ctx context.Context) { s.deliver(ctx, id) })
 		case r.Stage.Agent():

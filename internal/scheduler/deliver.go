@@ -153,6 +153,11 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 	}
 }
 
+// promptedState is the WorkerState from a typed prompt until the Worker reports.
+// It is busy, and it is not "working", so the first working report is a return
+// to working that clears a flag.
+const promptedState = "prompted"
+
 // typePrompt claims Pending before it types, so a rerun during the Type sets
 // Pending again and gets its own prompt.
 func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.Stage) {
@@ -166,7 +171,7 @@ func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.St
 	var claimed bool
 	s.update(r.ID, func(rec *Record) {
 		if claimed = rec.Pending != nil && *rec.Pending == stage && rec.BlockID == r.BlockID; claimed {
-			rec.Pending, rec.WorkerStage, rec.WorkerState = nil, stage, "working"
+			rec.Pending, rec.WorkerStage, rec.WorkerState = nil, stage, promptedState
 		}
 	})
 	if !claimed || prompt == "" {
@@ -175,7 +180,7 @@ func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.St
 	if err := s.d.Rex.Type(ctx, r.SessionID, r.BlockID, prompt); err != nil {
 		s.update(r.ID, func(rec *Record) {
 			if rec.Pending == nil && rec.Stage == stage {
-				rec.Pending = &stage
+				s.pend(rec, stage)
 			}
 		})
 		s.fail(r.ID, "type prompt", err)

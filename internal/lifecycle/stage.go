@@ -171,6 +171,10 @@ const (
 	ReasonStopped     Reason = "stopped"
 	ReasonBudgetSpent Reason = "budget spent"
 	ReasonWorkerLost  Reason = "worker lost"
+	// ReasonWorkerSilent is a Stage prompt that waits on a Worker that has
+	// never reported a program status, so the Scheduler cannot tell when it is
+	// ready.
+	ReasonWorkerSilent Reason = "worker silent"
 	// ReasonDraft is a passing PR that is a draft. lineup never marks a PR
 	// ready, so it waits for the user to.
 	ReasonDraft       Reason = "draft"
@@ -182,7 +186,7 @@ const (
 // the user's reply clears it.
 func (r Reason) Transient() bool {
 	switch r {
-	case ReasonQuestion, ReasonPermission, ReasonAuth, ReasonError, ReasonStopped:
+	case ReasonQuestion, ReasonPermission, ReasonAuth, ReasonError, ReasonStopped, ReasonWorkerSilent:
 		return true
 	}
 	return false

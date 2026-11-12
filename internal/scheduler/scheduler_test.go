@@ -1593,6 +1593,34 @@ func TestARerunWaitsWhileTheWorkerReadsATypedPrompt(t *testing.T) {
 	h.waitTyped(worker.BlockID, "prompt ci_debug", "prompt ci_debug")
 }
 
+func TestAPromptThatWaitsOnASilentWorkerFlagsTheTask(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PromptWait = 100 * time.Millisecond })
+	worker := h.working()
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+
+	eventually(h.t, "the silent Worker flag", func() bool { return h.task("ENG-1").Flag == string(lifecycle.ReasonWorkerSilent) })
+	if got := h.rex.typedInto(worker.BlockID); len(got) != 0 {
+		t.Fatalf("typed %q into a Worker of unknown state", got)
+	}
+	h.status(worker.BlockID, "idle")
+	h.waitTyped(worker.BlockID, "prompt working")
+	h.status(worker.BlockID, "working")
+	eventually(h.t, "the flag clears", func() bool { return h.task("ENG-1").Flag == "" })
+}
+
+func TestAPromptThatWaitsOnAReportingWorkerRaisesNoFlag(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PromptWait = 50 * time.Millisecond })
+	worker := h.working()
+	h.status(worker.BlockID, "working")
+	h.waitWorkerState("ENG-1", "working")
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+
+	time.Sleep(300 * time.Millisecond)
+	if f := h.task("ENG-1").Flag; f != "" {
+		t.Fatalf("flag = %q, want none: the Worker reports its turn", f)
+	}
+}
+
 func TestAWorkerBetweenStagesMeetsNoContract(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	worker := h.working()

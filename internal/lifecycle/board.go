@@ -341,6 +341,11 @@ func (t *Task) observe(s Signal) []Effect {
 			t.flag(ReasonNoBotReview, fmt.Sprintf("%s did not score %s", t.Policy.Bar.Bot.Title, head[:min(7, len(head))]))
 		}
 
+	case PromptStalled:
+		if t.Stage == s.Stage && t.Flag == "" {
+			t.flag(ReasonWorkerSilent, fmt.Sprintf("the %s prompt waits: the Worker has sent no status", s.Stage))
+		}
+
 	case PRReviewed:
 		if t.Kind == KindReview {
 			return t.finish(OutcomeReviewed)
