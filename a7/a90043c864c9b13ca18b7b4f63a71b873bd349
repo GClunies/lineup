@@ -1,0 +1,29 @@
+internal/config/config_test.go
+  s_3ed37eca61650c::t_4b63e18a3f3527 673-679
+internal/config/config.go
+  s_0d159c1d81b81a::t_d7f3d31d767085 391-392,408-412
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a7a90043c864c9b13ca18b7b4f63a71b873bd349",
+  "prompts": {},
+  "sessions": {
+    "s_0d159c1d81b81a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "395c3cb6-af93-47e9-9856-72009842132d",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_3ed37eca61650c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5ac11a52-7190-436b-879b-5834c5a6fe27",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
