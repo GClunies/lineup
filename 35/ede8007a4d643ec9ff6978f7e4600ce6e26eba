@@ -1,0 +1,42 @@
+internal/scheduler/queue.go
+  s_490b26d3044ac3::t_13750d34ad86d6 5,14,128,144-236,239-240,243-248,267,270
+internal/scheduler/scheduler_test.go
+  s_490b26d3044ac3::t_9bce474368d963 574
+internal/scheduler/record.go
+  s_490b26d3044ac3::t_13750d34ad86d6 9,142-146
+internal/scheduler/skip_test.go
+  s_490b26d3044ac3::t_9bce474368d963 4-5,9,15,120-374
+cmd/lineup/cli.go
+  s_490b26d3044ac3::t_5a573340a2f7ff 145,148,164-170,216-226,233-247
+  s_490b26d3044ac3::t_a112042fe6bdc7 248-249
+internal/scheduler/scheduler.go
+  s_490b26d3044ac3::t_13750d34ad86d6 20,91-94,132-138,924
+internal/store/store_test.go
+  s_490b26d3044ac3::t_d29e9ea07febba 5,54-88
+  s_490b26d3044ac3::t_51b1ee6acacd7c 89
+internal/scheduler/api.go
+  s_490b26d3044ac3::t_13750d34ad86d6 139-142
+internal/scheduler/ports.go
+  s_490b26d3044ac3::t_13750d34ad86d6 6,56-59
+  s_490b26d3044ac3::t_f5cadf0332d4d2 60-61
+cmd/lineup/review_test.go
+  s_490b26d3044ac3::t_8dd1e5ebe73a33 330,349-350,400-446
+internal/store/store.go
+  s_490b26d3044ac3::t_6240adb318cf78 35-39,144-193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "35ede8007a4d643ec9ff6978f7e4600ce6e26eba",
+  "prompts": {},
+  "sessions": {
+    "s_490b26d3044ac3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6fe89f94-e7ea-40ef-8491-3e121004251f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
