@@ -442,7 +442,6 @@ func TestInputPastesMultiLineText(t *testing.T) {
 	}
 }
 
-// A menu reads a pasted "1" as no keypress, so a short answer stays as typed text.
 func TestInputTypesASingleLineAsIs(t *testing.T) {
 	for in, want := range map[string]string{"1": "1", "use a dual write": "use a dual write", "": "", "a\tb": "ab", "/compact now": "/compact now"} {
 		if got := Input(in); !slices.Equal(got, []string{want}) {
@@ -451,8 +450,6 @@ func TestInputTypesASingleLineAsIs(t *testing.T) {
 	}
 }
 
-// Claude runs a leading slash command only from typed keys. A pasted one is
-// plain text, so the skill would never load.
 func TestInputTypesTheSlashCommandAndPastesItsArguments(t *testing.T) {
 	got := Input("/simple-english fix the build\n\nBranch: b\n")
 	want := []string{"/simple-english ", "\x1b[200~fix the build\n\nBranch: b\n\x1b[201~"}

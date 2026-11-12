@@ -56,10 +56,9 @@ type Record struct {
 	WorkerStage lifecycle.Stage `json:"worker_stage"`
 	// Pending is the Stage whose prompt the Worker has not received yet. It is
 	// nil or the Task's Stage.
-	Pending *lifecycle.Stage `json:"pending,omitempty"`
-	// PendingSince is when Pending was set.
-	PendingSince time.Time `json:"pending_since,omitzero"`
-	Status       string    `json:"status,omitempty"`
+	Pending      *lifecycle.Stage `json:"pending,omitempty"`
+	PendingSince time.Time        `json:"pending_since,omitzero"`
+	Status       string           `json:"status,omitempty"`
 	// WorkerState is the Worker's last program status: working, blocked,
 	// done, idle, or error. It is "" before the Worker's first status, and
 	// "prompted" from a typed prompt until the Worker's next status.

@@ -316,11 +316,11 @@ func intro(stage lifecycle.Stage, task TaskInfo) string {
 var slashCommand = regexp.MustCompile(`^/[\w:.-]+ `)
 
 // Input returns the writes that put text into a Worker's input box. Text with a
-// newline goes in as one bracketed paste, because Claude drops the start of a
-// long unbracketed write that comes right after a turn ends. A single line stays
+// newline goes in as one bracketed paste. Claude drops the start of a long
+// unbracketed write that comes right after a turn ends. A single line stays
 // typed, because a menu reads a pasted answer as no keypress. A leading slash
 // command is typed too, because Claude runs a command only from typed keys.
-// Control bytes are dropped, so Issue text cannot end the paste or press a key.
+// Input drops control bytes, so Issue text cannot end the paste or press a key.
 func Input(text string) []string {
 	multi := strings.Contains(text, "\n")
 	text = strings.Map(func(r rune) rune {
