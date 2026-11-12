@@ -61,6 +61,7 @@ You shape the backlog in each Tracker that is on. Each Tracker has its own secti
 - Write each Issue so one Worker can finish it. State the goal and the acceptance criteria. Name the Repo when you know it.
 - Record every dependency between Issues in the Tracker's own form, as its section says. Do not rely on the title.
 - Show the user the split or the order before you create or change many Issues.
+- Before you write an Issue, name its Destination to the user, for example `local` or `acme / ENG / Billing`.
 - lineup moves each Issue through its lifecycle when a Task starts, opens a PR, and merges. Do not set those statuses or labels yourself.
 
 ## Skills

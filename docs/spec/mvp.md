@@ -481,6 +481,7 @@ The groups are Needs you, Working, Waiting, Queued, Ready, Done, and Backlog, in
 | `x` | Close the Task, after a confirmation. On a Done Task with a tab, close the tab and remove the worktree, after a confirmation. On a Done Task with no tab, archive it, after a confirmation. |
 | `s` | Start a Queued Task. On an Issue row, add the Issue as a Task and start it, with the skill picker and, when no Repo mapping exists, the Repo picker. |
 | `o` | Open the PR or the Issue in the browser. A local Issue opens in `$EDITOR`. |
+| `n` | Capture a new Issue at a Destination, `local` by default. `tab` picks a Linear team or Project. See `docs/spec/one-board.md`. |
 | `R` | Refresh now: the Scheduler polls GitHub for every started Task |
 | `z` | Zoom this tab's agent pane to full height, and back |
 | `?` | Show all keys |
