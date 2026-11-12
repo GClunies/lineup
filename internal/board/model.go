@@ -69,8 +69,9 @@ const (
 	modeConfirm
 	modeCap
 	modeHelp
-	modeBox   // the capture box
-	modeDests // the capture box's Destination list
+	modeBox     // the capture box
+	modeDests   // the capture box's Destination list
+	modePromote // the Destination list that P opens, with no local row
 )
 
 const (
@@ -285,7 +286,7 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.capKey(k)
 	case modeBox:
 		return m.boxKey(msg)
-	case modeDests:
+	case modeDests, modePromote:
 		return m.destKey(msg)
 	}
 
@@ -377,6 +378,10 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "n":
 		if m.view == viewBoard {
 			return m.openBox()
+		}
+	case "P":
+		if isRow && r.loc != nil {
+			return m.openPromote(r.ID)
 		}
 	case "p":
 		m.preview = !m.preview

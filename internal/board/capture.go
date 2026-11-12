@@ -21,8 +21,9 @@ import (
 	"github.com/gclunies/lineup/internal/localissues"
 )
 
-// This file holds the capture box that n opens on the work view, and the
-// Destination list that tab opens from it.
+// This file holds the capture box that n opens on the work view, the
+// Destination list that tab opens from it, and the Promote that P starts
+// from the same list.
 
 const (
 	maxRecent = 5
@@ -121,10 +122,11 @@ func (ds destinations) failures() []string {
 
 // captureBox is the capture box and the filter of its Destination list.
 type captureBox struct {
-	title  textinput.Model
-	to     destination
-	filter textinput.Model
-	cur    int
+	title   textinput.Model
+	to      destination
+	filter  textinput.Model
+	cur     int
+	promote string // the local Issue that P promotes
 }
 
 func newCaptureBox() captureBox {
@@ -158,6 +160,12 @@ type (
 		to  destination
 		err error
 	}
+	promotedMsg struct {
+		local, id string
+		to        destination
+		createErr error // the Linear Issue does not exist
+		writeErr  error // the Linear Issue exists, and the local file did not change
+	}
 )
 
 // openBox opens the capture box. The Destination is local each time.
@@ -177,15 +185,7 @@ func (m Model) boxKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.box.title.Blur()
 		return m, nil
 	case "tab":
-		m.mode = modeDests
-		m.box.filter.SetValue("")
-		m.box.cur = 0
-		cmd := m.box.filter.Focus()
-		if !m.dests.asked {
-			m.dests.asked, m.dests.waiting = true, 1
-			cmd = tea.Batch(cmd, m.loadDests())
-		}
-		return m, cmd
+		return m.openDests(modeDests)
 	case "enter":
 		title := strings.TrimSpace(m.box.title.Value())
 		m.mode = modeNormal
@@ -200,9 +200,29 @@ func (m Model) boxKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// openPromote opens the Destination list for the local Issue id.
+func (m Model) openPromote(id string) (tea.Model, tea.Cmd) {
+	m.box.promote = id
+	m2, cmd := m.openDests(modePromote)
+	return m2, tea.Batch(cmd, m.readRecent())
+}
+
+// openDests opens the Destination list in mode, modeDests or modePromote.
+func (m Model) openDests(mode mode) (Model, tea.Cmd) {
+	m.mode = mode
+	m.box.filter.SetValue("")
+	m.box.cur = 0
+	cmd := m.box.filter.Focus()
+	if !m.dests.asked {
+		m.dests.asked, m.dests.waiting = true, 1
+		cmd = tea.Batch(cmd, m.loadDests())
+	}
+	return m, cmd
+}
+
 // visibleDests lists the Destination rows that match the filter, best match first.
 func (m Model) visibleDests() []destRow {
-	rows := m.dests.rows(true)
+	rows := m.dests.rows(m.mode == modeDests)
 	labels := make([]string, len(rows))
 	for i, r := range rows {
 		labels[i] = r.to.label()
@@ -214,24 +234,36 @@ func (m Model) visibleDests() []destRow {
 	return out
 }
 
+// destKey handles the keys of the Destination list. The list goes back to
+// the capture box, or for a Promote to the work view.
 func (m Model) destKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	vis := m.visibleDests()
+	back := modeBox
+	if m.mode == modePromote {
+		back = modeNormal
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
 	case "esc":
-		m.mode = modeBox
+		m.mode = back
 		m.box.filter.Blur()
 	case "down", "ctrl+n":
 		m.box.cur = max(min(m.box.cur+1, len(vis)-1), 0)
 	case "up", "ctrl+p":
 		m.box.cur = max(m.box.cur-1, 0)
 	case "enter":
-		if m.box.cur < len(vis) {
-			m.box.to = vis[m.box.cur].to
-			m.mode = modeBox
-			m.box.filter.Blur()
+		if m.box.cur >= len(vis) {
+			return m, nil
 		}
+		to := vis[m.box.cur].to
+		promoting := m.mode == modePromote
+		m.mode = back
+		m.box.filter.Blur()
+		if promoting {
+			return m, m.promote(m.box.promote, to)
+		}
+		m.box.to = to
 	default:
 		var cmd tea.Cmd
 		m.box.filter, cmd = m.box.filter.Update(msg)
@@ -341,6 +373,28 @@ func (m Model) addIssue(title string, to destination) tea.Cmd {
 	}
 }
 
+// promote creates a Linear Issue at the Destination from the local Issue id,
+// then cancels the local Issue. It reads the file again, so an edit since
+// the last list goes to Linear.
+func (m Model) promote(id string, to destination) tea.Cmd {
+	store := localissues.Store{Dir: m.opts.LocalIssues}
+	api := m.tr.api(linear.Workspace{ID: to.Workspace, Name: to.WorkspaceName})
+	return func() tea.Msg {
+		is, err := store.Get(id)
+		if err != nil {
+			return promotedMsg{local: id, to: to, createErr: err}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		n := linear.NewIssue{TeamID: to.TeamID, ProjectID: to.ProjectID, Title: is.Title, Description: is.Body, AssignToMe: true}
+		created, err := api.Create(ctx, n)
+		if err != nil {
+			return promotedMsg{local: id, to: to, createErr: err}
+		}
+		return promotedMsg{local: id, id: created.Identifier, to: to, writeErr: store.Promote(id, created.Identifier)}
+	}
+}
+
 // boxMsg handles the messages of the capture box. ok is false for any other message.
 func (m Model) boxMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 	ds := &m.dests
@@ -378,6 +432,18 @@ func (m Model) boxMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		m.setStatus("added "+msg.id, false)
 		if msg.to.local() {
 			return m, m.loadMine(), true
+		}
+		ds.recent = pushRecent(ds.recent, msg.to)
+		return m, tea.Batch(m.loadMine(), m.saveRecent(msg.to)), true
+	case promotedMsg:
+		switch {
+		case msg.createErr != nil:
+			m.setStatus("promote "+msg.local+" to "+msg.to.label()+": "+msg.createErr.Error(), true)
+			return m, nil, true
+		case msg.writeErr != nil:
+			m.setStatus("created "+msg.id+", but "+msg.local+" did not change: "+msg.writeErr.Error(), true)
+		default:
+			m.setStatus("promoted "+msg.local+" to "+msg.id, false)
 		}
 		ds.recent = pushRecent(ds.recent, msg.to)
 		return m, tea.Batch(m.loadMine(), m.saveRecent(msg.to)), true
