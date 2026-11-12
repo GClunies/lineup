@@ -1,0 +1,43 @@
+docs/adr/0018-one-worker-for-each-task.md
+  s_a034df8ea4e589::t_3726bfdd9b641e 18
+docs/spec/mvp.md
+  s_a034df8ea4e589::t_eb8d4ac1519b44 175
+internal/scheduler/deliver.go
+  s_634bf1a299084d::t_e5819f4a3ff9a6 156-160,163-168,185
+internal/scheduler/scheduler.go
+  s_634bf1a299084d::t_3e3f56e301542f 181-183,187-188,516-518,802
+internal/scheduler/scheduler_test.go
+  s_8d208561ad58b0::t_cbdbbc4f1eadf0 1767-1855
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "137336e5395e32fba2fb3f1ceab791f56fe0a6a2",
+  "prompts": {},
+  "sessions": {
+    "s_634bf1a299084d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f0ab028-7ea9-4902-8aeb-6ba7faf74f77",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_8d208561ad58b0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4c1b1f39-66c3-412b-b5a7-603855f19aa4",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_a034df8ea4e589": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e76ae091-fd2d-4cac-bc45-66a5a866b2fe",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
