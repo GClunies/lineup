@@ -30,6 +30,10 @@ _Avoid_: Ticket, card
 A Tracker's own group of Issues, for example a Linear project.
 _Avoid_: Area, epic, repo
 
+**Skip**:
+A PR that the user holds out of every review queue, at every head, until the user unskips it. A skip writes nothing to GitHub. A skip ends the PR's open review Task with the outcome skipped. `r` and `lineup review` still review a skipped PR.
+_Avoid_: Mute, snooze, ignore, hide
+
 **Task**:
 One unit of work on the Board, in exactly one Repo, done by one Worker in one isolated tab and worktree. A Task links to zero or one Issue, and it ends when its PR merges or the user closes it. A Task that ends goes to Done and keeps its tab and worktree. Only the user closes a Task's tab.
 _Avoid_: Job, thread, card, item
