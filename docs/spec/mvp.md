@@ -448,7 +448,7 @@ To find which statuses Linear's GitHub automation sets, query `teams { gitAutoma
 The Board shows the build Tasks and the user's own Issues that have no Task. Review Tasks show on the Reviews tab of the `review` tab (see `docs/spec/reviews.md`). The Issue rows are in `docs/spec/one-board.md`.
 
 ```
- lineup  WIP 4/5   ●2 need you   ◐2 working   ◷1 waiting   1 queued   2 ready   1 backlog
+ lineup  WIP 4/5   ●2 need you (+1 in reviews)   ◐2 working   ◷1 waiting   1 queued   2 ready   1 backlog
  ─────────────────────────────────────────────────────────────────────────
  NEEDS YOU
  ▸ ENG-590 Working ⚑       data   Add billing model          stopped      12m
@@ -468,6 +468,8 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
  BACKLOG
    ENG-620                        Split billing ingest                   ▂
 ```
+
+The header counts the Needs you Tasks of the other view in parentheses, when there are any: `(+1 in reviews)` on the work view and `(+2 in work)` on the review view.
 
 The groups are Needs you, Working, Waiting, Queued, Ready, Done, and Backlog, in that order. Ready and Backlog hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. Backlog comes last because it is the longest list.
 
@@ -585,12 +587,13 @@ If `lineup add` or `lineup start` meets a full WIP cap, the command fails with `
 
 ### Alerts
 
-A Task alerts when it enters the Needs you group or Done. It alerts again only after it leaves that state and enters a state that needs the user. Two parts show each alert:
+A Task alerts when it enters the Needs you group or Done. It alerts again only after it leaves that state and enters a state that needs the user. These parts show the alerts:
 
 | Part | What it does |
 |---|---|
 | `lineup watch` | Prints one line for each alert of a Task of either Kind, for example `ENG-34 Working, stopped: <title>`. It keeps the alerts it printed in `alerted.json` in the state directory, so a restart repeats none of them. On its first run, Tasks that are already Done print nothing. A lock on `watch.lock` allows one watch at a time. With `--once`, it exits after the first Board that has new alerts. |
-| The boards in the `work` and `review` tabs | Each prints an OSC 777 notification for each alert of its own Tasks: build Tasks in `work`, review Tasks in `review`. Rex shows it as a desktop toast for that board's pane. A click on the toast opens that pane. The view that a board opens on makes no toast. |
+| The Board | It prints an OSC 777 notification for each alert of a Task of either Kind, whatever view is on screen. Rex shows it as a desktop toast for the Board's pane. A click on the toast opens that pane. The view that the Board opens on makes no toast. |
+| The free slot toast | When a build Task alerts for Done and the started build Tasks are fewer than the WIP cap, the Board sends one more toast that names the first Ready row, for example `1 slot free, next ENG-611: Move the retry job`. A Board view sends at most one such toast. With no Ready row, it sends none. The Board does not start the Issue. |
 
 The Hub starts the Orchestrator with a first message that tells it to run `lineup watch --once` as a background Bash command. The command exits at the next alerts, and the exit wakes the Orchestrator. The Orchestrator starts the command again, then asks the user with `AskUserQuestion` what to do. For a Done Task with a tab, the options are Close the tab, Open the tab, and Keep it open. For a `tab closed` flag, they are Restore and Close the Task. For other alerts, it tells the user what changed and what the user can say next. An idle Orchestrator writes nothing to its chat.
 
