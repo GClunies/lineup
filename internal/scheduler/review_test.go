@@ -1059,21 +1059,9 @@ func TestOpenClosesATabThatRexKeptAfterTheWorkerExited(t *testing.T) {
 	h.waitSplit(1)
 	h.status(old.BlockID, "done")
 	h.waitStage("pr-7", lifecycle.ReviewReady)
-	h.rex.events <- RexEvent{Kind: EvExited, BlockID: old.BlockID, ExitCode: 0}
-	eventually(t, "the Worker gone", func() bool { v := h.task("pr-7"); return !v.Live && v.Tab })
-
-	res := h.open("pr-7")
-	if res.Action != OpenRestored {
-		t.Fatalf("open = %+v, want restored", res)
-	}
-	reopened := h.waitNewTab("claude --resume "+conversation, old.BlockID)
+	h.keptTabRestore("pr-7", old, conversation)
 	if tabs := h.rex.open("claude reviewing"); len(tabs) != 0 {
 		t.Fatalf("the kept tab stayed open: %+v", tabs)
-	}
-	var window string
-	h.s.call(func() { window = h.s.recs["pr-7"].WindowID })
-	if window != reopened.WindowID {
-		t.Fatalf("the Task's window is %s, want the reopened tab %s", window, reopened.WindowID)
 	}
 
 	h.do(Request{Op: "close", Task: "pr-7"})

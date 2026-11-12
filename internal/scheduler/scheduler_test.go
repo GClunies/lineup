@@ -55,6 +55,8 @@ type fakeRex struct {
 	blocksErr error
 	typed     []typed
 	focused   []string
+	// calls lists each window that NewWindow opened and CloseWindow closed, in order.
+	calls []string
 	// hold makes NewWindow of a Worker wait for the channel to close.
 	hold chan struct{}
 	// t fails the test when lineup closes a live tab that the user did not
@@ -83,6 +85,7 @@ func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, env m
 	f.n++
 	w := Window{session, fmt.Sprintf("window:%d", f.n), fmt.Sprintf("block:%d", f.n)}
 	f.tabs = append(f.tabs, &tab{Window: w, label: label, cwd: cwd, env: env, argv: argv})
+	f.calls = append(f.calls, "new "+w.WindowID)
 	f.mu.Unlock()
 	if f.exitFast != "" && argv[0] == f.exitFast {
 		f.exits(tab{Window: w}, 0)
@@ -109,6 +112,7 @@ func (f *fakeRex) Split(_ context.Context, _, block, cwd string, argv []string) 
 func (f *fakeRex) CloseWindow(_ context.Context, _, window string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.calls = append(f.calls, "close "+window)
 	for _, t := range f.tabs {
 		if t.WindowID == window {
 			if !t.closed && !t.blockGone && !f.asked && f.t != nil {
@@ -2291,4 +2295,41 @@ func TestAFailedResumeInAWaitingStageKeepsTheConversation(t *testing.T) {
 	if kept != first.Conversation || h.tabs() != tabs {
 		t.Fatalf("conversation %q, %d tabs, want %q and %d: the failed resume must change nothing", kept, h.tabs(), first.Conversation, tabs)
 	}
+}
+
+// keptTabRestore exits the Worker with code 0 and leaves its tab open, as Rex
+// does for a program that ends within a second, then restores the Worker. It
+// returns the new tab.
+func (h *harness) keptTabRestore(id string, kept tab, conversation string) tab {
+	h.t.Helper()
+	h.rex.events <- RexEvent{Kind: EvExited, BlockID: kept.BlockID, ExitCode: 0}
+	eventually(h.t, "the Worker gone", func() bool { v := h.task(id); return !v.Live && v.Tab })
+	h.open(id)
+	reopened := h.waitNewTab("claude --resume "+conversation, kept.BlockID)
+	h.rex.mu.Lock()
+	calls := slices.Clone(h.rex.calls)
+	h.rex.mu.Unlock()
+	closeAt, newAt := slices.Index(calls, "close "+kept.WindowID), slices.Index(calls, "new "+reopened.WindowID)
+	if closeAt < 0 || newAt < 0 || closeAt > newAt {
+		h.t.Fatalf("calls %v, want the kept window %s closed before the new window %s opens", calls, kept.WindowID, reopened.WindowID)
+	}
+	var window string
+	h.s.call(func() { window = h.s.recs[id].WindowID })
+	if window != reopened.WindowID {
+		h.t.Fatalf("the Task's window is %s, want only the new window %s", window, reopened.WindowID)
+	}
+	return reopened
+}
+
+func TestOpenClosesTheKeptTabOfABuildWorkerBeforeTheNewTabOpens(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	worker := h.working()
+	first := h.waitSpecs(1)
+	h.keptTabRestore("ENG-1", worker, first.Conversation)
+	eventually(t, "the restored Worker live", func() bool { return h.task("ENG-1").Live })
+	if tabs := h.rex.open("claude working"); len(tabs) != 0 {
+		t.Fatalf("the kept tab stayed open: %+v", tabs)
+	}
+	h.do(Request{Op: "close", Task: "ENG-1"})
+	eventually(t, "the restored tab closed", func() bool { return len(h.rex.open("claude --resume "+first.Conversation)) == 0 })
 }
