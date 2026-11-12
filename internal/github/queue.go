@@ -53,15 +53,39 @@ func Candidates(prs []PullRequest, tasks []ReviewTask) []Candidate {
 
 // wantsReview applies the queue rules that need no review Task. pr-review
 // refuses a fork, because the fork's code would run with the user's
-// credentials.
+// credentials. It also stops on a PR with another person's open review,
+// because a second review can contradict it.
 func (pr PullRequest) wantsReview() bool {
 	switch {
-	case pr.Draft, pr.Fork, pr.Bot, pr.Viewer.Author:
+	case pr.Draft, pr.Fork, pr.Bot, pr.Viewer.Author, pr.hasOpenReview():
 		return false
 	case pr.Viewer.Reviewed:
 		return pr.Viewer.Requested
 	}
-	return !slices.ContainsFunc(pr.LatestReviews, func(r Review) bool { return r.State == "APPROVED" })
+	return !slices.ContainsFunc(pr.LatestReviews, func(r Review) bool { return r.opinion() == "APPROVED" })
+}
+
+// hasOpenReview is true when a person other than the user and the author
+// requested changes, or commented on the head without approving. The author
+// answers a comment with a new head.
+func (pr PullRequest) hasOpenReview() bool {
+	return slices.ContainsFunc(pr.LatestReviews, func(r Review) bool {
+		switch {
+		case r.Bot, r.Viewer, r.Author == pr.Author:
+			return false
+		case r.opinion() != "":
+			return r.opinion() == "CHANGES_REQUESTED"
+		}
+		return r.State == "COMMENTED" && r.Commit == pr.Head
+	})
+}
+
+// opinion is the review author's last APPROVED or CHANGES_REQUESTED, or "".
+func (r Review) opinion() string {
+	if r.State == "APPROVED" || r.State == "CHANGES_REQUESTED" {
+		return r.State
+	}
+	return r.Opinion
 }
 
 // first orders true before false.
