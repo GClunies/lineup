@@ -12,7 +12,7 @@ _Avoid_: Project, codebase, area
 
 **Tracker**:
 The system that holds planned work. One Tracker is a Linear workspace, for example `acme`, the user's GitHub account, or the Local Tracker.
-_Avoid_: Backlog, issue source, provider, area
+_Avoid_: Issue source, provider, area
 
 **Local Tracker**:
 The Tracker that lineup keeps on the user's machine: one folder of Markdown Issues, outside every Repo. It is the Tracker for a user who has no Linear workspace and no GitHub Tracker.
@@ -42,6 +42,22 @@ _Avoid_: Job, thread, card, item
 A Task with no Issue, made from the user's own words. Its ID has the form `adhoc-<n>`, and its tab opens in the ad hoc session instead of its Repo's session.
 _Avoid_: Text Task, one-off
 
+**Ready**:
+The Board group of the user's own Issues that have no Task and that the user chose to do next: a Linear Issue assigned to the user in an unstarted state, or a local Issue with `status: todo`.
+_Avoid_: Todo, next up
+
+**Backlog**:
+The Board group of the user's own Issues that have no Task and that wait for the user to choose them: a Linear Issue assigned to the user in a backlog or triage state, or a local Issue with `status: backlog`.
+_Avoid_: Ideas, inbox
+
+**Destination**:
+Where a new Issue goes: the Local Tracker, or one Linear workspace, team, and optional Project. A capture defaults to the Local Tracker.
+_Avoid_: Target, location
+
+**Promote**:
+To move a local Issue to Linear once: lineup creates the Linear Issue and cancels the local one.
+_Avoid_: Sync, export, upgrade
+
 **Intake**:
 The act of putting a Task on the Board, from the tracker browser, the Orchestrator, or the CLI. Auto-intake is Intake that the Scheduler does by itself from a Tracker status.
 _Avoid_: Import, claim, enqueue
@@ -49,7 +65,7 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The top of the `hub` tab, above the Orchestrator. It has three views, and the keys `1`, `2`, and `3` pick one. `1 plan` is the tracker browser. `2 work` lists the build Tasks, grouped as Needs you, Working, Waiting, Queued, and Done. `3 review` has a Reviews tab that shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
+The top of the `hub` tab, above the Orchestrator. It has three views, and the keys `1`, `2`, and `3` pick one. `1 plan` is the tracker browser. `2 work` lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Working, Waiting, Queued, Ready, Done, and Backlog. `3 review` has a Reviews tab that shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:
