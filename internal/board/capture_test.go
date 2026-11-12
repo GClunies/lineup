@@ -233,3 +233,18 @@ func TestTheListLoadsOnceAndAFailedWorkspaceIsOneLine(t *testing.T) {
 		t.Fatalf("the second tab read the teams again: %d reads, want %d", e.api.teamReads, reads)
 	}
 }
+
+func TestALongProjectNameKeepsTheTagOnScreen(t *testing.T) {
+	e, _ := captureEnv(t)
+	long := destination{Workspace: "w1", WorkspaceName: "acme", TeamID: "t1", TeamKey: "ENG", ProjectID: "p9", ProjectName: strings.Repeat("Long name ", 12)}
+	e.m = feed(e.m, destRecentMsg{recent: []destination{long}})
+	e.m.width = 60
+	m, _ := press(e.m, "n", "tab")
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	for _, row := range []struct{ label, tag string }{{"local", "just me"}, {"acme / ENG / Long name", "recent"}} {
+		i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, row.label) })
+		if i < 0 || !strings.HasSuffix(strings.TrimSpace(lines[i]), row.tag) {
+			t.Fatalf("the %s row lost its tag %q at width 60:\n%s", row.label, row.tag, strings.Join(lines, "\n"))
+		}
+	}
+}

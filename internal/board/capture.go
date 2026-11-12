@@ -400,6 +400,8 @@ func (m Model) destList() string {
 	for _, r := range vis {
 		w = max(w, lipgloss.Width(r.to.label()))
 	}
+	// A long Project name gives way to the tag: the marker and the tag take 13 columns.
+	w = min(w, max(m.width-13, 12))
 	for i, r := range vis {
 		lines = append(lines, m.row(i == m.box.cur, pad(r.to.label(), w)+"  "+r.tag, false))
 	}
