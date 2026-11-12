@@ -46,6 +46,10 @@ func (m Model) View() string {
 		body = m.trackerBody()
 	case m.view == viewReview:
 		body = m.reviewBody()
+	case m.picking() && m.tr.ov == ovSkill:
+		body = m.skillPicker()
+	case m.picking():
+		body = m.repoPicker()
 	case m.detail:
 		body = m.vp.View()
 	default:
@@ -80,6 +84,9 @@ func (m Model) header() string {
 	for _, t := range m.tasks {
 		count[t.Group]++
 	}
+	for _, r := range m.issues {
+		count[r.Group]++
+	}
 	s := " " + bold.Render("lineup") + "  " + m.viewNames()
 	if m.kind == lifecycle.KindBuild {
 		s += fmt.Sprintf("  WIP %d/%d", m.board.Started, m.board.Cap)
@@ -89,6 +96,9 @@ func (m Model) header() string {
 	}
 	s += fmt.Sprintf("   ●%d need you   ◐%d working   ◷%d waiting   %d queued",
 		count["Needs you"], count["Working"], count["Waiting"], count["Queued"])
+	if m.kind == lifecycle.KindBuild {
+		s += fmt.Sprintf("   %d ready   %d backlog", count[groupReady], count[groupBacklog])
+	}
 	if m.kind == lifecycle.KindReview && m.board.ReviewsPaused {
 		s += "   " + bad.Render("reviews paused")
 	}
@@ -122,6 +132,9 @@ func (m Model) footer() string {
 	}
 	if m.view == viewReview && m.mode == modeNormal {
 		return ansi.Truncate(m.reviewFooter(), m.width, "…")
+	}
+	if m.picking() && m.mode == modeNormal {
+		return ansi.Truncate(m.trackerFooter(), m.width, "…")
 	}
 	switch m.mode {
 	case modeConfirm:
@@ -167,6 +180,13 @@ func (m Model) boardHints() []hint {
 	}
 	if m.detail {
 		return []hint{{"f", "back"}, {"j/k", "scroll"}, {"?", "all keys"}}
+	}
+	if r, ok := m.currentIssue(); ok {
+		open := "open the Issue"
+		if r.lin == nil {
+			open = "edit the Issue"
+		}
+		return append([]hint{{"s", "start"}, {"o", open}, {"j/k", "move"}}, tail...)
 	}
 	t, ok := m.current()
 	if !ok && m.kind == lifecycle.KindReview {
@@ -238,32 +258,46 @@ func (m Model) rows(w int) string {
 		repoW = max(repoW, lipgloss.Width(t.Repo))
 		noteW = max(noteW, min(lipgloss.Width(t.Note), 36))
 	}
+	for _, r := range m.issues {
+		idW = max(idW, lipgloss.Width(r.ID))
+		repoW = max(repoW, lipgloss.Width(r.Repo))
+		noteW = max(noteW, min(lipgloss.Width(r.note()), 36))
+	}
 	// marker 2, gaps 2 each between five columns, age 5
 	titleW := max(w-(2+idW+stageW+repoW+noteW+5+14), 12)
-	var b strings.Builder
-	last := ""
-	for _, t := range m.tasks {
-		if t.Group != last {
-			last = t.Group
-			b.WriteString(headRow.Render(" "+strings.ToUpper(t.Group)) + "\n")
-		}
+	row := func(id, stage, repo, title, note, tail string, faded bool) string {
 		marker := "  "
-		if t.ID == m.sel {
+		if id == m.sel {
 			marker = "▸ "
 		}
-		row := fmt.Sprintf(" %s%s  %s  %s  %s  %s  %s",
-			marker, pad(t.ID, idW), pad(stageText(t), stageW), pad(t.Repo, repoW),
-			pad(t.Title, titleW), pad(t.Note, noteW), m.age(t))
-		row = ansi.Truncate(row, w, "…")
+		s := ansi.Truncate(fmt.Sprintf(" %s%s  %s  %s  %s  %s  %s",
+			marker, pad(id, idW), pad(stage, stageW), pad(repo, repoW), pad(title, titleW), pad(note, noteW), tail), w, "…")
 		switch {
-		case t.ID == m.sel:
-			row = selRow.Render(row)
-		case t.Group == "Done" || t.Group == "Queued":
-			row = dim.Render(row)
+		case id == m.sel:
+			return selRow.Render(s)
+		case faded:
+			return dim.Render(s)
 		}
-		b.WriteString(row + "\n")
+		return s
 	}
-	if len(m.tasks) == 0 {
+	var b strings.Builder
+	for _, g := range groupOrder {
+		var lines []string
+		for _, t := range m.tasks {
+			if t.Group == g {
+				lines = append(lines, row(t.ID, stageText(t), t.Repo, t.Title, t.Note, m.age(t), g == "Done" || g == "Queued"))
+			}
+		}
+		for _, r := range m.issues {
+			if r.Group == g {
+				lines = append(lines, row(r.ID, "", r.Repo, r.Title, r.note(), r.priorityText(), g == groupBacklog || len(r.Blockers) > 0))
+			}
+		}
+		if len(lines) > 0 {
+			b.WriteString(headRow.Render(" "+strings.ToUpper(g)) + "\n" + strings.Join(lines, "\n") + "\n")
+		}
+	}
+	if len(m.tasks)+len(m.issues) == 0 {
 		b.WriteString(dim.Render(" no Tasks") + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
@@ -325,8 +359,9 @@ const boardHelp = `
    m        merge the PR            (Ready to land)
    x        close the Task, or its tab and worktree when it is Done,
             or archive a Done Task with no tab, after y/n
-   s        start a Queued Task
-   o        open the PR or the Issue
+   s        start a Queued Task, or start a Task from a Ready or
+            Backlog Issue; pick or type a skill, or just go
+   o        open the PR or the Issue; a local Issue opens in $EDITOR
    R        refresh now: poll GitHub for every started Task
    z        zoom the agent pane
    1 2 3    show the plan, work, or review view

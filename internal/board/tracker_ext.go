@@ -161,7 +161,7 @@ func (m Model) sourceKey(k string) (Model, tea.Cmd, bool) {
 		case it.Broken != "":
 			m.setStatus(it.Path+" does not parse: "+it.Broken, true)
 		default:
-			t.ov, t.item, t.skCur = ovSkill, &it, 0
+			t.ov, t.item, t.itemSrc, t.skCur = ovSkill, &it, src, 0
 			t.skillIn.SetValue("")
 			return m, t.skillIn.Focus(), true
 		}

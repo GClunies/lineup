@@ -214,6 +214,7 @@ type tracker struct {
 	sources    []Source // the GitHub and Local lists that are on
 	items      []Item   // the open Source tab's list
 	item       *Item    // the Item that the overlay is about; nil for a Linear Issue
+	itemSrc    Source   // the Source that keeps the Repo picked for item
 	itemDetail Item
 	itemStates []string
 }
@@ -1036,7 +1037,7 @@ func (m Model) trackerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			is := t.pick
 			t.ov = ovNone
 			t.repoIn.Blur()
-			if it, src := t.item, t.curSource(); it != nil && src != nil {
+			if it, src := t.item, t.itemSrc; it != nil && src != nil {
 				start := m.startItem(*it, repo, t.skill)
 				return m, func() tea.Msg {
 					if err := src.SetRepo(*it, repo); err != nil {

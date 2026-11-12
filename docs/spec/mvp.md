@@ -445,10 +445,10 @@ To find which statuses Linear's GitHub automation sets, query `teams { gitAutoma
 
 ## Board
 
-The Board shows the build Tasks. Review Tasks show on the Reviews tab of the `review` tab (see `docs/spec/reviews.md`).
+The Board shows the build Tasks and the user's own Issues that have no Task. Review Tasks show on the Reviews tab of the `review` tab (see `docs/spec/reviews.md`). The Issue rows are in `docs/spec/one-board.md`.
 
 ```
- lineup  WIP 4/5   ●2 need you   ◐2 working   ◷1 waiting   3 queued
+ lineup  WIP 4/5   ●2 need you   ◐2 working   ◷1 waiting   1 queued   2 ready   1 backlog
  ─────────────────────────────────────────────────────────────────────────
  NEEDS YOU
  ▸ ENG-590 Working ⚑       data   Add billing model          stopped      12m
@@ -460,9 +460,16 @@ The Board shows the build Tasks. Review Tasks show on the Reviews tab of the `re
    ENG-571 In review       data   Rate limit login          #4636 needs approval · optional failed: lint  1d
  QUEUED
    ENG-601                 data   Drop old API keys
+ READY
+   ENG-611                        Move the retry job        unblocked    ▂▄▆
+   local-7                 data   Rename the log flag
  DONE
    ENG-560 merged          data   Rename config options     #4601  today
+ BACKLOG
+   ENG-620                        Split billing ingest                   ▂
 ```
+
+The groups are Needs you, Working, Waiting, Queued, Ready, Done, and Backlog, in that order. Ready and Backlog hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. Backlog comes last because it is the longest list.
 
 | Key | Action |
 |---|---|
@@ -472,8 +479,8 @@ The Board shows the build Tasks. Review Tasks show on the Reviews tab of the `re
 | `f` | Show the detail pane at full screen, and back |
 | `m` | Merge the PR (Ready to land) |
 | `x` | Close the Task, after a confirmation. On a Done Task with a tab, close the tab and remove the worktree, after a confirmation. On a Done Task with no tab, archive it, after a confirmation. |
-| `s` | Start a Queued Task |
-| `o` | Open the PR or the Issue in the browser |
+| `s` | Start a Queued Task. On an Issue row, add the Issue as a Task and start it, with the skill picker and, when no Repo mapping exists, the Repo picker. |
+| `o` | Open the PR or the Issue in the browser. A local Issue opens in `$EDITOR`. |
 | `R` | Refresh now: the Scheduler polls GitHub for every started Task |
 | `z` | Zoom this tab's agent pane to full height, and back |
 | `?` | Show all keys |

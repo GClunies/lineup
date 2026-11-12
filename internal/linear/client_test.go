@@ -123,6 +123,39 @@ func TestBlockersAreTheOpenBlocksRelations(t *testing.T) {
 	}
 }
 
+// Unblocked needs one or more "blocks" relations, each done or canceled.
+// Other relation types never count.
+func TestUnblockedMeansEveryBlocksRelationIsClosed(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rels []any
+		want bool
+	}{
+		{"no relations", nil, false},
+		{"one done blocker", []any{relation("blocks", "x-1", "completed")}, true},
+		{"one canceled blocker", []any{relation("blocks", "x-1", "canceled")}, true},
+		{"one done and one open blocker", []any{relation("blocks", "x-1", "completed"), relation("blocks", "x-2", "started")}, false},
+		{"one open blocker", []any{relation("blocks", "x-1", "unstarted")}, false},
+		{"a done related Issue only", []any{relation("related", "x-1", "completed")}, false},
+		{"a done blocker and an open related Issue", []any{relation("blocks", "x-1", "completed"), relation("related", "x-2", "started")}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := signedInFor(t)
+			fakeLinear(t, reply(200, data(map[string]any{"viewer": map[string]any{"assignedIssues": map[string]any{"nodes": []any{
+				map[string]any{"id": "p-1", "identifier": "P-1", "state": map[string]any{"type": "unstarted"},
+					"inverseRelations": map[string]any{"nodes": tc.rels}},
+			}}}})))
+			is, err := c.MyIssues(context.Background())
+			if err != nil || len(is) != 1 {
+				t.Fatalf("%v %v", is, err)
+			}
+			if is[0].Unblocked != tc.want {
+				t.Fatalf("unblocked = %v, want %v", is[0].Unblocked, tc.want)
+			}
+		})
+	}
+}
+
 func TestMyIssuesAsksForOpenIssuesAndPages(t *testing.T) {
 	c := signedInFor(t)
 	var first, second map[string]any

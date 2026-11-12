@@ -4,6 +4,7 @@ package board
 
 import (
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
+	"github.com/gclunies/lineup/internal/linear"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
@@ -43,6 +45,9 @@ type Options struct {
 	// Tracker holds the calls of the tracker browser. Tests replace the
 	// Linear calls. Sources lists the GitHub and Local tabs.
 	Tracker Tracker
+	// LocalIssues is the Local Tracker folder that the work view reads,
+	// whatever local_tracker says. Empty reads no local Issues.
+	LocalIssues string
 }
 
 type viewID int
@@ -67,7 +72,7 @@ const (
 	capFull      = "wip cap full"
 )
 
-var groupOrder = []string{"Needs you", "Working", "Waiting", "Queued", "Done"}
+var groupOrder = []string{"Needs you", "Working", "Waiting", "Queued", groupReady, "Done", groupBacklog}
 
 type (
 	boardMsg  scheduler.BoardView
@@ -97,7 +102,8 @@ type Model struct {
 	board   scheduler.BoardView
 	kind    lifecycle.Kind       // the Kind of the Tasks that this board shows
 	tasks   []scheduler.TaskView // the Tasks of kind, in group order
-	sel     string               // selected Task ID
+	issues  []issueRow           // the Issue rows of the work view, in group order
+	sel     string               // the ID of the selected Task or Issue row
 	online  bool
 	status  string
 	statusE bool
@@ -121,8 +127,9 @@ type Model struct {
 	detailTask string
 	vp         viewport.Model
 
-	tr *tracker
-	rv *review
+	tr   *tracker
+	rv   *review
+	mine mine
 
 	alerted map[string]string // Task ID to the Attention that last toasted
 }
@@ -138,6 +145,7 @@ func New(v scheduler.BoardView, opts Options) Model {
 	m := Model{opts: opts, client: opts.Client, width: 100, height: 30, vp: viewport.New(100, 28)}
 	m.tr = newTracker(opts.Tracker)
 	m.rv = newReview(opts.Reviews)
+	m.mine = mine{lin: map[string][]linear.Issue{}, fresh: map[string]bool{}}
 	m.setBoard(v)
 	m.alerted = map[string]string{}
 	scheduler.Alerts(m.alerted, v) // what is on the Board now is not news
@@ -156,28 +164,44 @@ func (m *Model) setBoard(v scheduler.BoardView) {
 			}
 		}
 	}
-	if _, ok := m.current(); !ok && len(m.tasks) > 0 {
-		m.sel = m.tasks[0].ID
+	m.issues = nil
+	if m.kind == lifecycle.KindBuild {
+		m.issues = issueRows(m.mine.linearIssues(), m.mine.loc, v.Tasks)
+	}
+	if ids := m.rowIDs(); !slices.Contains(ids, m.sel) && len(ids) > 0 {
+		m.sel = ids[0]
 	}
 }
 
-func (m Model) index() int {
-	for i, t := range m.tasks {
-		if t.ID == m.sel {
-			return i
+// rowIDs lists the IDs of the Task and Issue rows in screen order.
+func (m Model) rowIDs() []string {
+	var ids []string
+	for _, g := range groupOrder {
+		for _, t := range m.tasks {
+			if t.Group == g {
+				ids = append(ids, t.ID)
+			}
+		}
+		for _, r := range m.issues {
+			if r.Group == g {
+				ids = append(ids, r.ID)
+			}
 		}
 	}
-	return -1
+	return ids
 }
 
 func (m Model) current() (scheduler.TaskView, bool) {
-	if i := m.index(); i >= 0 {
-		return m.tasks[i], true
+	for _, t := range m.tasks {
+		if t.ID == m.sel {
+			return t, true
+		}
 	}
 	return scheduler.TaskView{}, false
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+// Init loads the Issue rows and fetches them again every minute.
+func (m Model) Init() tea.Cmd { return tea.Batch(m.loadMine(), tickMine()) }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -216,6 +240,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m2, cmd, ok := m.reviewMsg(msg); ok {
 			return m2, cmd
 		}
+		if m2, cmd, ok := m.mineMsg(msg); ok {
+			return m2, cmd
+		}
 	}
 	return m, nil
 }
@@ -245,7 +272,7 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.capKey(k)
 	}
 
-	if m.view == viewTracker && m.tr.capturing() {
+	if (m.view == viewTracker && m.tr.capturing()) || m.picking() {
 		return m.trackerKey(msg)
 	}
 	if m.view == viewReview && m.rv.filtering {
@@ -312,14 +339,17 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	t, ok := m.current()
+	r, isRow := m.currentIssue()
 	switch k {
 	case "j", "down":
-		if i := m.index(); i >= 0 && i+1 < len(m.tasks) {
-			m.sel = m.tasks[i+1].ID
+		ids := m.rowIDs()
+		if i := slices.Index(ids, m.sel); i >= 0 && i+1 < len(ids) {
+			m.sel = ids[i+1]
 		}
 	case "k", "up":
-		if i := m.index(); i > 0 {
-			m.sel = m.tasks[i-1].ID
+		ids := m.rowIDs()
+		if i := slices.Index(ids, m.sel); i > 0 {
+			m.sel = ids[i-1]
 		}
 	case "z":
 		if m.opts.Zoom != nil {
@@ -367,6 +397,9 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if ok && t.Group == "Queued" {
 			return m, m.op("start", scheduler.Request{Op: "start", Task: t.ID})
 		}
+		if isRow {
+			return m.startRow(r)
+		}
 	case "S":
 		if ok && t.Kind == lifecycle.KindReview {
 			return m.toggleSkip(t.PRURL, urlRef(t.PRURL))
@@ -378,6 +411,9 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, func() tea.Msg { return opMsg{label: "open", err: open(u)} }
 			}
 			m.setStatus("no URL for "+t.ID, true)
+		}
+		if isRow {
+			return m, m.openRow(r)
 		}
 	}
 	return m, nil
@@ -416,6 +452,9 @@ func (m Model) afterOp(msg opMsg) (tea.Model, tea.Cmd) {
 			ok += " · " + msg.note
 		}
 		m.setStatus(ok, false)
+		if msg.label == "start" {
+			return m, m.loadMine()
+		}
 	case msg.label == "start" && msg.err.Error() == capFull:
 		m.mode, m.pendingTask = modeCap, msg.task
 	default:
