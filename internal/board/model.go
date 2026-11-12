@@ -3,6 +3,7 @@
 package board
 
 import (
+	"fmt"
 	"os/exec"
 	"slices"
 	"strings"
@@ -522,13 +523,43 @@ func firstNonEmpty(ss ...string) string {
 
 func (m Model) toasts(v scheduler.BoardView) tea.Cmd {
 	alerts := scheduler.Alerts(m.alerted, v)
-	if m.opts.Notify == nil || len(alerts) == 0 {
+	var texts []string
+	for _, t := range alerts {
+		texts = append(texts, t.AlertText())
+	}
+	if hint := m.slotHint(v, alerts); hint != "" {
+		texts = append(texts, hint)
+	}
+	if m.opts.Notify == nil || len(texts) == 0 {
 		return nil
 	}
 	return func() tea.Msg {
-		for _, t := range alerts {
-			m.opts.Notify(t.AlertText())
+		for _, s := range texts {
+			m.opts.Notify(s)
 		}
 		return nil
 	}
+}
+
+// slotHint names the first Ready row when a build Task in alerts reached Done
+// and v has a free WIP slot. It never starts the Issue. The rows come from
+// issueRows, not m.issues, so the hint shows on the review view too.
+func (m Model) slotHint(v scheduler.BoardView, alerts []scheduler.TaskView) string {
+	free := v.Cap - v.Started
+	if free <= 0 || !slices.ContainsFunc(alerts, func(t scheduler.TaskView) bool {
+		return t.Kind == lifecycle.KindBuild && t.StageKey == lifecycle.Done.Key()
+	}) {
+		return ""
+	}
+	for _, r := range issueRows(m.mine.linearIssues(), m.mine.loc, v.Tasks) {
+		if r.Group != groupReady {
+			continue
+		}
+		slots := "slots"
+		if free == 1 {
+			slots = "slot"
+		}
+		return fmt.Sprintf("%d %s free, next %s: %s", free, slots, r.ID, r.Title)
+	}
+	return ""
 }
