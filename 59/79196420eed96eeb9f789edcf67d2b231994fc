@@ -1,0 +1,21 @@
+internal/harness/claude/claude.go
+  s_535d8965140e10::t_3389726da839c4 319-320,323
+internal/scheduler/record.go
+  s_535d8965140e10::t_e28c7ab7ca158a 59-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5979196420eed96eeb9f789edcf67d2b231994fc",
+  "prompts": {},
+  "sessions": {
+    "s_535d8965140e10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b9e1685c-5022-4378-9e4e-03f300532e37",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
