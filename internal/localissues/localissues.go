@@ -177,13 +177,21 @@ func (s Store) SetStatus(id string, st Status) error {
 	if !slices.Contains(Statuses, st) {
 		return fmt.Errorf("unknown status %q", st)
 	}
-	return s.setField(id, "status", string(st))
+	return s.setField(id, "status", string(st), "")
 }
 
 // SetRepo rewrites the repo line, or adds one.
-func (s Store) SetRepo(id, repo string) error { return s.setField(id, "repo", repo) }
+func (s Store) SetRepo(id, repo string) error { return s.setField(id, "repo", repo, "") }
 
-func (s Store) setField(id, key, value string) error {
+// Promote cancels the Issue and ends its body with the line
+// "Promoted to <linearID>.", after the Issue moved to Linear.
+func (s Store) Promote(id, linearID string) error {
+	return s.setField(id, "status", string(Canceled), "Promoted to "+linearID+".\n")
+}
+
+// setField rewrites one frontmatter line, or adds it. A tail goes at the end
+// of the body as a paragraph of its own.
+func (s Store) setField(id, key, value, tail string) error {
 	n, err := ParseID(id)
 	if err != nil {
 		return err
@@ -203,6 +211,12 @@ func (s Store) setField(id, key, value string) error {
 		lines[at] = line
 	} else {
 		lines = append(lines, line)
+	}
+	if tail != "" {
+		if rest != "" && !strings.HasSuffix(rest, "\n") {
+			rest += "\n"
+		}
+		rest += "\n" + tail
 	}
 	out := "---\n" + strings.Join(lines, "\n") + "\n---\n" + rest
 	tmp := s.path(n) + ".tmp"
