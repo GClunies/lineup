@@ -574,7 +574,7 @@ The Orchestrator has four jobs:
 
 The Orchestrator handles build Tasks and review Tasks. It maps each review request, `/pr-review` included, to `lineup review`. Its settings deny every GitHub write to a PR.
 
-If `lineup add` or `lineup start` meets a full WIP cap, the command fails with `wip cap full`. The Orchestrator must then ask the user in chat. It must not use `--over-cap` without the user's yes.
+If `lineup add` or `lineup start` meets a full WIP cap, the command fails with `wip cap full`. The Orchestrator must then ask the user with `AskUserQuestion`. It must not use `--over-cap` without the user's pick.
 
 ### Alerts
 
@@ -585,7 +585,7 @@ A Task alerts when it enters the Needs you group or Done. It alerts again only a
 | `lineup watch` | Prints one line for each alert of a Task of either Kind, for example `ENG-34 Working, stopped: <title>`. It keeps the alerts it printed in `alerted.json` in the state directory, so a restart repeats none of them. On its first run, Tasks that are already Done print nothing. A lock on `watch.lock` allows one watch at a time. With `--once`, it exits after the first Board that has new alerts. |
 | The boards in the `work` and `review` tabs | Each prints an OSC 777 notification for each alert of its own Tasks: build Tasks in `work`, review Tasks in `review`. Rex shows it as a desktop toast for that board's pane. A click on the toast opens that pane. The view that a board opens on makes no toast. |
 
-The Hub starts the Orchestrator with a first message that tells it to run `lineup watch --once` as a background Bash command. The command exits at the next alerts, and the exit wakes the Orchestrator. The Orchestrator tells the user what changed and what the user can say next, then starts the command again. An idle Orchestrator writes nothing to its chat.
+The Hub starts the Orchestrator with a first message that tells it to run `lineup watch --once` as a background Bash command. The command exits at the next alerts, and the exit wakes the Orchestrator. The Orchestrator starts the command again, then asks the user with `AskUserQuestion` what to do. For a Done Task with a tab, the options are Close the tab, Open the tab, and Keep it open. For a `tab closed` flag, they are Restore and Close the Task. For other alerts, it tells the user what changed and what the user can say next. An idle Orchestrator writes nothing to its chat.
 
 ## Planning
 
