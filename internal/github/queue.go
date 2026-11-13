@@ -40,16 +40,6 @@ func (h Holds) IsSkipped(url string) bool {
 	return slices.ContainsFunc(h.Skips, func(s Skip) bool { return strings.EqualFold(s.URL, url) })
 }
 
-// Ranking is what the queue rules make of one queue's search.
-type Ranking struct {
-	// Ranked are the PRs that the queue reviews, in start order. A skipped PR is
-	// never in it.
-	Ranked []Candidate
-	// Skipped are the PRs that the queue would review if the user had not
-	// skipped them, in the same order.
-	Skipped []Candidate
-}
-
 // Candidate is a PR that a queue reviews, with why it wants the user.
 type Candidate struct {
 	PR PullRequest `json:"pr"`
@@ -59,8 +49,8 @@ type Candidate struct {
 	ByName   bool `json:"by_name,omitempty"`
 }
 
-// Rank applies the queue rules to a queue's search. Ranked PRs come in this
-// order: re-reviews first, then the PRs that request the user by name, then
+// Rank applies the queue rules to a queue's search. It returns the PRs that
+// the queue reviews, in start order: re-reviews first, then the PRs that request the user by name, then
 // the oldest.
 //
 // A PR with an open review Task never enters, because that Task's Worker
@@ -69,7 +59,7 @@ type Candidate struct {
 // Task. A skip holds the PR, and an unskip lets it back at the same head. After
 // the user's review, only a new request for the user lets it back. A skipped
 // PR never enters, at any head, until the user unskips it.
-func Rank(prs []PullRequest, h Holds) Ranking {
+func Rank(prs []PullRequest, h Holds) []Candidate {
 	open, seen, skipped := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, t := range h.Tasks {
 		u := strings.ToLower(t.URL)
@@ -81,25 +71,18 @@ func Rank(prs []PullRequest, h Holds) Ranking {
 	for _, s := range h.Skips {
 		skipped[strings.ToLower(s.URL)] = true
 	}
-	var r Ranking
+	var ranked []Candidate
 	for _, pr := range prs {
 		u := strings.ToLower(pr.URL)
-		if open[u] || seen[u+" "+pr.Head] || !pr.wantsReview() {
+		if open[u] || skipped[u] || seen[u+" "+pr.Head] || !pr.wantsReview() {
 			continue
 		}
-		c := Candidate{PR: pr, Rereview: pr.Viewer.Reviewed && pr.Viewer.Requested, ByName: pr.Viewer.ByName}
-		if skipped[u] {
-			r.Skipped = append(r.Skipped, c)
-		} else {
-			r.Ranked = append(r.Ranked, c)
-		}
+		ranked = append(ranked, Candidate{PR: pr, Rereview: pr.Viewer.Reviewed && pr.Viewer.Requested, ByName: pr.Viewer.ByName})
 	}
-	for _, cs := range [][]Candidate{r.Ranked, r.Skipped} {
-		slices.SortStableFunc(cs, func(a, b Candidate) int {
-			return cmp.Or(first(a.Rereview, b.Rereview), first(a.ByName, b.ByName), a.PR.CreatedAt.Compare(b.PR.CreatedAt))
-		})
-	}
-	return r
+	slices.SortStableFunc(ranked, func(a, b Candidate) int {
+		return cmp.Or(first(a.Rereview, b.Rereview), first(a.ByName, b.ByName), a.PR.CreatedAt.Compare(b.PR.CreatedAt))
+	})
+	return ranked
 }
 
 // wantsReview applies the queue rules that need no review Task. pr-review

@@ -82,7 +82,7 @@ func (s *Scheduler) readQueues(ctx context.Context) (queueRows, error) {
 	rows := queueRows{Found: found, Repos: map[string]queueRepo{}}
 	tried := map[string]bool{}
 	for _, q := range s.d.Queues {
-		for _, c := range github.Rank(found[q.Name], github.Holds{}).Ranked {
+		for _, c := range github.Rank(found[q.Name], github.Holds{}) {
 			slug := strings.ToLower(c.PR.Repo)
 			if tried[slug] {
 				continue
@@ -389,7 +389,7 @@ func planFill(in fillInput) fillPlan {
 	owned := map[string]bool{}
 	for _, q := range in.Queues {
 		var urls []string
-		for _, c := range github.Rank(in.Found[q.Name], holds).Ranked {
+		for _, c := range github.Rank(in.Found[q.Name], holds) {
 			u := strings.ToLower(c.PR.URL)
 			if owned[u] {
 				continue

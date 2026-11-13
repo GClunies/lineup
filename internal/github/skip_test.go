@@ -11,49 +11,32 @@ import (
 
 const url7 = "https://github.com/umbrella/data/pull/7"
 
-func TestASkipKeepsAPRInTheSkippedList(t *testing.T) {
+func TestASkipKeepsAPROutOfTheQueue(t *testing.T) {
 	skip := func(u string) []Skip { return []Skip{{URL: u}} }
 	same := func(p PullRequest) PullRequest { return p }
 	ended := func(skipped bool) []ReviewTask {
 		return []ReviewTask{{URL: url7, Head: "h7", Done: true, Skipped: skipped}}
 	}
 	cases := []struct {
-		name        string
-		pr          func(PullRequest) PullRequest
-		holds       Holds
-		ranked, hit bool
+		name   string
+		pr     func(PullRequest) PullRequest
+		holds  Holds
+		ranked bool
 	}{
-		{"no skip", same, Holds{}, true, false},
-		{"a skip", same, Holds{Skips: skip(url7)}, false, true},
-		{"a skip holds at any head", func(p PullRequest) PullRequest { p.Head = "h7-pushed"; return p }, Holds{Skips: skip(url7)}, false, true},
-		{"a skip in another case", same, Holds{Skips: skip(strings.ToUpper(url7))}, false, true},
-		{"a skip of another PR", same, Holds{Skips: skip("https://github.com/umbrella/data/pull/8")}, true, false},
-		{"a skip and an open Task: the Task holds the PR", same,
-			Holds{Skips: skip(url7), Tasks: []ReviewTask{{URL: url7, Head: "h6"}}}, false, false},
-		{"a skip and a Done Task at an older head: the skip holds the PR", same,
-			Holds{Skips: skip(url7), Tasks: []ReviewTask{{URL: url7, Head: "h6", Done: true}}}, false, true},
-		{"a skip of a draft: no rule wants the PR", func(p PullRequest) PullRequest { p.Draft = true; return p }, Holds{Skips: skip(url7)}, false, false},
-		{"a skip of an approved PR: no rule wants the PR", func(p PullRequest) PullRequest { p.LatestReviews = approved; return p }, Holds{Skips: skip(url7)}, false, false},
-		{"a Done Task that the user closed holds the PR at its head", same, Holds{Tasks: ended(false)}, false, false},
-		{"a Done Task that a skip ended holds nothing", same, Holds{Tasks: ended(true)}, true, false},
-		{"a Done Task that a skip ended, and the skip: the PR is in the skipped list", same,
-			Holds{Skips: skip(url7), Tasks: ended(true)}, false, true},
-		{"a Done Task that the user closed, and the skip: no list", same,
-			Holds{Skips: skip(url7), Tasks: ended(false)}, false, false},
+		{"no skip", same, Holds{}, true},
+		{"a skip", same, Holds{Skips: skip(url7)}, false},
+		{"a skip holds at any head", func(p PullRequest) PullRequest { p.Head = "h7-pushed"; return p }, Holds{Skips: skip(url7)}, false},
+		{"a skip in another case", same, Holds{Skips: skip(strings.ToUpper(url7))}, false},
+		{"a skip of another PR", same, Holds{Skips: skip("https://github.com/umbrella/data/pull/8")}, true},
+		{"a Done Task that the user closed holds the PR at its head", same, Holds{Tasks: ended(false)}, false},
+		{"a Done Task that a skip ended holds nothing", same, Holds{Tasks: ended(true)}, true},
+		{"a Done Task that a skip ended, and the skip", same, Holds{Skips: skip(url7), Tasks: ended(true)}, false},
 	}
 	for _, c := range cases {
 		r := Rank([]PullRequest{c.pr(row(7, "2026-01-01", ViewerState{}))}, c.holds)
-		if (len(r.Ranked) == 1) != c.ranked || (len(r.Skipped) == 1) != c.hit {
-			t.Errorf("%s: ranked %v, skipped %v, want ranked=%v skipped=%v", c.name, numbers(r.Ranked), numbers(r.Skipped), c.ranked, c.hit)
+		if (len(r) == 1) != c.ranked {
+			t.Errorf("%s: ranked %v, want ranked=%v", c.name, numbers(r), c.ranked)
 		}
-	}
-}
-
-func TestSkippedCandidatesKeepTheRankOrder(t *testing.T) {
-	prs := []PullRequest{row(41, "2026-02-01", ViewerState{}), row(42, "2026-03-01", ViewerState{Requested: true, ByName: true}), row(40, "2026-01-01", ViewerState{})}
-	r := Rank(prs, Holds{Skips: []Skip{{URL: prs[0].URL}, {URL: prs[1].URL}}})
-	if !slices.Equal(numbers(r.Ranked), []int{40}) || !slices.Equal(numbers(r.Skipped), []int{42, 41}) {
-		t.Fatalf("ranked %v skipped %v, want [40] and [42 41]", numbers(r.Ranked), numbers(r.Skipped))
 	}
 }
 
@@ -84,16 +67,13 @@ func drawHolds(t *rapid.T, prs []PullRequest) Holds {
 	return h
 }
 
-// A skip is a split of the rules' own result, so it never changes which PRs
-// the other rules pass, or their order.
-func TestPropertySkipSplitsWhatTheOtherRulesPass(t *testing.T) {
+// A skip only takes the skipped PRs out of the rules' own result. It never
+// changes which other PRs the rules pass, or their order.
+func TestPropertyASkipOnlyRemovesTheSkippedPRs(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		prs := drawPRs(t)
 		base := drawHolds(t, prs)
 		want := Rank(prs, base)
-		if len(want.Skipped) != 0 {
-			t.Fatalf("no skips, yet %v are skipped", numbers(want.Skipped))
-		}
 		withSkips := base
 		skippedURL := map[string]bool{}
 		for _, p := range prs {
@@ -106,17 +86,14 @@ func TestPropertySkipSplitsWhatTheOtherRulesPass(t *testing.T) {
 				skippedURL[strings.ToLower(p.URL)] = true
 			}
 		}
-		got := Rank(prs, withSkips)
-		var keep, hold []int
-		for _, c := range want.Ranked {
-			if skippedURL[strings.ToLower(c.PR.URL)] {
-				hold = append(hold, c.PR.Number)
-			} else {
+		var keep []int
+		for _, c := range want {
+			if !skippedURL[strings.ToLower(c.PR.URL)] {
 				keep = append(keep, c.PR.Number)
 			}
 		}
-		if !slices.Equal(numbers(got.Ranked), keep) || !slices.Equal(numbers(got.Skipped), hold) {
-			t.Fatalf("ranked %v skipped %v, want %v and %v", numbers(got.Ranked), numbers(got.Skipped), keep, hold)
+		if got := Rank(prs, withSkips); !slices.Equal(numbers(got), keep) {
+			t.Fatalf("ranked %v, want %v", numbers(got), keep)
 		}
 	})
 }
@@ -136,14 +113,14 @@ func TestPropertyASkipIgnoresDuplicatesAndHeads(t *testing.T) {
 		for _, s := range h.Skips {
 			twice.Skips = append(twice.Skips, Skip{URL: strings.ToUpper(s.URL), Title: "again"})
 		}
-		if a, b := Rank(prs, h), Rank(prs, twice); !slices.Equal(numbers(a.Ranked), numbers(b.Ranked)) || !slices.Equal(numbers(a.Skipped), numbers(b.Skipped)) {
-			t.Fatalf("a repeated skip changed the ranking: %v/%v then %v/%v", numbers(a.Ranked), numbers(a.Skipped), numbers(b.Ranked), numbers(b.Skipped))
+		if a, b := Rank(prs, h), Rank(prs, twice); !slices.Equal(numbers(a), numbers(b)) {
+			t.Fatalf("a repeated skip changed the ranking: %v then %v", numbers(a), numbers(b))
 		}
 		pushed := slices.Clone(prs)
 		for i := range pushed {
 			pushed[i].Head += fmt.Sprint("-pushed")
 		}
-		for _, c := range Rank(pushed, h).Ranked {
+		for _, c := range Rank(pushed, h) {
 			if h.IsSkipped(c.PR.URL) {
 				t.Fatalf("PR %d enters at a new head though the user skipped it", c.PR.Number)
 			}
@@ -162,8 +139,8 @@ func TestPropertyATaskThatASkipEndedHoldsNothing(t *testing.T) {
 				h.Tasks = append(h.Tasks, ReviewTask{URL: p.URL, Head: p.Head, Done: true, Skipped: true})
 			}
 		}
-		if got, want := Rank(prs, h), Rank(prs, Holds{}); !slices.Equal(numbers(got.Ranked), numbers(want.Ranked)) || len(got.Skipped) != 0 {
-			t.Fatalf("ranked %v skipped %v, want %v and none", numbers(got.Ranked), numbers(got.Skipped), numbers(want.Ranked))
+		if got, want := Rank(prs, h), Rank(prs, Holds{}); !slices.Equal(numbers(got), numbers(want)) {
+			t.Fatalf("ranked %v, want %v", numbers(got), numbers(want))
 		}
 	})
 }

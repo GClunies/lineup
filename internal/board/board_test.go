@@ -94,6 +94,11 @@ func fixture() scheduler.BoardView {
 	}}
 }
 
+const (
+	urlLogs = "https://github.com/umbrella/data/pull/4945"
+	urlBase = "https://github.com/umbrella/data/pull/4955"
+)
+
 // rtv is a review Task.
 func rtv(id string, st lifecycle.Stage, title, url string, age time.Duration) scheduler.TaskView {
 	t := tv(id, st, "data", title, "", age)
@@ -370,21 +375,14 @@ func TestOverCapHeaderAndOffline(t *testing.T) {
 	}
 }
 
-func TestOnlyTheReviewViewShowsThatReviewsArePaused(t *testing.T) {
+func TestTheHeaderShowsThatReviewsArePaused(t *testing.T) {
 	for _, paused := range []bool{false, true} {
 		v := fixture()
 		v.ReviewsPaused = paused
 		m := newModel(&fakeClient{}, v)
-		if strings.Contains(m.header(), "reviews paused") {
-			t.Errorf("paused %v: the work board shows reviews paused", paused)
-		}
-		rm, _ := press(New(v, Options{Client: &fakeClient{}}), "2")
-		rm.width = 200
-		if got := strings.Contains(ansi.Strip(rm.header()), "reviews paused"); got != paused {
-			t.Errorf("paused %v: the review board shows reviews paused: %v", paused, got)
-		}
-		if strings.Contains(rm.header(), "WIP") {
-			t.Errorf("the review board shows the WIP cap: %q", rm.header())
+		m.width = 200
+		if got := strings.Contains(ansi.Strip(m.header()), "WIP 4/5   ●2 need you   reviews paused"); got != paused {
+			t.Errorf("paused %v: the header %q shows reviews paused: %v", paused, ansi.Strip(m.header()), got)
 		}
 	}
 }
@@ -426,52 +424,18 @@ func TestAgeAndRows(t *testing.T) {
 	}
 }
 
-func TestKey1ShowsTheWorkViewKey2TheReviewViewAndKey3Nothing(t *testing.T) {
+func TestTheHeaderNamesNoViewAndADigitDoesNothing(t *testing.T) {
 	m := newModel(&fakeClient{}, fixture())
-	for _, c := range []struct {
-		key  string
-		view viewID
-		kind lifecycle.Kind
-	}{
-		{"2", viewReview, lifecycle.KindReview}, {"1", viewBoard, lifecycle.KindBuild}, {"3", viewBoard, lifecycle.KindBuild},
-		{"2", viewReview, lifecycle.KindReview}, {"3", viewReview, lifecycle.KindReview},
-	} {
+	if h := ansi.Strip(m.header()); !strings.HasPrefix(h, " lineup  WIP 4/5   ●2 need you") {
+		t.Fatalf("header %q, want lineup, then the WIP cap, then the Needs you count", h)
+	}
+	for _, k := range []string{"1", "2", "3"} {
 		before := m.View()
 		var cmd tea.Cmd
-		m, cmd = press(m, c.key)
-		if m.view != c.view || m.kind != c.kind {
-			t.Fatalf("after %s: view %d kind %v, want view %d kind %v", c.key, m.view, m.kind, c.view, c.kind)
+		m, cmd = press(m, k)
+		if cmd != nil || m.View() != before {
+			t.Fatalf("%s changed the screen or ran a command:\n%s", k, m.View())
 		}
-		if c.key == "3" && (cmd != nil || m.View() != before) {
-			t.Fatalf("3 changed the screen or ran a command:\n%s", m.View())
-		}
-	}
-}
-
-func TestTheHeaderNamesTwoViewsAndOnlyTheFirstReviewVisitReads(t *testing.T) {
-	e := newRvEnv(t)
-	for _, v := range []viewID{viewBoard, viewReview} {
-		e.m.view = v
-		if h := ansi.Strip(e.m.header()); !strings.Contains(h, "1 work  2 review") || strings.Contains(h, "plan") {
-			t.Fatalf("view %d header %q, want 1 work  2 review", v, h)
-		}
-	}
-	e.m.view = viewBoard
-	e.press("1")
-	if len(e.api.searches) != 0 {
-		t.Fatalf("1 read the reviews %d times, want 0", len(e.api.searches))
-	}
-	e.press("2", "1", "2")
-	if len(e.api.searches) != 1 {
-		t.Fatalf("two visits to the review view read it %d times, want 1", len(e.api.searches))
-	}
-}
-
-func TestADigitInTheReviewSearchStaysText(t *testing.T) {
-	r := newRvEnv(t)
-	r.press("2", "tab", "/", "2", "1")
-	if r.m.view != viewReview || r.m.rv.filter.Value() != "21" {
-		t.Fatalf("view %d, filter %q, want the review view and 21", r.m.view, r.m.rv.filter.Value())
 	}
 }
 
@@ -731,32 +695,26 @@ func TestTheBoardToastsEachNewAlertOnce(t *testing.T) {
 	}
 }
 
-func TestEachViewCountsTheOtherViewsNeedsYouTasks(t *testing.T) {
+func TestTheHeaderCountsTheReviewTasksThatNeedYou(t *testing.T) {
 	flagged := func(id string) scheduler.TaskView {
 		r := rtv(id, lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour)
 		r.Flag, r.Group = "question", "Needs you"
 		return r
 	}
-	header := func(v scheduler.BoardView, keys ...string) string {
-		m, _ := press(New(v, Options{Client: &fakeClient{}}), keys...)
+	header := func(v scheduler.BoardView) string {
+		m := New(v, Options{Client: &fakeClient{}})
 		m.width = 200
 		return ansi.Strip(m.header())
 	}
 	v := fixture()
-	v.Tasks = append(v.Tasks, flagged("R-3"), rtv("R-4", lifecycle.Reviewing, "data#8 Fix the map", urlBase, time.Hour))
-	if h := header(v); !strings.Contains(h, "●2 need you (+1 in reviews)") {
-		t.Errorf("work header %q", h)
-	}
-	if h := header(v, "2"); !strings.Contains(h, "●1 need you (+2 in work)") {
-		t.Errorf("review header %q", h)
+	v.Tasks = append(v.Tasks, flagged("R-3"), flagged("R-5"), rtv("R-4", lifecycle.Reviewing, "data#8 Fix the map", urlBase, time.Hour))
+	if h := header(v); !strings.Contains(h, "●2 need you (+2 in reviews)") {
+		t.Errorf("header %q, want the 2 review Tasks that need you", h)
 	}
 	quiet := fixture()
-	quiet.Tasks = quiet.Tasks[:4]
 	quiet.Tasks = append(quiet.Tasks, rtv("R-4", lifecycle.Reviewing, "data#8 Fix the map", urlBase, time.Hour))
-	for _, h := range []string{header(quiet), header(quiet, "2")} {
-		if strings.Contains(h, "(+") {
-			t.Errorf("no Needs you Task in the other view, but the header shows a count: %q", h)
-		}
+	if h := header(quiet); strings.Contains(h, "(+") {
+		t.Errorf("no review Task needs you, but the header shows a count: %q", h)
 	}
 }
 
@@ -793,39 +751,36 @@ func TestTheBoardToastsTheNextReadyIssueWhenASlotFrees(t *testing.T) {
 		{"no Ready row", false, board(4, landing, review), board(3, done, review), ""},
 		{"a review Task reached Done", true, board(3, landing, review), board(3, landing, reviewDone), ""},
 	} {
-		for _, keys := range [][]string{nil, {"2"}} {
-			var toasts []string
-			m := New(c.before, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
-			m, _ = press(m, keys...)
-			if c.issues {
-				m = feed(m, ready)
+		var toasts []string
+		m := New(c.before, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
+		if c.issues {
+			m = feed(m, ready)
+		}
+		send := func(v scheduler.BoardView) {
+			t2, cmd := m.Update(boardMsg(v))
+			m = t2.(Model)
+			if cmd != nil {
+				cmd()
 			}
-			send := func(v scheduler.BoardView) {
-				t2, cmd := m.Update(boardMsg(v))
-				m = t2.(Model)
-				if cmd != nil {
-					cmd()
-				}
+		}
+		send(c.before)
+		send(c.then)
+		send(c.then)
+		var hints []string
+		for _, s := range toasts {
+			if strings.Contains(s, "free, next") {
+				hints = append(hints, s)
 			}
-			send(c.before)
-			send(c.then)
-			send(c.then)
-			var hints []string
-			for _, s := range toasts {
-				if strings.Contains(s, "free, next") {
-					hints = append(hints, s)
-				}
-			}
-			var want []string
-			if c.want != "" {
-				want = []string{c.want}
-			}
-			if !slices.Equal(hints, want) {
-				t.Errorf("%s, keys %v: slot toasts %q, want %q (all toasts %q)", c.name, keys, hints, want, toasts)
-			}
-			if len(toasts) == 0 {
-				t.Errorf("%s, keys %v: the Task that reached Done made no toast", c.name, keys)
-			}
+		}
+		var want []string
+		if c.want != "" {
+			want = []string{c.want}
+		}
+		if !slices.Equal(hints, want) {
+			t.Errorf("%s: slot toasts %q, want %q (all toasts %q)", c.name, hints, want, toasts)
+		}
+		if len(toasts) == 0 {
+			t.Errorf("%s: the Task that reached Done made no toast", c.name)
 		}
 	}
 }

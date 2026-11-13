@@ -470,14 +470,12 @@ func runBoard(args []string) error {
 		return fmt.Errorf("usage: lineup board")
 	}
 	opts := board.Options{Zoom: func() { rexRun("zoom", "-s", hubSession, "LINEUP") }}
-	opts.Reviews = reviewStores(stateDir())
 	opts.Destinations = filepath.Join(stateDir(), "destinations.json")
 	opts.Groups = filepath.Join(stateDir(), "groups.json")
 	if g, err := config.Load(configPath()); err == nil { // a bad file only means defaults here
 		opts.StartSkills = g.StartSkills()
 		opts.Repos = g.Checkouts
 		opts.LocalIssues = g.LocalIssuesDir()
-		opts.Reviews.Views = reviewViews(g)
 	}
 	opts.Notify = func(text string) { board.Toast(os.Stdout, text) }
 	return board.Run(socketPath(), filepath.Join(stateDir(), "board.json"), opts)

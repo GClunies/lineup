@@ -31,7 +31,7 @@ A Tracker's own group of Issues, for example a Linear project.
 _Avoid_: Area, epic, repo
 
 **Skip**:
-A PR that the user holds out of every review queue, at every head, until the user unskips it. A skip writes nothing to GitHub. A skip ends the PR's open review Task with the outcome skipped. `r` and `lineup review` still review a skipped PR.
+A PR that the user holds out of every review queue, at every head, until the user unskips it. A skip writes nothing to GitHub. A skip ends the PR's open review Task with the outcome skipped. `lineup review` still reviews a skipped PR.
 _Avoid_: Mute, snooze, ignore, hide
 
 **Task**:
@@ -65,7 +65,7 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The top of the `hub` tab, above the Orchestrator. It has two views, and the keys `1` and `2` pick one. `1 work` lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. `2 review` has a Reviews tab that shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
+The top of the `hub` tab, above the Orchestrator. It lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:

@@ -21,15 +21,6 @@ type Key struct {
 	Bot string
 }
 
-type CheckState string
-
-const (
-	ChecksNone    CheckState = "none"
-	ChecksPending CheckState = "pending"
-	ChecksPassed  CheckState = "passed"
-	ChecksFailed  CheckState = "failed"
-)
-
 type Review struct {
 	Author      string
 	State       string // APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, PENDING
@@ -192,18 +183,6 @@ type gqlComment struct {
 
 type gqlRollup struct {
 	State string `json:"state"`
-}
-
-func (r *gqlRollup) checks() CheckState {
-	switch {
-	case r == nil:
-		return ChecksNone
-	case r.State == "SUCCESS":
-		return ChecksPassed
-	case r.State == "FAILURE", r.State == "ERROR":
-		return ChecksFailed
-	}
-	return ChecksPending
 }
 
 type gqlPR struct {

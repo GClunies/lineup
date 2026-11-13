@@ -232,7 +232,7 @@ func (m Model) openStatuses(msg statusesMsg) Model {
 		m.setStatus("status "+msg.row.ID+": "+msg.err.Error(), true)
 	case len(msg.names) == 0:
 		m.setStatus("status "+msg.row.ID+": no statuses to pick", true)
-	case m.mode == modeNormal && m.view == viewBoard:
+	case m.mode == modeNormal:
 		m.mode, m.pick = modeStatus, msg.row
 		m.sl = statusList{names: msg.names, cur: max(msg.cur, 0)}
 	}

@@ -1,6 +1,6 @@
 # One board: the user's own Issues on the work view
 
-Status: built. This spec adds the user's own Issues to the `1 work` view, a quick capture, and a promote from the Local Tracker to Linear. It also adds the description, the status change, and the filter that replace the plan view. The decisions behind it are in `docs/adr/0019-the-board-holds-my-issues.md`, `docs/adr/0020-capture-defaults-to-the-local-tracker.md`, and `docs/adr/0021-the-board-has-no-plan-view.md`.
+Status: built. This spec adds the user's own Issues to the work view, a quick capture, and a promote from the Local Tracker to Linear. It also adds the description, the status change, and the filter that replace the plan view. The decisions behind it are in `docs/adr/0019-the-board-holds-my-issues.md`, `docs/adr/0020-capture-defaults-to-the-local-tracker.md`, `docs/adr/0021-the-board-has-no-plan-view.md`, and `docs/adr/0023-the-board-has-no-review-view.md`.
 
 ## Goal
 
@@ -10,24 +10,24 @@ The user sees all of their own work on one board, from a captured idea to a merg
 
 | In this cut | Later |
 |---|---|
-| Ready and Backlog groups on the `1 work` view | Columns in place of groups |
+| Ready and Backlog groups on the work view | Columns in place of groups |
 | Linear Issues assigned to the user, in every signed-in workspace | GitHub Issues in Ready and Backlog |
 | Local Issues, and a new local status, `backlog` | Sync between the Local Tracker and Linear |
 | `s` on an Issue row | A Destination picker in the Orchestrator |
 | `n` captures one line at a Destination, `local` by default | A blocked Issue that starts on its blocker's branch as a stack |
 | `P` promotes a local Issue to Linear | |
 | The `unblocked` mark and the Ready order | |
-| One Needs you count across the work and review views | |
+| A count of the review Tasks that need the user | |
 | A toast that names the next Ready Issue when a WIP slot opens | |
 | `f` shows an Issue's description, and `c` changes its status | |
 | `/` filters the rows of the work view | |
 
-The Board has no plan view (ADR 0021). The keys `1` and `2` show the work view and the review view.
+The Board shows the work view only. It has no plan view (ADR 0021) and no review view (ADR 0023).
 
 ## Shape
 
 ```
- lineup  1 work  2 review  WIP 4/5   ●1 need you (+1 in reviews)
+ lineup  WIP 4/5   ●1 need you (+1 in reviews)
  ──────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU  1
  ▸ ENG-590 Working ⚑    data  Add billing model        stopped                    12m
@@ -121,9 +121,8 @@ One table, `issueKinds` in `internal/board/issuekind.go`, decides the keys of ea
 - The filter matches the ID and the title of each Task and Issue row, as a fuzzy match.
 - While the filter holds text, only the matching rows show. Every group with a match is open, whatever `groups.json` says, and each heading counts its matches. `j` and `k` skip the headings.
 - `enter` keeps the filter and gives the keys back, so the keys work on the matching rows. `esc` clears the filter and gives back the rows and the selection from before the filter.
-- Digits and letters in the filter are text, so `1` and `q` do not switch the view or quit.
+- Digits and letters in the filter are text, so `q` does not quit.
 - lineup does not save the filter.
-- The review view keeps its own search.
 
 ## Capture
 
@@ -175,10 +174,7 @@ If step 1 fails, the local file does not change. If step 2 fails, the footer nam
 
 ## One Needs you count
 
-The header of each view counts the Needs you Tasks of the other view in parentheses, when there are any:
-
-- The work view: `●2 need you (+1 in reviews)`
-- The review view: `●1 need you (+2 in work)`
+The header counts the build Tasks that need the user. It counts the review Tasks that need the user in parentheses, when there are any: `●2 need you (+1 in reviews)`. While the queues are paused, the header also shows `reviews paused`.
 
 The header has no count for the other groups. Each group heading shows its count.
 
@@ -193,8 +189,8 @@ A long Backlog or Done group can push Ready and Working off a 24-row pane. Each 
 | Heading | The group name in upper case and its row count, as `BACKLOG  7`. A closed group adds ` …` and hides its rows. A group with no row has no heading. |
 | Needs you | It never closes, and its heading is not a selection stop. |
 | Keys | `j` and `k` move through the headings and the rows of open groups. `enter` on a heading opens or closes the group. The footer reads `enter open` or `enter close`, then `j/k move`. |
-| Defaults | Backlog and Done start closed on the work view. Done starts closed on the Reviews tab. |
-| State | `groups.json` in the state folder holds the closed groups of each view, as `{"build": ["Backlog", "Done"], "review": ["Done"]}`. A missing or unreadable file gives the defaults. A view that the file leaves out keeps its default. |
+| Defaults | Backlog and Done start closed. |
+| State | `groups.json` in the state folder holds the closed groups, as `{"build": ["Backlog", "Done"]}`. A missing or unreadable file gives the defaults, and so does a file that leaves out `build`. |
 | Selection | A Task that moves into a closed group selects that group's heading. Any other lost selection goes to the first row, or to the first heading when every group is closed. |
 | Capture | `n` into a closed Backlog opens Backlog and saves the file. |
 
@@ -240,12 +236,11 @@ Each PR lands on `main` before the next one starts.
 | A local capture writes `status: backlog`. A Linear capture sends the team, the Project, and `AssignToMe`. | Board tests with the fake Linear client and a temporary Local Tracker folder |
 | The default Destination is `local`, even after the user picks a Linear one | A board test that captures twice |
 | Promote changes the local file only after the Linear create succeeds | A board test with a failing fake create |
-| The header shows the other view's Needs you count and no per-group counts, and it fits 80 columns | Board tests for each view |
+| The header names no view, shows the review Tasks' Needs you count and `reviews paused`, has no per-group counts, and fits 80 columns | Board tests that read the header |
 | Backlog and Done start closed with their counts, and `enter` on a heading opens or closes the group and saves `groups.json` | Board tests that read the screen, the footer, and the file, and a restart |
 | `j` and `k` stop on each heading except Needs you and skip the rows of closed groups | A board test over the fixture, and a `rapid` property test over random rows and closed sets |
-| The Reviews tab keeps its own closed groups | A board test that toggles Done on each view |
 | The free slot toast names the first Ready row, and only when a slot is free | A board test that sends two board views |
-| `1` and `2` show the two views, and `3` does nothing | A board test that reads the view, the Kind, and the screen |
+| `1`, `2`, and `3` do nothing | A board test that reads the screen and the command |
 | `f` shows a Linear description and a local file body, and `f` goes back | Board tests with the fake Linear client and a temporary Local Tracker folder |
 | `c` writes the new status, the row moves group or leaves the Board, and a failed write changes nothing | Board tests, and a `rapid` property test over every local status pair |
 | The filter shows only the matches, opens a closed group with a match, and `esc` gives back the exact screen | Board tests, and a `rapid` property test over random filters |

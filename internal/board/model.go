@@ -6,14 +6,12 @@ import (
 	"fmt"
 	"os/exec"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/linear"
 	"github.com/gclunies/lineup/internal/markdown"
@@ -34,11 +32,8 @@ type Options struct {
 	// Zoom zooms the agent pane in this tab, and back, or goes to the tab that
 	// has the agent. The Hub provides it.
 	Zoom func()
-	// Reviews holds the PR views of the review view. Its Reviews tab lists
-	// the review Tasks, and its other tabs list PRs.
-	Reviews Reviews
 	// Notify shows one alert line as a desktop toast. It fires for every
-	// Kind, whichever view is up.
+	// Kind.
 	Notify func(text string)
 	// Open opens a URL. The default runs `open`.
 	Open func(url string) error
@@ -59,13 +54,6 @@ type Options struct {
 	// user closed. Empty keeps them for this run.
 	Groups string
 }
-
-type viewID int
-
-const (
-	viewBoard viewID = iota
-	viewReview
-)
 
 type mode int
 
@@ -117,8 +105,7 @@ type Model struct {
 	client Client
 
 	board   scheduler.BoardView
-	kind    lifecycle.Kind       // the Kind of the Tasks that this board shows
-	tasks   []scheduler.TaskView // the Tasks of kind, in group order
+	tasks   []scheduler.TaskView // the build Tasks, in group order
 	issues  []issueRow           // the Issue rows of the work view, in group order
 	sel     string               // the ID of the selected Task or Issue row, or a heading's key
 	folds   folds                // the closed groups, by Kind
@@ -126,13 +113,9 @@ type Model struct {
 	status  string
 	statusE bool
 
-	view          viewID
-	reviewsRead   bool // the review view's first load ran
 	mode          mode
 	pendingTask   string // Task the current prompt is about
-	pendingOp     string // close, archive, or reviews-skip, for the y/n prompt
-	pendingURL    string // the PR that a skip prompt is about
-	pendingRef    string // that PR's short name
+	pendingOp     string // close or archive, for the y/n prompt
 	pendingAsk    string
 	width, height int
 
@@ -147,7 +130,6 @@ type Model struct {
 	md         *markdown.Renderer // renders an Issue's description in the detail pane
 
 	lin        linearClients
-	rv         *review
 	mine       mine
 	box        captureBox
 	dests      destinations
@@ -175,7 +157,6 @@ func New(v scheduler.BoardView, opts Options) Model {
 	m.lin = newLinearClients(opts.Linear)
 	m.st = newStarter()
 	m.filter = newFilter()
-	m.rv = newReview(opts.Reviews)
 	m.mine = mine{lin: map[string][]linear.Issue{}, wss: map[string]linear.Workspace{}, fresh: map[string]bool{}}
 	m.box = newCaptureBox()
 	m.folds = readFolds(opts.Groups)
@@ -188,9 +169,8 @@ func New(v scheduler.BoardView, opts Options) Model {
 
 func (m *Model) setBoard(v scheduler.BoardView) {
 	m.board = v
-	m.rv.holds = github.Holds{Tasks: reviewTasks(v.Tasks), Skips: v.Skips}
 	m.tasks = m.tasks[:0]
-	own := v.OfKind(m.kind).Tasks
+	own := v.OfKind(lifecycle.KindBuild).Tasks
 	for _, g := range groupOrder {
 		for _, t := range own {
 			if t.Group == g {
@@ -198,10 +178,7 @@ func (m *Model) setBoard(v scheduler.BoardView) {
 			}
 		}
 	}
-	m.issues = nil
-	if m.kind == lifecycle.KindBuild {
-		m.issues = issueRows(m.mine.linearIssues(), m.mine.loc, v.Tasks)
-	}
+	m.issues = issueRows(m.mine.linearIssues(), m.mine.loc, v.Tasks)
 	if q := m.query(); q != "" {
 		m.tasks = matching(q, m.tasks, func(t scheduler.TaskView) string { return t.ID + "  " + t.Title })
 		m.issues = matching(q, m.issues, func(r issueRow) string { return r.ID + "  " + r.Title })
@@ -243,7 +220,7 @@ func (m Model) groupOf(id string) string {
 
 // open reports whether the group shows its rows. Under a filter every
 // group with a match shows them.
-func (m Model) open(g string) bool { return m.query() != "" || !m.folds.closed(m.kind, g) }
+func (m Model) open(g string) bool { return m.query() != "" || !m.folds.closed(lifecycle.KindBuild, g) }
 
 // groupIDs lists the IDs of the rows in group g.
 func (m Model) groupIDs(g string) []string {
@@ -284,7 +261,7 @@ func (m Model) rowIDs() []string {
 // toggleGroup opens the group if it is closed, and closes it if it is open.
 // It saves the choice.
 func (m Model) toggleGroup(g string) Model {
-	return m.setGroup(m.kind, g, m.open(g))
+	return m.setGroup(lifecycle.KindBuild, g, m.open(g))
 }
 
 // setGroup closes or opens the group of Kind k and saves the choice. A failed
@@ -295,6 +272,11 @@ func (m Model) setGroup(k lifecycle.Kind, g string, closed bool) Model {
 		m.setStatus("save groups: "+err.Error(), true)
 	}
 	return m
+}
+
+func restorable(t scheduler.TaskView) bool {
+	st, err := lifecycle.ParseStage(t.StageKey)
+	return err == nil && st.Started() && !t.Live
 }
 
 func (m Model) current() (scheduler.TaskView, bool) {
@@ -345,9 +327,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m2, cmd, ok := m.startMsg(msg); ok {
 			return m2, cmd
 		}
-		if m2, cmd, ok := m.reviewMsg(msg); ok {
-			return m2, cmd
-		}
 		if m2, cmd, ok := m.mineMsg(msg); ok {
 			return m2, cmd
 		}
@@ -370,13 +349,10 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case modeConfirm:
 		m.mode = modeNormal
-		if k == "y" && m.pendingOp == opSkip {
-			return m, m.skipOp(opSkip, m.pendingURL, m.pendingRef)
-		}
 		if k == "y" {
 			return m, m.op(m.pendingOp, scheduler.Request{Op: m.pendingOp, Task: m.pendingTask})
 		}
-		m.setStatus(strings.TrimPrefix(m.pendingOp, "reviews-")+" cancelled", false)
+		m.setStatus(m.pendingOp+" cancelled", false)
 		return m, nil
 	case modeCap:
 		return m.capKey(k)
@@ -394,45 +370,19 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.filterKey(msg)
 	}
 
-	if m.view == viewReview && m.rv.filtering {
-		return m.reviewKey(msg)
-	}
 	// A status message stays until the next key, then the key hints come back.
 	m.status = ""
 	if k == "ctrl+c" || k == "q" {
 		return m, tea.Quit
 	}
-	switch k {
-	case "?":
+	if k == "?" {
 		m.mode = modeHelp
 		return m, nil
-	case "1":
-		return m.show(viewBoard, lifecycle.KindBuild)
-	case "2":
-		return m.show(viewReview, lifecycle.KindReview)
-	}
-	if m.view == viewReview {
-		return m.reviewKey(msg)
 	}
 	return m.boardKey(msg)
 }
 
-// show switches to a view. The PR search loads on the first visit to the
-// review view, so a Hub that never opens it makes no call.
-func (m Model) show(v viewID, kind lifecycle.Kind) (tea.Model, tea.Cmd) {
-	m.view, m.kind = v, kind
-	m.detail, m.preview = false, false
-	m.previewGen++
-	m.setBoard(m.board)
-	if v != viewReview || m.reviewsRead {
-		return m, nil
-	}
-	m.reviewsRead = true
-	return m, m.loadReviews()
-}
-
-// boardKey handles the keys of the Task rows. The work board and the review
-// tab's Reviews tab share it.
+// boardKey handles the keys of the Task and Issue rows.
 func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	if m.detail {
@@ -456,9 +406,7 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		return m.move(-1), nil
 	case "/":
-		if m.view == viewBoard {
-			return m.startFilter()
-		}
+		return m.startFilter()
 	case "esc":
 		if m.query() != "" {
 			return m.clearFilter(), nil
@@ -470,9 +418,7 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "R":
 		return m, m.op("refresh", scheduler.Request{Op: "poll"})
 	case "n":
-		if m.view == viewBoard {
-			return m.openBox()
-		}
+		return m.openBox()
 	case "p":
 		m.preview = !m.preview
 		m.previewGen++
@@ -515,10 +461,6 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "s":
 		if ok && t.Group == "Queued" {
 			return m, m.op("start", scheduler.Request{Op: "start", Task: t.ID})
-		}
-	case "S":
-		if ok && t.Kind == lifecycle.KindReview {
-			return m.toggleSkip(t.PRURL, urlRef(t.PRURL))
 		}
 	case "o":
 		if ok {
@@ -651,13 +593,6 @@ func (m Model) tickCapture() tea.Cmd {
 	return tea.Tick(previewEvery, func(time.Time) tea.Msg { return captureTick(gen) })
 }
 
-func errText(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
 func firstNonEmpty(ss ...string) string {
 	for _, s := range ss {
 		if s != "" {
@@ -689,7 +624,7 @@ func (m Model) toasts(v scheduler.BoardView) tea.Cmd {
 
 // slotHint names the first Ready row when a build Task in alerts reached Done
 // and v has a free WIP slot. It never starts the Issue. The rows come from
-// issueRows, not m.issues, so the hint shows on the review view too.
+// issueRows, not m.issues, so the filter never hides the hint.
 func (m Model) slotHint(v scheduler.BoardView, alerts []scheduler.TaskView) string {
 	free := v.Cap - v.Started
 	if free <= 0 || !slices.ContainsFunc(alerts, func(t scheduler.TaskView) bool {

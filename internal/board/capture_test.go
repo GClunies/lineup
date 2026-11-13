@@ -202,8 +202,8 @@ func TestTheCaptureBoxTakesEveryKeyAsText(t *testing.T) {
 			}
 		}
 	}
-	if e.m.view != viewBoard || len(e.sched.ops()) != 0 {
-		t.Fatalf("view %v and ops %v, want the work view and no op", e.m.view, e.sched.ops())
+	if len(e.sched.ops()) != 0 {
+		t.Fatalf("ops %v, want no op", e.sched.ops())
 	}
 	if f := footLines(e.m); !strings.Contains(f, "new issue: 123qsx") {
 		t.Fatalf("footer %q, want every key as text", f)

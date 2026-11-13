@@ -23,17 +23,10 @@ var (
 	bad     = lipgloss.NewStyle().Foreground(pink)
 	selRow  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e3f1ef"))
 	headRow = lipgloss.NewStyle().Foreground(teal).Bold(true)
-	colHead = lipgloss.NewStyle().Foreground(gray).Bold(true)
 )
 
 func (m Model) View() string {
 	if m.mode == modeHelp {
-		switch {
-		case m.view == viewReview && m.rv.curTab().Tasks:
-			return reviewTasksHelp
-		case m.view == viewReview:
-			return reviewHelp
-		}
 		return boardHelp
 	}
 	foot := m.footer()
@@ -49,8 +42,6 @@ func (m Model) View() string {
 		body = m.repoPicker()
 	case m.mode == modeStatus:
 		body = m.statusPicker()
-	case m.view == viewReview:
-		body = m.reviewBody()
 	case m.detail:
 		body = m.vp.View()
 	default:
@@ -83,22 +74,15 @@ func (m Model) window(lines []string, h int) []string {
 }
 
 func (m Model) header() string {
-	s := " " + bold.Render("lineup") + "  " + m.viewNames()
-	if m.kind == lifecycle.KindBuild {
-		s += fmt.Sprintf("  WIP %d/%d", m.board.Started, m.board.Cap)
-		if m.board.OverCap > 0 {
-			s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
-		}
+	s := " " + bold.Render("lineup") + fmt.Sprintf("  WIP %d/%d", m.board.Started, m.board.Cap)
+	if m.board.OverCap > 0 {
+		s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
 	}
-	s += fmt.Sprintf("   ●%d need you", needsYou(m.board.OfKind(m.kind).Tasks))
-	other, name := lifecycle.KindReview, "reviews"
-	if m.kind == lifecycle.KindReview {
-		other, name = lifecycle.KindBuild, "work"
+	s += fmt.Sprintf("   ●%d need you", needsYou(m.board.OfKind(lifecycle.KindBuild).Tasks))
+	if n := needsYou(m.board.OfKind(lifecycle.KindReview).Tasks); n > 0 {
+		s += fmt.Sprintf(" (+%d in reviews)", n)
 	}
-	if n := needsYou(m.board.OfKind(other).Tasks); n > 0 {
-		s += fmt.Sprintf(" (+%d in %s)", n, name)
-	}
-	if m.kind == lifecycle.KindReview && m.board.ReviewsPaused {
+	if m.board.ReviewsPaused {
 		s += "   " + bad.Render("reviews paused")
 	}
 	if !m.online {
@@ -117,28 +101,8 @@ func needsYou(tasks []scheduler.TaskView) int {
 	return n
 }
 
-// viewNames lists the two views with the one on screen bright.
-func (m Model) viewNames() string {
-	names := [...]struct {
-		id   viewID
-		name string
-	}{{viewBoard, "1 work"}, {viewReview, "2 review"}}
-	var parts []string
-	for _, n := range names {
-		if n.id == m.view {
-			parts = append(parts, headRow.Render(n.name))
-		} else {
-			parts = append(parts, dim.Render(n.name))
-		}
-	}
-	return strings.Join(parts, "  ")
-}
-
 func (m Model) footer() string {
 	var s string
-	if m.view == viewReview && m.mode == modeNormal {
-		return ansi.Truncate(m.reviewFooter(), m.width, "…")
-	}
 	switch m.mode {
 	case modeBox:
 		lines := strings.Split(m.boxFooter(), "\n")
@@ -196,9 +160,7 @@ func hintBar(width int, hints []hint) string {
 // boardHints lists the keys for the selected Task, most useful first.
 func (m Model) boardHints() []hint {
 	tail := []hint{{"z", "agent"}, {"R", "refresh now"}, {"q", "quit"}, {"?", "all keys"}}
-	if m.view == viewReview {
-		tail = append([]hint{{"tab", "next view"}, {"< >", "move the tab"}}, tail...)
-	} else if m.query() != "" {
+	if m.query() != "" {
 		tail = append([]hint{{"esc", "clear the filter"}, {"n", "new Issue"}}, tail...)
 	} else {
 		tail = append([]hint{{"n", "new Issue"}, {"/", "filter"}}, tail...)
@@ -218,9 +180,6 @@ func (m Model) boardHints() []hint {
 		return append(append(hs, hint{"j/k", "move"}), tail...)
 	}
 	t, ok := m.current()
-	if !ok && m.kind == lifecycle.KindReview {
-		return append([]hint{{"tab", "find a PR to review"}}, tail...)
-	}
 	if !ok {
 		return tail
 	}
@@ -242,9 +201,6 @@ func (m Model) boardHints() []hint {
 		hs = append(hs, hint{"o", "open the PR"})
 	case t.IssueURL != "":
 		hs = append(hs, hint{"o", "open the Issue"})
-	}
-	if t.Kind == lifecycle.KindReview && t.PRURL != "" {
-		hs = append(hs, m.skipHint(t.PRURL))
 	}
 	hs = append(hs, hint{"f", "details"})
 	if t.Group == lifecycle.GroupDone.String() && !t.Tab {
@@ -430,7 +386,6 @@ const boardHelp = `
             esc clears it
    R        refresh now: poll GitHub for every started Task
    z        zoom the agent pane
-   1 2      show the work or review view
    ?        this help      q  quit
 
  press any key to go back

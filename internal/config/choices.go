@@ -56,35 +56,6 @@ func (c *RepoChoices) Set(projectID, repoPath string) error {
 	return WriteJSON(c.path, m)
 }
 
-// ViewOrder remembers the user's rank of the review tabs, as tab keys.
-type ViewOrder struct {
-	mu   sync.Mutex
-	path string
-}
-
-func NewViewOrder(path string) *ViewOrder { return &ViewOrder{path: path} }
-
-// Get returns the saved tab keys, best first. With nothing saved it returns none.
-func (v *ViewOrder) Get() ([]string, error) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	data, err := os.ReadFile(v.path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var ids []string
-	return ids, json.Unmarshal(data, &ids)
-}
-
-func (v *ViewOrder) Set(ids []string) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	return WriteJSON(v.path, ids)
-}
-
 // WriteJSON replaces the file at path in one rename, so a reader never sees half a file.
 func WriteJSON(path string, x any) error {
 	data, err := json.MarshalIndent(x, "", "  ")

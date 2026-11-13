@@ -126,7 +126,7 @@ func TestCandidateRules(t *testing.T) {
 			[]ReviewTask{{URL: "https://github.com/umbrella/data/pull/8", Head: "h7"}}, true},
 	}
 	for _, c := range cases {
-		got := Rank([]PullRequest{c.pr(row(7, "2026-01-01", ViewerState{}))}, Holds{Tasks: c.tasks}).Ranked
+		got := Rank([]PullRequest{c.pr(row(7, "2026-01-01", ViewerState{}))}, Holds{Tasks: c.tasks})
 		if (len(got) == 1) != c.want {
 			t.Errorf("%s: candidates %v, want in=%v", c.name, numbers(got), c.want)
 		}
@@ -144,7 +144,7 @@ func TestCandidateRanking(t *testing.T) {
 		row(3, "2026-06-01", ViewerState{Reviewed: true, Requested: true, ByName: true}),
 	}
 	prs[4].LatestReviews = approved
-	got := Rank(prs, Holds{}).Ranked
+	got := Rank(prs, Holds{})
 	if want := []int{3, 2, 1, 42, 40, 41}; !slices.Equal(numbers(got), want) {
 		t.Fatalf("rank %v, want %v", numbers(got), want)
 	}
@@ -197,11 +197,11 @@ func TestCandidatesOfARecordedQueueSearch(t *testing.T) {
 	}
 
 	want := []int{4790, 4849, 4851, 4880, 4939, 4940, 4954}
-	if c := Rank(queue, Holds{}).Ranked; !slices.Equal(numbers(c), want) {
+	if c := Rank(queue, Holds{}); !slices.Equal(numbers(c), want) {
 		t.Errorf("candidates %v, want %v: oldest first, without the two the user approved and the one liskov reviews", numbers(c), want)
 	}
 	for _, k := range []string{"bots", "mine"} {
-		if c := Rank(got[k], Holds{}).Ranked; len(c) != 0 {
+		if c := Rank(got[k], Holds{}); len(c) != 0 {
 			t.Errorf("%s: candidates %v, want none", k, numbers(c))
 		}
 	}

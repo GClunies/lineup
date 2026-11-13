@@ -218,7 +218,7 @@ The Scheduler has no tab. launchd runs `lineup serve` as a user agent, and the l
 The rules for this layout:
 
 - `lineup` opens the Hub session. If the session does not exist, `lineup` creates it.
-- The Hub has one tab, `hub`. Its Board shows the work view and the review view.
+- The Hub has one tab, `hub`. Its Board shows the build Tasks and the user's own Issues.
 - A Hub from before the `hub` tab has a tab labeled `work`. `lineup` renames it to `hub`. It closes the old `orchestrate`, `plan`, and `review` tabs.
 - A Hub from before the one agent has tabs with an `ORCHESTRATOR`, `PLANNER`, or `REVIEWER` block. `lineup` closes each such tab and opens it again.
 - The Hub session is named `lineup hub`. A Repo session is named after its folder, and the Scheduler removes it after its last Task. The space keeps a Repo session from taking the Hub's name.
@@ -436,10 +436,10 @@ To find which statuses Linear's GitHub automation sets, query `teams { gitAutoma
 
 ## Board
 
-The Board shows the build Tasks and the user's own Issues that have no Task. Review Tasks show on the Reviews tab of the review view (see `docs/spec/reviews.md`). The Issue rows are in `docs/spec/one-board.md`.
+The Board shows the build Tasks and the user's own Issues that have no Task. Review Tasks run in their own tabs in the `reviews` Rex session, and the Board lists none of them (see `docs/spec/reviews.md`). The Issue rows are in `docs/spec/one-board.md`.
 
 ```
- lineup  1 work  2 review  WIP 4/5   ●2 need you (+1 in reviews)
+ lineup  WIP 4/5   ●2 need you (+1 in reviews)
  ─────────────────────────────────────────────────────────────────────────
  NEEDS YOU  2
  ▸ ENG-590 Working ⚑       data   Add billing model          stopped      12m
@@ -458,13 +458,13 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
  DONE  1 …
 ```
 
-The Board has two views. `1` shows the work view, and `2` shows the review view. The header shows the view names, the WIP cap, and the Needs you count. It counts the Needs you Tasks of the other view in parentheses, when there are any: `(+1 in reviews)` on the work view and `(+2 in work)` on the review view. It has no count for the other groups, because each group heading shows its own count. The header also shows `reviews paused` on the review view and a warning when the Scheduler is offline. At 80 columns, the header with `+1 over` and the other view's count fits.
+The header shows the WIP cap and the count of the build Tasks that need the user. It counts the review Tasks that need the user in parentheses, when there are any: `(+1 in reviews)`. It has no count for the other groups, because each group heading shows its own count. The header also shows `reviews paused` while the review queues are paused, and a warning when the Scheduler is offline. At 80 columns, the header with `+1 over` and the review count fits.
 
 The groups are Needs you, Backlog, Ready, Queued, Working, Waiting, and Done, in that order. Needs you comes first, and the other groups follow the development cycle. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
 
 Each group with at least one row has a heading that shows the group name and its row count, for example `BACKLOG  7`. A heading is a row that the user can select, except the Needs you heading. `j` and `k` stop on each heading and skip the rows of a closed group. `enter` on a heading opens or closes the group. A closed group shows its heading with a `…` mark and hides its rows, as `BACKLOG  7 …` does. Needs you never closes. This keeps a long Backlog or Done group from pushing Ready and Working off the screen.
 
-Backlog and Done start closed on the work view. Done starts closed on the Reviews tab. The work view and the Reviews tab keep their own closed groups. lineup saves them in `groups.json` in the state folder as soon as the user opens or closes a group. A missing or unreadable file gives these defaults. When a Task moves into a closed group, the selection goes to that group's heading. When `n` adds a local Issue, lineup opens Backlog, so the new row shows.
+Backlog and Done start closed. lineup saves the closed groups in `groups.json` in the state folder as soon as the user opens or closes a group. A missing or unreadable file gives these defaults. When a Task moves into a closed group, the selection goes to that group's heading. When `n` adds a local Issue, lineup opens Backlog, so the new row shows.
 
 | Key | Action |
 |---|---|
@@ -479,10 +479,9 @@ Backlog and Done start closed on the work view. Done starts closed on the Review
 | `o` | Open the PR or the Issue in the browser. A local Issue opens in `$EDITOR`. |
 | `n` | Capture a new Issue at a Destination, `local` by default. `tab` picks a Linear team or Project. A local Issue opens a closed Backlog. See `docs/spec/one-board.md`. |
 | `P` | Promote a local Issue to Linear. Pick a Linear team or Project. lineup creates the Issue there and cancels the local Issue. See `docs/spec/one-board.md`. |
-| `/` | Filter the rows of the work view by ID and title. `enter` keeps the filter, and `esc` clears it. |
+| `/` | Filter the rows by ID and title. `enter` keeps the filter, and `esc` clears it. |
 | `R` | Refresh now: the Scheduler polls GitHub for every started Task |
 | `z` | Zoom this tab's agent pane to full height, and back |
-| `1` `2` | Show the work view or the review view |
 | `?` | Show all keys |
 
 A Task that ends keeps its tab and worktree. Only the user closes the tab: with `x` or `lineup close <task>` on the Done Task, with the tab's own close in Rex, or with `lineup archive <task>`. A Done Task leaves the Board when the user archives it. It also leaves 7 days after it ends, but only if its tab is closed. A Done Task with an open tab stays on the Board. The Scheduler refuses `lineup add` for a Done Task's ID while that Task keeps its tab. The Scheduler keeps the Task and its events, so `lineup show <task>` still finds it. To put an archived Issue back on the Board, run `lineup add` again.
@@ -510,7 +509,7 @@ A Task alerts when it enters the Needs you group or Done. It alerts again only a
 | Part | What it does |
 |---|---|
 | `lineup watch` | Prints one line for each alert of a Task of either Kind, for example `ENG-34 Working, stopped: <title>`. It keeps the alerts it printed in `alerted.json` in the state directory, so a restart repeats none of them. On its first run, Tasks that are already Done print nothing. A lock on `watch.lock` allows one watch at a time. With `--once`, it exits after the first Board that has new alerts. |
-| The Board | It prints an OSC 777 notification for each alert of a Task of either Kind, whatever view is on screen. Rex shows it as a desktop toast for the Board's pane. A click on the toast opens that pane. The view that the Board opens on makes no toast. |
+| The Board | It prints an OSC 777 notification for each alert of a Task of either Kind. Rex shows it as a desktop toast for the Board's pane. A click on the toast opens that pane. The view that the Board opens on makes no toast. |
 | The free slot toast | When a build Task alerts for Done and the started build Tasks are fewer than the WIP cap, the Board sends one more toast that names the first Ready row, for example `1 slot free, next ENG-611: Move the retry job`. A Board view sends at most one such toast. With no Ready row, it sends none. The Board does not start the Issue. |
 
 The Hub starts the Orchestrator with a first message that tells it to run `lineup watch --once` as a background Bash command. The command exits at the next alerts, and the exit wakes the Orchestrator. The Orchestrator starts the command again, then asks the user with `AskUserQuestion` what to do. For a Done Task with a tab, the options are Close the tab, Open the tab, and Keep it open. For a `tab closed` flag, they are Restore and Close the Task. For other alerts, it tells the user what changed and what the user can say next. An idle Orchestrator writes nothing to its chat.
