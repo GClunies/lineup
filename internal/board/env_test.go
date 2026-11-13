@@ -25,6 +25,10 @@ type fakeLinear struct {
 	described []string // the identifiers that Issue read
 	// issueErr is what Issue returns.
 	issueErr error
+	statuses []string // each SetStatusByName call, as "ENG-9=In Progress"
+	// statesErr is what TeamStates returns, and setStatusErr what
+	// SetStatusByName returns.
+	statesErr, setStatusErr error
 }
 
 // wsLinear is fakeLinear as one workspace sees it.
@@ -68,6 +72,21 @@ func (f *fakeLinear) Issue(_ context.Context, id string) (linear.Issue, error) {
 		}
 	}
 	return linear.Issue{}, errors.New("not found")
+}
+func (f *fakeLinear) TeamStates(context.Context, string) ([]linear.State, error) {
+	if f.statesErr != nil {
+		return nil, f.statesErr
+	}
+	return []linear.State{{ID: "s1", Name: "Todo", Type: "unstarted"}, {ID: "s2", Name: "In Progress", Type: "started"}}, nil
+}
+func (f *fakeLinear) SetStatusByName(_ context.Context, is linear.Issue, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.setStatusErr != nil {
+		return f.setStatusErr
+	}
+	f.statuses = append(f.statuses, is.Identifier+"="+name)
+	return nil
 }
 func (f *fakeLinear) Create(_ context.Context, n linear.NewIssue) (linear.Issue, error) {
 	f.mu.Lock()

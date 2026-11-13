@@ -14,6 +14,8 @@ type LinearAPI interface {
 	Teams(ctx context.Context) ([]linear.Team, error)
 	TeamProjects(ctx context.Context, teamID string) ([]linear.ProjectInfo, error)
 	Create(ctx context.Context, n linear.NewIssue) (linear.Issue, error)
+	TeamStates(ctx context.Context, teamID string) ([]linear.State, error)
+	SetStatusByName(ctx context.Context, is linear.Issue, statusName string) error
 }
 
 // Linear holds the Board's outside world in Linear. Tests replace it.

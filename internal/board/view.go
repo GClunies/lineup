@@ -46,6 +46,8 @@ func (m Model) View() string {
 		body = m.skillPicker()
 	case m.mode == modeRepo:
 		body = m.repoPicker()
+	case m.mode == modeStatus:
+		body = m.statusPicker()
 	case m.view == viewReview:
 		body = m.reviewBody()
 	case m.detail:
@@ -146,6 +148,8 @@ func (m Model) footer() string {
 		s = dim.Render(" type a skill  up/down move  enter start  esc cancel")
 	case modeRepo:
 		s = dim.Render(" type to filter  up/down move  enter pick  esc cancel")
+	case modeStatus:
+		s = dim.Render(" j/k move  enter set the status  esc cancel")
 	case modePromote:
 		s = " promote " + bold.Render(m.box.promote) + " to Linear" + dim.Render("   type to filter  up/down move  enter promote  esc cancel")
 	case modeConfirm:
@@ -403,6 +407,8 @@ const boardHelp = `
             or archive a Done Task with no tab, after y/n
    s        start a Queued Task, or start a Task from a Ready or
             Backlog Issue; pick or type a skill, or just go
+   c        change the status of an Issue row: pick a Linear state of
+            its team, or a local status
    o        open the PR or the Issue; a local Issue opens in $EDITOR
    P        promote a local Issue: pick a Linear team or Project; lineup
             creates the Issue there and cancels the local one

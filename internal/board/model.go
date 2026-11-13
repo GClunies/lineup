@@ -78,6 +78,7 @@ const (
 	modePromote // the Destination list that P opens, with no local row
 	modeSkill   // the skill picker that s opens on an Issue row
 	modeRepo    // the Repo picker, when the Issue has no Repo mapping
+	modeStatus  // the status list that c opens on an Issue row
 )
 
 const (
@@ -149,7 +150,8 @@ type Model struct {
 	box   captureBox
 	dests destinations
 	st    starter
-	pick  issueRow // the Issue row that the skill or Repo picker is about
+	pick  issueRow // the Issue row that the skill, Repo, or status list is about
+	sl    statusList
 
 	alerted map[string]string // Task ID to the Attention that last toasted
 }
@@ -324,6 +326,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case detailMsg:
 		return m.afterDetail(msg)
+	case statusesMsg:
+		return m.openStatuses(msg), nil
 	case tea.KeyMsg:
 		return m.key(msg)
 	default:
@@ -373,6 +377,8 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.skillKey(msg)
 	case modeRepo:
 		return m.repoKey(msg)
+	case modeStatus:
+		return m.statusKey(msg)
 	}
 
 	if m.view == viewReview && m.rv.filtering {
@@ -518,6 +524,8 @@ func (m Model) issueKey(r issueRow, k string) (tea.Model, tea.Cmd) {
 		return m.startRow(r)
 	case "f":
 		return m.showIssue(r)
+	case "c":
+		return m, m.loadStatuses(r)
 	case "o":
 		return m, m.tracker(r).open()
 	case "P":
@@ -559,7 +567,7 @@ func (m Model) afterOp(msg opMsg) (tea.Model, tea.Cmd) {
 			ok += " · " + msg.note
 		}
 		m.setStatus(ok, false)
-		if msg.label == "start" || msg.label == "edit" {
+		if msg.label == "start" || msg.label == "edit" || msg.label == "status" {
 			return m, m.loadMine()
 		}
 	case msg.label == "start" && msg.err.Error() == capFull:

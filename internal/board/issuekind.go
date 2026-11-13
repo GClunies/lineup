@@ -32,11 +32,11 @@ type issueKind struct {
 // issueKinds is the one table of the Issue row Kinds.
 var issueKinds = map[string]issueKind{
 	scheduler.KindLinear: {
-		keys:    []hint{{"s", "start"}, {"f", "details"}, {"o", "open the Issue"}},
+		keys:    []hint{{"s", "start"}, {"f", "details"}, {"c", "status"}, {"o", "open the Issue"}},
 		tracker: Model.linearRow,
 	},
 	scheduler.KindLocal: {
-		keys:    []hint{{"s", "start"}, {"f", "details"}, {"o", "edit the Issue"}, {"P", "promote to Linear"}},
+		keys:    []hint{{"s", "start"}, {"f", "details"}, {"c", "status"}, {"o", "edit the Issue"}, {"P", "promote to Linear"}},
 		tracker: Model.localRow,
 	},
 }
@@ -57,6 +57,11 @@ type rowTracker interface {
 	open() tea.Cmd
 	// rememberRepo keeps the Repo that the user picked for the Issue.
 	rememberRepo(repo string) error
+	// statuses lists the statuses that the Issue can take, in the order work
+	// flows, and the index of the one it has, or -1.
+	statuses(ctx context.Context) (names []string, cur int, err error)
+	// setStatus moves the Issue to the status of that name.
+	setStatus(ctx context.Context, name string) error
 }
 
 func (m Model) tracker(r issueRow) rowTracker { return issueKinds[r.Kind].tracker(m, r) }
@@ -103,6 +108,23 @@ func (l linearRow) rememberRepo(repo string) error {
 	return l.remember(l.is.Project.ID, repo)
 }
 
+// statuses are the workflow states of the Issue's team.
+func (l linearRow) statuses(ctx context.Context) ([]string, int, error) {
+	states, err := l.api.TeamStates(ctx, l.is.Team.ID)
+	names, cur := make([]string, len(states)), -1
+	for i, s := range states {
+		names[i] = s.Name
+		if s.ID == l.is.State.ID {
+			cur = i
+		}
+	}
+	return names, cur, err
+}
+
+func (l linearRow) setStatus(ctx context.Context, name string) error {
+	return l.api.SetStatusByName(ctx, l.is, name)
+}
+
 // localRow is a local Issue row, in the Local Tracker's folder.
 type localRow struct {
 	is    localissues.Issue
@@ -136,6 +158,18 @@ func (l localRow) open() tea.Cmd {
 // rememberRepo writes the Repo into the Issue's file.
 func (l localRow) rememberRepo(repo string) error { return l.store.SetRepo(l.is.ID(), repo) }
 
+func (l localRow) statuses(context.Context) ([]string, int, error) {
+	names := make([]string, len(localissues.Statuses))
+	for i, s := range localissues.Statuses {
+		names[i] = string(s)
+	}
+	return names, slices.Index(localissues.Statuses, l.is.Status), nil
+}
+
+func (l localRow) setStatus(_ context.Context, name string) error {
+	return l.store.SetStatus(l.is.ID(), localissues.Status(name))
+}
+
 // showIssue opens the detail pane on the Issue row r, then reads the Issue's
 // description off the render path.
 func (m Model) showIssue(r issueRow) (tea.Model, tea.Cmd) {
@@ -163,4 +197,75 @@ func (m Model) showIssue(r issueRow) (tea.Model, tea.Cmd) {
 		}
 		return detailMsg{gen: gen, text: head + " " + strings.Join(lines, "\n ")}
 	}
+}
+
+// statusList is the list that c opens on the Model's pick.
+type statusList struct {
+	names []string
+	cur   int
+}
+
+type statusesMsg struct {
+	row   issueRow
+	names []string
+	cur   int
+	err   error
+}
+
+// loadStatuses reads the statuses of the Issue row r off the render path.
+func (m Model) loadStatuses(r issueRow) tea.Cmd {
+	tr := m.tracker(r)
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		names, cur, err := tr.statuses(ctx)
+		return statusesMsg{row: r, names: names, cur: cur, err: err}
+	}
+}
+
+// openStatuses opens the status list when its statuses come back. A list
+// that comes back after the user went on to another prompt or view opens
+// nothing.
+func (m Model) openStatuses(msg statusesMsg) Model {
+	switch {
+	case msg.err != nil:
+		m.setStatus("status "+msg.row.ID+": "+msg.err.Error(), true)
+	case len(msg.names) == 0:
+		m.setStatus("status "+msg.row.ID+": no statuses to pick", true)
+	case m.mode == modeNormal && m.view == viewBoard:
+		m.mode, m.pick = modeStatus, msg.row
+		m.sl = statusList{names: msg.names, cur: max(msg.cur, 0)}
+	}
+	return m
+}
+
+func (m Model) statusKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	sl := &m.sl
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "esc":
+		m.mode = modeNormal
+	case "j", "down", "ctrl+n":
+		sl.cur = min(sl.cur+1, len(sl.names)-1)
+	case "k", "up", "ctrl+p":
+		sl.cur = max(sl.cur-1, 0)
+	case "enter":
+		m.mode = modeNormal
+		r, name, tr := m.pick, sl.names[sl.cur], m.tracker(m.pick)
+		return m, func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			return opMsg{label: "status", task: r.ID, note: name, err: tr.setStatus(ctx, name)}
+		}
+	}
+	return m, nil
+}
+
+func (m Model) statusPicker() string {
+	lines := []string{" " + headRow.Render("Status of "+m.pick.ID)}
+	for i, s := range m.sl.names {
+		lines = append(lines, m.row(i == m.sl.cur, s))
+	}
+	return strings.Join(lines, "\n")
 }
