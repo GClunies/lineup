@@ -1,0 +1,40 @@
+internal/board/model.go
+  s_06f618fc4ae197::t_64741aa9982ee4 164,189,193-243,247-249,251-255,261-276,475-477
+  s_06f618fc4ae197::t_8a076f69a0b6c3 55-57,86,117-118
+internal/board/view.go
+  s_06f618fc4ae197::t_64741aa9982ee4 216-222,322-332,338,346-351,411
+internal/board/groups_test.go
+  s_06f618fc4ae197::t_0bcfb388d289f0 1-315
+internal/board/board_test.go
+  s_06f618fc4ae197::t_cfb584c5965cfb 161-164,166,168,170,420
+internal/board/capture_test.go
+  s_06f618fc4ae197::t_cfb584c5965cfb 63
+internal/board/testdata/rapid/TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce/TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce-20261112170005-78736.fail
+  s_06f618fc4ae197::t_466e78d900efae 1-29
+internal/board/review_test.go
+  s_06f618fc4ae197::t_cfb584c5965cfb 680
+internal/board/groups.go
+  s_06f618fc4ae197::t_8a076f69a0b6c3 1-88
+internal/board/issues_test.go
+  s_06f618fc4ae197::t_cfb584c5965cfb 282,297,300,304-305,313-314
+internal/board/review_view.go
+  s_06f618fc4ae197::t_64741aa9982ee4 290
+cmd/lineup/hub.go
+  s_06f618fc4ae197::t_02ea23690158c2 508
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c659788f7c8558fef4fd58351b5ccfbfc6492344",
+  "prompts": {},
+  "sessions": {
+    "s_06f618fc4ae197": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0f96725b-43c5-4c73-a2c7-36a82adcd497",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
