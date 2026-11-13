@@ -8,7 +8,7 @@ The words in this spec have the meanings in [GLOSSARY.md](../../GLOSSARY.md). Th
 
 The MVP is complete when this sequence works with no manual step other than the four that the user owns:
 
-1. The user starts a Linear Issue from the tracker browser.
+1. The user starts a Linear Issue from its row on the Board.
 2. A Worker does the Task in the background. If the skill or the user asks for a plan first, the Worker shows it to the user in its own tab.
 3. Workers implement the change, fix CI, and answer review comments.
 4. The user merges the PR from the Board.
@@ -22,7 +22,7 @@ The MVP is complete when this sequence works with no manual step other than the 
 | Scheduler, store, and recovery | GitHub Issues and GitHub Projects Trackers |
 | All Stages, Signals, and Loop budgets | Local Markdown Tracker |
 | WIP cap with confirm or raise | Auto-intake |
-| Linear browser and Issue actions | Alerts through a Claude channel |
+| Linear Issue rows and Issue actions | Alerts through a Claude channel |
 | `lineup` CLI for the Orchestrator | Per-workspace WIP caps |
 | Claude Harness adapter | Edits to labels, priority, cycles, and milestones |
 | Worktree setup through worktrunk | |
@@ -40,7 +40,7 @@ A one-off skill run, for example `/pr-explain <url>`, is a Task with the overrid
 | worktrunk (`wt`) | Creates, sets up, and removes worktrees | `lineup` shows `worktrunk is required: brew install worktrunk (https://worktrunk.dev)` and starts no Task |
 | GitHub CLI (`gh`) | PR state and merge | `lineup` stops with an error |
 | Claude Code | The Orchestrator and the Workers | `lineup` stops with an error |
-| Linear OAuth | Tracker access | The tracker browser asks the user to sign in |
+| Linear OAuth | Tracker access | The Board shows no Linear Issue rows. `lineup login` signs in. |
 
 lineup has no dependency on herdr. It copies the Linear client, OAuth, cache, and Markdown view from the `herdr-linear` fork into this repo.
 
@@ -201,13 +201,9 @@ A low review bot score spends a review cycle. Open threads that only bots opened
 ```
 Rex server
 ├── session "lineup hub"        (the Hub session)
-│   ├── tab "plan"
-│   │   └── block "LINEAR"            lineup board --linear  (the whole tab)
-│   ├── tab "work"                   (active when a new Hub opens)
-│   │   ├── block "BOARD"             lineup board           (top, most of the height)
-│   │   └── block "LINEUP"            claude --continue     (bottom, 25% of the height, own theme)
-│   └── tab "review"
-│       └── block "REVIEWS"           lineup board --review  (the whole tab)
+│   └── tab "hub"
+│       ├── block "BOARD"             lineup board           (top, most of the height)
+│       └── block "LINEUP"            claude --continue     (bottom, 25% of the height, own theme)
 ├── session "data"                    (one session for each Repo with an open Task)
 │   ├── tab "ENG-590 Add billing model"
 │   └── tab "ENG-592 Fix flaky test"
@@ -222,9 +218,8 @@ The Scheduler has no tab. launchd runs `lineup serve` as a user agent, and the l
 The rules for this layout:
 
 - `lineup` opens the Hub session. If the session does not exist, `lineup` creates it.
-- The Hub tabs are in the order plan, work, review. Each run of `lineup` moves every Hub tab back to its place.
-- Each Hub tab owns one kind of work. The `plan` tab plans Issues, the `work` tab holds build Tasks, and the `review` tab holds review Tasks.
-- A Hub from before the `work` tab has a tab labeled `orchestrate`. `lineup` renames it to `work`.
+- The Hub has one tab, `hub`. Its Board shows the work view and the review view.
+- A Hub from before the `hub` tab has a tab labeled `work`. `lineup` renames it to `hub`. It closes the old `orchestrate`, `plan`, and `review` tabs.
 - A Hub from before the one agent has tabs with an `ORCHESTRATOR`, `PLANNER`, or `REVIEWER` block. `lineup` closes each such tab and opens it again.
 - The Hub session is named `lineup hub`. A Repo session is named after its folder, and the Scheduler removes it after its last Task. The space keeps a Repo session from taking the Hub's name.
 - The Scheduler creates each Task tab with `rex window new -s <session> <label> --focus=false -- <command>`. The user stays on the Hub.
@@ -255,7 +250,7 @@ Rex has no key/value metadata on its objects. The store keeps the session, windo
 |---|---|
 | `lineup serve` | The Scheduler. It owns all Task state, applies the transitions, starts Workers, and reads Signals. launchd starts it at login and starts it again when it stops. A lock in `serve.lock` allows one Scheduler at a time. `lineup restart`, `lineup stop`, and `lineup logs` control it. |
 | SQLite store | `~/.local/state/lineup/state.db`. One table holds Tasks. An append-only table holds the events of each Task. |
-| `lineup board` | The Board and the tracker browser. It reads state from the Scheduler and never writes the store. |
+| `lineup board` | The Board. It reads state from the Scheduler and never writes the store. |
 | `lineup` CLI | The commands that the Orchestrator uses. Each command calls the Scheduler. |
 | Orchestrator folder | `~/.local/state/lineup/lineup/`, with a `CLAUDE.md` that defines the Orchestrator's role and the `lineup` commands. |
 | Harness adapter | Launches a Harness, trusts the worktree for it, and supplies its status. The MVP has the Claude adapter only. |
@@ -390,7 +385,7 @@ checks = "all"
 
 Each key layers on its own, as in `[budgets]`. A value that is not in the table stops the load with an error that names the key, for example `landing_bar.threads: "any" is not one of ignored, resolved, replied`. A Task keeps the Landing bar that it had at Intake.
 
-`start_skills` is a top-level key in the global file. It lists the skills that the tracker browser offers when the user starts a Task. A chosen skill is stored as the Task override `skill`.
+`start_skills` is a top-level key in the global file. It lists the skills that the skill picker offers when the user starts a Task from an Issue row. A chosen skill is stored as the Task override `skill`.
 
 `ad_hoc_session` is a top-level key in the global file. It names the Rex session for ad hoc Tasks. The default is `ad hoc`.
 
@@ -441,10 +436,10 @@ To find which statuses Linear's GitHub automation sets, query `teams { gitAutoma
 
 ## Board
 
-The Board shows the build Tasks and the user's own Issues that have no Task. Review Tasks show on the Reviews tab of the `review` tab (see `docs/spec/reviews.md`). The Issue rows are in `docs/spec/one-board.md`.
+The Board shows the build Tasks and the user's own Issues that have no Task. Review Tasks show on the Reviews tab of the review view (see `docs/spec/reviews.md`). The Issue rows are in `docs/spec/one-board.md`.
 
 ```
- lineup  1 plan  2 work  3 review  WIP 4/5   ●2 need you (+1 in reviews)
+ lineup  1 work  2 review  WIP 4/5   ●2 need you (+1 in reviews)
  ─────────────────────────────────────────────────────────────────────────
  NEEDS YOU  2
  ▸ ENG-590 Working ⚑       data   Add billing model          stopped      12m
@@ -463,9 +458,9 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
  DONE  1 …
 ```
 
-The header shows the view names, the WIP cap, and the Needs you count. It counts the Needs you Tasks of the other view in parentheses, when there are any: `(+1 in reviews)` on the work view and `(+2 in work)` on the review view. It has no count for the other groups, because each group heading shows its own count. The header also shows `reviews paused` on the review view and a warning when the Scheduler is offline. At 80 columns, the header with `+1 over` and the other view's count fits.
+The Board has two views. `1` shows the work view, and `2` shows the review view. The header shows the view names, the WIP cap, and the Needs you count. It counts the Needs you Tasks of the other view in parentheses, when there are any: `(+1 in reviews)` on the work view and `(+2 in work)` on the review view. It has no count for the other groups, because each group heading shows its own count. The header also shows `reviews paused` on the review view and a warning when the Scheduler is offline. At 80 columns, the header with `+1 over` and the other view's count fits.
 
-The groups are Needs you, Backlog, Ready, Queued, Working, Waiting, and Done, in that order. Needs you comes first, and the other groups follow the development cycle. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID.
+The groups are Needs you, Backlog, Ready, Queued, Working, Waiting, and Done, in that order. Needs you comes first, and the other groups follow the development cycle. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
 
 Each group with at least one row has a heading that shows the group name and its row count, for example `BACKLOG  7`. A heading is a row that the user can select, except the Needs you heading. `j` and `k` stop on each heading and skip the rows of a closed group. `enter` on a heading opens or closes the group. A closed group shows its heading with a `…` mark and hides its rows, as `BACKLOG  7 …` does. Needs you never closes. This keeps a long Backlog or Done group from pushing Ready and Working off the screen.
 
@@ -476,98 +471,21 @@ Backlog and Done start closed on the work view. Done starts closed on the Review
 | `j` `k` | Move the selection through the group headings and the rows of open groups |
 | `enter` | On a Task row, focus the Task's tab in Rex. If the Task has started and has no live Worker, restore the Worker with `claude --resume`, as `lineup open` does. The hint reads `restore the Worker`. On a group heading, open or close the group. The hint reads `open` or `close`. |
 | `p` | Show a live preview of the Worker's screen beside the Board |
-| `f` | Show the detail pane at full screen, and back |
+| `f` | Show the detail pane at full screen, and back. On an Issue row, the pane shows the Issue's description. |
 | `m` | Merge the PR (Ready to land) |
 | `x` | Close the Task, after a confirmation. On a Done Task with a tab, close the tab and remove the worktree, after a confirmation. On a Done Task with no tab, archive it, after a confirmation. |
-| `s` | Start a Queued Task. On an Issue row, add the Issue as a Task and start it, with the skill picker and, when no Repo mapping exists, the Repo picker. |
+| `s` | Start a Queued Task. On an Issue row, open the skill picker, then add the Issue as a Task and start it. The first row of the picker is `just go`, which starts with no skill. The other rows are the skills in `start_skills`. Typed text filters these rows, and a typed name that is not in the list becomes its own row. The picker drops a leading `/`. When no Repo mapping exists, the Repo picker opens next. |
+| `c` | On an Issue row, change the status. A Linear row lists the workflow states of its team, and a local row lists the local statuses. |
 | `o` | Open the PR or the Issue in the browser. A local Issue opens in `$EDITOR`. |
 | `n` | Capture a new Issue at a Destination, `local` by default. `tab` picks a Linear team or Project. A local Issue opens a closed Backlog. See `docs/spec/one-board.md`. |
 | `P` | Promote a local Issue to Linear. Pick a Linear team or Project. lineup creates the Issue there and cancels the local Issue. See `docs/spec/one-board.md`. |
+| `/` | Filter the rows of the work view by ID and title. `enter` keeps the filter, and `esc` clears it. |
 | `R` | Refresh now: the Scheduler polls GitHub for every started Task |
 | `z` | Zoom this tab's agent pane to full height, and back |
+| `1` `2` | Show the work view or the review view |
 | `?` | Show all keys |
 
 A Task that ends keeps its tab and worktree. Only the user closes the tab: with `x` or `lineup close <task>` on the Done Task, with the tab's own close in Rex, or with `lineup archive <task>`. A Done Task leaves the Board when the user archives it. It also leaves 7 days after it ends, but only if its tab is closed. A Done Task with an open tab stays on the Board. The Scheduler refuses `lineup add` for a Done Task's ID while that Task keeps its tab. The Scheduler keeps the Task and its events, so `lineup show <task>` still finds it. To put an archived Issue back on the Board, run `lineup add` again.
-
-## Tracker browser
-
-The tracker browser runs in the top pane of the `plan` tab, and the Board runs in the top pane of the `work` tab. Neither pane can switch to the other view.
-
-The tracker browser has a row of tabs at the top. Each tab is one of the user's Linear favorites that is a view. The last tab is Browse.
-
-```
- [Current+ (Ada)]  Current+ (Team)   ENG Issues   ENG Projects   Browse
- Cycle 10  Oct 28 → Nov 11  7 Issues
-  In QA  1
- ▸ ··· ENG-537  Fix login bounce             #4810  ● Bug  ◇ Billing  △3  AL  Oct 17
-```
-
-### View tabs
-
-To add a tab, the user stars the view in Linear. lineup shows these favorites:
-
-| Favorite | Tab | Content |
-|---|---|---|
-| Custom Issue view | The view's name | The view's Issues, with Linear's filter |
-| Custom Project view | The view's name | The view's Projects, with Linear's filter |
-| A team's Active Issues | Team key and "Issues", for example `ENG Issues` | The team's unstarted and started Issues |
-| A team's Projects | Team key and "Projects", for example `ENG Projects` | The team's open Projects |
-
-lineup leaves out every other favorite.
-
-The user ranks the tabs with `<` and `>`. lineup keeps the rank in `~/.local/state/lineup/views.json`. The tab order is:
-
-1. The saved views that are still favorites, in the saved order.
-2. The other favorites, in the order of Linear's sidebar.
-3. Browse.
-
-The browser opens on the first tab.
-
-An Issue view groups its Issues as Linear does:
-
-1. Cycle, by start date. Issues with no cycle come last.
-2. State type: started, unstarted, backlog, triage, completed, canceled. Inside a type, Linear's state position, high first.
-3. Priority: urgent, high, medium, low, then no priority.
-4. Linear's manual order.
-
-A header names each cycle, its dates, and its Issue count. A sub-header names each state and its count. A search hides the headers.
-
-A Project list groups by status as Linear does: started, planned, backlog, paused, completed, canceled. Then it sorts by status position, priority, and manual order. Browse uses the same Project order.
-
-`esc` never goes above a view tab. In a Project view, `enter` opens the Project's Issues, and `esc` goes back to the view.
-
-### Browse
-
-Browse starts at a switcher for the Linear workspaces (`acme`, `globex`). The tree is workspace, then team, then Project, then Issues. A "My Issues" view shows the user's Issues in all workspaces. If the user has no favorite views, Browse is the only tab.
-
-My Issues and Project Issue lists use the same order:
-
-1. Dependency level. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker. Only open "blocks" relations count, and blockers in other Projects count too. A cycle is broken as in `herdr-linear` `graph.go`.
-2. Natural ID order, so that ENG-9 comes before ENG-10.
-
-### Rows
-
-An Issue row shows the priority, the identifier, the state, the title, and these chips: PRs, labels, Project, estimate, assignee initials, and created date. A grouped view leaves out the state, because the header shows it. On a narrow screen, chips drop from the left so that the title keeps at least 24 cells. A blocked row names its open blockers, for example `blocked by ENG-590`.
-
-A Project row shows the priority, the name, the health, the lead, the target date, and the progress.
-
-### Keys
-
-| Key | Action |
-|---|---|
-| `tab` `shift+tab` | Open the next or previous tab |
-| `<` `>` | Move this view's tab left or right, and save the rank |
-| `/` | Fuzzy search |
-| `enter` | Open the row |
-| `esc` | Go back up one level |
-| `s` | Open the skill picker, then start the Issue as a Task. The first row is `just go`, which starts with no skill. The other rows are the skills in `start_skills`. Typed text filters these rows, and a typed name that is not in the list becomes its own row. A leading `/` is dropped. |
-| `c` | Change the status |
-| `A` | Assign the Issue to the user |
-| `n` | Add an Issue quickly, in a Project or a team's view |
-| `o` | Open the Issue in the browser |
-| `R` | Read again what is on screen: the Issue list, the open Issue, or the teams or Projects |
-
-A typed `R` in a search is search text.
 
 ## Orchestrator
 
@@ -599,7 +517,7 @@ The Hub starts the Orchestrator with a first message that tells it to run `lineu
 
 ## Planning
 
-The Orchestrator shapes the backlog in Linear with the `linear` CLI. The Linear browser in the `plan` tab opens on the user's favorite Linear views, in the user's rank (see Tracker browser). Planning has four jobs:
+The Orchestrator shapes the backlog in Linear with the `linear` CLI. Planning has four jobs:
 
 | Job | Example | `linear` command |
 |---|---|---|
@@ -608,7 +526,7 @@ The Orchestrator shapes the backlog in Linear with the `linear` CLI. The Linear 
 | Criteria | "write acceptance criteria for ENG-614" | `linear issue update` |
 | Order | "ENG-615 needs ENG-614 first" | `linear issue relation add ENG-614 blocks ENG-615` |
 
-A plan starts no Task. The Orchestrator must not run `linear issue start` or `linear issue pull-request`, because lineup moves each Issue through its lifecycle. Its settings deny these commands. To start work, the user presses `s` in the Linear browser, or asks the Orchestrator.
+A plan starts no Task. The Orchestrator must not run `linear issue start` or `linear issue pull-request`, because lineup moves each Issue through its lifecycle. Its settings deny these commands. To start work, the user presses `s` on an Issue row of the Board, or asks the Orchestrator.
 
 ## Speed budget
 
