@@ -37,7 +37,7 @@ A queue takes these filter keys. Each key takes the name of a GitHub search qual
 | Key | Matches a PR when | Search qualifier |
 |---|---|---|
 | `state` | its state is `open`, the default and the only state that a queue takes | `is:open` |
-| `draft` | `false`: it is not a draft. The queue search adds `draft:false` itself. | `draft:false` |
+| `draft` | `false` only. Every queue search leaves out drafts, so the key adds nothing. | none |
 | `repo` | its repository is in the list | `repo:<owner/name>`, one per item |
 | `author` | its author is in the list | `author:<login>`, one per item |
 | `author_team` | its author is a member of a team in the list | `author:<login>` for each member |
@@ -297,7 +297,7 @@ The Orchestrator in the `hub` tab adds, steers, reruns, and closes review Tasks,
 
 ## Success criteria and tests
 
-1. **Query builder.** Table tests: each filter alone, two filters together, `author_team` merged with `author`, labels as one comma list, each `state` and `draft` value, `review_requested`, and the queue's added qualifiers. Title regexes: table tests, and a `rapid` property test that a kept PR matches `include_regex` and does not match `exclude_regex`.
+1. **Query builder.** Table tests: each filter alone, two filters together, `author_team` merged with `author`, labels as one comma list, `review_requested`, and the queue's added qualifiers. Title regexes: table tests, and a `rapid` property test that a kept PR matches `include_regex` and does not match `exclude_regex`.
 2. **Search.** Against a recorded GraphQL response with three aliased searches, each search gets its own PRs, with author and requested reviewers.
 3. **Lifecycle.** Table tests for every transition above. Property tests with `rapid`:
    - `start` never succeeds for a queue whose started count is at or above its slots.

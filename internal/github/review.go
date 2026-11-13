@@ -20,16 +20,14 @@ import (
 // first 100.
 const QueuePRs = "is:pr archived:false sort:created-asc draft:false -author:@me"
 
-// Filter picks PRs. Base is QueuePRs. State is open,
-// closed, merged, or all, and "" is open. Draft nil matches drafts and other
-// PRs. ReviewRequested is @me or a login, and GitHub matches a request to
+// Filter picks open PRs. Base is QueuePRs, which already leaves out drafts.
+// ReviewRequested is @me or a login, and GitHub matches a request to
 // that user by name or through any of their teams. The items of one list
 // combine with OR, and two keys combine with AND. Author and the members of
 // AuthorTeam are one list. IncludeRegex and ExcludeRegex are RE2 patterns on
 // the title, which config checked at load.
 type Filter struct {
 	Base            string
-	Draft           *bool
 	Repo            []string // owner/name
 	Author          []string
 	AuthorTeam      []string // org/slug
@@ -58,9 +56,6 @@ func (f Filter) Keep(prs []PullRequest) []PullRequest {
 func (f Filter) Query(members map[string][]string) (q string, ok bool) {
 	parts := []string{f.Base}
 	parts = append(parts, "is:open")
-	if f.Draft != nil {
-		parts = append(parts, "draft:"+strconv.FormatBool(*f.Draft))
-	}
 	for _, r := range f.Repo {
 		parts = append(parts, "repo:"+r)
 	}

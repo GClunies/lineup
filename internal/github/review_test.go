@@ -23,7 +23,6 @@ func TestQuery(t *testing.T) {
 		"umbrella/data-eng": {"hopper", "knuth"},
 		"umbrella/empty":    {},
 	}
-	yes, no := true, false
 	for name, c := range map[string]struct {
 		f    Filter
 		want string
@@ -39,8 +38,6 @@ func TestQuery(t *testing.T) {
 			open + ` label:needs-review,"breaking change",frontend`},
 		"two filters": {Filter{Base: QueuePRs, Repo: []string{"umbrella/data"}, Label: []string{"needs-review"}},
 			open + " repo:umbrella/data label:needs-review"},
-		"drafts only": {Filter{Base: QueuePRs, Draft: &yes, Repo: []string{"o/r"}}, open + " draft:true repo:o/r"},
-		"no drafts":   {Filter{Base: QueuePRs, Draft: &no, Repo: []string{"o/r"}}, open + " draft:false repo:o/r"},
 		"empty team with author": {Filter{Base: QueuePRs, Author: []string{"octo"}, AuthorTeam: []string{"umbrella/empty"}},
 			open + " author:octo"},
 		"regex adds nothing": {Filter{Base: QueuePRs, Repo: []string{"o/r"}, IncludeRegex: "DATA-", ExcludeRegex: "WIP"}, open + " repo:o/r"},
