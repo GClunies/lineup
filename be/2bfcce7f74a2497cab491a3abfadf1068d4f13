@@ -1,0 +1,25 @@
+internal/github/review.go
+  s_cb9315cd84195e::t_b0ac55be8dbc1c 23-24
+cmd/lineup/wire.go
+  s_cb9315cd84195e::t_b0ac55be8dbc1c 632
+cmd/lineup/wire_test.go
+  s_cb9315cd84195e::t_b0ac55be8dbc1c 214
+docs/spec/reviews.md
+  s_cb9315cd84195e::t_6b979510a6ed80 40,300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "be2bfcce7f74a2497cab491a3abfadf1068d4f13",
+  "prompts": {},
+  "sessions": {
+    "s_cb9315cd84195e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63a76830-1bf9-40da-af50-4d201e8035e6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
