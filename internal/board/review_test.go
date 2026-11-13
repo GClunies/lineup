@@ -677,7 +677,7 @@ func TestTheReviewsTabListsOnlyTheReviewTasks(t *testing.T) {
 	if c := e.sched.calls[1:]; len(c) != 1 || c[0].Op != "close" || c[0].Task != "R-10" {
 		t.Fatalf("x then y sent %+v, want close R-10", c)
 	}
-	e.press("j", "f")
+	e.press("j", "j", "f")
 	if c := e.sched.calls[2:]; len(c) != 1 || c[0].Op != "show" || c[0].Task != "R-14" || !strings.Contains(e.m.View(), "R-14  ") {
 		t.Fatalf("f sent %+v, want show R-14 at full screen:\n%s", c, e.m.View())
 	}

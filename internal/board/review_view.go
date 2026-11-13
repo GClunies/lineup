@@ -287,6 +287,7 @@ const reviewTasksHelp = `
    < >      move this view's tab left or right; lineup keeps the order
    j k      move the selection
    enter    focus the Task's tab in Rex, or restore its closed Worker
+            on a group heading: open or close the group
    p        live preview of the Worker's screen
    f        detail pane at full screen, and back
    x        close the Task, or its tab and worktree when it is Done,

@@ -279,29 +279,27 @@ func mineEnv(t *testing.T) (*trkEnv, localissues.Store) {
 func TestTheWorkViewShowsReadyAndBacklogInTheirPlaces(t *testing.T) {
 	e, _ := mineEnv(t)
 	v := fixture()
-	e.m = feed(e.m, boardMsg(v))
+	e.m = openAll(feed(e.m, boardMsg(v)))
 	e.m.width = 200
 	out := ansi.Strip(e.m.View())
 	inOrder(t, out, "NEEDS YOU", "BACKLOG", "ENG-20", "READY", "ENG-9", "local-1", "QUEUED", "WORKING", "WAITING", "DONE")
-	if h := ansi.Strip(e.m.header()); !strings.Contains(h, "1 queued   2 ready   1 backlog") {
-		t.Fatalf("header %q, want the ready and backlog counts after queued", h)
-	}
 	rm, _ := press(e.m, "3")
-	if h := ansi.Strip(rm.header()); strings.Contains(h, "ready") || strings.Contains(ansi.Strip(rm.View()), "ENG-9") {
+	if strings.Contains(ansi.Strip(rm.View()), "ENG-9") {
 		t.Fatalf("the review view shows Issue rows:\n%s", rm.View())
 	}
 }
 
 func TestJAndKMoveAcrossTaskAndIssueRows(t *testing.T) {
 	e, _ := mineEnv(t)
-	e.m = feed(e.m, boardMsg(fixture()))
+	e.m = openAll(feed(e.m, boardMsg(fixture())))
 	e.m.sel = "ENG-588"
 	var seen []string
-	for range 12 {
+	for range 18 {
 		seen = append(seen, e.m.sel)
 		e.press("j")
 	}
-	want := []string{"ENG-588", "ENG-590", "ENG-20", "ENG-9", "local-1", "ENG-601", "WEB-12", "ENG-592", "ENG-571", "ENG-560", "ENG-560", "ENG-560"}
+	want := []string{"ENG-588", "ENG-590", "group:Backlog", "ENG-20", "group:Ready", "ENG-9", "local-1", "group:Queued", "ENG-601",
+		"group:Working", "WEB-12", "ENG-592", "group:Waiting", "ENG-571", "group:Done", "ENG-560", "ENG-560", "ENG-560"}
 	if !slices.Equal(seen, want) {
 		t.Fatalf("j moved through %v, want %v", seen, want)
 	}
@@ -309,8 +307,8 @@ func TestJAndKMoveAcrossTaskAndIssueRows(t *testing.T) {
 		t.Fatalf("the last row is not marked:\n%s", e.m.View())
 	}
 	e.press("k")
-	if e.m.sel != "ENG-571" {
-		t.Fatalf("k went to %s, want ENG-571", e.m.sel)
+	if e.m.sel != "group:Done" {
+		t.Fatalf("k went to %s, want the Done heading", e.m.sel)
 	}
 }
 

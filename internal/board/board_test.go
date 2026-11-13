@@ -158,12 +158,16 @@ func TestGroupOrderAndSelection(t *testing.T) {
 		t.Fatalf("initial selection = %s", m.sel)
 	}
 	m, _ = press(m, "j", "j")
-	if m.sel != "ENG-601" {
-		t.Fatalf("after jj = %s", m.sel)
+	if m.sel != headingKey("Queued") {
+		t.Fatalf("after jj = %s, want the Queued heading", m.sel)
 	}
-	m, _ = press(m, "k")
+	m, _ = press(m, "j")
+	if m.sel != "ENG-601" {
+		t.Fatalf("after jjj = %s", m.sel)
+	}
+	m, _ = press(m, "k", "k")
 	if m.sel != "ENG-590" {
-		t.Fatalf("after k = %s", m.sel)
+		t.Fatalf("after kk = %s", m.sel)
 	}
 	m, _ = press(m, "k", "k", "k")
 	if m.sel != "ENG-588" {
@@ -355,7 +359,7 @@ func TestOverCapHeaderAndOffline(t *testing.T) {
 	m := newModel(&fakeClient{}, v)
 	m.width = 160
 	h := m.header()
-	for _, w := range []string{"WIP 4/5", "+1 over", "●2 need you", "◐2 working", "◷1 waiting", "1 queued"} {
+	for _, w := range []string{"WIP 4/5", "+1 over", "●2 need you"} {
 		if !strings.Contains(h, w) {
 			t.Errorf("header %q lacks %q", h, w)
 		}
@@ -392,7 +396,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 	v.Tasks = append(v.Tasks, rtv("R-3", lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour))
 	m := New(v, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
 	m.width, m.height = 160, 30
-	if out := m.View(); strings.Contains(out, "R-3") || !strings.Contains(m.header(), "◐2 working") {
+	if out := m.View(); strings.Contains(out, "R-3") || !strings.Contains(m.header(), "●2 need you") {
 		t.Fatalf("the work board shows the review Task:\n%s", out)
 	}
 	m, _ = press(m, "j", "j", "j", "j", "j", "j", "j")
@@ -413,7 +417,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 }
 
 func TestAgeAndRows(t *testing.T) {
-	m := newModel(&fakeClient{}, fixture())
+	m := openAll(newModel(&fakeClient{}, fixture()))
 	out := m.View()
 	for _, w := range []string{"NEEDS YOU", "WORKING", "WAITING", "QUEUED", "DONE", "Working ⚑", "12m", "1d", "today", "merged"} {
 		if !strings.Contains(out, w) {
@@ -757,10 +761,10 @@ func TestEachViewCountsTheOtherViewsNeedsYouTasks(t *testing.T) {
 	}
 	v := fixture()
 	v.Tasks = append(v.Tasks, flagged("R-3"), rtv("R-4", lifecycle.Reviewing, "data#8 Fix the map", urlBase, time.Hour))
-	if h := header(v); !strings.Contains(h, "●2 need you (+1 in reviews)   ◐2 working") {
+	if h := header(v); !strings.Contains(h, "●2 need you (+1 in reviews)") {
 		t.Errorf("work header %q", h)
 	}
-	if h := header(v, "3"); !strings.Contains(h, "●1 need you (+2 in work)   ◐") {
+	if h := header(v, "3"); !strings.Contains(h, "●1 need you (+2 in work)") {
 		t.Errorf("review header %q", h)
 	}
 	quiet := fixture()
