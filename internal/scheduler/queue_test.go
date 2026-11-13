@@ -177,7 +177,7 @@ func queueHarness(t *testing.T, queues ...Queue) *harness {
 }
 
 func authorQueue(name string, slots int, author string) Queue {
-	return Queue{Name: name, Slots: slots, Filter: github.Filter{Base: github.QueuePRs, Repos: []string{"acme/data"}, Authors: []string{author}}}
+	return Queue{Name: name, Slots: slots, Filter: github.Filter{Base: github.QueuePRs, Repo: []string{"acme/data"}, Author: []string{author}}}
 }
 
 // reviews lists the review Tasks on the Board as "<id> #<number> <stage>".
@@ -279,16 +279,16 @@ func TestOnlyAFullPollFills(t *testing.T) {
 	}
 }
 
-func TestAFillLeavesOutAPRWithAnExcludedTitle(t *testing.T) {
+func TestAFillLeavesOutAPRThatTheTitleRegexesDrop(t *testing.T) {
 	q := authorQueue("q", 2, "hopper")
-	q.Filter.ExcludeTitles = []string{"HLESS-"}
+	q.Filter.IncludeRegex, q.Filter.ExcludeRegex = `^[A-Z]+-\d`, "^HLESS-"
 	h := queueHarness(t, q)
-	excluded, kept := queuePR("acme/data", 9, 99), queuePR("acme/data", 7, 30)
-	excluded.Title = "HLESS-12 Move the loaders"
-	h.gh.found = map[string][]github.PullRequest{"q": {excluded, kept}}
+	excluded, kept, noTicket := queuePR("acme/data", 9, 99), queuePR("acme/data", 7, 30), queuePR("acme/data", 8, 40)
+	excluded.Title, kept.Title, noTicket.Title = "HLESS-12 Move the loaders", "DATA-7 Write the usage logs", "Write the usage logs"
+	h.gh.found = map[string][]github.PullRequest{"q": {excluded, kept, noTicket}}
 	h.s.fill(context.Background())
 	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Reviewing"}) {
-		t.Fatalf("reviews %v, want only #7: #9's title holds HLESS-", got)
+		t.Fatalf("reviews %v, want only #7: #8 has no ticket and #9 starts with HLESS-", got)
 	}
 }
 
@@ -309,7 +309,7 @@ func TestAFillReadsTeamMembersOnceAnHour(t *testing.T) {
 	var mu sync.Mutex
 	now := time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC)
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) {
-		d.Queues, d.PollInterval = []Queue{{Name: "q", Slots: 1, Filter: github.Filter{Base: github.QueuePRs, AuthorTeams: []string{"acme/eng"}}}}, time.Hour
+		d.Queues, d.PollInterval = []Queue{{Name: "q", Slots: 1, Filter: github.Filter{Base: github.QueuePRs, AuthorTeam: []string{"acme/eng"}}}}, time.Hour
 		d.Now = func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
 	})
 	h.gh.members = map[string][]string{"acme/eng": {"ada"}}

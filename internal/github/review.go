@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,18 +13,18 @@ import (
 	"time"
 )
 
-// The qualifiers that each kind of PR search starts with. In search(type:
-// ISSUE), a repeated repo:, author:, or team-review-requested: qualifier is
+// The qualifiers that each kind of PR search starts with. Filter.Query adds
+// the state. In search(type: ISSUE), a repeated repo: or author: qualifier is
 // OR, a repeated label: is AND, and boolean OR returns nothing.
 // A view lists the newest PRs first. A queue lists the oldest first, so that
 // its oldest PRs are inside the first 100.
 const (
-	openPRs      = "is:pr is:open archived:false"
-	newestFirst  = openPRs + " sort:created-desc"
+	prs          = "is:pr archived:false"
+	newestFirst  = prs + " sort:created-desc"
 	MyPRs        = newestFirst + " author:@me"
 	RequestedPRs = newestFirst + " review-requested:@me draft:false"
 	ViewPRs      = newestFirst
-	QueuePRs     = openPRs + " sort:created-asc draft:false -author:@me"
+	QueuePRs     = prs + " sort:created-asc draft:false -author:@me"
 )
 
 // MyMergedPRs is the search for the user's PRs merged at since or later.
@@ -32,61 +33,76 @@ func MyMergedPRs(since time.Time) string {
 	return "is:pr is:merged archived:false sort:updated-desc author:@me merged:>=" + since.UTC().Format(time.RFC3339)
 }
 
-// Filter picks open PRs. Base is one of the searches above. The items of one
-// list combine with OR, and two lists combine with AND. Authors and the
-// members of AuthorTeams are one list. A PR whose title holds any item of
-// ExcludeTitles never matches.
+// Filter picks PRs. Base is one of the searches above. State is open,
+// closed, merged, or all, and "" is open. Draft nil matches drafts and other
+// PRs. ReviewRequested is @me or a login, and GitHub matches a request to
+// that user by name or through any of their teams. The items of one list
+// combine with OR, and two keys combine with AND. Author and the members of
+// AuthorTeam are one list. IncludeRegex and ExcludeRegex are RE2 patterns on
+// the title, which config checked at load.
 type Filter struct {
-	Base           string
-	Repos          []string // owner/name
-	Authors        []string
-	AuthorTeams    []string // org/slug
-	RequestedTeams []string // org/slug
-	Labels         []string
-	ExcludeTitles  []string // case-sensitive substrings
+	Base            string
+	State           string
+	Draft           *bool
+	Repo            []string // owner/name
+	Author          []string
+	AuthorTeam      []string // org/slug
+	ReviewRequested string
+	Label           []string
+	IncludeRegex    string
+	ExcludeRegex    string
 }
 
-// Keep returns the PRs of a search for f whose titles hold no item of
-// ExcludeTitles. GitHub search matches words in any case, so it cannot match
-// a case-sensitive substring.
+// Keep returns the PRs of a search for f whose titles match IncludeRegex,
+// when it is set, and do not match ExcludeRegex. GitHub search has no regex.
 func (f Filter) Keep(prs []PullRequest) []PullRequest {
-	if len(f.ExcludeTitles) == 0 {
+	if f.IncludeRegex == "" && f.ExcludeRegex == "" {
 		return prs
 	}
+	include, exclude := regexp.MustCompile(f.IncludeRegex), regexp.MustCompile(f.ExcludeRegex)
 	return slices.DeleteFunc(slices.Clone(prs), func(pr PullRequest) bool {
-		return slices.ContainsFunc(f.ExcludeTitles, func(s string) bool { return strings.Contains(pr.Title, s) })
+		return !include.MatchString(pr.Title) || f.ExcludeRegex != "" && exclude.MatchString(pr.Title)
 	})
 }
 
 // Query builds the search for f, given the members of each team in
-// AuthorTeams. ok is false when the author list is empty because each of its
+// AuthorTeam. ok is false when the author list is empty because each of its
 // teams is empty. With no author: qualifier the search would match every
 // author, so it must not run.
 func (f Filter) Query(members map[string][]string) (q string, ok bool) {
 	parts := []string{f.Base}
-	for _, r := range f.Repos {
+	switch f.State {
+	case "", "open":
+		parts = append(parts, "is:open")
+	case "closed", "merged":
+		parts = append(parts, "is:"+f.State)
+	}
+	if f.Draft != nil {
+		parts = append(parts, "draft:"+strconv.FormatBool(*f.Draft))
+	}
+	for _, r := range f.Repo {
 		parts = append(parts, "repo:"+r)
 	}
-	logins := slices.Clone(f.Authors)
-	for _, t := range f.AuthorTeams {
+	logins := slices.Clone(f.Author)
+	for _, t := range f.AuthorTeam {
 		for _, l := range members[t] {
 			if !slices.Contains(logins, l) {
 				logins = append(logins, l)
 			}
 		}
 	}
-	if len(logins) == 0 && len(f.AuthorTeams) > 0 {
+	if len(logins) == 0 && len(f.AuthorTeam) > 0 {
 		return "", false
 	}
 	for _, l := range logins {
 		parts = append(parts, "author:"+l)
 	}
-	for _, t := range f.RequestedTeams {
-		parts = append(parts, "team-review-requested:"+t)
+	if f.ReviewRequested != "" {
+		parts = append(parts, "review-requested:"+f.ReviewRequested)
 	}
-	if len(f.Labels) > 0 {
-		quoted := make([]string, len(f.Labels))
-		for i, l := range f.Labels {
+	if len(f.Label) > 0 {
+		quoted := make([]string, len(f.Label))
+		for i, l := range f.Label {
 			quoted[i] = l
 			if strings.ContainsAny(l, " ,") {
 				quoted[i] = `"` + l + `"`

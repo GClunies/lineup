@@ -132,8 +132,8 @@ func newRvEnv(t *testing.T) *rvEnv {
 		Open:   func(u string) error { e.opened = append(e.opened, u); return nil },
 		Reviews: Reviews{
 			Views: []ReviewView{
-				{Key: "view:My teammates", Name: "My teammates", Filter: github.Filter{Base: github.ViewPRs, Repos: []string{"umbrella/data"}, AuthorTeams: []string{"umbrella/platform"}}},
-				{Key: "queue:platform", Name: "Q: platform", Filter: github.Filter{Base: github.QueuePRs, Authors: []string{"hopper"}}, Queue: true},
+				{Key: "view:My teammates", Name: "My teammates", Filter: github.Filter{Base: github.ViewPRs, Repo: []string{"umbrella/data"}, AuthorTeam: []string{"umbrella/platform"}}},
+				{Key: "queue:platform", Name: "Q: platform", Filter: github.Filter{Base: github.QueuePRs, Author: []string{"hopper"}}, Queue: true},
 			},
 			API:        e.api,
 			ReadCache:  func(k string) ([]github.PullRequest, bool) { prs, ok := e.cache[k]; return prs, ok },
@@ -426,10 +426,10 @@ func TestReviewSearchesEveryViewInOneCall(t *testing.T) {
 	}
 }
 
-func TestAViewAndAQueueLeaveOutTheExcludedTitles(t *testing.T) {
+func TestAViewAndAQueueApplyTheTitleRegexes(t *testing.T) {
 	e := newRvEnv(t)
 	for i := range e.m.rv.tabs {
-		e.m.rv.tabs[i].Filter.ExcludeTitles = []string{"HLESS-"}
+		e.m.rv.tabs[i].Filter.ExcludeRegex = "HLESS-"
 	}
 	pr := func(n int, title string) github.PullRequest {
 		return github.PullRequest{Repo: "umbrella/data", Number: n, Title: title, Author: "hopper",

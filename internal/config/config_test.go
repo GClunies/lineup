@@ -421,36 +421,44 @@ func TestReviewViewsAndQueues(t *testing.T) {
 	g := load(t, `
 [[review.views]]
 name = "My teammates"
-repos = ["umbrella/data"]
-author_teams = ["umbrella/platform"]
+repo = ["umbrella/data"]
+author_team = ["umbrella/platform"]
 
 [[review.views]]
 name = "Data team"
-requested_teams = ["umbrella/data"]
-labels = ["needs-review", "breaking change"]
-exclude_titles = ["WIP"]
+state = "all"
+draft = true
+review_requested = "@me"
+label = ["needs-review", "breaking change"]
+include_regex = '\bDATA-\d+'
+exclude_regex = "WIP"
 
 [[review.queues]]
 name = "platform"
-repos = ["umbrella/data"]
-authors = ["hopper", "noether"]
-exclude_titles = ["HLESS-", "[skip review]"]
+state = "open"
+draft = false
+repo = ["umbrella/data"]
+author = ["hopper", "noether"]
+exclude_regex = 'HLESS-|\[skip review\]'
 
 [[review.queues]]
 name = "one at a time"
-authors = ["octo"]
+author = ["octo"]
 slots = 1
 `)
+	yes, no := true, false
 	wantViews := []ReviewView{
-		{Name: "My teammates", PRFilter: PRFilter{Repos: []string{"umbrella/data"}, AuthorTeams: []string{"umbrella/platform"}}},
-		{Name: "Data team", PRFilter: PRFilter{RequestedTeams: []string{"umbrella/data"}, Labels: []string{"needs-review", "breaking change"}, ExcludeTitles: []string{"WIP"}}},
+		{Name: "My teammates", PRFilter: PRFilter{Repo: []string{"umbrella/data"}, AuthorTeam: []string{"umbrella/platform"}}},
+		{Name: "Data team", PRFilter: PRFilter{State: "all", Draft: &yes, ReviewRequested: "@me", Label: []string{"needs-review", "breaking change"},
+			IncludeRegex: `\bDATA-\d+`, ExcludeRegex: "WIP"}},
 	}
 	if got := g.ReviewViews(); !reflect.DeepEqual(got, wantViews) {
 		t.Errorf("ReviewViews = %+v\nwant %+v", got, wantViews)
 	}
 	wantQueues := []ReviewQueue{
-		{Name: "platform", PRFilter: PRFilter{Repos: []string{"umbrella/data"}, Authors: []string{"hopper", "noether"}, ExcludeTitles: []string{"HLESS-", "[skip review]"}}, Slots: 3},
-		{Name: "one at a time", PRFilter: PRFilter{Authors: []string{"octo"}}, Slots: 1},
+		{Name: "platform", PRFilter: PRFilter{State: "open", Draft: &no, Repo: []string{"umbrella/data"}, Author: []string{"hopper", "noether"},
+			ExcludeRegex: `HLESS-|\[skip review\]`}, Slots: 3},
+		{Name: "one at a time", PRFilter: PRFilter{Author: []string{"octo"}}, Slots: 1},
 	}
 	if got := g.ReviewQueues(); !reflect.DeepEqual(got, wantQueues) {
 		t.Errorf("ReviewQueues = %+v\nwant %+v", got, wantQueues)
@@ -467,15 +475,15 @@ slots = 5
 
 [[review.queues]]
 name = "first"
-authors = ["a"]
+author = ["a"]
 
 [[review.queues]]
 name = "second"
-repos = ["o/r"]
+repo = ["o/r"]
 
 [[review.queues]]
 name = "own"
-repos = ["o/s"]
+repo = ["o/s"]
 slots = 2
 `)
 	if g.ReviewSlots() != 5 {
@@ -494,27 +502,41 @@ slots = 2
 }
 
 func TestBadReviewConfigFailsAtLoad(t *testing.T) {
+	view := "[[review.views]]\nname = \"a\"\n"
+	queue := "[[review.queues]]\nname = \"q\"\n"
 	for name, c := range map[string]struct{ text, want string }{
-		"unknown key":       {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\nauthor = [\"x\"]\n", "unknown keys"},
+		"unknown key":       {view + "repo = [\"o/r\"]\nauthors_x = [\"x\"]\n", "unknown keys"},
 		"unknown section":   {"[review.bogus]\nx = 1\n", "unknown keys"},
-		"no filter":         {"[[review.views]]\nname = \"a\"\n", "review.views[0]: needs at least one"},
-		"empty filter":      {"[[review.views]]\nname = \"a\"\nrepos = []\n", "review.views[0]: needs at least one"},
-		"no name":           {"[[review.views]]\nrepos = [\"o/r\"]\n", "review.views[0]: name is required"},
-		"team form":         {"[[review.views]]\nname = \"a\"\nauthor_teams = [\"platform\"]\n", `review.views[0]: author_teams[0] "platform" must be org/slug`},
-		"requested form":    {"[[review.views]]\nname = \"a\"\nrequested_teams = [\"umbrella/data/x\"]\n", "requested_teams[0]"},
-		"repo form":         {"[[review.views]]\nname = \"a\"\nrepos = [\"umbrella\"]\n", `repos[0] "umbrella" must be owner/name`},
-		"repo space":        {"[[review.views]]\nname = \"a\"\nrepos = [\"umbrella/da ta\"]\n", "repos[0]"},
-		"author space":      {"[[review.views]]\nname = \"a\"\nauthors = [\"a b\"]\n", "authors[0]"},
-		"label quote":       {"[[review.views]]\nname = \"a\"\nlabels = [\"a\\\"b\"]\n", "labels[0]"},
-		"duplicate view":    {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\n[[review.views]]\nname = \"a\"\nrepos = [\"o/s\"]\n", `review.views[1]: name "a" is used twice`},
-		"view and queue":    {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\n[[review.queues]]\nname = \"a\"\nrepos = [\"o/s\"]\n", `review.queues[0]: name "a" is used twice`},
-		"built-in name":     {"[[review.views]]\nname = \"My PRs\"\nrepos = [\"o/r\"]\n", "is used twice"},
-		"slots zero":        {"[[review.queues]]\nname = \"q\"\nrepos = [\"o/r\"]\nslots = 0\n", "review.queues[0]: slots must be at least 1"},
+		"no filter":         {view, "review.views[0]: needs at least one"},
+		"empty filter":      {view + "repo = []\n", "review.views[0]: needs at least one"},
+		"no name":           {"[[review.views]]\nrepo = [\"o/r\"]\n", "review.views[0]: name is required"},
+		"team form":         {view + "author_team = [\"platform\"]\n", `review.views[0]: author_team[0] "platform" must be org/slug`},
+		"repo form":         {view + "repo = [\"umbrella\"]\n", `repo[0] "umbrella" must be owner/name`},
+		"repo space":        {view + "repo = [\"umbrella/da ta\"]\n", "repo[0]"},
+		"author space":      {view + "author = [\"a b\"]\n", "author[0]"},
+		"label quote":       {view + "label = [\"a\\\"b\"]\n", "label[0]"},
+		"requested space":   {view + "review_requested = \"a b\"\n", `review_requested "a b" must be @me or a login`},
+		"bad state":         {view + "repo = [\"o/r\"]\nstate = \"draft\"\n", `state "draft" must be one of open, closed, merged, all`},
+		"bad include":       {view + "repo = [\"o/r\"]\ninclude_regex = \"(\"\n", "review.views[0]: include_regex: error parsing regexp"},
+		"bad exclude":       {view + "repo = [\"o/r\"]\nexclude_regex = \"a[\"\n", "review.views[0]: exclude_regex: error parsing regexp"},
+		"only regexes":      {queue + "include_regex = \"DATA-\"\nexclude_regex = \"WIP\"\n", "review.queues[0]: needs at least one"},
+		"only state":        {view + "state = \"open\"\ndraft = false\n", "review.views[0]: needs at least one"},
+		"queue closed":      {queue + "repo = [\"o/r\"]\nstate = \"closed\"\n", "review.queues[0]: a queue reviews open PRs"},
+		"queue all":         {queue + "repo = [\"o/r\"]\nstate = \"all\"\n", "review.queues[0]: a queue reviews open PRs"},
+		"queue drafts":      {queue + "repo = [\"o/r\"]\ndraft = true\n", "review.queues[0]: a queue never reviews drafts"},
+		"duplicate view":    {view + "repo = [\"o/r\"]\n" + view + "repo = [\"o/s\"]\n", `review.views[1]: name "a" is used twice`},
+		"view and queue":    {view + "repo = [\"o/r\"]\n[[review.queues]]\nname = \"a\"\nrepo = [\"o/s\"]\n", `review.queues[0]: name "a" is used twice`},
+		"built-in name":     {"[[review.views]]\nname = \"My PRs\"\nrepo = [\"o/r\"]\n", "is used twice"},
+		"slots zero":        {queue + "repo = [\"o/r\"]\nslots = 0\n", "review.queues[0]: slots must be at least 1"},
 		"shared slots zero": {"[review]\nslots = 0\n", "review.slots: slots must be at least 1"},
-		"queue no filter":   {"[[review.queues]]\nname = \"q\"\nslots = 2\n", "review.queues[0]: needs at least one"},
-		"queue unknown key": {"[[review.queues]]\nname = \"q\"\nrepos = [\"o/r\"]\nslot = 2\n", "unknown keys"},
-		"only exclusions":   {"[[review.queues]]\nname = \"q\"\nexclude_titles = [\"WIP\"]\n", "review.queues[0]: needs at least one"},
-		"empty exclusion":   {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\nexclude_titles = [\"WIP\", \"\"]\n", "review.views[0]: exclude_titles[1] is empty"},
+		"queue no filter":   {queue + "slots = 2\n", "review.queues[0]: needs at least one"},
+		"queue unknown key": {queue + "repo = [\"o/r\"]\nslot = 2\n", "unknown keys"},
+		"old repos":         {view + "repos = [\"o/r\"]\n", "Rename repos to repo"},
+		"old authors":       {queue + "authors = [\"x\"]\n", "Rename authors to author"},
+		"old author_teams":  {view + "author_teams = [\"o/t\"]\n", "Rename author_teams to author_team"},
+		"old labels":        {view + "labels = [\"x\"]\n", "Rename labels to label"},
+		"old exclude":       {queue + "repo = [\"o/r\"]\nexclude_titles = [\"WIP\"]\n", "Rename exclude_titles to exclude_regex"},
+		"old requested":     {view + "requested_teams = [\"o/t\"]\n", `Rename requested_teams to review_requested = "@me"`},
 	} {
 		_, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), c.text))
 		if err == nil || !strings.Contains(err.Error(), c.want) {
@@ -525,7 +547,7 @@ func TestBadReviewConfigFailsAtLoad(t *testing.T) {
 
 func TestReviewInTheRepoFileIsAnError(t *testing.T) {
 	repo := t.TempDir()
-	write(t, filepath.Join(repo, ".lineup.toml"), "[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\n")
+	write(t, filepath.Join(repo, ".lineup.toml"), "[[review.views]]\nname = \"a\"\nrepo = [\"o/r\"]\n")
 	if _, err := load(t, "").Resolve(repo, nil); err == nil || !strings.Contains(err.Error(), "unknown keys") {
 		t.Errorf("err = %v", err)
 	}

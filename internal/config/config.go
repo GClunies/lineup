@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -145,16 +146,22 @@ type globalFile struct {
 	} `toml:"review"`
 }
 
-// PRFilter picks pull requests. The items of one list combine with OR, and
-// two lists combine with AND. Authors and AuthorTeams are one list. A PR
-// whose title holds any item of ExcludeTitles, case-sensitive, never matches.
+// PRFilter picks pull requests. Its keys are named after GitHub's search
+// qualifiers. The items of one list combine with OR, and two keys combine
+// with AND. Author and AuthorTeam are one list. State is open, closed,
+// merged, or all, and "" is open. Draft nil matches drafts and other PRs.
+// IncludeRegex and ExcludeRegex are RE2 patterns on the title: a PR must
+// match IncludeRegex when it is set, and must not match ExcludeRegex.
 type PRFilter struct {
-	Repos          []string `toml:"repos"`
-	Authors        []string `toml:"authors"`
-	AuthorTeams    []string `toml:"author_teams"`
-	RequestedTeams []string `toml:"requested_teams"`
-	Labels         []string `toml:"labels"`
-	ExcludeTitles  []string `toml:"exclude_titles"`
+	State           string   `toml:"state"`
+	Draft           *bool    `toml:"draft"`
+	Repo            []string `toml:"repo"`
+	Author          []string `toml:"author"`
+	AuthorTeam      []string `toml:"author_team"`
+	ReviewRequested string   `toml:"review_requested"`
+	Label           []string `toml:"label"`
+	IncludeRegex    string   `toml:"include_regex"`
+	ExcludeRegex    string   `toml:"exclude_regex"`
 }
 
 // ReviewView is a tab of the review tab.
@@ -312,7 +319,7 @@ func validateReview(views []ReviewView, queues []queueFile, slots *int) error {
 		return errors.New("review.slots: slots must be at least 1")
 	}
 	names := map[string]bool{}
-	check := func(where, name string, f PRFilter) error {
+	check := func(where, name string, f PRFilter, queue bool) error {
 		name = strings.TrimSpace(name)
 		switch {
 		case name == "":
@@ -321,16 +328,16 @@ func validateReview(views []ReviewView, queues []queueFile, slots *int) error {
 			return fmt.Errorf("%s: name %q is used twice", where, name)
 		}
 		names[name] = true
-		return f.validate(where)
+		return f.validate(where, queue)
 	}
 	for i, v := range views {
-		if err := check(fmt.Sprintf("review.views[%d]", i), v.Name, v.PRFilter); err != nil {
+		if err := check(fmt.Sprintf("review.views[%d]", i), v.Name, v.PRFilter, false); err != nil {
 			return err
 		}
 	}
 	for i, q := range queues {
 		where := fmt.Sprintf("review.queues[%d]", i)
-		if err := check(where, q.Name, q.PRFilter); err != nil {
+		if err := check(where, q.Name, q.PRFilter, true); err != nil {
 			return err
 		}
 		if q.Slots != nil && *q.Slots < 1 {
@@ -340,23 +347,36 @@ func validateReview(views []ReviewView, queues []queueFile, slots *int) error {
 	return nil
 }
 
-func (f PRFilter) validate(where string) error {
+// prStates are the values of state, as GitHub's is: qualifier names them.
+var prStates = []string{"open", "closed", "merged", "all"}
+
+// A queue reviews PRs, so it lists only open PRs that are not drafts.
+func (f PRFilter) validate(where string, queue bool) error {
+	switch {
+	case f.State != "" && !slices.Contains(prStates, f.State):
+		return fmt.Errorf("%s: state %q must be one of %s", where, f.State, strings.Join(prStates, ", "))
+	case queue && f.State != "" && f.State != "open":
+		return fmt.Errorf("%s: a queue reviews open PRs, so state must be open", where)
+	case queue && f.Draft != nil && *f.Draft:
+		return fmt.Errorf("%s: a queue never reviews drafts, so draft must be false", where)
+	case f.ReviewRequested != "" && !isWord(f.ReviewRequested):
+		return fmt.Errorf("%s: review_requested %q must be @me or a login", where, f.ReviewRequested)
+	}
 	lists := []struct {
 		key   string
 		items []string
 		want  string
 		good  func(string) bool
 	}{
-		{"repos", f.Repos, "owner/name", isPair},
-		{"authors", f.Authors, "a login", isWord},
-		{"author_teams", f.AuthorTeams, "org/slug", isPair},
-		{"requested_teams", f.RequestedTeams, "org/slug", isPair},
+		{"repo", f.Repo, "owner/name", isPair},
+		{"author", f.Author, "a login", isWord},
+		{"author_team", f.AuthorTeam, "org/slug", isPair},
 		// A label travels in double quotes, so it can hold spaces but no quote.
-		{"labels", f.Labels, "a label with no double quote", func(s string) bool {
+		{"label", f.Label, "a label with no double quote", func(s string) bool {
 			return strings.TrimSpace(s) != "" && !strings.Contains(s, `"`)
 		}},
 	}
-	empty := true
+	empty := f.ReviewRequested == ""
 	for _, l := range lists {
 		for j, it := range l.items {
 			empty = false
@@ -366,12 +386,11 @@ func (f PRFilter) validate(where string) error {
 		}
 	}
 	if empty {
-		return fmt.Errorf("%s: needs at least one of repos, authors, author_teams, requested_teams, labels", where)
+		return fmt.Errorf("%s: needs at least one of repo, author, author_team, review_requested, label", where)
 	}
-	// An empty item is in every title, so it would drop every PR.
-	for j, it := range f.ExcludeTitles {
-		if it == "" {
-			return fmt.Errorf("%s: exclude_titles[%d] is empty", where, j)
+	for key, re := range map[string]string{"include_regex": f.IncludeRegex, "exclude_regex": f.ExcludeRegex} {
+		if _, err := regexp.Compile(re); err != nil {
+			return fmt.Errorf("%s: %s: %w", where, key, err)
 		}
 	}
 	return nil
@@ -386,6 +405,17 @@ func isPair(s string) bool {
 }
 
 var errHarnessGone = errors.New("harness is no longer a setting, lineup runs claude")
+
+// renamedFilterKeys are the review filter keys before they took GitHub's
+// qualifier names, and what replaces each.
+var renamedFilterKeys = map[string]string{
+	"repos":           "repo",
+	"authors":         "author",
+	"author_teams":    "author_team",
+	"labels":          "label",
+	"exclude_titles":  `exclude_regex, one RE2 pattern, for example 'HLESS-|WIP'`,
+	"requested_teams": `review_requested = "@me", which matches a request to you or to any of your teams`,
+}
 
 const restartsHint = ". A lost Worker no longer restarts by itself, so delete the restarts line from the [budgets] table"
 
@@ -407,6 +437,13 @@ func decodeStrict(text string, v any) error {
 		msg := "unknown keys: " + strings.Join(names, ", ")
 		if slices.Contains(names, "budgets.restarts") {
 			msg += restartsHint
+		}
+		for _, k := range keys {
+			if len(k) == 3 && k[0] == "review" {
+				if hint, ok := renamedFilterKeys[k[2]]; ok {
+					msg += fmt.Sprintf(". Rename %s to %s", k[2], hint)
+				}
+			}
 		}
 		return errors.New(msg)
 	}

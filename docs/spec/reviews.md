@@ -41,25 +41,31 @@ The user sees in one place which PRs need them: their own open PRs and the PRs t
 
 ## Filters
 
-A view and a queue take the same five filters and one exclusion. Each is a list.
+A view and a queue take the same filter keys. Each key takes the name of a GitHub search qualifier.
 
 | Key | Matches a PR when | Search qualifier |
 |---|---|---|
-| `repos` | its repository is in the list | `repo:<owner/name>`, one per item |
-| `authors` | its author is in the list | `author:<login>`, one per item |
-| `author_teams` | its author is a member of a team in the list | `author:<login>` for each member |
-| `requested_teams` | it requests review from a team in the list | `team-review-requested:<org/slug>`, one per item |
-| `labels` | it has any label in the list | `label:<a>,<b>` |
-| `exclude_titles` | its title holds no item of the list | none: lineup drops the PR after the search |
+| `state` | its state is `open`, `closed`, or `merged`. `all` matches every state. The default is `open`. | `is:open`, `is:closed`, or `is:merged`. `all` adds none. |
+| `draft` | `true`: it is a draft. `false`: it is not a draft. If you omit the key, drafts and other PRs match. | `draft:true` or `draft:false` |
+| `repo` | its repository is in the list | `repo:<owner/name>`, one per item |
+| `author` | its author is in the list | `author:<login>`, one per item |
+| `author_team` | its author is a member of a team in the list | `author:<login>` for each member |
+| `review_requested` | it requests review from the user, by name or through any of the user's teams | `review-requested:<@me or login>` |
+| `label` | it has any label in the list | `label:<a>,<b>` |
+| `include_regex` | its title matches the pattern | none: lineup drops the PR after the search |
+| `exclude_regex` | its title does not match the pattern | none: lineup drops the PR after the search |
 
-- The items of one filter combine with OR. Two filters combine with AND.
-- `authors` and `author_teams` are one filter. lineup puts their logins into one OR list.
-- `exclude_titles` drops a PR whose title contains any item, case-sensitive, even when every filter matches. GitHub search matches whole words in any case, so lineup compares the titles itself. A view or queue needs at least one filter besides `exclude_titles`, and an empty item fails at load.
-- Every search adds `is:pr is:open archived:false`.
-- A team is `org/slug`, for example `umbrella/platform`. lineup reads the members of each team in `author_teams` once an hour, in one GraphQL call for every team.
+- The items of one list combine with OR. Two keys combine with AND.
+- `author` and `author_team` are one filter. lineup puts their logins into one OR list.
+- `review_requested = "@me"` matches a request to the user by name and a request to any team of the user. GitHub never requests the author, so the user's own PRs never match.
+- `include_regex` and `exclude_regex` are RE2 patterns, case-sensitive. `(?i)` makes a pattern ignore case. GitHub search has no regex, so lineup matches the titles itself. A PR that matches `exclude_regex` drops, also when it matches `include_regex`.
+- A view or queue needs at least one of `repo`, `author`, `author_team`, `review_requested`, or `label`. A bad pattern, an unknown `state`, and a key with its old name fail at load. The old names are `repos`, `authors`, `author_teams`, `labels`, `requested_teams`, and `exclude_titles`. The error names the new key.
+- Every search adds `is:pr archived:false`.
+- A team is `org/slug`, for example `umbrella/platform`. lineup reads the members of each team in `author_team` once an hour, in one GraphQL call for every team.
 - A view search sorts newest first (`sort:created-desc`). A queue search sorts oldest first (`sort:created-asc`), so that its oldest PRs are inside the first 100.
+- A queue search also adds `draft:false -author:@me`. A queue reviews open PRs only, so a queue with a `state` other than `open`, or with `draft = true`, fails at load.
 
-These rules come from probes of GitHub search with `search(type: ISSUE)`. A repeated `repo:`, `author:`, or `team-review-requested:` qualifier is OR. A repeated `label:` qualifier is AND, and `label:a,b` is OR. Boolean `OR` and parentheses return nothing in this search type. lineup pins `type: ISSUE`, because `ISSUE_ADVANCED` makes a repeated `author:` an AND.
+These rules come from probes of GitHub search with `search(type: ISSUE)`. A repeated `repo:` or `author:` qualifier is OR. A repeated `label:` qualifier is AND, and `label:a,b` is OR. Boolean `OR` and parentheses return nothing in this search type. lineup pins `type: ISSUE`, because `ISSUE_ADVANCED` makes a repeated `author:` an AND. In a probe, `review-requested:@me` returned every PR of `user-review-requested:@me` and every PR of the user's team requests, except the user's own PRs.
 
 ## Views
 
@@ -67,14 +73,16 @@ These rules come from probes of GitHub search with `search(type: ISSUE)`. A repe
 # ~/.config/lineup/config.toml
 [[review.views]]
 name = "My teammates"
-repos = ["umbrella/data"]
-author_teams = ["umbrella/platform"]
+repo = ["umbrella/data"]
+author_team = ["umbrella/platform"]
 
 [[review.views]]
 name = "Data team"
-requested_teams = ["umbrella/data"]
-labels = ["needs-review"]
-exclude_titles = ["WIP"]
+review_requested = "@me"
+draft = false
+label = ["needs-review"]
+include_regex = '\bDATA-\d+'
+exclude_regex = '^WIP'
 ```
 
 The review tab shows these tabs, in this order before the user ranks them:
@@ -149,12 +157,12 @@ slots = 5             # at most 5 queue reviews run at once, across all queues
 
 [[review.queues]]     # queues fill in config order, so this one picks first
 name = "platform"
-repos = ["umbrella/data"]
-authors = ["hopper", "noether"]
+repo = ["umbrella/data"]
+author = ["hopper", "noether"]
 
 [[review.queues]]
 name = "umbrella/data"
-repos = ["umbrella/data"]
+repo = ["umbrella/data"]
 slots = 2             # at most 2 of this queue's reviews, so 3 stay free for "platform"
 ```
 
@@ -381,7 +389,7 @@ The `review` Hub tab holds one pane, `REVIEWS`, which runs `lineup board --revie
 
 ## Success criteria and tests
 
-1. **Query builder.** Table tests: each filter alone, two filters together, `author_teams` merged with `authors`, labels as one comma list, and the queue's added qualifiers.
+1. **Query builder.** Table tests: each filter alone, two filters together, `author_team` merged with `author`, labels as one comma list, each `state` and `draft` value, `review_requested`, and the queue's added qualifiers. Title regexes: table tests, and a `rapid` property test that a kept PR matches `include_regex` and does not match `exclude_regex`.
 2. **Search.** Against a recorded GraphQL response with three aliased searches, each view gets its own PRs, with author, CI, review decision, and requested reviewers.
 3. **Lifecycle.** Table tests for every transition above. Property tests with `rapid`:
    - `start` never succeeds for a queue whose started count is at or above its slots.
@@ -395,7 +403,7 @@ The `review` Hub tab holds one pane, `REVIEWS`, which runs `lineup board --revie
 6. **Review poll.** Against recorded responses, `pr-reviewed`, `pr-merged`, and `pr-closed` fire as the table says, wait while the Worker works, and fire on the next poll after the Worker stops. A pending review does not fire `pr-reviewed`.
 7. **Setup and cleanup.** Two review starts in one Repo fetch one after the other. Cleanup removes a clean review worktree and keeps one with an unpushed commit. A review Task never calls `wt remove`.
 8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then restores the Worker in the same conversation. A closed tab in Reviewing flags the Task `tab closed` and opens no tab, and `lineup open` or `lineup review` then resumes the Worker. Recovery with no tab in Review ready leaves the Task as it is, and in Reviewing it sets the flag. The events of the hunk pane leave the Task as it is. A closed Worker block closes the hunk pane with its tab.
-9. **Config.** Load and validation: an unknown key, an empty filter list, a bad team or repository form, a duplicate name, an empty `exclude_titles` item, and `slots` below 1 each fail at load.
+9. **Config.** Load and validation: an unknown key, an empty filter list, a bad team or repository form, a duplicate name, a bad regex, an unknown `state`, a queue on closed PRs or drafts, each old key name, and `slots` below 1 each fail at load.
 10. **Board.** A render test of the review view with a build Task and a review Task on PRs. Only the review Task joins. `enter` on a joined row sends `focus` for that Task when its Worker is live, and `open` when it is not. The Reviews tab lists only the review Task. Typing `q` in the search does not quit. A `Q:` tab lists a skipped PR dim after the PRs that wait, also right after the skip closed its review Task. `S` toggles the skip.
 11. **Speed.** The review view's first paint from the cache meets the Board's 100 ms budget.
 12. **Live.**

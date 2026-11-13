@@ -12,52 +12,61 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"pgregory.net/rapid"
 )
 
 func TestQuery(t *testing.T) {
-	const open = "is:pr is:open archived:false sort:created-desc"
-	const oldest = "is:pr is:open archived:false sort:created-asc"
+	const open = "is:pr archived:false sort:created-desc is:open"
+	const oldest = "is:pr archived:false sort:created-asc draft:false -author:@me is:open"
 	members := map[string][]string{
 		"umbrella/platform": {"kernighan", "hopper"},
 		"umbrella/data-eng": {"hopper", "knuth"},
 		"umbrella/empty":    {},
 	}
+	yes, no := true, false
 	for name, c := range map[string]struct {
 		f    Filter
 		want string
 	}{
-		"my PRs":    {Filter{Base: MyPRs}, open + " author:@me"},
-		"requested": {Filter{Base: RequestedPRs}, open + " review-requested:@me draft:false"},
-		"repos":     {Filter{Base: ViewPRs, Repos: []string{"umbrella/data", "umbrella/backend"}}, open + " repo:umbrella/data repo:umbrella/backend"},
-		"authors":   {Filter{Base: ViewPRs, Authors: []string{"octo", "hubot"}}, open + " author:octo author:hubot"},
-		"author teams": {Filter{Base: ViewPRs, AuthorTeams: []string{"umbrella/platform"}},
+		"my PRs":    {Filter{Base: MyPRs}, "is:pr archived:false sort:created-desc author:@me is:open"},
+		"requested": {Filter{Base: RequestedPRs}, "is:pr archived:false sort:created-desc review-requested:@me draft:false is:open"},
+		"repo":      {Filter{Base: ViewPRs, Repo: []string{"umbrella/data", "umbrella/backend"}}, open + " repo:umbrella/data repo:umbrella/backend"},
+		"author":    {Filter{Base: ViewPRs, Author: []string{"octo", "hubot"}}, open + " author:octo author:hubot"},
+		"author team": {Filter{Base: ViewPRs, AuthorTeam: []string{"umbrella/platform"}},
 			open + " author:kernighan author:hopper"},
-		"authors and teams merged": {Filter{Base: ViewPRs, Authors: []string{"hopper", "octo"}, AuthorTeams: []string{"umbrella/platform", "umbrella/data-eng"}},
+		"author and teams merged": {Filter{Base: ViewPRs, Author: []string{"hopper", "octo"}, AuthorTeam: []string{"umbrella/platform", "umbrella/data-eng"}},
 			open + " author:hopper author:octo author:kernighan author:knuth"},
-		"requested teams": {Filter{Base: ViewPRs, RequestedTeams: []string{"umbrella/data", "umbrella/data-eng"}},
-			open + " team-review-requested:umbrella/data team-review-requested:umbrella/data-eng"},
-		"labels": {Filter{Base: ViewPRs, Labels: []string{"needs-review", "breaking change", "frontend"}},
+		"review requested": {Filter{Base: ViewPRs, ReviewRequested: "@me"}, open + " review-requested:@me"},
+		"label": {Filter{Base: ViewPRs, Label: []string{"needs-review", "breaking change", "frontend"}},
 			open + ` label:needs-review,"breaking change",frontend`},
-		"two filters": {Filter{Base: ViewPRs, Repos: []string{"umbrella/data"}, Labels: []string{"needs-review"}},
+		"two filters": {Filter{Base: ViewPRs, Repo: []string{"umbrella/data"}, Label: []string{"needs-review"}},
 			open + " repo:umbrella/data label:needs-review"},
-		"queue": {Filter{Base: QueuePRs, Repos: []string{"umbrella/data"}, Authors: []string{"hopper"}},
-			oldest + " draft:false -author:@me repo:umbrella/data author:hopper"},
-		"empty team with authors": {Filter{Base: ViewPRs, Authors: []string{"octo"}, AuthorTeams: []string{"umbrella/empty"}},
+		"state open":   {Filter{Base: ViewPRs, State: "open", Repo: []string{"o/r"}}, open + " repo:o/r"},
+		"state closed": {Filter{Base: ViewPRs, State: "closed", Repo: []string{"o/r"}}, "is:pr archived:false sort:created-desc is:closed repo:o/r"},
+		"state merged": {Filter{Base: ViewPRs, State: "merged", Repo: []string{"o/r"}}, "is:pr archived:false sort:created-desc is:merged repo:o/r"},
+		"state all":    {Filter{Base: ViewPRs, State: "all", Repo: []string{"o/r"}}, "is:pr archived:false sort:created-desc repo:o/r"},
+		"drafts only":  {Filter{Base: ViewPRs, Draft: &yes, Repo: []string{"o/r"}}, open + " draft:true repo:o/r"},
+		"no drafts":    {Filter{Base: ViewPRs, Draft: &no, Repo: []string{"o/r"}}, open + " draft:false repo:o/r"},
+		"queue": {Filter{Base: QueuePRs, Repo: []string{"umbrella/data"}, Author: []string{"hopper"}},
+			oldest + " repo:umbrella/data author:hopper"},
+		"empty team with author": {Filter{Base: ViewPRs, Author: []string{"octo"}, AuthorTeam: []string{"umbrella/empty"}},
 			open + " author:octo"},
+		"regex adds nothing": {Filter{Base: ViewPRs, Repo: []string{"o/r"}, IncludeRegex: "DATA-", ExcludeRegex: "WIP"}, open + " repo:o/r"},
 	} {
 		got, ok := c.f.Query(members)
 		if !ok || got != c.want {
 			t.Errorf("%s:\n got %q %v\nwant %q", name, got, ok, c.want)
 		}
 	}
-	if q, ok := (Filter{Base: ViewPRs, AuthorTeams: []string{"umbrella/empty"}}).Query(members); ok {
+	if q, ok := (Filter{Base: ViewPRs, AuthorTeam: []string{"umbrella/empty"}}).Query(members); ok {
 		t.Errorf("a filter whose only team is empty searched %q, which matches every author", q)
 	}
 }
 
-func TestKeepDropsTheExcludedTitles(t *testing.T) {
+func TestKeepAppliesTheTitleRegexes(t *testing.T) {
 	prs := []PullRequest{{Number: 1, Title: "HLESS-12 Move the loaders"}, {Number: 2, Title: "hless-13 lower case"},
-		{Number: 3, Title: "Fix the HLESS- prefix parser"}, {Number: 4, Title: "Write the usage logs"}, {Number: 5, Title: "WIP: draft"}}
+		{Number: 3, Title: "Fix the HLESS- prefix parser"}, {Number: 4, Title: "DATA-7 Write the usage logs"}, {Number: 5, Title: "WIP: DATA-8 draft"}}
 	numbers := func(prs []PullRequest) []int {
 		out := []int{}
 		for _, pr := range prs {
@@ -66,17 +75,20 @@ func TestKeepDropsTheExcludedTitles(t *testing.T) {
 		return out
 	}
 	for name, c := range map[string]struct {
-		exclude []string
-		want    []int
+		include, exclude string
+		want             []int
 	}{
-		"no exclusions":   {nil, []int{1, 2, 3, 4, 5}},
-		"case-sensitive":  {[]string{"HLESS-"}, []int{2, 4, 5}},
-		"anywhere":        {[]string{"usage"}, []int{1, 2, 3, 5}},
-		"any item":        {[]string{"HLESS-", "WIP"}, []int{2, 4}},
-		"no title holds":  {[]string{"nothing"}, []int{1, 2, 3, 4, 5}},
-		"lower case item": {[]string{"hless-"}, []int{1, 3, 4, 5}},
+		"no regex":             {"", "", []int{1, 2, 3, 4, 5}},
+		"exclude":              {"", "HLESS-", []int{2, 4, 5}},
+		"exclude anywhere":     {"", "usage", []int{1, 2, 3, 5}},
+		"exclude alternation":  {"", "HLESS-|WIP", []int{2, 4}},
+		"exclude ignore case":  {"", "(?i)hless-", []int{4, 5}},
+		"exclude anchored":     {"", `^HLESS-\d`, []int{2, 3, 4, 5}},
+		"include":              {`\bDATA-\d+`, "", []int{4, 5}},
+		"include and exclude":  {`DATA-\d+`, "^WIP", []int{4}},
+		"include matches none": {"NOPE", "", []int{}},
 	} {
-		f := Filter{Base: QueuePRs, Repos: []string{"umbrella/data"}, ExcludeTitles: c.exclude}
+		f := Filter{Base: QueuePRs, Repo: []string{"umbrella/data"}, IncludeRegex: c.include, ExcludeRegex: c.exclude}
 		if got := numbers(f.Keep(prs)); !slices.Equal(got, c.want) {
 			t.Errorf("%s: kept %v, want %v", name, got, c.want)
 		}
@@ -84,13 +96,34 @@ func TestKeepDropsTheExcludedTitles(t *testing.T) {
 	if len(prs) != 5 || prs[0].Number != 1 {
 		t.Errorf("Keep changed its input: %v", numbers(prs))
 	}
-	if got := (Filter{ExcludeTitles: []string{"HLESS-"}}).Keep([]PullRequest{}); got == nil {
+	if got := (Filter{ExcludeRegex: "HLESS-"}).Keep([]PullRequest{}); got == nil {
 		t.Error("Keep of an empty list gave nil, want an empty list")
 	}
-	q, _ := Filter{Base: ViewPRs, Repos: []string{"umbrella/data"}, ExcludeTitles: []string{"HLESS-"}}.Query(nil)
-	if q != ViewPRs+" repo:umbrella/data" {
-		t.Errorf("exclude_titles changed the search: %q", q)
-	}
+}
+
+// Every PR that Keep returns matches IncludeRegex and not ExcludeRegex, and
+// Keep drops no other PR.
+func TestKeepIsTheRegexRule(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		word := rapid.StringMatching(`[A-Za-z]{1,3}`)
+		include := rapid.OneOf(rapid.Just(""), word).Draw(t, "include")
+		exclude := rapid.OneOf(rapid.Just(""), word).Draw(t, "exclude")
+		titles := rapid.SliceOf(rapid.StringMatching(`[A-Za-z -]{0,12}`)).Draw(t, "titles")
+		var prs []PullRequest
+		for i, title := range titles {
+			prs = append(prs, PullRequest{Number: i, Title: title})
+		}
+		kept := map[int]bool{}
+		for _, pr := range (Filter{IncludeRegex: include, ExcludeRegex: exclude}).Keep(prs) {
+			kept[pr.Number] = true
+		}
+		for _, pr := range prs {
+			want := strings.Contains(pr.Title, include) && (exclude == "" || !strings.Contains(pr.Title, exclude))
+			if kept[pr.Number] != want {
+				t.Fatalf("title %q, include %q, exclude %q: kept %v, want %v", pr.Title, include, exclude, kept[pr.Number], want)
+			}
+		}
+	})
 }
 
 // fakeSearchGH is a gh that answers each search with the reply for its query.
