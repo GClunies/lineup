@@ -1,0 +1,41 @@
+docs/adr/0022-the-users-review-closes-the-review-tab.md
+  s_cb9315cd84195e::t_a625b6fd50a295 3-4
+cmd/lineup/agent/CLAUDE.md
+  s_cb9315cd84195e::t_a625b6fd50a295 51
+docs/adr/0024-every-review-end-closes-the-review-tab.md
+  s_cb9315cd84195e::t_a625b6fd50a295 1-15
+internal/lifecycle/review_test.go
+  s_cb9315cd84195e::t_d2999b514c28e7 18,31-36,41-46
+docs/spec/reviews.md
+  s_cb9315cd84195e::t_a625b6fd50a295 184,197,237,261-262,271,308,403
+internal/scheduler/queue.go
+  s_cb9315cd84195e::t_3fe415e45d37c1 161
+internal/scheduler/skip_test.go
+  s_cb9315cd84195e::t_93120f357c56c8 320,324,332,334-335
+internal/lifecycle/board.go
+  s_cb9315cd84195e::t_33de2d71317673 221-222,224,344,518-519,521
+  s_cb9315cd84195e::t_563e32921d5d56 218-220
+internal/scheduler/review_test.go
+  s_cb9315cd84195e::t_fee8142c5cf65f 215-218
+  s_cb9315cd84195e::t_d2999b514c28e7 71-74,76-85,88,192,196,247,255-258
+cmd/lineup/review_test.go
+  s_cb9315cd84195e::t_ed29f586048e7b 63,73
+internal/scheduler/review.go
+  s_cb9315cd84195e::t_33de2d71317673 62-64,66,310-312,333
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "74a693f7e0bf43d4f27e879e9c8ff289864c81c6",
+  "prompts": {},
+  "sessions": {
+    "s_cb9315cd84195e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63a76830-1bf9-40da-af50-4d201e8035e6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
