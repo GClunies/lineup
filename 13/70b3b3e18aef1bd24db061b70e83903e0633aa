@@ -1,0 +1,60 @@
+internal/board/view.go
+  s_06f618fc4ae197::t_e56f5faee7e1fc 41,57-59,70,93,157-158,201-202,204,344-348,429-430
+internal/board/model.go
+  s_06f618fc4ae197::t_e56f5faee7e1fc 157-158,177,205-208,244-246,265-266,274,393-394,455,457-464,535-542
+  s_06f618fc4ae197::t_a8ceafc869d0b4 149-156
+  s_06f618fc4ae197::t_fd8b765b90bda0 12,83
+  s_06f618fc4ae197::t_e42572aae49bc7 543-544
+internal/board/testdata/rapid/TestTheFilterNeverShowsARowThatDoesNotMatchAndEscRestoresTheScreen/TestTheFilterNeverShowsARowThatDoesNotMatchAndEscRestoresTheScreen-20261112181452-6699.fail
+  s_06f618fc4ae197::t_75b8d97ee3929c 1-40
+internal/board/filter.go
+  s_06f618fc4ae197::t_5ce91db5afd29d 1-70,74-96,111-118
+  s_06f618fc4ae197::t_31c77f6762fd2e 71,73
+  s_06f618fc4ae197::t_dc41234f16a73a 72,97-108
+  s_06f618fc4ae197::t_d31649692aabf8 109-110
+internal/board/filter_test.go
+  s_06f618fc4ae197::t_4dd8e25046ede7 1-8,10-13,20-111,125-137,147-161,164-178
+  s_06f618fc4ae197::t_3204e431991d63 138-146
+  s_06f618fc4ae197::t_ec636efbb79e19 9,14-19,112-124,162-163
+internal/board/env_test.go
+  s_06f618fc4ae197::t_dff756afc5f9ad 9,13
+  s_06f618fc4ae197::t_d181b8f5ab5100 137-143
+GLOSSARY.md
+  s_06f618fc4ae197::t_36af16a734c1d6 62,68,86
+docs/adr/0021-the-board-has-no-plan-view.md
+  s_06f618fc4ae197::t_e292ea70ae3193 7
+  s_06f618fc4ae197::t_6496384abae716 3
+  s_06f618fc4ae197::t_52dad5fe2a5230 1-2,4-6,8-17
+docs/spec/reviews.md
+  s_06f618fc4ae197::t_b97ee3c0f231b7 85
+docs/spec/one-board.md
+  s_06f618fc4ae197::t_eabc538aa9482c 3,13,22-23,25,30,79,84-85,91-117,119,121-126,217,248-251
+  s_06f618fc4ae197::t_8d87f453b736d1 118
+docs/spec/mvp.md
+  s_06f618fc4ae197::t_b97ee3c0f231b7 439
+  s_06f618fc4ae197::t_c5696a20526e44 477
+  s_06f618fc4ae197::t_e7451b9ccb66a6 11,25,43,253,388,442,461,463,474,478,482,485,520,529
+  s_06f618fc4ae197::t_282d2c10066f85 204-206,221-222
+docs/spec/trackers.md
+  s_06f618fc4ae197::t_2cc10402cb1728 14
+  s_06f618fc4ae197::t_67ca4e376ddc4c 3,7,31,54,64,122-123,125,127,148,150,159,161
+  s_06f618fc4ae197::t_7e8520d394d2f4 129
+internal/board/testdata/rapid/TestTheFilterNeverShowsARowThatDoesNotMatchAndEscRestoresTheScreen/TestTheFilterNeverShowsARowThatDoesNotMatchAndEscRestoresTheScreen-20261112183035-29477.fail
+  s_06f618fc4ae197::t_e0344ac7eb7f72 1-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1370b3b3e18aef1bd24db061b70e83903e0633aa",
+  "prompts": {},
+  "sessions": {
+    "s_06f618fc4ae197": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0f96725b-43c5-4c73-a2c7-36a82adcd497",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
