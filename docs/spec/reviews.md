@@ -194,7 +194,7 @@ If the PR's head moves after Review ready, the Task gets the note `head moved`. 
 | Item | Value |
 |---|---|
 | Rex session | `reviews` |
-| Tab label | `pr-4955 data#4955 <title>` |
+| Tab label | `data#4955 <title>`, the Task's title. It names the PR, so it leaves out the Task ID. |
 | Main checkout | The `[[repos]]` checkout whose `origin` is the PR's repository. It is the Worker's folder and the trusted checkout of `pr-review` Step 1. The PR's code never becomes the Worker's folder, because a folder's `.claude` settings and hooks would run. |
 | Review worktree | `<main checkout's parent>/<repo>.review-pr-<number>`, detached at the PR's head. lineup makes it and removes it. |
 | Prompt | `/pr-review <PR URL>`, the review worktree, then the review contract |

@@ -119,7 +119,7 @@ func TestTheUsersReviewClosesTheReviewTab(t *testing.T) {
 		t.Fatalf("review = %+v", res)
 	}
 	worker := h.waitTab("claude reviewing")
-	if worker.cwd != "/repos/acme/data" || worker.SessionID != "session:reviews" || worker.label != "pr-7 data#7 Fix the tooltip" {
+	if worker.cwd != "/repos/acme/data" || worker.SessionID != "session:reviews" || worker.label != "data#7 Fix the tooltip" {
 		t.Fatalf("worker tab = %+v, want the main checkout in the reviews session", worker)
 	}
 	if worker.env["XDG_STATE_HOME"] != h.stateHome {
