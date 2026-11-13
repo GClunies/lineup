@@ -181,7 +181,7 @@ The queue's filters pick the candidates. A candidate enters the queue only when 
 - It is not a draft, and it does not come from a fork. `pr-review` refuses fork PRs, because a fork's code would run with the user's credentials.
 - Its author is not the user and is not a bot.
 - The user did not skip it. A skip holds the PR out of every queue, at every head, until the user unskips it. See [Skips](#skips).
-- No review Task exists for its URL at its current head commit, Done or not. A Done review that keeps its tab holds the PR. The queue starts a new review only after the user closes that tab. A Task that the user closed with `x` at one head stays closed until the author pushes. A Task that a skip ended holds nothing, because the skip alone holds the PR. The user can always start a review again with `r`, after the tab closes.
+- No review Task exists for its URL at its current head commit, Done or not. A Done review that keeps its tab holds the PR. The queue starts a new review only after the user closes that tab. A Task that the user closed with `x` at one head stays closed until the author pushes. A Task that a skip ended holds nothing, because the skip alone holds the PR. A Task that the user's review ended holds nothing at its head. The next rule lets the PR back only when it requests the user again. The user can always start a review again with `r`, after the tab closes.
 - It wants the user's review. A PR that the user reviewed before wants it only when it requests the user again. Any other PR wants it only when nobody approved it yet. A pending review, a draft that the user has not submitted, does not count as a review.
 - No other person's review is open on it. A review is open when a person other than the user and the author requested changes, or commented on the current head and did not approve. Bots do not count. A second review can contradict an open review, so the PR waits until the author pushes a new head or the reviewer approves. `pr-review` stops on the same rule.
 - A person who approved and then commented still counts as an approval. GitHub's `latestReviews` shows only the comment, so lineup reads `latestOpinionatedReviews` too.
@@ -257,7 +257,7 @@ A review Task never enters a Stage of a build Task, and a build Task never enter
 | Reviewing | `done` or a question, and the findings file exists | Review ready |
 | Reviewing | `done`, and no findings file exists | Reviewing, with the Needs you flag `stopped` |
 | Reviewing | a question, and no findings file exists | Reviewing, with the Needs you flag `question` |
-| Reviewing or Review ready | `pr-reviewed`: the user submitted a review after the Task was added. A pending review does not count. | Done, marked reviewed |
+| Reviewing or Review ready | `pr-reviewed`: the user submitted a review after the Task was added: an approval, a comment, or a request for changes. A pending review does not count. | Done, marked reviewed. The Scheduler closes the tab and removes the review worktree. |
 | Reviewing or Review ready | `pr-merged` | Done, marked merged |
 | Reviewing or Review ready | `pr-closed`: closed without a merge | Done, marked closed |
 | Reviewing | the Worker's tab closes, or recovery finds no tab | Reviewing, with the Needs you flag `tab closed` and no Worker. lineup opens no tab. |
@@ -273,7 +273,7 @@ A review Task never enters a Stage of a build Task, and a build Task never enter
 - Review ready is a Stage, not a flag. The Worker's later statuses, for example `working` after the user's answer, never move the Task back to Reviewing. Recovery flags a lost Worker only in an agent Stage, and opens no tab, so a finished review never runs again after a restart.
 - `open` fits every started review Task. It opens a new tab, clears the Worker's flags, and takes no new slot. A Task in Review ready with no conversation ID reviews again in Reviewing.
 - `rerun` takes only the Stages of the Task's Kind, so a review Task never enters Working, CI running, or any other build Stage.
-- When a PR that the user reviewed requests the user again, its review Task is already Done. A Done review that keeps its tab holds the PR. The queue starts a new review Task only after the user closes that tab. `pr-review` reads its review record and reviews only what changed.
+- When a PR that the user reviewed requests the user again, its review Task is already Done, and its tab is closed. The queue starts a new review Task at the next fill, at the same head or a new one. `pr-review` reads its review record and reviews only what changed. See [ADR 0022](../adr/0022-the-users-review-closes-the-review-tab.md).
 
 ### The review poll
 
@@ -305,7 +305,7 @@ If no `[[repos]]` checkout has the PR's repository as its `origin`, the add fail
 
 The lock keeps two starts from fetching into one checkout at once. A fetch from outside lineup, for example the user's editor, can still hold a ref lock in that checkout. If git reports `cannot lock ref`, lineup tries the fetch again after 0.5 s, 1 s, and 2 s. A failed step gives the flag `setup failed`.
 
-**Cleanup.** A review Task that ends keeps its tab, its hunk pane, and its review worktree. The user ends them by closing the Task's tab, or with `x` or `lineup close <task>`. Then lineup closes the tab if it is open and fetches. It removes the review worktree if the worktree holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
+**Cleanup.** A review Task that the user's review ends loses its tab, its hunk pane, and its review worktree at once. A review Task that ends when its PR merges or closes keeps them. The user ends them by closing the Task's tab, or with `x` or `lineup close <task>`. Then lineup closes the tab if it is open and fetches. It removes the review worktree if the worktree holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
 
 **The hunk pane.** Each review Worker gets the PR's diff beside it, so the user reads the diff next to the review. lineup splits the Worker's tab when it opens the tab. That happens on the first start and on each restore. A rerun types into the same tab, so it keeps its pane. The Worker keeps the focus. The pane runs this command:
 
@@ -398,7 +398,7 @@ The `review` Hub tab holds one pane, `REVIEWS`, which runs `lineup board --revie
    - Review Tasks never change `Started()`, so the WIP cap property holds unchanged.
    - Every started review Task ends in Done or in the Needs you group.
    - A review Task never receives an Effect that writes to GitHub.
-4. **Queue rules.** Table tests over draft, fork, bot, own PR, open review Task, approved, reviewed, and re-requested PRs, and the ranking order. A skipped PR never enters `Ranked`, at any head. A Task that a skip ended holds nothing, and a Task that `x` closed holds its head. Property tests with `rapid` check both.
+4. **Queue rules.** Table tests over draft, fork, bot, own PR, open review Task, approved, reviewed, and re-requested PRs, and the ranking order. A skipped PR never enters `Ranked`, at any head. A Task that a skip ended holds nothing, a Task that the user's review ended lets the PR back only on a new request, and a Task that `x` closed holds its head. Property tests with `rapid` check both.
 5. **Fill.** A skipped PR is never added, at any head, also after a restart of the Scheduler. A skip ends the open review Task in one loop call, and an unskip lets the next fill add the PR at the same head. A skip writes nothing to GitHub. Two fills in the same state start the same Tasks once. A paused queue starts nothing. Table tests for the shared slots: an earlier queue's PR is added above an older later-queue PR, a PR that two queues match is added once in the first queue, the shared count caps the started reviews of all queues, and a full queue leaves a new PR of the first queue waiting until a slot frees.
 6. **Review poll.** Against recorded responses, `pr-reviewed`, `pr-merged`, and `pr-closed` fire as the table says, wait while the Worker works, and fire on the next poll after the Worker stops. A pending review does not fire `pr-reviewed`.
 7. **Setup and cleanup.** Two review starts in one Repo fetch one after the other. Cleanup removes a clean review worktree and keeps one with an unpushed commit. A review Task never calls `wt remove`.
