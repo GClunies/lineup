@@ -121,7 +121,7 @@ func TestPropertyASkipIgnoresDuplicatesAndHeads(t *testing.T) {
 			pushed[i].Head += fmt.Sprint("-pushed")
 		}
 		for _, c := range Rank(pushed, h) {
-			if h.IsSkipped(c.PR.URL) {
+			if slices.ContainsFunc(h.Skips, func(s Skip) bool { return strings.EqualFold(s.URL, c.PR.URL) }) {
 				t.Fatalf("PR %d enters at a new head though the user skipped it", c.PR.Number)
 			}
 		}

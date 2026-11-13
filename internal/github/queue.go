@@ -35,11 +35,6 @@ type Holds struct {
 	Skips []Skip
 }
 
-// IsSkipped reports whether the user skipped the PR at url. GitHub URLs ignore case.
-func (h Holds) IsSkipped(url string) bool {
-	return slices.ContainsFunc(h.Skips, func(s Skip) bool { return strings.EqualFold(s.URL, url) })
-}
-
 // Candidate is a PR that a queue reviews, with why it wants the user.
 type Candidate struct {
 	PR PullRequest `json:"pr"`

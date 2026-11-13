@@ -3,7 +3,6 @@ package github
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,12 +39,8 @@ func TestQuery(t *testing.T) {
 			open + ` label:needs-review,"breaking change",frontend`},
 		"two filters": {Filter{Base: QueuePRs, Repo: []string{"umbrella/data"}, Label: []string{"needs-review"}},
 			open + " repo:umbrella/data label:needs-review"},
-		"state open":   {Filter{Base: QueuePRs, State: "open", Repo: []string{"o/r"}}, open + " repo:o/r"},
-		"state closed": {Filter{Base: QueuePRs, State: "closed", Repo: []string{"o/r"}}, base + " is:closed repo:o/r"},
-		"state merged": {Filter{Base: QueuePRs, State: "merged", Repo: []string{"o/r"}}, base + " is:merged repo:o/r"},
-		"state all":    {Filter{Base: QueuePRs, State: "all", Repo: []string{"o/r"}}, base + " repo:o/r"},
-		"drafts only":  {Filter{Base: QueuePRs, Draft: &yes, Repo: []string{"o/r"}}, open + " draft:true repo:o/r"},
-		"no drafts":    {Filter{Base: QueuePRs, Draft: &no, Repo: []string{"o/r"}}, open + " draft:false repo:o/r"},
+		"drafts only": {Filter{Base: QueuePRs, Draft: &yes, Repo: []string{"o/r"}}, open + " draft:true repo:o/r"},
+		"no drafts":   {Filter{Base: QueuePRs, Draft: &no, Repo: []string{"o/r"}}, open + " draft:false repo:o/r"},
 		"empty team with author": {Filter{Base: QueuePRs, Author: []string{"octo"}, AuthorTeam: []string{"umbrella/empty"}},
 			open + " author:octo"},
 		"regex adds nothing": {Filter{Base: QueuePRs, Repo: []string{"o/r"}, IncludeRegex: "DATA-", ExcludeRegex: "WIP"}, open + " repo:o/r"},
@@ -196,9 +191,7 @@ func TestSearchPRsSplitsEachSearch(t *testing.T) {
 
 	mine := got["mine"]
 	first := mine[0]
-	if first.Repo != "umbrella/data" || first.Author != "octocat" || first.URL != "https://github.com/umbrella/data/pull/4945" ||
-		!reflect.DeepEqual(first.RequestedUsers, []string{"umbrella-ci-bot", "dijkstra"}) ||
-		!reflect.DeepEqual(first.RequestedTeams, []string{"umbrella/data", "umbrella/search"}) {
+	if first.Repo != "umbrella/data" || first.Author != "octocat" || first.URL != "https://github.com/umbrella/data/pull/4945" || first.Viewer.ByName {
 		t.Errorf("data#4945 = %+v", first)
 	}
 	if !first.CreatedAt.Equal(time.Date(2026, 11, 4, 22, 6, 53, 0, time.UTC)) {
@@ -216,7 +209,7 @@ func TestSearchPRsSplitsEachSearch(t *testing.T) {
 	if pr := mine[4]; !pr.Fork || pr.Repo != "globex/toolkit" {
 		t.Errorf("toolkit#94 = %+v", pr)
 	}
-	if pr := got["requested"][0]; pr.Author != "goldberg" || !reflect.DeepEqual(pr.RequestedUsers, []string{"octocat", "umbrella-ci-bot"}) {
+	if pr := got["requested"][0]; pr.Author != "goldberg" || !pr.Viewer.ByName {
 		t.Errorf("data#4955 = %+v", pr)
 	}
 	if pr := got["requested"][1]; pr.Author != "dependabot" {
@@ -234,21 +227,14 @@ func TestSearchErrorNamesTheSearch(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "search My teammates: too many records") {
 		t.Errorf("a GraphQL error on My teammates: err = %v", err)
 	}
-	var errs SearchErrors
-	if !errors.As(err, &errs) || len(errs) != 1 || errs["view:team"] == nil {
-		t.Errorf("SearchErrors = %v, want only view:team", errs)
-	}
-	if prs, ok := got["mine"]; !ok || prs == nil {
-		t.Errorf("the passed search has no list: %v", got)
-	}
-	if _, ok := got["view:team"]; ok {
-		t.Errorf("the failed search has a list: %v", got)
+	if got != nil {
+		t.Errorf("a failed search returned lists %v, want none: the fill starts nothing without every queue", got)
 	}
 
-	searches = []Search{{"mine", "My PRs", "a"}, {"view:team", "My teammates", "missing"}}
+	searches = []Search{{"mine", "My PRs", "b"}, {"view:team", "My teammates", "missing"}}
 	_, err = (&Client{Bin: bin}).SearchPRs(context.Background(), "octocat", searches)
-	if err == nil || !strings.Contains(err.Error(), "search My teammates") || !strings.Contains(err.Error(), "HTTP 502") {
-		t.Errorf("a failed call: err = %v", err)
+	if err == nil || !strings.Contains(err.Error(), "search My PRs: too many records") || !strings.Contains(err.Error(), "search My teammates") || !strings.Contains(err.Error(), "HTTP 502") {
+		t.Errorf("two failed searches: err = %v, want both named", err)
 	}
 }
 

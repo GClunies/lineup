@@ -71,7 +71,7 @@ func TestPlanFillSkips(t *testing.T) {
 		}
 		for _, cs := range p.Ranked {
 			for _, cand := range cs {
-				if (github.Holds{Skips: c.in.Skips}).IsSkipped(cand.PR.URL) {
+				if skipped(c.in.Skips, cand.PR.URL) {
 					t.Errorf("%s: ranked a skipped PR %s", c.name, cand.PR.URL)
 				}
 			}
@@ -101,16 +101,15 @@ func TestPropertyPlanFillNeverRanksOrAddsASkippedPR(t *testing.T) {
 				in.Skips = append(in.Skips, github.Skip{URL: u})
 			}
 		}
-		holds := github.Holds{Skips: in.Skips}
 		plan := planFill(in)
 		for _, a := range plan.Add {
-			if holds.IsSkipped(a.PR.URL) {
+			if skipped(in.Skips, a.PR.URL) {
 				t.Fatalf("the plan adds the skipped PR %s", a.PR.URL)
 			}
 		}
 		for _, cs := range plan.Ranked {
 			for _, c := range cs {
-				if holds.IsSkipped(c.PR.URL) {
+				if skipped(in.Skips, c.PR.URL) {
 					t.Fatalf("the plan ranks the skipped PR %s", c.PR.URL)
 				}
 			}
@@ -367,4 +366,9 @@ func TestASecondSkipEndsATaskThatSurvivedACrashAfterTheStoreWrite(t *testing.T) 
 		t.Fatalf("second skip = %+v, want pr-7 closed", r)
 	}
 	h.waitStage("pr-7", lifecycle.Done)
+}
+
+// skipped reports whether the user skipped the PR at url. GitHub URLs ignore case.
+func skipped(skips []github.Skip, url string) bool {
+	return slices.ContainsFunc(skips, func(s github.Skip) bool { return strings.EqualFold(s.URL, url) })
 }

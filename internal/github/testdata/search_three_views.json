@@ -9,36 +9,28 @@
           "isDraft": false,
           "createdAt": "2026-11-04T22:06:53Z",
           "isCrossRepository": false,
-          "reviewDecision": "REVIEW_REQUIRED",
           "author": {
             "login": "octocat"
           },
           "repository": {
             "nameWithOwner": "umbrella/data"
           },
-          "labels": {
-            "nodes": []
-          },
           "reviewRequests": {
             "nodes": [
               {
                 "requestedReviewer": {
-                  "login": "umbrella-ci-bot"
+                  "isViewer": false
                 }
               },
               {
-                "requestedReviewer": {
-                  "combinedSlug": "umbrella/data"
-                }
+                "requestedReviewer": {}
+              },
+              {
+                "requestedReviewer": {}
               },
               {
                 "requestedReviewer": {
-                  "combinedSlug": "umbrella/search"
-                }
-              },
-              {
-                "requestedReviewer": {
-                  "login": "dijkstra"
+                  "isViewer": false
                 }
               }
             ]
@@ -53,17 +45,6 @@
                 "submittedAt": "2026-11-04T22:09:52Z"
               }
             ]
-          },
-          "commits": {
-            "nodes": [
-              {
-                "commit": {
-                  "statusCheckRollup": {
-                    "state": "SUCCESS"
-                  }
-                }
-              }
-            ]
           }
         },
         {
@@ -73,27 +54,21 @@
           "isDraft": false,
           "createdAt": "2026-11-04T06:05:10Z",
           "isCrossRepository": false,
-          "reviewDecision": "CHANGES_REQUESTED",
           "author": {
             "login": "octocat"
           },
           "repository": {
             "nameWithOwner": "umbrella/data"
           },
-          "labels": {
-            "nodes": []
-          },
           "reviewRequests": {
             "nodes": [
               {
                 "requestedReviewer": {
-                  "login": "umbrella-ci-bot"
+                  "isViewer": false
                 }
               },
               {
-                "requestedReviewer": {
-                  "combinedSlug": "umbrella/search"
-                }
+                "requestedReviewer": {}
               }
             ]
           },
@@ -114,17 +89,6 @@
                 "submittedAt": "2026-11-04T20:08:17Z"
               }
             ]
-          },
-          "commits": {
-            "nodes": [
-              {
-                "commit": {
-                  "statusCheckRollup": {
-                    "state": "PENDING"
-                  }
-                }
-              }
-            ]
           }
         },
         {
@@ -134,30 +98,17 @@
           "isDraft": false,
           "createdAt": "2026-11-02T16:27:31Z",
           "isCrossRepository": false,
-          "reviewDecision": null,
           "author": {
             "login": "octocat"
           },
           "repository": {
             "nameWithOwner": "octocat/hello-world"
           },
-          "labels": {
-            "nodes": []
-          },
           "reviewRequests": {
             "nodes": []
           },
           "latestReviews": {
             "nodes": []
-          },
-          "commits": {
-            "nodes": [
-              {
-                "commit": {
-                  "statusCheckRollup": null
-                }
-              }
-            ]
           }
         },
         {
@@ -167,31 +118,23 @@
           "isDraft": true,
           "createdAt": "2026-10-25T06:50:38Z",
           "isCrossRepository": false,
-          "reviewDecision": "REVIEW_REQUIRED",
           "author": {
             "login": "octocat"
           },
           "repository": {
             "nameWithOwner": "umbrella/data"
           },
-          "labels": {
-            "nodes": []
-          },
           "reviewRequests": {
             "nodes": [
               {
-                "requestedReviewer": {
-                  "combinedSlug": "umbrella/data"
-                }
+                "requestedReviewer": {}
+              },
+              {
+                "requestedReviewer": {}
               },
               {
                 "requestedReviewer": {
-                  "combinedSlug": "umbrella/search"
-                }
-              },
-              {
-                "requestedReviewer": {
-                  "login": "umbrella-ci-bot"
+                  "isViewer": false
                 }
               }
             ]
@@ -213,17 +156,6 @@
                 "submittedAt": "2026-11-04T16:40:50Z"
               }
             ]
-          },
-          "commits": {
-            "nodes": [
-              {
-                "commit": {
-                  "statusCheckRollup": {
-                    "state": "FAILURE"
-                  }
-                }
-              }
-            ]
           }
         },
         {
@@ -233,32 +165,17 @@
           "isDraft": false,
           "createdAt": "2026-10-17T06:02:04Z",
           "isCrossRepository": true,
-          "reviewDecision": null,
           "author": {
             "login": "octocat"
           },
           "repository": {
             "nameWithOwner": "globex/toolkit"
           },
-          "labels": {
-            "nodes": []
-          },
           "reviewRequests": {
             "nodes": []
           },
           "latestReviews": {
             "nodes": []
-          },
-          "commits": {
-            "nodes": [
-              {
-                "commit": {
-                  "statusCheckRollup": {
-                    "state": "SUCCESS"
-                  }
-                }
-              }
-            ]
           }
         }
       ]
@@ -272,53 +189,34 @@
           "isDraft": false,
           "createdAt": "2026-11-05T18:46:40Z",
           "isCrossRepository": false,
-          "reviewDecision": "REVIEW_REQUIRED",
           "author": {
             "login": "goldberg"
           },
           "repository": {
             "nameWithOwner": "umbrella/data"
           },
-          "labels": {
-            "nodes": []
-          },
           "reviewRequests": {
             "nodes": [
               {
                 "requestedReviewer": {
-                  "login": "octocat"
+                  "isViewer": true
                 }
               },
               {
                 "requestedReviewer": {
-                  "login": "umbrella-ci-bot"
+                  "isViewer": false
                 }
               },
               {
-                "requestedReviewer": {
-                  "combinedSlug": "umbrella/data"
-                }
+                "requestedReviewer": {}
               },
               {
-                "requestedReviewer": {
-                  "combinedSlug": "umbrella/search"
-                }
+                "requestedReviewer": {}
               }
             ]
           },
           "latestReviews": {
             "nodes": []
-          },
-          "commits": {
-            "nodes": [
-              {
-                "commit": {
-                  "statusCheckRollup": {
-                    "state": "SUCCESS"
-                  }
-                }
-              }
-            ]
           }
         },
         {
@@ -328,34 +226,19 @@
           "isDraft": false,
           "createdAt": "2026-11-03T19:54:46Z",
           "isCrossRepository": false,
-          "reviewDecision": "APPROVED",
           "author": {
             "login": "dependabot"
           },
           "repository": {
             "nameWithOwner": "umbrella/data"
           },
-          "labels": {
-            "nodes": [
-              {
-                "name": "dependencies"
-              },
-              {
-                "name": "python"
-              }
-            ]
-          },
           "reviewRequests": {
             "nodes": [
               {
-                "requestedReviewer": {
-                  "combinedSlug": "umbrella/data"
-                }
+                "requestedReviewer": {}
               },
               {
-                "requestedReviewer": {
-                  "combinedSlug": "umbrella/search"
-                }
+                "requestedReviewer": {}
               }
             ]
           },
@@ -376,17 +259,6 @@
                 "submittedAt": "2026-11-03T19:55:03Z"
               }
             ]
-          },
-          "commits": {
-            "nodes": [
-              {
-                "commit": {
-                  "statusCheckRollup": {
-                    "state": "FAILURE"
-                  }
-                }
-              }
-            ]
           }
         }
       ]
@@ -400,32 +272,24 @@
           "isDraft": false,
           "createdAt": "2026-11-05T00:54:40Z",
           "isCrossRepository": false,
-          "reviewDecision": "REVIEW_REQUIRED",
           "author": {
             "login": "noether"
           },
           "repository": {
             "nameWithOwner": "umbrella/data"
           },
-          "labels": {
-            "nodes": []
-          },
           "reviewRequests": {
             "nodes": [
               {
                 "requestedReviewer": {
-                  "login": "umbrella-ci-bot"
+                  "isViewer": false
                 }
               },
               {
-                "requestedReviewer": {
-                  "combinedSlug": "umbrella/data"
-                }
+                "requestedReviewer": {}
               },
               {
-                "requestedReviewer": {
-                  "combinedSlug": "umbrella/search"
-                }
+                "requestedReviewer": {}
               }
             ]
           },
@@ -439,17 +303,6 @@
                 "submittedAt": "2026-11-05T00:57:54Z"
               }
             ]
-          },
-          "commits": {
-            "nodes": [
-              {
-                "commit": {
-                  "statusCheckRollup": {
-                    "state": "SUCCESS"
-                  }
-                }
-              }
-            ]
           }
         },
         {
@@ -459,31 +312,25 @@
           "isDraft": false,
           "createdAt": "2026-11-02T20:42:47Z",
           "isCrossRepository": false,
-          "reviewDecision": "APPROVED",
           "author": {
             "login": "hopper"
           },
           "repository": {
             "nameWithOwner": "umbrella/data"
           },
-          "labels": {
-            "nodes": []
-          },
           "reviewRequests": {
             "nodes": [
               {
                 "requestedReviewer": {
-                  "login": "umbrella-svc"
+                  "isViewer": false
                 }
               },
               {
-                "requestedReviewer": {
-                  "combinedSlug": "umbrella/search"
-                }
+                "requestedReviewer": {}
               },
               {
                 "requestedReviewer": {
-                  "login": "umbrella-ci-bot"
+                  "isViewer": false
                 }
               }
             ]
@@ -503,17 +350,6 @@
                 },
                 "state": "APPROVED",
                 "submittedAt": "2026-11-05T17:55:46Z"
-              }
-            ]
-          },
-          "commits": {
-            "nodes": [
-              {
-                "commit": {
-                  "statusCheckRollup": {
-                    "state": "SUCCESS"
-                  }
-                }
               }
             ]
           }
