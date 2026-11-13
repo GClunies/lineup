@@ -25,26 +25,27 @@ The `1 plan` view does not change. It still browses the team's Linear views.
 ## Shape
 
 ```
- lineup  WIP 4/5   ●2 need you (+1 in reviews)   ◐2 working   ◷1 waiting   1 queued   3 ready   12 backlog
+ lineup  1 plan  2 work  3 review  WIP 4/5   ●1 need you (+1 in reviews)
  ──────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU
+ NEEDS YOU  1
  ▸ ENG-590 Working ⚑    data  Add billing model        stopped                    12m
- BACKLOG
+ BACKLOG  2
    local-9                    Retry failed loads before alerting
    ENG-620              data  Split billing ingest     △4
- READY
+ READY  3
    ENG-611              data  Move the retry job       unblocked        △2
    local-7                    Rename the log flag
    ENG-614              data  Drop old API keys        blocked by ENG-610  △3
- QUEUED
+ QUEUED  1
    adhoc-9              data  Evaluate the ADR
- WORKING
+ WORKING  1
    ENG-592 CI debug     data  Fix flaky test           attempt 2/3                 1m
- WAITING
+ WAITING  1
    ENG-571 In review    data  Rate limit login         #4636 needs approval        1d
- DONE
-   ENG-560 merged       data  Rename config options    #4601                    today
+ DONE  1 …
 ```
+
+Each heading shows its row count. Backlog is open in this picture, and Done is closed. The header has no per-group counts. See "Fold the groups" below.
 
 An Issue row is an Issue of the user's own with no Task on the Board. The Board reads the Issues itself. The Scheduler and its store do not change.
 
@@ -149,7 +150,23 @@ The header of each view counts the Needs you Tasks of the other view in parenthe
 - The work view: `●2 need you (+1 in reviews)`
 - The review view: `●1 need you (+2 in work)`
 
+The header has no count for the other groups. Each group heading shows its count.
+
 The Board already holds the Tasks of both Kinds, so this needs no new data.
+
+## Fold the groups
+
+A long Backlog or Done group can push Ready and Working off a 24-row pane. Each group heading is a selectable row, so the user can close the groups that they do not need now.
+
+| Rule | Behavior |
+|---|---|
+| Heading | The group name in upper case and its row count, as `BACKLOG  7`. A closed group adds ` …` and hides its rows. A group with no row has no heading. |
+| Needs you | It never closes, and its heading is not a selection stop. |
+| Keys | `j` and `k` move through the headings and the rows of open groups. `enter` on a heading opens or closes the group. The footer reads `enter open` or `enter close`, then `j/k move`. |
+| Defaults | Backlog and Done start closed on the work view. Done starts closed on the Reviews tab. |
+| State | `groups.json` in the state folder holds the closed groups of each view, as `{"build": ["Backlog", "Done"], "review": ["Done"]}`. A missing or unreadable file gives the defaults. A view that the file leaves out keeps its default. |
+| Selection | A Task that moves into a closed group selects that group's heading. Any other lost selection goes to the first row, or to the first heading when every group is closed. |
+| Capture | `n` into a closed Backlog opens Backlog and saves the file. |
 
 ## The free slot toast
 
@@ -167,7 +184,7 @@ With no Ready row, the Board sends no extra toast. The Board does not start the 
 |---|---|
 | `internal/localissues` | The `backlog` status. `Create` writes `backlog`. A `Promote` write that sets `canceled` and adds the line to the body. |
 | `internal/linear` | A `Levels` function that returns the dependency level of each Issue. An `Unblocked` fact on `Issue` from the closed "blocks" relations. |
-| `internal/board` | Issue rows, their load and refresh, the Ready and Backlog groups, the keys, the capture box, the Destination list, promote, the header count, and the free slot toast |
+| `internal/board` | Issue rows, their load and refresh, the Ready and Backlog groups, the keys, the capture box, the Destination list, promote, the group headings and `groups.json`, the header count, and the free slot toast |
 | `cmd/lineup/wire.go` | The Local Tracker store for the work view, whatever `local_tracker` says |
 | Docs | `GLOSSARY.md` gets Ready, Backlog, Destination, and Promote. `docs/spec/mvp.md` and `docs/spec/trackers.md` name the new groups and the `backlog` status. |
 
@@ -193,7 +210,10 @@ Each PR lands on `main` before the next one starts.
 | A local capture writes `status: backlog`. A Linear capture sends the team, the Project, and `AssignToMe`. | Board tests with the fake Linear client and a temporary Local Tracker folder |
 | The default Destination is `local`, even after the user picks a Linear one | A board test that captures twice |
 | Promote changes the local file only after the Linear create succeeds | A board test with a failing fake create |
-| The header shows the other view's Needs you count | A board test for each view |
+| The header shows the other view's Needs you count and no per-group counts, and it fits 80 columns | Board tests for each view |
+| Backlog and Done start closed with their counts, and `enter` on a heading opens or closes the group and saves `groups.json` | Board tests that read the screen, the footer, and the file, and a restart |
+| `j` and `k` stop on each heading except Needs you and skip the rows of closed groups | A board test over the fixture, and a `rapid` property test over random rows and closed sets |
+| The Reviews tab keeps its own closed groups | A board test that toggles Done on each view |
 | The free slot toast names the first Ready row, and only when a slot is free | A board test that sends two board views |
 | The first paint stays inside the speed budget | `TestSpeedBudget` with 200 Issue rows |
 | Live | A dev build of `lineup board` in a Rex pane, read with `rex`, shows the groups with real Linear data, and captures a local Issue into a temporary Local Tracker folder |

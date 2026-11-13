@@ -448,42 +448,44 @@ To find which statuses Linear's GitHub automation sets, query `teams { gitAutoma
 The Board shows the build Tasks and the user's own Issues that have no Task. Review Tasks show on the Reviews tab of the `review` tab (see `docs/spec/reviews.md`). The Issue rows are in `docs/spec/one-board.md`.
 
 ```
- lineup  WIP 4/5   ●2 need you (+1 in reviews)   ◐2 working   ◷1 waiting   1 queued   2 ready   1 backlog
+ lineup  1 plan  2 work  3 review  WIP 4/5   ●2 need you (+1 in reviews)
  ─────────────────────────────────────────────────────────────────────────
- NEEDS YOU
+ NEEDS YOU  2
  ▸ ENG-590 Working ⚑       data   Add billing model          stopped      12m
    ENG-588 Working ⚑       data   Backfill events           permission: Bash(make deploy)   3m
- BACKLOG
-   ENG-620                        Split billing ingest                   ▂
- READY
+ BACKLOG  7 …
+ READY  2
    ENG-611                        Move the retry job        unblocked    ▂▄▆
    local-7                 data   Rename the log flag
- QUEUED
+ QUEUED  1
    ENG-601                 data   Drop old API keys
- WORKING
+ WORKING  2
    WEB-12  Responding      web    Fix map tooltip           round 1/3    5m
    ENG-592 CI debug        data   Fix flaky test            attempt 2/3  1m
- WAITING
+ WAITING  1
    ENG-571 In review       data   Rate limit login          #4636 needs approval · optional failed: lint  1d
- DONE
-   ENG-560 merged          data   Rename config options     #4601  today
+ DONE  1 …
 ```
 
-The header counts the Needs you Tasks of the other view in parentheses, when there are any: `(+1 in reviews)` on the work view and `(+2 in work)` on the review view.
+The header shows the view names, the WIP cap, and the Needs you count. It counts the Needs you Tasks of the other view in parentheses, when there are any: `(+1 in reviews)` on the work view and `(+2 in work)` on the review view. It has no count for the other groups, because each group heading shows its own count. The header also shows `reviews paused` on the review view and a warning when the Scheduler is offline. At 80 columns, the header with `+1 over` and the other view's count fits.
 
 The groups are Needs you, Backlog, Ready, Queued, Working, Waiting, and Done, in that order. Needs you comes first, and the other groups follow the development cycle. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID.
 
+Each group with at least one row has a heading that shows the group name and its row count, for example `BACKLOG  7`. A heading is a row that the user can select, except the Needs you heading. `j` and `k` stop on each heading and skip the rows of a closed group. `enter` on a heading opens or closes the group. A closed group shows its heading with a `…` mark and hides its rows, as `BACKLOG  7 …` does. Needs you never closes. This keeps a long Backlog or Done group from pushing Ready and Working off the screen.
+
+Backlog and Done start closed on the work view. Done starts closed on the Reviews tab. The work view and the Reviews tab keep their own closed groups. lineup saves them in `groups.json` in the state folder as soon as the user opens or closes a group. A missing or unreadable file gives these defaults. When a Task moves into a closed group, the selection goes to that group's heading. When `n` adds a local Issue, lineup opens Backlog, so the new row shows.
+
 | Key | Action |
 |---|---|
-| `j` `k` | Move the selection |
-| `enter` | Focus the Task's tab in Rex. If the Task has started and has no live Worker, restore the Worker with `claude --resume`, as `lineup open` does. The hint reads `restore the Worker`. |
+| `j` `k` | Move the selection through the group headings and the rows of open groups |
+| `enter` | On a Task row, focus the Task's tab in Rex. If the Task has started and has no live Worker, restore the Worker with `claude --resume`, as `lineup open` does. The hint reads `restore the Worker`. On a group heading, open or close the group. The hint reads `open` or `close`. |
 | `p` | Show a live preview of the Worker's screen beside the Board |
 | `f` | Show the detail pane at full screen, and back |
 | `m` | Merge the PR (Ready to land) |
 | `x` | Close the Task, after a confirmation. On a Done Task with a tab, close the tab and remove the worktree, after a confirmation. On a Done Task with no tab, archive it, after a confirmation. |
 | `s` | Start a Queued Task. On an Issue row, add the Issue as a Task and start it, with the skill picker and, when no Repo mapping exists, the Repo picker. |
 | `o` | Open the PR or the Issue in the browser. A local Issue opens in `$EDITOR`. |
-| `n` | Capture a new Issue at a Destination, `local` by default. `tab` picks a Linear team or Project. See `docs/spec/one-board.md`. |
+| `n` | Capture a new Issue at a Destination, `local` by default. `tab` picks a Linear team or Project. A local Issue opens a closed Backlog. See `docs/spec/one-board.md`. |
 | `P` | Promote a local Issue to Linear. Pick a Linear team or Project. lineup creates the Issue there and cancels the local Issue. See `docs/spec/one-board.md`. |
 | `R` | Refresh now: the Scheduler polls GitHub for every started Task |
 | `z` | Zoom this tab's agent pane to full height, and back |
