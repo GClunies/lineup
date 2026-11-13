@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gclunies/lineup/internal/config"
+	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/linear"
 	"github.com/gclunies/lineup/internal/localissues"
 )
@@ -431,6 +432,9 @@ func (m Model) boxMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		}
 		m.setStatus("added "+msg.id, false)
 		if msg.to.local() {
+			if m.folds.closed(lifecycle.KindBuild, groupBacklog) {
+				m = m.setGroup(lifecycle.KindBuild, groupBacklog, false) // a new local Issue is in the backlog
+			}
 			return m, m.loadMine(), true
 		}
 		ds.recent = pushRecent(ds.recent, msg.to)

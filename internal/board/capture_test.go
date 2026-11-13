@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gclunies/lineup/internal/config"
+	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/linear"
 	"github.com/gclunies/lineup/internal/localissues"
 )
@@ -58,9 +59,32 @@ func savedRecent(t *testing.T, path string) []string {
 
 var billing = linear.NewIssue{TeamID: "t1", ProjectID: "p1", AssignToMe: true}
 
+func TestNIntoAClosedBacklogOpensItAndSavesTheFile(t *testing.T) {
+	e, _ := captureEnv(t)
+	e.m.opts.Groups = filepath.Join(t.TempDir(), "groups.json")
+	e.m = feed(e.m, boardMsg(fixture()))
+	if out := ansi.Strip(e.m.View()); !strings.Contains(out, "BACKLOG  1 …") || strings.Contains(out, "ENG-20") {
+		t.Fatalf("Backlog starts open:\n%s", out)
+	}
+	e.press("n", "Retry failed loads", "enter")
+	out := ansi.Strip(e.m.View())
+	inOrder(t, out, "BACKLOG  2\n", "ENG-20", "Retry failed loads")
+	if got := savedFolds(t, e.m.opts.Groups)[lifecycle.KindBuild]; !slices.Equal(got, []string{"Done"}) {
+		t.Fatalf("groups.json holds %v for build, want [Done]", got)
+	}
+}
+
+func TestAFailedAddLeavesABacklogClosed(t *testing.T) {
+	e, _ := captureEnv(t)
+	e.m.opts.LocalIssues = ""
+	e.press("n", "Retry failed loads", "enter")
+	if out := ansi.Strip(e.m.View()); strings.Contains(out, "ENG-20") {
+		t.Fatalf("a failed add opened Backlog:\n%s", out)
+	}
+}
+
 func TestNCapturesALocalIssueInTheBacklog(t *testing.T) {
 	e, store := captureEnv(t)
-	e.m = withClosed(e.m, groupDone)
 	e.m.sel = "ENG-9"
 	e.press("n", "Retry failed loads")
 	if f := footLines(e.m); !strings.Contains(f, "new issue: Retry failed loads") || !strings.Contains(f, "to: local   tab: change   enter: add   esc: cancel") {

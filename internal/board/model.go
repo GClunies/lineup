@@ -261,13 +261,13 @@ func (m Model) rowIDs() []string {
 // toggleGroup opens the group if it is closed, and closes it if it is open.
 // It saves the choice.
 func (m Model) toggleGroup(g string) Model {
-	return m.setGroup(g, m.open(g))
+	return m.setGroup(m.kind, g, m.open(g))
 }
 
-// setGroup closes or opens the group and saves the choice. A failed save
-// leaves the choice in force for this run.
-func (m Model) setGroup(g string, closed bool) Model {
-	m.folds = m.folds.with(m.kind, g, closed)
+// setGroup closes or opens the group of Kind k and saves the choice. A failed
+// save leaves the choice in force for this run.
+func (m Model) setGroup(k lifecycle.Kind, g string, closed bool) Model {
+	m.folds = m.folds.with(k, g, closed)
 	if err := writeFolds(m.opts.Groups, m.folds); err != nil {
 		m.setStatus("save groups: "+err.Error(), true)
 	}
