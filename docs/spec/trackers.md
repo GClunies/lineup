@@ -120,7 +120,7 @@ The description, in Markdown.
 | `blocked_by` | Local Issue IDs | No |
 
 - The next ID is one more than the highest ID in the folder. The adapter creates the file with `O_EXCL`, so two writers cannot take one ID.
-- A new Issue gets `status: backlog`. The `1 work` view shows a `backlog` Issue in Backlog and a `todo` Issue in Ready.
+- A new Issue gets `status: backlog`. The Board shows a `backlog` Issue in Backlog and a `todo` Issue in Ready.
 - The branch name is `local-<n>-<title slug>`, for example `local-7-retry-failed-loads-before-alerting`. A GitHub Issue's branch is `gh-<n>-<title slug>`.
 - The adapter reads files that the Orchestrator or the user wrote. The work view leaves out a file that the adapter cannot parse.
 

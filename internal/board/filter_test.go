@@ -101,8 +101,8 @@ func TestEnterKeepsTheFilterAndTheKeysWorkOnTheMatches(t *testing.T) {
 func TestDigitsAndLettersInTheFilterStayText(t *testing.T) {
 	e := groupEnv(t)
 	e.press("/", "1", "2", "q", "s", "j")
-	if e.m.view != viewBoard || e.m.mode != modeFilter || e.m.filter.Value() != "12qsj" {
-		t.Fatalf("view %d mode %d filter %q, want the work view and 12qsj", e.m.view, e.m.mode, e.m.filter.Value())
+	if e.m.mode != modeFilter || e.m.filter.Value() != "12qsj" {
+		t.Fatalf("mode %d filter %q, want the filter open with 12qsj", e.m.mode, e.m.filter.Value())
 	}
 	if len(e.sched.calls) != 0 {
 		t.Fatalf("typing ran ops %v", e.sched.ops())
@@ -131,19 +131,6 @@ func TestTheFilterIsNotSaved(t *testing.T) {
 	fresh := groupEnv(t)
 	if fresh.m.filter.Value() != "" {
 		t.Fatalf("a new Board starts with the filter %q", fresh.m.filter.Value())
-	}
-}
-
-func TestTheReviewViewKeepsItsOwnSearch(t *testing.T) {
-	e := newRvEnv(t)
-	e.open()
-	e.press("/")
-	if e.m.mode == modeFilter || e.m.rv.filtering {
-		t.Fatalf("/ on the Reviews tab started a filter: mode %d, review search %v", e.m.mode, e.m.rv.filtering)
-	}
-	e.press("tab", "/", "logs")
-	if e.m.mode == modeFilter || !e.m.rv.filtering || e.m.rv.filter.Value() != "logs" {
-		t.Fatalf("mode %d, review search %v %q, want the review search", e.m.mode, e.m.rv.filtering, e.m.rv.filter.Value())
 	}
 }
 

@@ -140,8 +140,7 @@ type BoardView struct {
 	OverCap int `json:"over_cap"`
 	// ReviewsPaused is true while `lineup reviews pause` holds every queue fill.
 	ReviewsPaused bool `json:"reviews_paused,omitempty"`
-	// Skips are the PRs that the user holds out of every review queue. The
-	// Board feeds them to the queue rules with the review Tasks.
+	// Skips are the PRs that the user holds out of every review queue.
 	Skips []github.Skip `json:"skips,omitempty"`
 	Tasks []TaskView    `json:"tasks"`
 }

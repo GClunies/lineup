@@ -13,27 +13,14 @@ import (
 	"time"
 )
 
-// The qualifiers that each kind of PR search starts with. Filter.Query adds
-// the state. In search(type: ISSUE), a repeated repo: or author: qualifier is
-// OR, a repeated label: is AND, and boolean OR returns nothing.
-// A view lists the newest PRs first. A queue lists the oldest first, so that
-// its oldest PRs are inside the first 100.
-const (
-	prs          = "is:pr archived:false"
-	newestFirst  = prs + " sort:created-desc"
-	MyPRs        = newestFirst + " author:@me"
-	RequestedPRs = newestFirst + " review-requested:@me draft:false"
-	ViewPRs      = newestFirst
-	QueuePRs     = prs + " sort:created-asc draft:false -author:@me"
-)
+// QueuePRs are the qualifiers that a queue's search starts with. Filter.Query
+// adds the state. In search(type: ISSUE), a repeated repo: or author:
+// qualifier is OR, a repeated label: is AND, and boolean OR returns nothing.
+// A queue lists the oldest PRs first, so that its oldest PRs are inside the
+// first 100.
+const QueuePRs = "is:pr archived:false sort:created-asc draft:false -author:@me"
 
-// MyMergedPRs is the search for the user's PRs merged at since or later.
-// GitHub compares merged: to the second.
-func MyMergedPRs(since time.Time) string {
-	return "is:pr is:merged archived:false sort:updated-desc author:@me merged:>=" + since.UTC().Format(time.RFC3339)
-}
-
-// Filter picks PRs. Base is one of the searches above. State is open,
+// Filter picks PRs. Base is QueuePRs. State is open,
 // closed, merged, or all, and "" is open. Draft nil matches drafts and other
 // PRs. ReviewRequested is @me or a login, and GitHub matches a request to
 // that user by name or through any of their teams. The items of one list
@@ -113,10 +100,10 @@ func (f Filter) Query(members map[string][]string) (q string, ok bool) {
 	return strings.Join(parts, " "), true
 }
 
-// Search is one view's search. Name is for error messages.
+// Search is one queue's search. Name is for error messages.
 type Search struct{ Key, Name, Query string }
 
-// PullRequest is one row of a PR view.
+// PullRequest is one PR that a queue's search found.
 type PullRequest struct {
 	Repo   string // owner/name
 	Number int
@@ -130,9 +117,6 @@ type PullRequest struct {
 	// Head is the head commit, and Base is the base branch.
 	Head, Base     string
 	CreatedAt      time.Time
-	MergedAt       time.Time // zero for an open PR
-	Checks         CheckState
-	ReviewDecision string // APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, or ""
 	Labels         []string
 	RequestedUsers []string
 	RequestedTeams []string // org/slug
@@ -157,7 +141,7 @@ type ViewerState struct {
 // the reviews that the user submitted.
 const searchFields = `
 fragment R on PullRequest {
-  number title url isDraft createdAt mergedAt isCrossRepository reviewDecision headRefOid baseRefName viewerDidAuthor
+  number title url isDraft createdAt isCrossRepository headRefOid baseRefName viewerDidAuthor
   author { __typename login }
   repository { nameWithOwner }
   labels(first: 20) { nodes { name } }
@@ -166,7 +150,6 @@ fragment R on PullRequest {
   viewerReviews: reviews(author: $viewer, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) { totalCount }
   latestReviews(first: 20) { nodes { author { __typename login } state submittedAt viewerDidAuthor commit { oid } } }
   latestOpinionatedReviews(first: 20) { nodes { author { login } state } }
-  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
 }`
 
 const searchQuery = "query($viewer: String!, $q: String!) {\n" +
@@ -254,9 +237,7 @@ type gqlSearchPR struct {
 	URL               string    `json:"url"`
 	IsDraft           bool      `json:"isDraft"`
 	CreatedAt         time.Time `json:"createdAt"`
-	MergedAt          time.Time `json:"mergedAt"`
 	IsCrossRepository bool      `json:"isCrossRepository"`
-	ReviewDecision    string    `json:"reviewDecision"`
 	HeadRefOid        string    `json:"headRefOid"`
 	BaseRefName       string    `json:"baseRefName"`
 	ViewerDidAuthor   bool      `json:"viewerDidAuthor"`
@@ -305,20 +286,12 @@ type gqlSearchPR struct {
 			State  string    `json:"state"`
 		} `json:"nodes"`
 	} `json:"latestOpinionatedReviews"`
-	Commits struct {
-		Nodes []struct {
-			Commit struct {
-				StatusCheckRollup *gqlRollup `json:"statusCheckRollup"`
-			} `json:"commit"`
-		} `json:"nodes"`
-	} `json:"commits"`
 }
 
 func (g gqlSearchPR) toPullRequest() PullRequest {
 	pr := PullRequest{
 		Repo: g.Repository.NameWithOwner, Number: g.Number, Title: g.Title, URL: g.URL,
 		Draft: g.IsDraft, Fork: g.IsCrossRepository, Head: g.HeadRefOid, Base: g.BaseRefName, CreatedAt: g.CreatedAt,
-		MergedAt: g.MergedAt, ReviewDecision: g.ReviewDecision, Checks: ChecksNone,
 		Viewer: ViewerState{Author: g.ViewerDidAuthor, Requested: g.ViewerLatestReviewRequest != nil, Reviewed: g.ViewerReviews.TotalCount > 0},
 	}
 	if g.Author != nil {
@@ -352,9 +325,6 @@ func (g gqlSearchPR) toPullRequest() PullRequest {
 			rv.Commit = r.Commit.OID
 		}
 		pr.LatestReviews = append(pr.LatestReviews, rv)
-	}
-	if n := len(g.Commits.Nodes); n > 0 {
-		pr.Checks = g.Commits.Nodes[n-1].Commit.StatusCheckRollup.checks()
 	}
 	return pr
 }

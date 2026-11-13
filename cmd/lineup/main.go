@@ -17,7 +17,7 @@ const usage = `usage: lineup [command]
   lineup restart               install the Scheduler's launchd agent and restart it
   lineup stop                  stop the Scheduler until the next restart or login
   lineup logs                  follow the Scheduler's log
-  lineup board                 run the Board: the plan, work, and review views
+  lineup board                 run the Board: your build Tasks and your Issues
   lineup login [linear [workspace] | github]
                                sign in to a Tracker; with no argument, asks which
   lineup logout linear [workspace] [--local]

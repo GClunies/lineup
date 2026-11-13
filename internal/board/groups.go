@@ -12,8 +12,8 @@ import (
 	"github.com/gclunies/lineup/internal/lifecycle"
 )
 
-// This file holds the group headings of the work and review views, and the
-// closed groups that the Board keeps between runs.
+// This file holds the group headings of the Board, and the closed groups
+// that the Board keeps between runs.
 
 const (
 	groupNeedsYou = "Needs you"
@@ -33,10 +33,7 @@ func headingName(id string) (string, bool) { return strings.CutPrefix(id, headin
 type folds map[lifecycle.Kind][]string
 
 func defaultFolds() folds {
-	return folds{
-		lifecycle.KindBuild:  {groupBacklog, groupDone},
-		lifecycle.KindReview: {groupDone},
-	}
+	return folds{lifecycle.KindBuild: {groupBacklog, groupDone}}
 }
 
 // readFolds reads groups.json. A missing or unreadable file gives the defaults,

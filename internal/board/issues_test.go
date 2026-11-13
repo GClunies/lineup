@@ -283,10 +283,6 @@ func TestTheWorkViewShowsReadyAndBacklogInTheirPlaces(t *testing.T) {
 	e.m.width = 200
 	out := ansi.Strip(e.m.View())
 	inOrder(t, out, "NEEDS YOU", "BACKLOG", "ENG-20", "READY", "ENG-9", "local-1", "QUEUED", "WORKING", "WAITING", "DONE")
-	rm, _ := press(e.m, "2")
-	if strings.Contains(ansi.Strip(rm.View()), "ENG-9") {
-		t.Fatalf("the review view shows Issue rows:\n%s", rm.View())
-	}
 }
 
 func TestJAndKMoveAcrossTaskAndIssueRows(t *testing.T) {

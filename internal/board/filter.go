@@ -21,13 +21,8 @@ func newFilter() textinput.Model {
 	return f
 }
 
-// query is the filter's text on the work view, or "" for no filter.
-func (m Model) query() string {
-	if m.view != viewBoard {
-		return ""
-	}
-	return strings.TrimSpace(m.filter.Value())
-}
+// query is the filter's text, or "" for no filter.
+func (m Model) query() string { return strings.TrimSpace(m.filter.Value()) }
 
 // matching keeps the rows whose label matches q, in their order.
 func matching[T any](q string, rows []T, label func(T) string) []T {
@@ -111,7 +106,7 @@ func (m Model) typeRunes(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // filterLine is the line above the rows while the filter is open or holds
 // text. It is "" when it does not show.
 func (m Model) filterLine() string {
-	if m.view != viewBoard || (m.mode != modeFilter && m.query() == "") {
+	if m.mode != modeFilter && m.query() == "" {
 		return ""
 	}
 	return " " + m.filter.View()

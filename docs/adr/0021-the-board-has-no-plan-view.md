@@ -1,5 +1,7 @@
 # The Board has no plan view
 
+[ADR 0023](0023-the-board-has-no-review-view.md) also removes the review view, so the Board shows the work view only.
+
 The Board had three views. `1 plan` was the tracker browser, with the user's favorite Linear views, Browse, the Local tab, and one tab for each GitHub Issue list. `2 work` held the user's own Issues and build Tasks. `3 review` held the review Tasks. The plan view showed the work of the whole team, but lineup orchestrates the user's own work. Two of its actions serve the user's own Issues. One shows the description, and one changes the status. We removed the plan view and moved these two actions to the work view. The Board now has two views, `1 work` and `2 review`. An Issue row on the work view takes `f` to show the Issue's description and `c` to change its status. `/` filters the rows of the work view.
 
 ## Considered Options

@@ -6,12 +6,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/gclunies/lineup/internal/board"
 	"github.com/gclunies/lineup/internal/config"
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/localissues"
@@ -187,18 +185,19 @@ func loadConfig(t *testing.T, text string) *config.Global {
 	return cfg
 }
 
-func TestReviewViewsComeFromTheConfig(t *testing.T) {
+func TestReviewQueuesComeFromTheConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	os.WriteFile(path, []byte(`
-[[review.views]]
+[[review.queues]]
 name = "My teammates"
-state = "all"
+state = "open"
 draft = false
 repo = ["umbrella/data"]
 author_team = ["umbrella/platform"]
 review_requested = "@me"
 include_regex = "DATA-"
 exclude_regex = "WIP"
+slots = 1
 
 [[review.queues]]
 name = "platform"
@@ -211,35 +210,13 @@ exclude_regex = "HLESS-"
 		t.Fatal(err)
 	}
 	no := false
-	want := []board.ReviewView{
-		{Key: "view:My teammates", Name: "My teammates", Filter: github.Filter{Base: github.ViewPRs, Repo: []string{"umbrella/data"}, AuthorTeam: []string{"umbrella/platform"},
-			State: "all", Draft: &no, ReviewRequested: "@me", IncludeRegex: "DATA-", ExcludeRegex: "WIP"}},
-		{Key: "queue:platform", Name: "Q: platform", Filter: github.Filter{Base: github.QueuePRs, Author: []string{"hopper"}, Label: []string{"needs-review"}, ExcludeRegex: "HLESS-"}, Queue: true},
+	want := []scheduler.Queue{
+		{Name: "My teammates", Slots: 1, Filter: github.Filter{Base: github.QueuePRs, Repo: []string{"umbrella/data"}, AuthorTeam: []string{"umbrella/platform"},
+			State: "open", Draft: &no, ReviewRequested: "@me", IncludeRegex: "DATA-", ExcludeRegex: "WIP"}},
+		{Name: "platform", Slots: 3, Filter: github.Filter{Base: github.QueuePRs, Author: []string{"hopper"}, Label: []string{"needs-review"}, ExcludeRegex: "HLESS-"}},
 	}
-	if got := reviewViews(cfg); !reflect.DeepEqual(got, want) {
-		t.Errorf("reviewViews =\n%+v\nwant\n%+v", got, want)
-	}
-	queues := []scheduler.Queue{{Name: "platform", Filter: want[1].Filter, Slots: 3}}
-	if got := reviewQueues(cfg); !reflect.DeepEqual(got, queues) {
-		t.Errorf("reviewQueues = %+v, want %+v with the default 3 slots", got, queues)
-	}
-}
-
-func TestTheReviewRankHasItsOwnFile(t *testing.T) {
-	dir := t.TempDir()
-	r := reviewStores(dir)
-	if err := r.SaveOrder([]string{"requested", "mine"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "review_views.json")); err != nil {
-		t.Errorf("the rank is not in review_views.json: %v", err)
-	}
-	if got, _ := r.Order(); !slices.Equal(got, []string{"requested", "mine"}) {
-		t.Errorf("rank read back as %v", got)
-	}
-	r.WriteCache("view:My teammates", nil)
-	if _, err := os.Stat(filepath.Join(dir, "cache", "github", "view:My%20teammates.json")); err != nil {
-		t.Errorf("the cache file is not under cache/github: %v", err)
+	if got := reviewQueues(cfg); !reflect.DeepEqual(got, want) {
+		t.Errorf("reviewQueues =\n%+v\nwant\n%+v, the second with the default 3 slots", got, want)
 	}
 }
 

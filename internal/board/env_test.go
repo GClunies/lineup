@@ -6,11 +6,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/linear"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
@@ -134,13 +132,6 @@ func newWorkEnv(t *testing.T, workspaces ...linear.Workspace) *workEnv {
 		Client: e.sched,
 		Open:   func(u string) error { e.opened = append(e.opened, u); return nil },
 		Repos:  func() []string { return []string{"/Users/g/repos/acme/data", "/Users/g/repos/acme/web"} },
-		// The review view reads a fake, so a test that visits it calls no GitHub.
-		Reviews: Reviews{
-			API:        &fakeReviewAPI{lists: map[string][]github.PullRequest{}},
-			ReadCache:  func(string) ([]github.PullRequest, bool) { return nil, false },
-			WriteCache: func(string, []github.PullRequest) {},
-			Tick:       func(time.Duration, func(time.Time) tea.Msg) tea.Cmd { return nil },
-		},
 		Linear: Linear{
 			Workspaces: func() ([]linear.Workspace, error) { return workspaces, nil },
 			Client:     func(w linear.Workspace) LinearAPI { return wsLinear{e.api, w.ID} },

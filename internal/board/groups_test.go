@@ -18,9 +18,9 @@ import (
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
-// withClosed sets the closed groups of both Kinds, so a test names the state it reads.
+// withClosed sets the closed groups, so a test names the state it reads.
 func withClosed(m Model, groups ...string) Model {
-	m.folds = folds{lifecycle.KindBuild: groups, lifecycle.KindReview: groups}
+	m.folds = folds{lifecycle.KindBuild: groups}
 	m.setBoard(m.board)
 	return m
 }
@@ -114,7 +114,7 @@ func TestAnUnreadableGroupsFileGivesTheDefaults(t *testing.T) {
 				}
 			}
 			got := readFolds(path)
-			if want := defaultFolds(); !slices.Equal(got[lifecycle.KindBuild], want[lifecycle.KindBuild]) || !slices.Equal(got[lifecycle.KindReview], want[lifecycle.KindReview]) {
+			if want := defaultFolds(); !slices.Equal(got[lifecycle.KindBuild], want[lifecycle.KindBuild]) {
 				t.Fatalf("folds %v, want the defaults %v", got, want)
 			}
 		})
@@ -123,12 +123,12 @@ func TestAnUnreadableGroupsFileGivesTheDefaults(t *testing.T) {
 
 func TestAKindTheFileLeavesOutKeepsItsDefault(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "groups.json")
-	if err := os.WriteFile(path, []byte(`{"build":[]}`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(`{"review":[]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got := readFolds(path)
-	if len(got[lifecycle.KindBuild]) != 0 || !slices.Equal(got[lifecycle.KindReview], []string{"Done"}) {
-		t.Fatalf("folds %v, want build open and review at its default", got)
+	if want := defaultFolds(); !slices.Equal(got[lifecycle.KindBuild], want[lifecycle.KindBuild]) {
+		t.Fatalf("folds %v, want build at its default %v", got, want)
 	}
 }
 
@@ -211,33 +211,6 @@ func TestTheInitialSelectionIsTheFirstRowNotAHeading(t *testing.T) {
 	m := New(scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{done}}, Options{Client: &fakeClient{}})
 	if m.sel != headingKey("Done") {
 		t.Fatalf("selection %q, want the only heading when every group is closed", m.sel)
-	}
-}
-
-func TestTheReviewTasksTabKeepsItsOwnClosedGroups(t *testing.T) {
-	e := newRvEnv(t)
-	e.m.opts.Groups = filepath.Join(t.TempDir(), "groups.json")
-	v := reviewBoard()
-	v.Tasks = append(v.Tasks,
-		rtv("R-20", lifecycle.Done, "data#4001 Old review", urlLogs, 5*time.Hour),
-		tv("ENG-1", lifecycle.Done, "data", "Old build", "#1", 5*time.Hour))
-	e.m = feed(e.m, boardMsg(v))
-	e.open()
-	if out := screen(e.m); !strings.Contains(out, "DONE  1 …") || strings.Contains(out, "R-20") {
-		t.Fatalf("the Reviews tab does not start with Done closed:\n%s", out)
-	}
-	e.m.sel = headingKey("Done")
-	e.press("enter")
-	if out := screen(e.m); !strings.Contains(out, "R-20") {
-		t.Fatalf("enter on the Done heading did not open it:\n%s", out)
-	}
-	e.press("1")
-	if out := screen(e.m); !strings.Contains(out, "DONE  1 …") || strings.Contains(out, "ENG-1 ") {
-		t.Fatalf("a toggle on the Reviews tab changed the work view:\n%s", out)
-	}
-	got := savedFolds(t, e.m.opts.Groups)
-	if len(got[lifecycle.KindReview]) != 0 || !slices.Equal(got[lifecycle.KindBuild], []string{"Backlog", "Done"}) {
-		t.Fatalf("groups.json holds %v, want review open and build unchanged", got)
 	}
 }
 
@@ -327,13 +300,9 @@ func TestTheHeaderDropsTheGroupCounts(t *testing.T) {
 			t.Errorf("header %q lacks %q", h, want)
 		}
 	}
-	rm, _ := press(e.m, "2")
-	if h := ansi.Strip(rm.header()); strings.Contains(h, "working") || strings.Contains(h, "queued") {
-		t.Errorf("review header %q still shows group counts", h)
-	}
 }
 
-func TestTheHeaderFitsEightyColumnsWithTheWipOverflowAndTheOtherViewsCount(t *testing.T) {
+func TestTheHeaderFitsEightyColumnsWithTheWipOverflowAndTheReviewCount(t *testing.T) {
 	v := fixture()
 	v.OverCap = 1
 	flagged := rtv("R-3", lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour)

@@ -140,9 +140,8 @@ type globalFile struct {
 	LocalTracker   bool   `toml:"local_tracker"`
 	LocalIssuesDir string `toml:"local_issues_dir"`
 	Review         struct {
-		Views  []ReviewView `toml:"views"`
-		Slots  *int         `toml:"slots"`
-		Queues []queueFile  `toml:"queues"`
+		Slots  *int        `toml:"slots"`
+		Queues []queueFile `toml:"queues"`
 	} `toml:"review"`
 }
 
@@ -164,13 +163,7 @@ type PRFilter struct {
 	ExcludeRegex    string   `toml:"exclude_regex"`
 }
 
-// ReviewView is a tab of the review tab.
-type ReviewView struct {
-	Name string `toml:"name"`
-	PRFilter
-}
-
-// ReviewQueue is a view whose PRs lineup reviews without being asked. Slots
+// ReviewQueue is a PR filter whose PRs lineup reviews without being asked. Slots
 // is how many of its review Tasks can be started at one time.
 type ReviewQueue struct {
 	Name string
@@ -214,9 +207,6 @@ func (g *Global) LinearClientID(workspace string) string {
 
 // GitHubLabels maps a lifecycle event to the label it sets on a GitHub Issue.
 func (g *Global) GitHubLabels() map[string]string { return g.file.GitHub.Labels }
-
-// ReviewViews are the [[review.views]] entries, in config order.
-func (g *Global) ReviewViews() []ReviewView { return g.file.Review.Views }
 
 // ReviewSlots is how many review Tasks of all queues together can be started
 // at one time, or 0 when review.slots is not set.
@@ -305,39 +295,28 @@ func Load(globalPath string) (*Global, error) {
 			return nil, fmt.Errorf("%s: github.labels: unknown event %q", globalPath, ev)
 		}
 	}
-	if err := validateReview(g.file.Review.Views, g.file.Review.Queues, g.file.Review.Slots); err != nil {
+	if err := validateReview(g.file.Review.Queues, g.file.Review.Slots); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	return g, nil
 }
 
-// reservedViews are the built-in tabs of the review tab.
-var reservedViews = []string{"My PRs", "Requested"}
-
-func validateReview(views []ReviewView, queues []queueFile, slots *int) error {
+func validateReview(queues []queueFile, slots *int) error {
 	if slots != nil && *slots < 1 {
 		return errors.New("review.slots: slots must be at least 1")
 	}
 	names := map[string]bool{}
-	check := func(where, name string, f PRFilter, queue bool) error {
-		name = strings.TrimSpace(name)
+	for i, q := range queues {
+		where := fmt.Sprintf("review.queues[%d]", i)
+		name := strings.TrimSpace(q.Name)
 		switch {
 		case name == "":
 			return fmt.Errorf("%s: name is required", where)
-		case names[name] || slices.Contains(reservedViews, name):
+		case names[name]:
 			return fmt.Errorf("%s: name %q is used twice", where, name)
 		}
 		names[name] = true
-		return f.validate(where, queue)
-	}
-	for i, v := range views {
-		if err := check(fmt.Sprintf("review.views[%d]", i), v.Name, v.PRFilter, false); err != nil {
-			return err
-		}
-	}
-	for i, q := range queues {
-		where := fmt.Sprintf("review.queues[%d]", i)
-		if err := check(where, q.Name, q.PRFilter, true); err != nil {
+		if err := q.PRFilter.validate(where); err != nil {
 			return err
 		}
 		if q.Slots != nil && *q.Slots < 1 {
@@ -351,13 +330,13 @@ func validateReview(views []ReviewView, queues []queueFile, slots *int) error {
 var prStates = []string{"open", "closed", "merged", "all"}
 
 // A queue reviews PRs, so it lists only open PRs that are not drafts.
-func (f PRFilter) validate(where string, queue bool) error {
+func (f PRFilter) validate(where string) error {
 	switch {
 	case f.State != "" && !slices.Contains(prStates, f.State):
 		return fmt.Errorf("%s: state %q must be one of %s", where, f.State, strings.Join(prStates, ", "))
-	case queue && f.State != "" && f.State != "open":
+	case f.State != "" && f.State != "open":
 		return fmt.Errorf("%s: a queue reviews open PRs, so state must be open", where)
-	case queue && f.Draft != nil && *f.Draft:
+	case f.Draft != nil && *f.Draft:
 		return fmt.Errorf("%s: a queue never reviews drafts, so draft must be false", where)
 	case f.ReviewRequested != "" && !isWord(f.ReviewRequested):
 		return fmt.Errorf("%s: review_requested %q must be @me or a login", where, f.ReviewRequested)
@@ -404,7 +383,10 @@ func isPair(s string) bool {
 	return ok && isWord(a) && isWord(b) && !strings.Contains(b, "/")
 }
 
-var errHarnessGone = errors.New("harness is no longer a setting, lineup runs claude")
+var (
+	errHarnessGone    = errors.New("harness is no longer a setting, lineup runs claude")
+	errViewTablesGone = errors.New("the Board has no review view, so delete the [[review.views]] tables")
+)
 
 // renamedFilterKeys are the review filter keys before they took GitHub's
 // qualifier names, and what replaces each.
@@ -428,6 +410,9 @@ func decodeStrict(text string, v any) error {
 		for _, k := range keys {
 			if k[0] == "harness" || k[len(k)-1] == "harness" {
 				return errHarnessGone
+			}
+			if len(k) >= 2 && k[0] == "review" && k[1] == "views" {
+				return errViewTablesGone
 			}
 		}
 		names := make([]string, len(keys))
