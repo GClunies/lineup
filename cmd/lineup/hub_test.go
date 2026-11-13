@@ -45,7 +45,7 @@ func TestAdHocSessionRefusesTheHub(t *testing.T) {
 }
 
 func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
-	role, settings, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/bin/lineup")
+	role, settings, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,8 +70,14 @@ func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 	if err := json.Unmarshal([]byte(settings), &v); err != nil {
 		t.Fatalf("settings are not valid JSON: %v\n%s", err, settings)
 	}
-	if !slices.Contains(v.Permissions.Allow, "Edit(//Users/g/issues/**)") || !slices.Equal(v.Permissions.Dirs, []string{"/Users/g/issues"}) {
+	if !slices.Contains(v.Permissions.Allow, "Edit(//Users/g/issues/**)") || !slices.Equal(v.Permissions.Dirs, []string{"/Users/g/issues", "/Users/g/.config/lineup"}) {
 		t.Errorf("the agent cannot write local Issues: %+v", v.Permissions)
+	}
+	if !slices.Contains(v.Permissions.Allow, "Edit(//Users/g/.config/lineup/config.toml)") || slices.Contains(v.Permissions.Allow, "Edit(//Users/g/.config/lineup/**)") {
+		t.Errorf("the agent cannot write the config file alone: %+v", v.Permissions)
+	}
+	if !strings.Contains(string(role), "`/Users/g/.config/lineup/config.toml`") || !strings.Contains(string(role), "`lineup restart`") {
+		t.Errorf("the role does not say how to change the review queues:\n%s", role)
 	}
 	if h := v.Hooks["UserPromptSubmit"]; len(h) != 1 || len(h[0].Hooks) != 1 || h[0].Hooks[0].Command != "'/Users/g/bin/lineup' trackers" {
 		t.Errorf("no prompt hook runs lineup trackers: %+v", v.Hooks)
@@ -82,7 +88,7 @@ func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 }
 
 func TestAgentRoleAsksWithAskUserQuestion(t *testing.T) {
-	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/bin/lineup")
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup")
 	if err != nil {
 		t.Fatal(err)
 	}

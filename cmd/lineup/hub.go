@@ -74,7 +74,9 @@ const agentSettings = `{
       "Bash(gh pr list:*)",
       "Bash(gh search prs:*)",
       "Read(/{{issues}}/**)",
-      "Edit(/{{issues}}/**)"
+      "Edit(/{{issues}}/**)",
+      "Read(/{{config}})",
+      "Edit(/{{config}})"
     ],
     "deny": [
       "Bash(linear issue start:*)",
@@ -91,7 +93,7 @@ const agentSettings = `{
       "Bash(gh pr edit:*)",
       "Bash(gh api:*)"
     ],
-    "additionalDirectories": ["{{issues}}"]
+    "additionalDirectories": ["{{issues}}", "{{configDir}}"]
   },
   "hooks": {
     "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "'{{lineup}}' trackers"}]}]
@@ -228,7 +230,7 @@ func trackersLine(on trackersOn) string {
 }
 
 // composeAgent adds the Tracker sections, and fills in the Local Tracker's
-// folder and the path of lineup.
+// folder, the config file, and the path of lineup.
 func composeAgent(role []byte, settings string) ([]byte, string, error) {
 	cfg, err := config.Load(configPath())
 	if err != nil {
@@ -238,15 +240,19 @@ func composeAgent(role []byte, settings string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	return agentFiles(role, settings, cfg.LocalIssuesDir(), self)
+	return agentFiles(role, settings, cfg.LocalIssuesDir(), configPath(), self)
 }
 
-func agentFiles(role []byte, settings, issuesDir, self string) ([]byte, string, error) {
+func agentFiles(role []byte, settings, issuesDir, configFile, self string) ([]byte, string, error) {
 	out := slices.Concat(role, linearSection, githubSection, localSection)
 	out = bytes.ReplaceAll(out, []byte("{{issues}}"), []byte(issuesDir))
+	out = bytes.ReplaceAll(out, []byte("{{config}}"), []byte(configFile))
 	// The rules write /{{issues}}, as a rule path that starts with // is
 	// absolute in Claude Code settings.
-	for k, v := range map[string]string{"{{issues}}": filepath.ToSlash(issuesDir), "{{lineup}}": self} {
+	for k, v := range map[string]string{
+		"{{issues}}": filepath.ToSlash(issuesDir), "{{config}}": filepath.ToSlash(configFile),
+		"{{configDir}}": filepath.ToSlash(filepath.Dir(configFile)), "{{lineup}}": self,
+	} {
 		q, err := json.Marshal(v)
 		if err != nil {
 			return nil, "", err

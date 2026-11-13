@@ -13,6 +13,8 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/gclunies/lineup/internal/config"
 )
 
 const serviceLabel = "com.github.gclunies.lineup.scheduler"
@@ -115,6 +117,7 @@ func realLaunchctl(args ...string) error {
 // manager installs and controls a service for one user.
 type manager struct {
 	svc      service
+	config   string // the global config file that the Scheduler loads
 	plistDir string
 	uid      int
 	ctl      launchctl
@@ -130,7 +133,7 @@ func newManager() (manager, error) {
 	if err != nil {
 		return manager{}, err
 	}
-	return manager{svc: svc, plistDir: filepath.Join(home, "Library", "LaunchAgents"), uid: os.Getuid(), ctl: realLaunchctl, sleep: time.Sleep}, nil
+	return manager{svc: svc, config: configPath(), plistDir: filepath.Join(home, "Library", "LaunchAgents"), uid: os.Getuid(), ctl: realLaunchctl, sleep: time.Sleep}, nil
 }
 
 func (m manager) domain() string { return fmt.Sprintf("gui/%d", m.uid) }
@@ -197,7 +200,12 @@ func (m manager) start() error {
 	return err
 }
 
+// restart loads the config first, so that a bad edit leaves the running
+// Scheduler as it is.
 func (m manager) restart() error {
+	if _, err := config.Load(m.config); err != nil {
+		return fmt.Errorf("the Scheduler keeps running on the old config: %w", err)
+	}
 	started, err := m.ensure()
 	if err != nil || started { // a kickstart now would kill the new Scheduler as it starts
 		return err
