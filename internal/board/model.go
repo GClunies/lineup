@@ -79,7 +79,8 @@ const (
 	capFull      = "wip cap full"
 )
 
-var groupOrder = []string{"Needs you", "Working", "Waiting", "Queued", groupReady, "Done", groupBacklog}
+// groupOrder puts Needs you first, then follows the development cycle.
+var groupOrder = []string{"Needs you", groupBacklog, groupReady, "Queued", "Working", "Waiting", "Done"}
 
 type (
 	boardMsg  scheduler.BoardView

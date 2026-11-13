@@ -134,10 +134,10 @@ func TestIssueRowsSortUnblockedThenPriorityThenLevelThenID(t *testing.T) {
 		{"natural ID order last",
 			[]linear.Issue{mineIssue("ENG-10", "unstarted", 2), mineIssue("ENG-9", "unstarted", 2), mineIssue("APP-30", "unstarted", 2)}, nil,
 			[]string{"APP-30", "ENG-9", "ENG-10"}},
-		{"Ready before Backlog",
+		{"Backlog before Ready",
 			[]linear.Issue{mineIssue("ENG-1", "backlog", 1), mineIssue("ENG-2", "triage", 1), mineIssue("ENG-3", "unstarted", 4, "ENG-1")},
 			[]localissues.Issue{localIssue(1, localissues.Backlog), localIssue(2, localissues.Todo)},
-			[]string{"local-2", "ENG-3", "ENG-1", "ENG-2", "local-1"}},
+			[]string{"ENG-1", "ENG-2", "local-1", "local-2", "ENG-3"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := rowIDs(issueRows(c.lin, c.loc, nil)); !slices.Equal(got, c.want) {
@@ -282,7 +282,7 @@ func TestTheWorkViewShowsReadyAndBacklogInTheirPlaces(t *testing.T) {
 	e.m = feed(e.m, boardMsg(v))
 	e.m.width = 200
 	out := ansi.Strip(e.m.View())
-	inOrder(t, out, "NEEDS YOU", "WORKING", "WAITING", "QUEUED", "READY", "ENG-9", "local-1", "DONE", "BACKLOG", "ENG-20")
+	inOrder(t, out, "NEEDS YOU", "BACKLOG", "ENG-20", "READY", "ENG-9", "local-1", "QUEUED", "WORKING", "WAITING", "DONE")
 	if h := ansi.Strip(e.m.header()); !strings.Contains(h, "1 queued   2 ready   1 backlog") {
 		t.Fatalf("header %q, want the ready and backlog counts after queued", h)
 	}
@@ -301,16 +301,16 @@ func TestJAndKMoveAcrossTaskAndIssueRows(t *testing.T) {
 		seen = append(seen, e.m.sel)
 		e.press("j")
 	}
-	want := []string{"ENG-588", "ENG-590", "WEB-12", "ENG-592", "ENG-571", "ENG-601", "ENG-9", "local-1", "ENG-560", "ENG-20", "ENG-20", "ENG-20"}
+	want := []string{"ENG-588", "ENG-590", "ENG-20", "ENG-9", "local-1", "ENG-601", "WEB-12", "ENG-592", "ENG-571", "ENG-560", "ENG-560", "ENG-560"}
 	if !slices.Equal(seen, want) {
 		t.Fatalf("j moved through %v, want %v", seen, want)
 	}
-	if !strings.Contains(e.m.View(), "▸ ENG-20") {
+	if !strings.Contains(e.m.View(), "▸ ENG-560") {
 		t.Fatalf("the last row is not marked:\n%s", e.m.View())
 	}
 	e.press("k")
-	if e.m.sel != "ENG-560" {
-		t.Fatalf("k went to %s, want ENG-560", e.m.sel)
+	if e.m.sel != "ENG-571" {
+		t.Fatalf("k went to %s, want ENG-571", e.m.sel)
 	}
 }
 
@@ -403,7 +403,7 @@ func TestIssueRowsPaintFromTheCacheThenLive(t *testing.T) {
 func TestAFailedFetchKeepsTheRowsAndNamesTheWorkspace(t *testing.T) {
 	e, _ := mineEnv(t)
 	e.m = feed(e.m, mineIssuesMsg{ws: acme, live: true, err: errors.New("timeout")})
-	if got := rowIDs(e.m.issues); !slices.Equal(got, []string{"ENG-9", "local-1", "ENG-20"}) {
+	if got := rowIDs(e.m.issues); !slices.Equal(got, []string{"ENG-20", "ENG-9", "local-1"}) {
 		t.Fatalf("rows %v, want the rows of the last fetch", got)
 	}
 	if f := footerAt(e.m, 100); !strings.Contains(f, "my Issues in acme: timeout") {

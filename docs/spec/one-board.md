@@ -29,21 +29,21 @@ The `1 plan` view does not change. It still browses the team's Linear views.
  ──────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU
  ▸ ENG-590 Working ⚑    data  Add billing model        stopped                    12m
- WORKING
-   ENG-592 CI debug     data  Fix flaky test           attempt 2/3                 1m
- WAITING
-   ENG-571 In review    data  Rate limit login         #4636 needs approval        1d
- QUEUED
-   adhoc-9              data  Evaluate the ADR
+ BACKLOG
+   local-9                    Retry failed loads before alerting
+   ENG-620              data  Split billing ingest     △4
  READY
    ENG-611              data  Move the retry job       unblocked        △2
    local-7                    Rename the log flag
    ENG-614              data  Drop old API keys        blocked by ENG-610  △3
+ QUEUED
+   adhoc-9              data  Evaluate the ADR
+ WORKING
+   ENG-592 CI debug     data  Fix flaky test           attempt 2/3                 1m
+ WAITING
+   ENG-571 In review    data  Rate limit login         #4636 needs approval        1d
  DONE
    ENG-560 merged       data  Rename config options    #4601                    today
- BACKLOG
-   local-9                    Retry failed loads before alerting
-   ENG-620              data  Split billing ingest     △4
 ```
 
 An Issue row is an Issue of the user's own with no Task on the Board. The Board reads the Issues itself. The Scheduler and its store do not change.
@@ -67,7 +67,7 @@ An Issue row is an Issue of the user's own with no Task on the Board. The Board 
 - A row shows the ID, the Repo when it is known, the title, a note, and the priority. The note is `blocked by <IDs>`, `unblocked`, or empty.
 - `unblocked` means that the Issue has one or more blockers and that every blocker is done or canceled. A Linear blocker is a "blocks" relation. A local blocker is an entry in `blocked_by`.
 
-The group order is Needs you, Working, Waiting, Queued, Ready, Done, Backlog. Backlog is the longest list, so it comes last and never pushes Done off the screen.
+The group order is Needs you, Backlog, Ready, Queued, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. The other groups follow the development cycle, from an idea to a merged PR.
 
 Both groups sort in this order:
 

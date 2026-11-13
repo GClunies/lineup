@@ -151,14 +151,14 @@ func TestGroupOrderAndSelection(t *testing.T) {
 	for _, x := range m.tasks {
 		ids = append(ids, x.ID)
 	}
-	if !slices.Equal(ids[:2], []string{"ENG-588", "ENG-590"}) || ids[2] != "WEB-12" || ids[4] != "ENG-571" || ids[5] != "ENG-601" || ids[6] != "ENG-560" {
+	if !slices.Equal(ids[:2], []string{"ENG-588", "ENG-590"}) || ids[2] != "ENG-601" || ids[3] != "WEB-12" || ids[5] != "ENG-571" || ids[6] != "ENG-560" {
 		t.Fatalf("order = %v", ids)
 	}
 	if m.sel != "ENG-588" {
 		t.Fatalf("initial selection = %s", m.sel)
 	}
 	m, _ = press(m, "j", "j")
-	if m.sel != "WEB-12" {
+	if m.sel != "ENG-601" {
 		t.Fatalf("after jj = %s", m.sel)
 	}
 	m, _ = press(m, "k")
