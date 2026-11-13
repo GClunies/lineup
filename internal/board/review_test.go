@@ -426,6 +426,32 @@ func TestReviewSearchesEveryViewInOneCall(t *testing.T) {
 	}
 }
 
+func TestAViewAndAQueueLeaveOutTheExcludedTitles(t *testing.T) {
+	e := newRvEnv(t)
+	for i := range e.m.rv.tabs {
+		e.m.rv.tabs[i].Filter.ExcludeTitles = []string{"HLESS-"}
+	}
+	pr := func(n int, title string) github.PullRequest {
+		return github.PullRequest{Repo: "umbrella/data", Number: n, Title: title, Author: "hopper",
+			URL: fmt.Sprintf("https://github.com/umbrella/data/pull/%d", n), CreatedAt: epoch.Add(-time.Hour)}
+	}
+	e.api.lists["view:My teammates"] = []github.PullRequest{pr(1, "HLESS-12 Move the loaders"), pr(2, "Write the usage logs")}
+	e.api.lists["queue:platform"] = []github.PullRequest{pr(3, "Read the HLESS- table"), pr(4, "hless-14 lower case")}
+	e.open()
+	for key, want := range map[string][]int{"view:My teammates": {2}, "queue:platform": {4}} {
+		var got []int
+		for _, p := range e.wrote[key] {
+			got = append(got, p.Number)
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("%s cached %v, want %v", key, got, want)
+		}
+	}
+	if len(e.wrote["mine"]) != 3 {
+		t.Errorf("My PRs cached %d PRs, want its 3: it has no exclusions", len(e.wrote["mine"]))
+	}
+}
+
 func TestReviewTickRefreshes(t *testing.T) {
 	e := newRvEnv(t)
 	e.open()

@@ -55,6 +55,44 @@ func TestQuery(t *testing.T) {
 	}
 }
 
+func TestKeepDropsTheExcludedTitles(t *testing.T) {
+	prs := []PullRequest{{Number: 1, Title: "HLESS-12 Move the loaders"}, {Number: 2, Title: "hless-13 lower case"},
+		{Number: 3, Title: "Fix the HLESS- prefix parser"}, {Number: 4, Title: "Write the usage logs"}, {Number: 5, Title: "WIP: draft"}}
+	numbers := func(prs []PullRequest) []int {
+		out := []int{}
+		for _, pr := range prs {
+			out = append(out, pr.Number)
+		}
+		return out
+	}
+	for name, c := range map[string]struct {
+		exclude []string
+		want    []int
+	}{
+		"no exclusions":   {nil, []int{1, 2, 3, 4, 5}},
+		"case-sensitive":  {[]string{"HLESS-"}, []int{2, 4, 5}},
+		"anywhere":        {[]string{"usage"}, []int{1, 2, 3, 5}},
+		"any item":        {[]string{"HLESS-", "WIP"}, []int{2, 4}},
+		"no title holds":  {[]string{"nothing"}, []int{1, 2, 3, 4, 5}},
+		"lower case item": {[]string{"hless-"}, []int{1, 3, 4, 5}},
+	} {
+		f := Filter{Base: QueuePRs, Repos: []string{"umbrella/data"}, ExcludeTitles: c.exclude}
+		if got := numbers(f.Keep(prs)); !slices.Equal(got, c.want) {
+			t.Errorf("%s: kept %v, want %v", name, got, c.want)
+		}
+	}
+	if len(prs) != 5 || prs[0].Number != 1 {
+		t.Errorf("Keep changed its input: %v", numbers(prs))
+	}
+	if got := (Filter{ExcludeTitles: []string{"HLESS-"}}).Keep([]PullRequest{}); got == nil {
+		t.Error("Keep of an empty list gave nil, want an empty list")
+	}
+	q, _ := Filter{Base: ViewPRs, Repos: []string{"umbrella/data"}, ExcludeTitles: []string{"HLESS-"}}.Query(nil)
+	if q != ViewPRs+" repo:umbrella/data" {
+		t.Errorf("exclude_titles changed the search: %q", q)
+	}
+}
+
 // fakeSearchGH is a gh that answers each search with the reply for its query.
 // A query with no reply fails, as gh does on an HTTP error.
 func fakeSearchGH(t *testing.T, replies map[string]string) (bin, log string) {
