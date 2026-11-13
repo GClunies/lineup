@@ -59,10 +59,11 @@ func ParseReviewKey(s string) (ReviewKey, error) {
 
 // Level is the review Signal that the PR's current state holds for a review
 // Task added at since, or nil. A review that the user submitted comes first,
-// because it is the user's own end of the review.
-func (p ReviewSnapshot) Level(since time.Time) lifecycle.Signal {
+// because it is the user's own end of the review. While the Worker works, it
+// can still be posting that review, so only a merge or a close ends the Task.
+func (p ReviewSnapshot) Level(since time.Time, working bool) lifecycle.Signal {
 	switch {
-	case p.ReviewedAt.After(since):
+	case !working && p.ReviewedAt.After(since):
 		return lifecycle.PRReviewed{}
 	case p.State == "MERGED":
 		return lifecycle.PRMerged{}
@@ -306,10 +307,9 @@ func (s *Scheduler) removeReviewWorktree(ctx context.Context, r Record) {
 	})
 }
 
-// pollReviews reads each review Task's PR by number and applies its level
-// while the Worker does not work. pr-review posts the review in its Step 9, and
-// a Done before that step ends would show the review as ended while the Worker
-// still posts it.
+// pollReviews reads each review Task's PR by number and applies its level.
+// pr-review posts the review in its Step 9, so the user's review ends the Task
+// only once the Worker stops. A merge or a close ends it at once.
 func (s *Scheduler) pollReviews(ctx context.Context, keys map[ReviewKey]string) {
 	if len(keys) == 0 {
 		return
@@ -330,10 +330,7 @@ func (s *Scheduler) pollReviews(ctx context.Context, keys map[ReviewKey]string) 
 				r.LatestHead = pr.Head
 				s.save(r)
 			}
-			if r.workerWorking() {
-				continue
-			}
-			if sig := pr.Level(r.CreatedAt); sig != nil {
+			if sig := pr.Level(r.CreatedAt, r.workerWorking()); sig != nil {
 				s.apply(r, sig, "")
 			}
 		}

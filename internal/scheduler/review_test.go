@@ -68,19 +68,24 @@ func (h *harness) reviewsRemoved() []string {
 func TestReviewLevels(t *testing.T) {
 	added := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
 	cases := []struct {
-		name string
-		pr   ReviewSnapshot
-		want lifecycle.Signal
+		name    string
+		pr      ReviewSnapshot
+		working bool
+		want    lifecycle.Signal
 	}{
-		{"open, no review", ReviewSnapshot{State: "OPEN"}, nil},
-		{"review before the add", ReviewSnapshot{State: "OPEN", ReviewedAt: added.Add(-time.Minute)}, nil},
-		{"review after the add", ReviewSnapshot{State: "OPEN", ReviewedAt: added.Add(time.Minute)}, lifecycle.PRReviewed{}},
-		{"merged", ReviewSnapshot{State: "MERGED"}, lifecycle.PRMerged{}},
-		{"closed", ReviewSnapshot{State: "CLOSED"}, lifecycle.PRClosed{}},
-		{"reviewed, then merged", ReviewSnapshot{State: "MERGED", ReviewedAt: added.Add(time.Minute)}, lifecycle.PRReviewed{}},
+		{"open, no review", ReviewSnapshot{State: "OPEN"}, false, nil},
+		{"review before the add", ReviewSnapshot{State: "OPEN", ReviewedAt: added.Add(-time.Minute)}, false, nil},
+		{"review after the add", ReviewSnapshot{State: "OPEN", ReviewedAt: added.Add(time.Minute)}, false, lifecycle.PRReviewed{}},
+		{"merged", ReviewSnapshot{State: "MERGED"}, false, lifecycle.PRMerged{}},
+		{"closed", ReviewSnapshot{State: "CLOSED"}, false, lifecycle.PRClosed{}},
+		{"reviewed, then merged", ReviewSnapshot{State: "MERGED", ReviewedAt: added.Add(time.Minute)}, false, lifecycle.PRReviewed{}},
+		{"review while the Worker posts it", ReviewSnapshot{State: "OPEN", ReviewedAt: added.Add(time.Minute)}, true, nil},
+		{"merged while the Worker works", ReviewSnapshot{State: "MERGED"}, true, lifecycle.PRMerged{}},
+		{"closed while the Worker works", ReviewSnapshot{State: "CLOSED"}, true, lifecycle.PRClosed{}},
+		{"reviewed and merged while the Worker works", ReviewSnapshot{State: "MERGED", ReviewedAt: added.Add(time.Minute)}, true, lifecycle.PRMerged{}},
 	}
 	for _, c := range cases {
-		if got := c.pr.Level(added); got != c.want {
+		if got := c.pr.Level(added, c.working); got != c.want {
 			t.Errorf("%s: level %v, want %v", c.name, got, c.want)
 		}
 	}
@@ -184,18 +189,16 @@ func TestTheUsersReviewClosesTheReviewTab(t *testing.T) {
 	}
 }
 
-func TestClosingTheWorkerPaneOfADoneReviewClosesTheHunkTabAndRemovesTheWorktree(t *testing.T) {
+func TestAMergedPRClosesTheReviewTabWithItsHunkPane(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
-	worker := h.waitTab("claude reviewing")
+	h.waitTab("claude reviewing")
 	merged := openPR(7, "h1")
 	merged.State = "MERGED"
 	h.gh.setReview(merged)
-	h.status(worker.BlockID, "idle")
 	h.waitStage("pr-7", lifecycle.Done)
 
-	h.rex.blockCloses(worker)
 	eventually(t, "the hunk pane's tab closed", func() bool {
 		splits := h.rex.allSplits()
 		return len(splits) == 1 && splits[0].closed
@@ -209,12 +212,10 @@ func TestADoneReviewWithAnOpenTabBlocksANewReviewOfThePR(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
-	worker := h.waitTab("claude reviewing")
-	merged := openPR(7, "h1")
-	merged.State = "MERGED"
-	h.gh.setReview(merged)
-	h.status(worker.BlockID, "idle")
-	h.waitStage("pr-7", lifecycle.Done)
+	h.waitTab("claude reviewing")
+	// Cleanup runs in the Task's lane after the loop call that ends the Task,
+	// so for a moment the loop sees a Done review that keeps its tab.
+	h.s.call(func() { h.s.recs["pr-7"].Stage = lifecycle.Done })
 
 	h.gh.setReview(openPR(7, "h2"))
 	if _, err := h.s.Handle(context.Background(), Request{Op: "review", URL: prURL7}); err == nil || !strings.Contains(err.Error(), "close its tab first with lineup close pr-7") {
@@ -243,14 +244,17 @@ func TestMergedAndClosedPRsEndTheReview(t *testing.T) {
 		h.gh.setReview(openPR(7, "h1"))
 		h.review(prURL7)
 		worker := h.waitTab("claude reviewing")
+		h.status(worker.BlockID, "working")
 		gone := openPR(7, "h1")
 		gone.State = state
 		h.gh.setReview(gone)
-		h.still("pr-7", lifecycle.Reviewing)
-		h.status(worker.BlockID, "idle")
 		h.waitStage("pr-7", lifecycle.Done)
 		if v := h.task("pr-7"); v.Outcome != outcome {
 			t.Fatalf("%s: outcome %q, want %q", state, v.Outcome, outcome)
+		}
+		eventually(t, "the review worktree removed", func() bool { return len(h.reviewsRemoved()) == 1 })
+		if len(h.rex.open("claude reviewing")) != 0 {
+			t.Fatalf("%s: the review tab stayed open while its Worker worked", state)
 		}
 	}
 }
@@ -268,7 +272,6 @@ func TestTheLastReviewKeepsASessionThatHoldsOtherTabs(t *testing.T) {
 	h.gh.setReview(merged)
 	h.status(worker.BlockID, "idle")
 	h.waitStage("pr-7", lifecycle.Done)
-	h.do(Request{Op: "close", Task: "pr-7"})
 	eventually(t, "the review worktree removed", func() bool { return len(h.reviewsRemoved()) == 1 })
 	time.Sleep(150 * time.Millisecond)
 	h.rex.mu.Lock()

@@ -158,8 +158,7 @@ type SkipResult struct {
 // skip holds the PR out of every queue at every head until the user unskips
 // it. It ends the PR's open review Task with the outcome skipped, in the same
 // loop call, so no fill can start a review of the PR between the two. A Done
-// review Task keeps its tab: only the user closes that. It writes nothing to
-// GitHub. Running it twice changes nothing the second time.
+// review Task stays as it is. It writes nothing to GitHub. Running it twice changes nothing the second time.
 func (s *Scheduler) skip(ctx context.Context, url string) (SkipResult, error) {
 	key, err := ParseReviewKey(url)
 	if err != nil {
