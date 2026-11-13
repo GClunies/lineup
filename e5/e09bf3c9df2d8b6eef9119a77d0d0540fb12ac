@@ -1,0 +1,23 @@
+docs/spec/reviews.md
+  s_cb9315cd84195e::t_cdeeef187e2385 197
+internal/scheduler/record.go
+  s_cb9315cd84195e::t_cdeeef187e2385 86-88,91-94
+internal/scheduler/review_test.go
+  s_cb9315cd84195e::t_cdeeef187e2385 122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e5e09bf3c9df2d8b6eef9119a77d0d0540fb12ac",
+  "prompts": {},
+  "sessions": {
+    "s_cb9315cd84195e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63a76830-1bf9-40da-af50-4d201e8035e6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
