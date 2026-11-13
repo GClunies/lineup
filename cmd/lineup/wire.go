@@ -629,7 +629,7 @@ func reviewQueues(g *config.Global) []scheduler.Queue {
 	var out []scheduler.Queue
 	for _, q := range g.ReviewQueues() {
 		f := q.PRFilter
-		out = append(out, scheduler.Queue{Name: q.Name, Slots: q.Slots, Filter: github.Filter{Base: github.QueuePRs, State: f.State, Draft: f.Draft,
+		out = append(out, scheduler.Queue{Name: q.Name, Slots: q.Slots, Filter: github.Filter{Base: github.QueuePRs, Draft: f.Draft,
 			Repo: f.Repo, Author: f.Author, AuthorTeam: f.AuthorTeam, ReviewRequested: f.ReviewRequested, Label: f.Label,
 			IncludeRegex: f.IncludeRegex, ExcludeRegex: f.ExcludeRegex}})
 	}

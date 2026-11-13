@@ -212,7 +212,7 @@ exclude_regex = "HLESS-"
 	no := false
 	want := []scheduler.Queue{
 		{Name: "My teammates", Slots: 1, Filter: github.Filter{Base: github.QueuePRs, Repo: []string{"umbrella/data"}, AuthorTeam: []string{"umbrella/platform"},
-			State: "open", Draft: &no, ReviewRequested: "@me", IncludeRegex: "DATA-", ExcludeRegex: "WIP"}},
+			Draft: &no, ReviewRequested: "@me", IncludeRegex: "DATA-", ExcludeRegex: "WIP"}},
 		{Name: "platform", Slots: 3, Filter: github.Filter{Base: github.QueuePRs, Author: []string{"hopper"}, Label: []string{"needs-review"}, ExcludeRegex: "HLESS-"}},
 	}
 	if got := reviewQueues(cfg); !reflect.DeepEqual(got, want) {

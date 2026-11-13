@@ -3,8 +3,8 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -29,7 +29,6 @@ const QueuePRs = "is:pr archived:false sort:created-asc draft:false -author:@me"
 // the title, which config checked at load.
 type Filter struct {
 	Base            string
-	State           string
 	Draft           *bool
 	Repo            []string // owner/name
 	Author          []string
@@ -58,12 +57,7 @@ func (f Filter) Keep(prs []PullRequest) []PullRequest {
 // author, so it must not run.
 func (f Filter) Query(members map[string][]string) (q string, ok bool) {
 	parts := []string{f.Base}
-	switch f.State {
-	case "", "open":
-		parts = append(parts, "is:open")
-	case "closed", "merged":
-		parts = append(parts, "is:"+f.State)
-	}
+	parts = append(parts, "is:open")
 	if f.Draft != nil {
 		parts = append(parts, "draft:"+strconv.FormatBool(*f.Draft))
 	}
@@ -115,13 +109,10 @@ type PullRequest struct {
 	Draft bool
 	Fork  bool
 	// Head is the head commit, and Base is the base branch.
-	Head, Base     string
-	CreatedAt      time.Time
-	Labels         []string
-	RequestedUsers []string
-	RequestedTeams []string // org/slug
-	LatestReviews  []Review
-	Viewer         ViewerState
+	Head, Base    string
+	CreatedAt     time.Time
+	LatestReviews []Review
+	Viewer        ViewerState
 }
 
 // ViewerState is the user's relation to a PR, as GitHub reports it to the
@@ -144,8 +135,7 @@ fragment R on PullRequest {
   number title url isDraft createdAt isCrossRepository headRefOid baseRefName viewerDidAuthor
   author { __typename login }
   repository { nameWithOwner }
-  labels(first: 20) { nodes { name } }
-  reviewRequests(first: 20) { nodes { requestedReviewer { ... on Team { combinedSlug } ... on User { login isViewer } } } }
+  reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { isViewer } } } }
   viewerLatestReviewRequest { id }
   viewerReviews: reviews(author: $viewer, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) { totalCount }
   latestReviews(first: 20) { nodes { author { __typename login } state submittedAt viewerDidAuthor commit { oid } } }
@@ -159,8 +149,8 @@ const searchQuery = "query($viewer: String!, $q: String!) {\n" +
 // user's login. A search that matches nothing maps to an empty list. Each
 // search is its own GraphQL call, and the calls run at the same time: GitHub
 // stops a call at about 10 seconds, and one call that holds every search of a
-// typical config takes longer. If a search fails, SearchPRs returns the lists
-// of the other searches and a SearchErrors.
+// typical config takes longer. If a search fails, SearchPRs returns the error
+// of each failed search and no lists.
 func (c *Client) SearchPRs(ctx context.Context, viewer string, searches []Search) (map[string][]PullRequest, error) {
 	lists := make([][]PullRequest, len(searches))
 	errs := make([]error, len(searches))
@@ -173,30 +163,14 @@ func (c *Client) SearchPRs(ctx context.Context, viewer string, searches []Search
 		}()
 	}
 	wg.Wait()
-	out, failed := map[string][]PullRequest{}, SearchErrors{}
-	for i, s := range searches {
-		if errs[i] != nil {
-			failed[s.Key] = errs[i]
-		} else {
-			out[s.Key] = lists[i]
-		}
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
 	}
-	if len(failed) > 0 {
-		return out, failed
+	out := map[string][]PullRequest{}
+	for i, s := range searches {
+		out[s.Key] = lists[i]
 	}
 	return out, nil
-}
-
-// SearchErrors holds the error of each failed search by its Key. Each error
-// names its search.
-type SearchErrors map[string]error
-
-func (e SearchErrors) Error() string {
-	var msgs []string
-	for _, k := range slices.Sorted(maps.Keys(e)) {
-		msgs = append(msgs, e[k].Error())
-	}
-	return strings.Join(msgs, "; ")
 }
 
 func (c *Client) searchOne(ctx context.Context, viewer string, s Search) ([]PullRequest, error) {
@@ -248,17 +222,10 @@ type gqlSearchPR struct {
 	Repository struct {
 		NameWithOwner string `json:"nameWithOwner"`
 	} `json:"repository"`
-	Labels struct {
-		Nodes []struct {
-			Name string `json:"name"`
-		} `json:"nodes"`
-	} `json:"labels"`
 	ReviewRequests struct {
 		Nodes []struct {
 			RequestedReviewer *struct {
-				CombinedSlug string `json:"combinedSlug"`
-				Login        string `json:"login"`
-				IsViewer     bool   `json:"isViewer"`
+				IsViewer bool `json:"isViewer"`
 			} `json:"requestedReviewer"`
 		} `json:"nodes"`
 	} `json:"reviewRequests"`
@@ -297,17 +264,9 @@ func (g gqlSearchPR) toPullRequest() PullRequest {
 	if g.Author != nil {
 		pr.Author, pr.Bot = g.Author.Login, g.Author.Typename == "Bot"
 	}
-	for _, l := range g.Labels.Nodes {
-		pr.Labels = append(pr.Labels, l.Name)
-	}
 	for _, n := range g.ReviewRequests.Nodes {
-		switch r := n.RequestedReviewer; {
-		case r == nil:
-		case r.CombinedSlug != "":
-			pr.RequestedTeams = append(pr.RequestedTeams, r.CombinedSlug)
-		case r.Login != "":
-			pr.RequestedUsers = append(pr.RequestedUsers, r.Login)
-			pr.Viewer.ByName = pr.Viewer.ByName || r.IsViewer
+		if r := n.RequestedReviewer; r != nil && r.IsViewer {
+			pr.Viewer.ByName = true
 		}
 	}
 	opinions := map[string]string{}
