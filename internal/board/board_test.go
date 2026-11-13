@@ -409,7 +409,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 	if cmd != nil {
 		cmd()
 	}
-	if want := []string{"ENG-571 Ready to land, #4636: Rate limit login", "R-3 Review ready: data#7 Fix the tooltip"}; !slices.Equal(toasts, want) {
+	if want := []string{"ENG-571 Ready to land, #4636: Rate limit login"}; !slices.Equal(toasts, want) {
 		t.Fatalf("toasts %q, want %q", toasts, want)
 	}
 }
@@ -728,9 +728,6 @@ func TestTheBoardToastsTheNextReadyIssueWhenASlotFrees(t *testing.T) {
 	done := tv("ENG-571", lifecycle.Done, "data", "Rate limit login", "#4636", 0)
 	done.Outcome = "merged"
 	review := rtv("R-3", lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour)
-	reviewDone := review
-	reviewDone.Stage, reviewDone.StageKey, reviewDone.Group, reviewDone.Outcome =
-		lifecycle.Done.String(), lifecycle.Done.Key(), groupOf[lifecycle.Done], "reviewed"
 	board := func(started int, tasks ...scheduler.TaskView) scheduler.BoardView {
 		v := fixture()
 		v.Started = started
@@ -749,7 +746,6 @@ func TestTheBoardToastsTheNextReadyIssueWhenASlotFrees(t *testing.T) {
 			board(5, landing, review), board(4, done, review), "1 slot free, next ENG-611: Move the retry job"},
 		{"no free slot", true, board(5, landing, review), board(5, done, review), ""},
 		{"no Ready row", false, board(4, landing, review), board(3, done, review), ""},
-		{"a review Task reached Done", true, board(3, landing, review), board(3, landing, reviewDone), ""},
 	} {
 		var toasts []string
 		m := New(c.before, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})

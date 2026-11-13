@@ -34,7 +34,7 @@ const usage = `usage: lineup [command]
                                stop or restart every review queue fill
   lineup ls [--json]           list the Tasks
   lineup show [--json] <task>
-  lineup watch [--once]        print a line each time a Task needs you or ends
+  lineup watch [--once]        print a line each time a build Task needs you or ends
   lineup steer <task> "<text>" type text into the Task's Worker
   lineup ask <task> "<question>"
                                a Worker's question for the user, on the Task's row

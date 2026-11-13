@@ -32,12 +32,16 @@ func (t TaskView) AlertText() string {
 	return fmt.Sprintf("%s %s, %s: %s", t.ID, t.Stage, note, t.Title)
 }
 
-// Alerts returns the Tasks of v whose Attention is new since seen, and records
-// each Task's Attention in seen. A Task that needs nothing leaves seen, so it
-// alerts again the next time it needs the user.
+// Alerts returns the build Tasks of v whose Attention is new since seen, and
+// records each one's Attention in seen. A Task that needs nothing leaves seen,
+// so it alerts again the next time it needs the user. A review Task never
+// alerts: the user answers it in its own tab.
 func Alerts(seen map[string]string, v BoardView) []TaskView {
 	var out []TaskView
 	for _, t := range v.Tasks {
+		if t.Kind == lifecycle.KindReview {
+			continue
+		}
 		a := t.Attention()
 		if a == "" {
 			delete(seen, t.ID)

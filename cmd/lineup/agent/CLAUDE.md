@@ -40,7 +40,7 @@ lineup has no planning Stage. If the user wants a Worker to plan before it build
 
 ## Reviews
 
-`lineup review` makes a review Task, `R-<n>`. Its Worker runs `pr-review` and writes nothing to GitHub until the user decides each finding. Then it posts what the user decided. When its findings are ready, the Task alerts with `Review ready`. The user decides each finding in the Worker's tab. If the PR already has an open review Task, `lineup review` adds nothing. It starts the Task if it is Queued, runs it again if it stopped for good, and otherwise focuses its tab. If the user closed a review Task's tab, `lineup open <task>` or `lineup review <url>` restores its Worker in the same conversation.
+`lineup review` makes a review Task, `R-<n>`. Its Worker runs `pr-review` and writes nothing to GitHub until the user decides each finding. Then it posts what the user decided. The user decides each finding in the Worker's tab, which the Rex sidebar shows in the `reviews` session. Never ask the user about a review Task, and never pass on its Worker's questions. Answer a review question only when the user asks you one. If the PR already has an open review Task, `lineup review` adds nothing. It starts the Task if it is Queued, runs it again if it stopped for good, and otherwise focuses its tab. If the user closed a review Task's tab, `lineup open <task>` or `lineup review <url>` restores its Worker in the same conversation.
 
 A review queue starts review Tasks without being asked, up to its slots. `lineup reviews --json` lists each queue with its started review Tasks in `started` and the PRs that wait in `ranked`, first to start first. A pause stops no review that started.
 
@@ -84,7 +84,7 @@ When the Worker finishes, its Task alerts with `stopped`. The user reads the res
 
 ## Alerts
 
-`lineup watch --once` waits for the next alerts of every Task, build or review, prints one line for each, and exits. For example, it prints `ENG-34 Working, stopped: <title>`. The boards also show each line as a desktop toast.
+`lineup watch --once` waits for the next alerts of the build Tasks, prints one line for each, and exits. For example, it prints `ENG-34 Working, stopped: <title>`. The boards also show each line as a desktop toast.
 
 - Run the watch with the Bash tool and `run_in_background: true`: command `lineup watch --once`, description `lineup alerts`. Do not use the Monitor tool. A Monitor expires after 30 minutes and wakes you to no purpose.
 - Start the watch when the Hub starts you, and again each time it exits, before you reply to its alerts. A question holds your turn until the user answers. The watch must run meanwhile. Say nothing about the start. Your reply to an alert is the only text the user sees.

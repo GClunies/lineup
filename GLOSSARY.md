@@ -83,7 +83,7 @@ The deterministic part of lineup that owns the queue, the WIP cap, Worker startu
 _Avoid_: Coordinator, daemon, engine
 
 **Orchestrator**:
-The long-lived agent that the user talks to in the `LINEUP` pane of the Hub's `hub` tab. It plans Issues in the Trackers, does Intake, starts reviews, reports status and alerts, passes the user's words to Workers, and applies overrides, for build Tasks and review Tasks alike, always through the Scheduler.
+The long-lived agent that the user talks to in the `LINEUP` pane of the Hub's `hub` tab. It plans Issues in the Trackers, does Intake, starts reviews, reports status and the alerts of build Tasks, passes the user's words to Workers, and applies overrides, for build Tasks and review Tasks alike, always through the Scheduler.
 _Avoid_: Coordinator, manager agent
 
 **Worker**:
