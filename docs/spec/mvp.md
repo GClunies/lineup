@@ -200,8 +200,8 @@ A low review bot score spends a review cycle. Open threads that only bots opened
 
 ```
 Rex server
-├── session "lineup hub"        (the Hub session)
-│   └── tab "hub"
+├── session "my-lineup"         (the Hub session)
+│   └── tab "lineup"
 │       ├── block "BOARD"             lineup board           (top, most of the height)
 │       └── block "LINEUP"            claude --continue     (bottom, 25% of the height, own theme)
 ├── session "data"                    (one session for each Repo with an open Task)
@@ -219,16 +219,16 @@ The rules for this layout:
 
 - `lineup` opens the Hub session. If the session does not exist, `lineup` creates it.
 - The Hub has one tab, `hub`. Its Board shows the build Tasks and the user's own Issues.
-- A Hub from before the `hub` tab has a tab labeled `work`. `lineup` renames it to `hub`. It closes the old `orchestrate`, `plan`, and `review` tabs.
+- A Hub from before the `lineup` tab has a session named `lineup hub` and a tab labeled `hub`. `lineup` renames them to `my-lineup` and `lineup`, so the agent keeps its conversation. It closes the old `orchestrate`, `plan`, and `review` tabs.
 - A Hub from before the one agent has tabs with an `ORCHESTRATOR`, `PLANNER`, or `REVIEWER` block. `lineup` closes each such tab and opens it again.
-- The Hub session is named `lineup hub`. A Repo session is named after its folder, and the Scheduler removes it after its last Task. The space keeps a Repo session from taking the Hub's name.
+- The Hub session is named `my-lineup`. A Repo session is named after its folder, and the Scheduler removes it after its last Task. A Repo whose folder is named `my-lineup` gets the session `<parent>-my-lineup`, so no Repo session takes the Hub's name.
 - The Scheduler creates each Task tab with `rex window new -s <session> <label> --focus=false -- <command>`. The user stays on the Hub.
 - The label is the Task ID, or the Issue identifier, and the title. Rex refuses a label longer than 128 characters, so a longer label stops at 127 characters and ends in `…`.
 - Each Task tab names its command. A tab without a command reports exit code 0 when its shell exits, whatever the real code is.
 - If a Worker exits within about 1 s, Rex keeps its tab open so that the user can read the error. The Scheduler never closes that tab by itself. A later prompt for the Task sets the flag `tab closed`. When the user runs `lineup open <task>`, the Scheduler closes the kept tab and opens a new one, because the user asked for the Worker.
 - The Scheduler creates a Repo session with the first Task in that Repo. It removes the session when the last Task tab in it closes and the session holds no other tab. A tab that the user or another Scheduler opened keeps the session.
 - If two Repos have the same folder name, the session label adds the parent folder, for example `acme-data`.
-- An ad hoc Task opens in the session `ad hoc`, or in the session that `ad_hoc_session` names. The Board still shows its Repo. The Scheduler removes this session after its last Task, as with a Repo session, so `ad_hoc_session` can't be `lineup hub`.
+- An ad hoc Task opens in the session `ad hoc`, or in the session that `ad_hoc_session` names. The Board still shows its Repo. The Scheduler removes this session after its last Task, as with a Repo session, so `ad_hoc_session` can't be `my-lineup`.
 - The Scheduler passes `-s <session>` on every block call. Without it, Rex resolves the block only inside the caller's own session and returns `block target ... not found`.
 - Each agent block uses a terminal `theme` with its own background color. The Orchestrator's block is `LINEUP`, and its Claude status line reads `Lineup`.
 

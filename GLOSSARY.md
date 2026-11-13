@@ -65,7 +65,7 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The top of the `hub` tab, above the Orchestrator. It lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
+The top of the `lineup` tab, above the Orchestrator. It lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:
@@ -83,7 +83,7 @@ The deterministic part of lineup that owns the queue, the WIP cap, Worker startu
 _Avoid_: Coordinator, daemon, engine
 
 **Orchestrator**:
-The long-lived agent that the user talks to in the `LINEUP` pane of the Hub's `hub` tab. It plans Issues in the Trackers, does Intake, starts reviews, reports status and the alerts of build Tasks, passes the user's words to Workers, and applies overrides, for build Tasks and review Tasks alike, always through the Scheduler.
+The long-lived agent that the user talks to in the `LINEUP` pane of the Hub's `lineup` tab. It plans Issues in the Trackers, does Intake, starts reviews, reports status and the alerts of build Tasks, passes the user's words to Workers, and applies overrides, for build Tasks and review Tasks alike, always through the Scheduler.
 _Avoid_: Coordinator, manager agent
 
 **Worker**:

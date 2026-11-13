@@ -293,7 +293,7 @@ The Orchestrator maps "review <url>" and `/pr-review <url>` to `lineup review <u
 | `cmd/lineup` | `lineup review`, `lineup reviews` |
 | Orchestrator instructions | The review jobs in `cmd/lineup/agent/CLAUDE.md` |
 
-The Orchestrator in the `hub` tab adds, steers, reruns, and closes review Tasks, and it pauses and resumes the queues, all through the `lineup` CLI. Its settings deny every GitHub write to a PR. The reviews run in their own tabs.
+The Orchestrator in the `lineup` tab adds, steers, reruns, and closes review Tasks, and it pauses and resumes the queues, all through the `lineup` CLI. Its settings deny every GitHub write to a PR. The reviews run in their own tabs.
 
 ## Success criteria and tests
 

@@ -3,6 +3,7 @@ package scheduler
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -96,14 +97,17 @@ func (r *Record) tabLabel() string {
 	return label
 }
 
+// HubSession is the Rex session of the Hub. The Scheduler removes a Repo
+// session after its last Task, so no Repo session may take this name.
+const HubSession = "my-lineup"
+
 // sessionLabel is the Repo's folder name, with its parent folder added when
-// another Repo on the Board has the same folder name.
+// another Repo on the Board has the same folder name, or when the folder name
+// is HubSession.
 func sessionLabel(repo string, others []string) string {
 	base := filepath.Base(repo)
-	for _, o := range others {
-		if o != repo && filepath.Base(o) == base {
-			return filepath.Base(filepath.Dir(repo)) + "-" + base
-		}
+	if base == HubSession || slices.ContainsFunc(others, func(o string) bool { return o != repo && filepath.Base(o) == base }) {
+		return filepath.Base(filepath.Dir(repo)) + "-" + base
 	}
 	return base
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/harness/claude"
 	"github.com/gclunies/lineup/internal/linear"
+	"github.com/gclunies/lineup/internal/scheduler"
 )
 
 //go:embed agent/CLAUDE.md
@@ -32,10 +33,11 @@ var githubSection []byte
 var localSection []byte
 
 const (
-	// hubSession has a space, so no Repo session can take it. A Repo session
-	// is named after its folder, and the Scheduler removes it after its last Task.
-	hubSession = "lineup hub"
-	agentRows  = 25 // percent of the tab
+	hubSession = scheduler.HubSession
+	// formerHubSession is the Hub's session name before my-lineup. openHub
+	// renames it, so the agent and its conversation stay.
+	formerHubSession = "lineup hub"
+	agentRows        = 25 // percent of the tab
 )
 
 // watchPrompt is the Orchestrator's first message each time the Hub starts
@@ -115,15 +117,15 @@ type agentTab struct {
 
 // agentTabs are in Hub tab order.
 var agentTabs = []agentTab{
-	{"hub", "BOARD", "LINEUP", []string{"board"}, agentRole, agentSettings, "#1b2733", watchPrompt, composeAgent},
+	{"lineup", "BOARD", "LINEUP", []string{"board"}, agentRole, agentSettings, "#1b2733", watchPrompt, composeAgent},
 }
 
 // activeTab is the tab that a new Hub opens on.
-const activeTab = "hub"
+const activeTab = "lineup"
 
 // formerLabels are the labels that a Hub tab had before a rename, by its
 // label now.
-var formerLabels = map[string]string{"hub": "work"}
+var formerLabels = map[string]string{"lineup": "hub"}
 
 // retiredTabs are the labels of tabs that no longer exist. Their windows hold
 // a board with no agent, or a former agent, so openHub closes them.
@@ -268,6 +270,19 @@ type hubWindow struct {
 	Blocks []string // block labels
 }
 
+// renameFormerHub gives a Hub session under its former name the current one,
+// unless a session already has the current name.
+func renameFormerHub() error {
+	if _, err := rexRun("session", "inspect", "--json", hubSession); err == nil || !strings.Contains(err.Error(), "not found") {
+		return nil
+	}
+	if _, err := rexRun("session", "inspect", "--json", formerHubSession); err != nil {
+		return nil
+	}
+	_, err := rexRun("session", "rename", formerHubSession, hubSession)
+	return err
+}
+
 func hubWindows() (map[string]hubWindow, bool, error) {
 	out, err := rexRun("session", "inspect", "--json", hubSession)
 	if err != nil {
@@ -319,6 +334,9 @@ func openHub() error {
 	claudeBin, err := exec.LookPath("claude")
 	if err != nil {
 		return fmt.Errorf("claude is required and is not on PATH")
+	}
+	if err := renameFormerHub(); err != nil {
+		return err
 	}
 	windows, exists, err := hubWindows()
 	if err != nil {
@@ -389,7 +407,7 @@ func openHub() error {
 // openAgentTab opens the tab, with the agent in dir, the folder that
 // prepareAgent wrote.
 func openAgentTab(t agentTab, dir, self, claudeBin string, focus bool) error {
-	cmd := agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, "lineup-"+t.window)
+	cmd := agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, t.window)
 	if hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {
 		cmd = append(cmd, "--continue")
 	}

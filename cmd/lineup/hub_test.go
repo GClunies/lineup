@@ -127,12 +127,12 @@ func TestHubHasOneTabAndItCarriesTheAgent(t *testing.T) {
 			agents = append(agents, tab.window)
 		}
 	}
-	if !slices.Equal(tabs, []string{"hub"}) || !slices.Equal(agents, []string{"hub"}) {
-		t.Errorf("tabs %v with agents %v, want hub with an agent", tabs, agents)
+	if !slices.Equal(tabs, []string{"lineup"}) || !slices.Equal(agents, []string{"lineup"}) {
+		t.Errorf("tabs %v with agents %v, want lineup with an agent", tabs, agents)
 	}
-	i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == "hub" })
+	i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == "lineup" })
 	if got := agentTabs[i]; got.agent != "LINEUP" || !slices.Equal(got.boardArgs, []string{"board"}) {
-		t.Errorf("the hub tab runs %v over %q, want board over LINEUP", got.boardArgs, got.agent)
+		t.Errorf("the lineup tab runs %v over %q, want board over LINEUP", got.boardArgs, got.agent)
 	}
 }
 
@@ -194,17 +194,17 @@ func TestRunBoardRefusesAnArgument(t *testing.T) {
 	}
 }
 
-func TestOpenHubRenamesTheWorkTab(t *testing.T) {
-	old := hubWindow{ID: "w7", Label: "work"}
+func TestOpenHubRenamesTheHubTab(t *testing.T) {
+	old := hubWindow{ID: "w7", Label: "hub"}
 	cases := []struct {
 		name    string
 		windows map[string]hubWindow
 		label   string
 		want    string // the ID of the window to rename, or ""
 	}{
-		{"an old Hub", map[string]hubWindow{"work": old, "plan": {ID: "w8"}}, "hub", "w7"},
-		{"a Hub with both", map[string]hubWindow{"work": old, "hub": {ID: "w9"}}, "hub", ""},
-		{"a new Hub", map[string]hubWindow{}, "hub", ""},
+		{"an old Hub", map[string]hubWindow{"hub": old, "plan": {ID: "w8"}}, "lineup", "w7"},
+		{"a Hub with both", map[string]hubWindow{"hub": old, "lineup": {ID: "w9"}}, "lineup", ""},
+		{"a new Hub", map[string]hubWindow{}, "lineup", ""},
 	}
 	for _, c := range cases {
 		got := ""
@@ -218,8 +218,8 @@ func TestOpenHubRenamesTheWorkTab(t *testing.T) {
 	if !slices.Equal(retiredTabs, []string{"orchestrate", "plan", "review"}) {
 		t.Errorf("retired tabs = %v, want orchestrate, plan, review", retiredTabs)
 	}
-	if activeTab != "hub" {
-		t.Errorf("a new Hub opens on %q, want hub", activeTab)
+	if activeTab != "lineup" {
+		t.Errorf("a new Hub opens on %q, want lineup", activeTab)
 	}
 }
 
@@ -245,7 +245,7 @@ func TestOpenHubRewritesTheAgentFilesWhenTheTabExists(t *testing.T) {
 	for name, body := range map[string]string{
 		"rex": `case "$1 $2" in
 "session inspect") echo '{"windows":[
-{"window_id":"w2","label":"hub","layers":[{"blocks":[{"label":"BOARD"},{"label":"LINEUP"}]}]}]}';;
+{"window_id":"w2","label":"lineup","layers":[{"blocks":[{"label":"BOARD"},{"label":"LINEUP"}]}]}]}';;
 esac`,
 		"launchctl": "",
 		"gh":        "",
@@ -280,5 +280,49 @@ esac`,
 	}
 	if prompt, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md")); !bytes.Equal(prompt, role) {
 		t.Errorf("CLAUDE.md is not the current prompt")
+	}
+}
+
+// A Hub from before the rename keeps its agent and its conversation: lineup
+// renames the session and the tab in place and opens no second Hub.
+func TestOpenHubRenamesTheOldHubInPlace(t *testing.T) {
+	bin, tmp := t.TempDir(), t.TempDir()
+	log, renamedMark := filepath.Join(tmp, "rex.log"), filepath.Join(tmp, "renamed")
+	for name, body := range map[string]string{
+		"rex": `echo "$@" >> '` + log + `'
+case "$1 $2" in
+"session inspect")
+  if [ "$4" = "lineup hub" ] || [ -f '` + renamedMark + `' ]; then
+    echo '{"windows":[{"window_id":"w2","label":"hub","layers":[{"blocks":[{"label":"BOARD"},{"label":"LINEUP"}]}]}]}'
+  else
+    echo "session $4 not found" >&2; exit 1
+  fi;;
+"session rename") touch '` + renamedMark + `';;
+esac`,
+		"launchctl": "",
+		"gh":        "",
+		"wt":        "",
+		"claude":    "",
+	} {
+		os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755)
+	}
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LINEUP_STATE_DIR", t.TempDir())
+	t.Setenv("LINEUP_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	if err := openHub(); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(log)
+	calls := string(raw)
+	for _, want := range []string{"session rename lineup hub my-lineup", "window rename -s my-lineup w2 lineup"} {
+		if !strings.Contains(calls, want) {
+			t.Errorf("rex calls lack %q:\n%s", want, calls)
+		}
+	}
+	if strings.Contains(calls, "session new") || strings.Contains(calls, "window new") {
+		t.Errorf("lineup opened a second Hub:\n%s", calls)
 	}
 }
