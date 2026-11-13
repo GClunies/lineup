@@ -34,7 +34,8 @@ func MyMergedPRs(since time.Time) string {
 
 // Filter picks open PRs. Base is one of the searches above. The items of one
 // list combine with OR, and two lists combine with AND. Authors and the
-// members of AuthorTeams are one list.
+// members of AuthorTeams are one list. A PR whose title holds any item of
+// ExcludeTitles never matches.
 type Filter struct {
 	Base           string
 	Repos          []string // owner/name
@@ -42,6 +43,19 @@ type Filter struct {
 	AuthorTeams    []string // org/slug
 	RequestedTeams []string // org/slug
 	Labels         []string
+	ExcludeTitles  []string // case-sensitive substrings
+}
+
+// Keep returns the PRs of a search for f whose titles hold no item of
+// ExcludeTitles. GitHub search matches words in any case, so it cannot match
+// a case-sensitive substring.
+func (f Filter) Keep(prs []PullRequest) []PullRequest {
+	if len(f.ExcludeTitles) == 0 {
+		return prs
+	}
+	return slices.DeleteFunc(slices.Clone(prs), func(pr PullRequest) bool {
+		return slices.ContainsFunc(f.ExcludeTitles, func(s string) bool { return strings.Contains(pr.Title, s) })
+	})
 }
 
 // Query builds the search for f, given the members of each team in

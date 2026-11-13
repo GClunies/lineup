@@ -279,6 +279,19 @@ func TestOnlyAFullPollFills(t *testing.T) {
 	}
 }
 
+func TestAFillLeavesOutAPRWithAnExcludedTitle(t *testing.T) {
+	q := authorQueue("q", 2, "hopper")
+	q.Filter.ExcludeTitles = []string{"HLESS-"}
+	h := queueHarness(t, q)
+	excluded, kept := queuePR("acme/data", 9, 99), queuePR("acme/data", 7, 30)
+	excluded.Title = "HLESS-12 Move the loaders"
+	h.gh.found = map[string][]github.PullRequest{"q": {excluded, kept}}
+	h.s.fill(context.Background())
+	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Reviewing"}) {
+		t.Fatalf("reviews %v, want only #7: #9's title holds HLESS-", got)
+	}
+}
+
 func TestAFillLeavesOutAPRWithNoCheckout(t *testing.T) {
 	h := queueHarness(t, authorQueue("q", 1, "hopper"))
 	h.gh.found = map[string][]github.PullRequest{"q": {queuePR("acme/other", 9, 99), queuePR("acme/data", 7, 30)}}

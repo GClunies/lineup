@@ -306,6 +306,9 @@ func (m Model) refreshReviews() tea.Cmd {
 				delete(found, mergedKey(tb))
 				continue
 			}
+			if prs, ok := found[tb.Key]; ok {
+				found[tb.Key] = tb.Filter.Keep(prs)
+			}
 			if merged, ok := found[mergedKey(tb)]; ok {
 				delete(found, mergedKey(tb))
 				slices.SortStableFunc(merged, func(a, b github.PullRequest) int { return b.MergedAt.Compare(a.MergedAt) })

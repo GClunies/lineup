@@ -41,7 +41,7 @@ The user sees in one place which PRs need them: their own open PRs and the PRs t
 
 ## Filters
 
-A view and a queue take the same five filters. Each filter is a list.
+A view and a queue take the same five filters and one exclusion. Each is a list.
 
 | Key | Matches a PR when | Search qualifier |
 |---|---|---|
@@ -50,9 +50,11 @@ A view and a queue take the same five filters. Each filter is a list.
 | `author_teams` | its author is a member of a team in the list | `author:<login>` for each member |
 | `requested_teams` | it requests review from a team in the list | `team-review-requested:<org/slug>`, one per item |
 | `labels` | it has any label in the list | `label:<a>,<b>` |
+| `exclude_titles` | its title holds no item of the list | none: lineup drops the PR after the search |
 
 - The items of one filter combine with OR. Two filters combine with AND.
 - `authors` and `author_teams` are one filter. lineup puts their logins into one OR list.
+- `exclude_titles` drops a PR whose title contains any item, case-sensitive, even when every filter matches. GitHub search matches whole words in any case, so lineup compares the titles itself. A view or queue needs at least one filter besides `exclude_titles`, and an empty item fails at load.
 - Every search adds `is:pr is:open archived:false`.
 - A team is `org/slug`, for example `umbrella/platform`. lineup reads the members of each team in `author_teams` once an hour, in one GraphQL call for every team.
 - A view search sorts newest first (`sort:created-desc`). A queue search sorts oldest first (`sort:created-asc`), so that its oldest PRs are inside the first 100.
@@ -72,6 +74,7 @@ author_teams = ["umbrella/platform"]
 name = "Data team"
 requested_teams = ["umbrella/data"]
 labels = ["needs-review"]
+exclude_titles = ["WIP"]
 ```
 
 The review tab shows these tabs, in this order before the user ranks them:
@@ -392,7 +395,7 @@ The `review` Hub tab holds one pane, `REVIEWS`, which runs `lineup board --revie
 6. **Review poll.** Against recorded responses, `pr-reviewed`, `pr-merged`, and `pr-closed` fire as the table says, wait while the Worker works, and fire on the next poll after the Worker stops. A pending review does not fire `pr-reviewed`.
 7. **Setup and cleanup.** Two review starts in one Repo fetch one after the other. Cleanup removes a clean review worktree and keeps one with an unpushed commit. A review Task never calls `wt remove`.
 8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then restores the Worker in the same conversation. A closed tab in Reviewing flags the Task `tab closed` and opens no tab, and `lineup open` or `lineup review` then resumes the Worker. Recovery with no tab in Review ready leaves the Task as it is, and in Reviewing it sets the flag. The events of the hunk pane leave the Task as it is. A closed Worker block closes the hunk pane with its tab.
-9. **Config.** Load and validation: an unknown key, an empty filter list, a bad team or repository form, a duplicate name, and `slots` below 1 each fail at load.
+9. **Config.** Load and validation: an unknown key, an empty filter list, a bad team or repository form, a duplicate name, an empty `exclude_titles` item, and `slots` below 1 each fail at load.
 10. **Board.** A render test of the review view with a build Task and a review Task on PRs. Only the review Task joins. `enter` on a joined row sends `focus` for that Task when its Worker is live, and `open` when it is not. The Reviews tab lists only the review Task. Typing `q` in the search does not quit. A `Q:` tab lists a skipped PR dim after the PRs that wait, also right after the skip closed its review Task. `S` toggles the skip.
 11. **Speed.** The review view's first paint from the cache meets the Board's 100 ms budget.
 12. **Live.**

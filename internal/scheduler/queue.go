@@ -74,6 +74,11 @@ func (s *Scheduler) readQueues(ctx context.Context) (queueRows, error) {
 	if err != nil {
 		return queueRows{}, err
 	}
+	for _, q := range s.d.Queues {
+		if prs, ok := found[q.Name]; ok {
+			found[q.Name] = q.Filter.Keep(prs)
+		}
+	}
 	rows := queueRows{Found: found, Repos: map[string]queueRepo{}}
 	tried := map[string]bool{}
 	for _, q := range s.d.Queues {

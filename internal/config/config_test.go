@@ -428,11 +428,13 @@ author_teams = ["umbrella/platform"]
 name = "Data team"
 requested_teams = ["umbrella/data"]
 labels = ["needs-review", "breaking change"]
+exclude_titles = ["WIP"]
 
 [[review.queues]]
 name = "platform"
 repos = ["umbrella/data"]
 authors = ["hopper", "noether"]
+exclude_titles = ["HLESS-", "[skip review]"]
 
 [[review.queues]]
 name = "one at a time"
@@ -441,13 +443,13 @@ slots = 1
 `)
 	wantViews := []ReviewView{
 		{Name: "My teammates", PRFilter: PRFilter{Repos: []string{"umbrella/data"}, AuthorTeams: []string{"umbrella/platform"}}},
-		{Name: "Data team", PRFilter: PRFilter{RequestedTeams: []string{"umbrella/data"}, Labels: []string{"needs-review", "breaking change"}}},
+		{Name: "Data team", PRFilter: PRFilter{RequestedTeams: []string{"umbrella/data"}, Labels: []string{"needs-review", "breaking change"}, ExcludeTitles: []string{"WIP"}}},
 	}
 	if got := g.ReviewViews(); !reflect.DeepEqual(got, wantViews) {
 		t.Errorf("ReviewViews = %+v\nwant %+v", got, wantViews)
 	}
 	wantQueues := []ReviewQueue{
-		{Name: "platform", PRFilter: PRFilter{Repos: []string{"umbrella/data"}, Authors: []string{"hopper", "noether"}}, Slots: 3},
+		{Name: "platform", PRFilter: PRFilter{Repos: []string{"umbrella/data"}, Authors: []string{"hopper", "noether"}, ExcludeTitles: []string{"HLESS-", "[skip review]"}}, Slots: 3},
 		{Name: "one at a time", PRFilter: PRFilter{Authors: []string{"octo"}}, Slots: 1},
 	}
 	if got := g.ReviewQueues(); !reflect.DeepEqual(got, wantQueues) {
@@ -511,6 +513,8 @@ func TestBadReviewConfigFailsAtLoad(t *testing.T) {
 		"shared slots zero": {"[review]\nslots = 0\n", "review.slots: slots must be at least 1"},
 		"queue no filter":   {"[[review.queues]]\nname = \"q\"\nslots = 2\n", "review.queues[0]: needs at least one"},
 		"queue unknown key": {"[[review.queues]]\nname = \"q\"\nrepos = [\"o/r\"]\nslot = 2\n", "unknown keys"},
+		"only exclusions":   {"[[review.queues]]\nname = \"q\"\nexclude_titles = [\"WIP\"]\n", "review.queues[0]: needs at least one"},
+		"empty exclusion":   {"[[review.views]]\nname = \"a\"\nrepos = [\"o/r\"]\nexclude_titles = [\"WIP\", \"\"]\n", "review.views[0]: exclude_titles[1] is empty"},
 	} {
 		_, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), c.text))
 		if err == nil || !strings.Contains(err.Error(), c.want) {

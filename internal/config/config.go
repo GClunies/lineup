@@ -146,13 +146,15 @@ type globalFile struct {
 }
 
 // PRFilter picks pull requests. The items of one list combine with OR, and
-// two lists combine with AND. Authors and AuthorTeams are one list.
+// two lists combine with AND. Authors and AuthorTeams are one list. A PR
+// whose title holds any item of ExcludeTitles, case-sensitive, never matches.
 type PRFilter struct {
 	Repos          []string `toml:"repos"`
 	Authors        []string `toml:"authors"`
 	AuthorTeams    []string `toml:"author_teams"`
 	RequestedTeams []string `toml:"requested_teams"`
 	Labels         []string `toml:"labels"`
+	ExcludeTitles  []string `toml:"exclude_titles"`
 }
 
 // ReviewView is a tab of the review tab.
@@ -365,6 +367,12 @@ func (f PRFilter) validate(where string) error {
 	}
 	if empty {
 		return fmt.Errorf("%s: needs at least one of repos, authors, author_teams, requested_teams, labels", where)
+	}
+	// An empty item is in every title, so it would drop every PR.
+	for j, it := range f.ExcludeTitles {
+		if it == "" {
+			return fmt.Errorf("%s: exclude_titles[%d] is empty", where, j)
+		}
 	}
 	return nil
 }
