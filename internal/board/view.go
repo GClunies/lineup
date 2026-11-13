@@ -213,6 +213,13 @@ func (m Model) boardHints() []hint {
 	if m.detail {
 		return []hint{{"f", "back"}, {"j/k", "scroll"}, {"?", "all keys"}}
 	}
+	if g, ok := headingName(m.sel); ok {
+		verb := "close"
+		if !m.open(g) {
+			verb = "open"
+		}
+		return append([]hint{{"enter", verb}, {"j/k", "move"}}, tail...)
+	}
 	if r, ok := m.currentIssue(); ok {
 		hs := []hint{{"s", "start"}, {"o", "open the Issue"}}
 		if r.loc != nil {
@@ -312,12 +319,23 @@ func (m Model) rows(w int) string {
 		}
 		return s
 	}
+	// A heading shows the group's count, and a closed group's mark.
+	heading := func(g string, n int) string {
+		s := fmt.Sprintf(" %s  %d", strings.ToUpper(g), n)
+		if !m.open(g) {
+			s += " …"
+		}
+		if m.sel == headingKey(g) {
+			return selRow.Render(ansi.Truncate("▸"+s[1:], w, "…"))
+		}
+		return headRow.Render(ansi.Truncate(s, w, "…"))
+	}
 	var b strings.Builder
 	for _, g := range groupOrder {
 		var lines []string
 		for _, t := range m.tasks {
 			if t.Group == g {
-				lines = append(lines, row(t.ID, stageText(t), t.Repo, t.Title, t.Note, m.age(t), g == "Done" || g == "Queued"))
+				lines = append(lines, row(t.ID, stageText(t), t.Repo, t.Title, t.Note, m.age(t), g == groupDone || g == "Queued"))
 			}
 		}
 		for _, r := range m.issues {
@@ -325,8 +343,12 @@ func (m Model) rows(w int) string {
 				lines = append(lines, row(r.ID, "", r.Repo, r.Title, r.note(), r.priorityText(), g == groupBacklog || len(r.Blockers) > 0))
 			}
 		}
-		if len(lines) > 0 {
-			b.WriteString(headRow.Render(" "+strings.ToUpper(g)) + "\n" + strings.Join(lines, "\n") + "\n")
+		if len(lines) == 0 {
+			continue
+		}
+		b.WriteString(heading(g, len(lines)) + "\n")
+		if m.open(g) {
+			b.WriteString(strings.Join(lines, "\n") + "\n")
 		}
 	}
 	if len(m.tasks)+len(m.issues) == 0 {
@@ -386,6 +408,7 @@ const boardHelp = `
 
    j k      move the selection
    enter    focus the Task's tab in Rex, or restore its closed Worker
+            on a group heading: open or close the group
    p        live preview of the Worker's screen
    f        detail pane at full screen, and back
    m        merge the PR            (Ready to land)

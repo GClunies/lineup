@@ -60,6 +60,7 @@ var billing = linear.NewIssue{TeamID: "t1", ProjectID: "p1", AssignToMe: true}
 
 func TestNCapturesALocalIssueInTheBacklog(t *testing.T) {
 	e, store := captureEnv(t)
+	e.m = withClosed(e.m, groupDone)
 	e.m.sel = "ENG-9"
 	e.press("n", "Retry failed loads")
 	if f := footLines(e.m); !strings.Contains(f, "new issue: Retry failed loads") || !strings.Contains(f, "to: local   tab: change   enter: add   esc: cancel") {

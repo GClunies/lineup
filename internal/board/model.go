@@ -52,6 +52,9 @@ type Options struct {
 	// Destinations is destinations.json in the state folder. It keeps the
 	// last Destinations that the user picked. Empty keeps them for this run.
 	Destinations string
+	// Groups is groups.json in the state folder. It keeps the groups that the
+	// user closed. Empty keeps them for this run.
+	Groups string
 }
 
 type viewID int
@@ -80,7 +83,7 @@ const (
 )
 
 // groupOrder puts Needs you first, then follows the development cycle.
-var groupOrder = []string{"Needs you", groupBacklog, groupReady, "Queued", "Working", "Waiting", "Done"}
+var groupOrder = []string{groupNeedsYou, groupBacklog, groupReady, "Queued", "Working", "Waiting", groupDone}
 
 type (
 	boardMsg  scheduler.BoardView
@@ -111,7 +114,8 @@ type Model struct {
 	kind    lifecycle.Kind       // the Kind of the Tasks that this board shows
 	tasks   []scheduler.TaskView // the Tasks of kind, in group order
 	issues  []issueRow           // the Issue rows of the work view, in group order
-	sel     string               // the ID of the selected Task or Issue row
+	sel     string               // the ID of the selected Task or Issue row, or a heading's key
+	folds   folds                // the closed groups, by Kind
 	online  bool
 	status  string
 	statusE bool
@@ -157,6 +161,7 @@ func New(v scheduler.BoardView, opts Options) Model {
 	m.rv = newReview(opts.Reviews)
 	m.mine = mine{lin: map[string][]linear.Issue{}, fresh: map[string]bool{}}
 	m.box = newCaptureBox()
+	m.folds = readFolds(opts.Groups)
 	m.dests = destinations{linear: map[string][]destination{}, errs: map[string]string{}}
 	m.setBoard(v)
 	m.alerted = map[string]string{}
@@ -181,26 +186,92 @@ func (m *Model) setBoard(v scheduler.BoardView) {
 		m.issues = issueRows(m.mine.linearIssues(), m.mine.loc, v.Tasks)
 	}
 	if ids := m.rowIDs(); !slices.Contains(ids, m.sel) && len(ids) > 0 {
-		m.sel = ids[0]
+		m.sel = m.fallback(ids)
 	}
 }
 
-// rowIDs lists the IDs of the Task and Issue rows in screen order.
-func (m Model) rowIDs() []string {
-	var ids []string
-	for _, g := range groupOrder {
-		for _, t := range m.tasks {
-			if t.Group == g {
-				ids = append(ids, t.ID)
-			}
+// fallback picks the selection when the old one is gone. A row that a closed
+// group now hides selects that group's heading. Any other loss selects the
+// first row, or the first heading when no group is open.
+func (m Model) fallback(ids []string) string {
+	if g := m.groupOf(m.sel); g != "" && !m.open(g) {
+		return headingKey(g)
+	}
+	for _, id := range ids {
+		if _, isHeading := headingName(id); !isHeading {
+			return id
 		}
-		for _, r := range m.issues {
-			if r.Group == g {
-				ids = append(ids, r.ID)
-			}
+	}
+	return ids[0]
+}
+
+// groupOf names the group of the Task or Issue row id, or "" for no row.
+func (m Model) groupOf(id string) string {
+	for _, t := range m.tasks {
+		if t.ID == id {
+			return t.Group
+		}
+	}
+	for _, r := range m.issues {
+		if r.ID == id {
+			return r.Group
+		}
+	}
+	return ""
+}
+
+// open reports whether the group shows its rows.
+func (m Model) open(g string) bool { return !m.folds.closed(m.kind, g) }
+
+// groupIDs lists the IDs of the rows in group g.
+func (m Model) groupIDs(g string) []string {
+	var ids []string
+	for _, t := range m.tasks {
+		if t.Group == g {
+			ids = append(ids, t.ID)
+		}
+	}
+	for _, r := range m.issues {
+		if r.Group == g {
+			ids = append(ids, r.ID)
 		}
 	}
 	return ids
+}
+
+// rowIDs lists the selection stops in screen order. Each group with a row has
+// its heading, except Needs you, and then its rows when it is open.
+func (m Model) rowIDs() []string {
+	var ids []string
+	for _, g := range groupOrder {
+		rows := m.groupIDs(g)
+		if len(rows) == 0 {
+			continue
+		}
+		if g != groupNeedsYou {
+			ids = append(ids, headingKey(g))
+		}
+		if m.open(g) {
+			ids = append(ids, rows...)
+		}
+	}
+	return ids
+}
+
+// toggleGroup opens the group if it is closed, and closes it if it is open.
+// It saves the choice.
+func (m Model) toggleGroup(g string) Model {
+	return m.setGroup(g, m.open(g))
+}
+
+// setGroup closes or opens the group and saves the choice. A failed save
+// leaves the choice in force for this run.
+func (m Model) setGroup(g string, closed bool) Model {
+	m.folds = m.folds.with(m.kind, g, closed)
+	if err := writeFolds(m.opts.Groups, m.folds); err != nil {
+		m.setStatus("save groups: "+err.Error(), true)
+	}
+	return m
 }
 
 func (m Model) current() (scheduler.TaskView, bool) {
@@ -401,6 +472,9 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.vp.GotoTop()
 		return m, m.loadDetail()
 	case "enter":
+		if g, isHeading := headingName(m.sel); isHeading {
+			return m.toggleGroup(g), nil
+		}
 		if ok {
 			return m, m.openTask(t.ID)
 		}

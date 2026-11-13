@@ -158,12 +158,16 @@ func TestGroupOrderAndSelection(t *testing.T) {
 		t.Fatalf("initial selection = %s", m.sel)
 	}
 	m, _ = press(m, "j", "j")
-	if m.sel != "ENG-601" {
-		t.Fatalf("after jj = %s", m.sel)
+	if m.sel != headingKey("Queued") {
+		t.Fatalf("after jj = %s, want the Queued heading", m.sel)
 	}
-	m, _ = press(m, "k")
+	m, _ = press(m, "j")
+	if m.sel != "ENG-601" {
+		t.Fatalf("after jjj = %s", m.sel)
+	}
+	m, _ = press(m, "k", "k")
 	if m.sel != "ENG-590" {
-		t.Fatalf("after k = %s", m.sel)
+		t.Fatalf("after kk = %s", m.sel)
 	}
 	m, _ = press(m, "k", "k", "k")
 	if m.sel != "ENG-588" {
@@ -413,7 +417,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 }
 
 func TestAgeAndRows(t *testing.T) {
-	m := newModel(&fakeClient{}, fixture())
+	m := openAll(newModel(&fakeClient{}, fixture()))
 	out := m.View()
 	for _, w := range []string{"NEEDS YOU", "WORKING", "WAITING", "QUEUED", "DONE", "Working ⚑", "12m", "1d", "today", "merged"} {
 		if !strings.Contains(out, w) {
