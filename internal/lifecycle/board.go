@@ -215,11 +215,13 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 		if t.Stage == Done {
 			return []Effect{Cleanup{}}, nil
 		}
-		outcome := OutcomeClosed
-		if s.Skipped && t.Kind == KindReview {
-			outcome = OutcomeSkipped
+		if t.Kind == KindReview {
+			if s.Skipped {
+				return t.finish(OutcomeSkipped), nil
+			}
+			return t.finish(OutcomeClosed), nil
 		}
-		return append([]Effect{Cleanup{}}, t.finish(outcome)...), nil
+		return append([]Effect{Cleanup{}}, t.finish(OutcomeClosed)...), nil
 
 	case TabClosed:
 		if t.Stage == Done {
@@ -338,9 +340,8 @@ func (t *Task) observe(s Signal) []Effect {
 		}
 
 	case PRReviewed:
-		// The user's review is the user's own end of the Task, as x is.
 		if t.Kind == KindReview {
-			return append([]Effect{Cleanup{}}, t.finish(OutcomeReviewed)...)
+			return t.finish(OutcomeReviewed)
 		}
 
 	case PRClosed:
@@ -514,8 +515,10 @@ func (t *Task) ready() []Effect {
 func (t *Task) finish(o Outcome) []Effect {
 	t.enter(Done)
 	t.Outcome = o
+	// A review ends in the user's review, or in a PR that nobody can review
+	// any more, so its tab has nothing left to show.
 	if t.Kind == KindReview {
-		return nil
+		return []Effect{Cleanup{}}
 	}
 	return []Effect{TrackerStatus{string(o)}}
 }

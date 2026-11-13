@@ -1,5 +1,7 @@
 # The user's review closes the review tab
 
+[ADR 0024](0024-every-review-end-closes-the-review-tab.md) extends this rule: a merge or a close of the PR also closes the review tab.
+
 A review Task that ends with the user's review closes its tab and removes its review worktree. The review then holds its PR only until the PR requests the user again. A submitted review counts in each of its states: approve, comment, and request changes. A pending review does not count. We chose this because the user's review is the user's own end of the review, as `x` is. Before this change, each Done review kept its tab under [ADR 0017](0017-the-user-closes-every-task-tab.md). The user then closed one tab for each review that they had just finished, and the queue held the PR until they did.
 
 ## Considered Options

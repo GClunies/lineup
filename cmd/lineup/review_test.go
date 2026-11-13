@@ -60,7 +60,7 @@ func TestTheRecordedReviewPollGivesTheTablesSignals(t *testing.T) {
 		if !ok {
 			t.Fatalf("#%d missing", c.number)
 		}
-		if got := pr.Level(c.added); got != c.want {
+		if got := pr.Level(c.added, false); got != c.want {
 			t.Errorf("#%d added %s: %v, want %v", c.number, c.added.Format(time.DateOnly), got, c.want)
 		}
 	}
@@ -70,7 +70,7 @@ func TestTheRecordedReviewPollGivesTheTablesSignals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := prs[keys[0]].Level(day("2026-11-01")); got != nil {
+	if got := prs[keys[0]].Level(day("2026-11-01"), false); got != nil {
 		t.Fatalf("a pending review gave %v", got)
 	}
 }

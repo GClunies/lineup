@@ -317,26 +317,22 @@ func TestASkipThatLandsMidFillWins(t *testing.T) {
 	}
 }
 
-func TestASkipLeavesADoneReviewThatKeepsItsTab(t *testing.T) {
+func TestASkipLeavesADoneReviewAsItIs(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
-	worker := h.waitTab("claude reviewing")
+	h.waitTab("claude reviewing")
 	merged := openPR(7, "h1")
 	merged.State = "MERGED"
 	h.gh.setReview(merged)
-	h.status(worker.BlockID, "idle")
 	h.waitStage("pr-7", lifecycle.Done)
 	h.gh.setReview(openPR(7, "h2"))
 
 	if r := h.skip(prURL7); r.Closed != "" {
-		t.Fatalf("skip = %+v, want no Task closed: only the user closes a Done Task's tab", r)
+		t.Fatalf("skip = %+v, want no Task closed", r)
 	}
-	if v := h.task("pr-7"); !v.Tab {
-		t.Fatalf("pr-7 = %+v, want its tab kept", v)
-	}
-	if len(h.rex.open("claude reviewing")) != 1 {
-		t.Fatal("the skip closed the tab")
+	if v := h.task("pr-7"); v.Outcome != "merged" {
+		t.Fatalf("pr-7 = %+v, want the merged outcome kept", v)
 	}
 }
 

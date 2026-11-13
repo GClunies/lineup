@@ -48,7 +48,7 @@ A skip holds a PR out of every queue until the user unskips it. If the PR has an
 
 The review queues live in `{{config}}`. `[review]` holds `slots`, the started reviews of all queues together. Each `[[review.queues]]` table holds a `name`, the filter keys, and an optional `slots`. The filter keys are `state`, `draft`, `repo`, `author`, `author_team`, `review_requested`, `label`, `include_regex`, and `exclude_regex`. Queues fill in file order, so an earlier queue picks first. Edit only these tables. Then run `lineup restart`, because the Scheduler reads the queues only when it starts. `lineup restart` loads the file first. If the file is bad, it prints the error and leaves the Scheduler running on the old file. Fix the file from the error, or undo your edit, and run `lineup restart` again. Then show the user the changed lines and `lineup reviews` for the new queues.
 
-A review Task ends by itself when the user submits the review, or when the PR merges or closes. The user's review also closes the Task's tab. The queue reviews that PR again only when it requests the user again.
+A review Task ends by itself when the user submits the review, or when the PR merges or closes. Each end closes the Task's tab. A merge or a close also stops a Worker that still works. The queue reviews that PR again only when it requests the user again.
 
 ## Plans
 
