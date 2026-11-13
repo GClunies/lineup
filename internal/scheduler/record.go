@@ -84,11 +84,15 @@ type Record struct {
 // maxTabLabel is the longest window label, in characters, that Rex accepts.
 const maxTabLabel = 128
 
-// tabLabel names the Task's tab and its Worker's conversation. A label past
-// maxTabLabel ends in "…".
+// tabLabel names the Task's tab and its Worker's conversation. A review's
+// title already names its PR, as in data#7, so the label leaves out its ID.
+// A label past maxTabLabel ends in "…".
 func (r *Record) tabLabel() string {
 	label := r.ID + " " + r.Title
-	if r.Issue != nil {
+	switch {
+	case r.Review != nil:
+		label = r.Title
+	case r.Issue != nil:
 		label = r.Issue.Identifier + " " + r.Title
 	}
 	if rs := []rune(label); len(rs) > maxTabLabel {
