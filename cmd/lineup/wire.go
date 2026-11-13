@@ -654,6 +654,6 @@ func reviewQueues(g *config.Global) []scheduler.Queue {
 }
 
 func prFilter(base string, f config.PRFilter) github.Filter {
-	return github.Filter{Base: base, Repos: f.Repos, Authors: f.Authors, AuthorTeams: f.AuthorTeams,
-		RequestedTeams: f.RequestedTeams, Labels: f.Labels, ExcludeTitles: f.ExcludeTitles}
+	return github.Filter{Base: base, State: f.State, Draft: f.Draft, Repo: f.Repo, Author: f.Author, AuthorTeam: f.AuthorTeam,
+		ReviewRequested: f.ReviewRequested, Label: f.Label, IncludeRegex: f.IncludeRegex, ExcludeRegex: f.ExcludeRegex}
 }

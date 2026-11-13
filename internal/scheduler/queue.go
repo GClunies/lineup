@@ -103,7 +103,7 @@ func (s *Scheduler) readQueues(ctx context.Context) (queueRows, error) {
 func (s *Scheduler) teamMembers(ctx context.Context) (map[string][]string, error) {
 	var teams []string
 	for _, q := range s.d.Queues {
-		for _, t := range q.Filter.AuthorTeams {
+		for _, t := range q.Filter.AuthorTeam {
 			if !slices.Contains(teams, t) {
 				teams = append(teams, t)
 			}

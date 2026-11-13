@@ -264,7 +264,7 @@ func (m Model) refreshReviews() tea.Cmd {
 		}
 		var teams []string
 		for _, tb := range tabs {
-			for _, t := range tb.Filter.AuthorTeams {
+			for _, t := range tb.Filter.AuthorTeam {
 				if !slices.Contains(teams, t) {
 					teams = append(teams, t)
 				}

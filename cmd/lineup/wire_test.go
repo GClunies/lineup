@@ -192,23 +192,29 @@ func TestReviewViewsComeFromTheConfig(t *testing.T) {
 	os.WriteFile(path, []byte(`
 [[review.views]]
 name = "My teammates"
-repos = ["umbrella/data"]
-author_teams = ["umbrella/platform"]
-exclude_titles = ["WIP"]
+state = "all"
+draft = false
+repo = ["umbrella/data"]
+author_team = ["umbrella/platform"]
+review_requested = "@me"
+include_regex = "DATA-"
+exclude_regex = "WIP"
 
 [[review.queues]]
 name = "platform"
-authors = ["hopper"]
-labels = ["needs-review"]
-exclude_titles = ["HLESS-"]
+author = ["hopper"]
+label = ["needs-review"]
+exclude_regex = "HLESS-"
 `), 0o644)
 	cfg, err := config.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	no := false
 	want := []board.ReviewView{
-		{Key: "view:My teammates", Name: "My teammates", Filter: github.Filter{Base: github.ViewPRs, Repos: []string{"umbrella/data"}, AuthorTeams: []string{"umbrella/platform"}, ExcludeTitles: []string{"WIP"}}},
-		{Key: "queue:platform", Name: "Q: platform", Filter: github.Filter{Base: github.QueuePRs, Authors: []string{"hopper"}, Labels: []string{"needs-review"}, ExcludeTitles: []string{"HLESS-"}}, Queue: true},
+		{Key: "view:My teammates", Name: "My teammates", Filter: github.Filter{Base: github.ViewPRs, Repo: []string{"umbrella/data"}, AuthorTeam: []string{"umbrella/platform"},
+			State: "all", Draft: &no, ReviewRequested: "@me", IncludeRegex: "DATA-", ExcludeRegex: "WIP"}},
+		{Key: "queue:platform", Name: "Q: platform", Filter: github.Filter{Base: github.QueuePRs, Author: []string{"hopper"}, Label: []string{"needs-review"}, ExcludeRegex: "HLESS-"}, Queue: true},
 	}
 	if got := reviewViews(cfg); !reflect.DeepEqual(got, want) {
 		t.Errorf("reviewViews =\n%+v\nwant\n%+v", got, want)
