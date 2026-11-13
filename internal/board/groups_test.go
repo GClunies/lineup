@@ -313,3 +313,36 @@ func TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce(t *testing.T) {
 		}
 	})
 }
+
+func TestTheHeaderDropsTheGroupCounts(t *testing.T) {
+	e := groupEnv(t)
+	h := ansi.Strip(e.m.header())
+	for _, gone := range []string{"working", "waiting", "queued", "ready", "backlog", "◐", "◷"} {
+		if strings.Contains(h, gone) {
+			t.Errorf("header %q still shows %q", h, gone)
+		}
+	}
+	for _, want := range []string{"WIP 4/5", "●2 need you"} {
+		if !strings.Contains(h, want) {
+			t.Errorf("header %q lacks %q", h, want)
+		}
+	}
+	rm, _ := press(e.m, "3")
+	if h := ansi.Strip(rm.header()); strings.Contains(h, "working") || strings.Contains(h, "queued") {
+		t.Errorf("review header %q still shows group counts", h)
+	}
+}
+
+func TestTheHeaderFitsEightyColumnsWithTheWipOverflowAndTheOtherViewsCount(t *testing.T) {
+	v := fixture()
+	v.OverCap = 1
+	flagged := rtv("R-3", lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour)
+	flagged.Flag, flagged.Group = "question", "Needs you"
+	v.Tasks = append(v.Tasks, flagged)
+	m := newModel(&fakeClient{}, v)
+	m.width = 80
+	h := ansi.Strip(m.header())
+	if !strings.Contains(h, "WIP 4/5 +1 over   ●2 need you (+1 in reviews)") || strings.Contains(h, "…") {
+		t.Fatalf("header %q is cut at 80 columns", h)
+	}
+}

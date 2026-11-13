@@ -359,7 +359,7 @@ func TestOverCapHeaderAndOffline(t *testing.T) {
 	m := newModel(&fakeClient{}, v)
 	m.width = 160
 	h := m.header()
-	for _, w := range []string{"WIP 4/5", "+1 over", "●2 need you", "◐2 working", "◷1 waiting", "1 queued"} {
+	for _, w := range []string{"WIP 4/5", "+1 over", "●2 need you"} {
 		if !strings.Contains(h, w) {
 			t.Errorf("header %q lacks %q", h, w)
 		}
@@ -396,7 +396,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 	v.Tasks = append(v.Tasks, rtv("R-3", lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour))
 	m := New(v, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
 	m.width, m.height = 160, 30
-	if out := m.View(); strings.Contains(out, "R-3") || !strings.Contains(m.header(), "◐2 working") {
+	if out := m.View(); strings.Contains(out, "R-3") || !strings.Contains(m.header(), "●2 need you") {
 		t.Fatalf("the work board shows the review Task:\n%s", out)
 	}
 	m, _ = press(m, "j", "j", "j", "j", "j", "j", "j")
@@ -761,10 +761,10 @@ func TestEachViewCountsTheOtherViewsNeedsYouTasks(t *testing.T) {
 	}
 	v := fixture()
 	v.Tasks = append(v.Tasks, flagged("R-3"), rtv("R-4", lifecycle.Reviewing, "data#8 Fix the map", urlBase, time.Hour))
-	if h := header(v); !strings.Contains(h, "●2 need you (+1 in reviews)   ◐2 working") {
+	if h := header(v); !strings.Contains(h, "●2 need you (+1 in reviews)") {
 		t.Errorf("work header %q", h)
 	}
-	if h := header(v, "3"); !strings.Contains(h, "●1 need you (+2 in work)   ◐") {
+	if h := header(v, "3"); !strings.Contains(h, "●1 need you (+2 in work)") {
 		t.Errorf("review header %q", h)
 	}
 	quiet := fixture()

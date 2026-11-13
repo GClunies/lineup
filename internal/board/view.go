@@ -25,8 +25,6 @@ var (
 	colHead = lipgloss.NewStyle().Foreground(gray).Bold(true)
 )
 
-var groupMark = map[string]string{"Needs you": "●", "Working": "◐", "Waiting": "◷"}
-
 func (m Model) View() string {
 	if m.mode == modeHelp {
 		switch m.view {
@@ -83,13 +81,6 @@ func (m Model) window(lines []string, h int) []string {
 }
 
 func (m Model) header() string {
-	count := map[string]int{}
-	for _, t := range m.tasks {
-		count[t.Group]++
-	}
-	for _, r := range m.issues {
-		count[r.Group]++
-	}
 	s := " " + bold.Render("lineup") + "  " + m.viewNames()
 	if m.kind == lifecycle.KindBuild {
 		s += fmt.Sprintf("  WIP %d/%d", m.board.Started, m.board.Cap)
@@ -97,17 +88,13 @@ func (m Model) header() string {
 			s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
 		}
 	}
-	s += fmt.Sprintf("   ●%d need you", count["Needs you"])
+	s += fmt.Sprintf("   ●%d need you", needsYou(m.tasks))
 	other, name := lifecycle.KindReview, "reviews"
 	if m.kind == lifecycle.KindReview {
 		other, name = lifecycle.KindBuild, "work"
 	}
 	if n := needsYou(m.board.OfKind(other).Tasks); n > 0 {
 		s += fmt.Sprintf(" (+%d in %s)", n, name)
-	}
-	s += fmt.Sprintf("   ◐%d working   ◷%d waiting   %d queued", count["Working"], count["Waiting"], count["Queued"])
-	if m.kind == lifecycle.KindBuild {
-		s += fmt.Sprintf("   %d ready   %d backlog", count[groupReady], count[groupBacklog])
 	}
 	if m.kind == lifecycle.KindReview && m.board.ReviewsPaused {
 		s += "   " + bad.Render("reviews paused")
