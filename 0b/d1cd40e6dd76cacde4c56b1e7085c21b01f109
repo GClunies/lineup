@@ -1,0 +1,42 @@
+internal/github/review_test.go
+  s_28301a4a95e7a7::t_7ad57aa86a5c05 58-95
+internal/config/config_test.go
+  s_28301a4a95e7a7::t_a181b157ea736b 431,437,446,452,516-517
+docs/spec/reviews.md
+  s_28301a4a95e7a7::t_c4e97dfecce021 44,53,57,77,398
+internal/config/config.go
+  s_28301a4a95e7a7::t_2200d71c82fc65 149-150,157,371-375
+  s_28301a4a95e7a7::t_dc3524a3b541ce 376
+cmd/lineup/wire.go
+  s_28301a4a95e7a7::t_2200d71c82fc65 658
+internal/scheduler/queue.go
+  s_28301a4a95e7a7::t_2200d71c82fc65 77-81
+internal/board/review.go
+  s_28301a4a95e7a7::t_2200d71c82fc65 309-311
+internal/board/review_test.go
+  s_28301a4a95e7a7::t_7ad57aa86a5c05 429-454
+cmd/lineup/wire_test.go
+  s_28301a4a95e7a7::t_c8a7ba6c92cf81 197,203,210-211
+internal/github/review.go
+  s_28301a4a95e7a7::t_dc1379e59b02f6 37,46-52,54-58
+  s_28301a4a95e7a7::t_f4267b2a384653 38
+  s_28301a4a95e7a7::t_b4e57a650abbf3 53
+internal/scheduler/queue_test.go
+  s_28301a4a95e7a7::t_7ad57aa86a5c05 282-294
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0bd1cd40e6dd76cacde4c56b1e7085c21b01f109",
+  "prompts": {},
+  "sessions": {
+    "s_28301a4a95e7a7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c958019d-7ef6-4d78-ae2a-cdb66ecd3b43",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
