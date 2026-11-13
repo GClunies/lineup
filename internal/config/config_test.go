@@ -97,15 +97,6 @@ func TestStartSkills(t *testing.T) {
 	}
 }
 
-func TestAssistDir(t *testing.T) {
-	if got := load(t, "wip_cap = 3\n").AssistDir(); got != "/home/u" {
-		t.Errorf("default = %q, want the home folder", got)
-	}
-	if got := load(t, "assist_dir = \"~/repos\"\n").AssistDir(); got != "/home/u/repos" {
-		t.Errorf("assist_dir = %q, want /home/u/repos", got)
-	}
-}
-
 func TestAdHocSession(t *testing.T) {
 	if got := load(t, "wip_cap = 3\n").AdHocSession(); got != "ad hoc" {
 		t.Errorf("default = %q", got)

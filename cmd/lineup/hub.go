@@ -99,10 +99,7 @@ const agentSettings = `{
 }
 `
 
-// agentTab is one Hub tab: a Board view on top and a Claude agent below. A
-// tab with no agent holds the Board view alone, at full height. A tab with no
-// Board and no role holds only a general agent, in the folder that assist_dir
-// names.
+// agentTab is one Hub tab: a Board view on top and a Claude agent below.
 type agentTab struct {
 	window, view, agent string // Rex window label, top block label, agent block label
 	boardArgs           []string
@@ -116,7 +113,6 @@ type agentTab struct {
 
 // agentTabs are in Hub tab order.
 var agentTabs = []agentTab{
-	{"assist", "", "ASSIST", nil, nil, "", "#262626", "", nil},
 	{"hub", "BOARD", "LINEUP", []string{"board"}, agentRole, agentSettings, "#1b2733", watchPrompt, composeAgent},
 }
 
@@ -165,20 +161,11 @@ func rexRun(args ...string) ([]byte, error) {
 	return out, nil
 }
 
-// prepareAgent writes the agent's folder and trusts it for Claude. An agent
-// with no role works in assist_dir and writes nothing there. openHub calls it
-// on every run, so a new lineup binary or prompt reaches the files at once.
+// prepareAgent writes the agent's folder and trusts it for Claude. openHub
+// calls it on every run, so a new lineup binary or prompt reaches the files at once.
 // Claude reads CLAUDE.md and the settings when a session starts, so a running
 // agent picks them up at its next start.
 func prepareAgent(t agentTab) (string, error) {
-	if t.role == nil {
-		cfg, err := config.Load(configPath())
-		if err != nil {
-			return "", err
-		}
-		dir := cfg.AssistDir()
-		return dir, claude.Trust(os.Getenv("CLAUDE_CONFIG_DIR"), dir)
-	}
 	dir := filepath.Join(stateDir(), strings.ToLower(t.agent))
 	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o700); err != nil {
 		return "", err
@@ -359,11 +346,9 @@ func openHub() error {
 	for i, t := range agentTabs {
 		// The files are written on every run, as the agent reads them only
 		// when it starts.
-		var dir string
-		if t.role != nil {
-			if dir, err = prepareAgent(t); err != nil {
-				return err
-			}
+		dir, err := prepareAgent(t)
+		if err != nil {
+			return err
 		}
 		if w, ok := renamed(windows, t.window); ok {
 			if _, err := rexRun("window", "rename", "-s", hubSession, w.ID, t.window); err != nil {
@@ -395,66 +380,42 @@ func openHub() error {
 	return nil
 }
 
-// openAgentTab opens the tab. dir is the agent's folder when openHub has
-// prepared it, and empty for an agent with no role.
+// openAgentTab opens the tab, with the agent in dir, the folder that
+// prepareAgent wrote.
 func openAgentTab(t agentTab, dir, self, claudeBin string, focus bool) error {
-	var cmd []string
-	if t.agent != "" {
-		if dir == "" {
-			var err error
-			if dir, err = prepareAgent(t); err != nil {
-				return err
-			}
-		}
-		cmd = agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, "lineup-"+t.window)
-		// The assist folder holds the user's own conversations, so the assist
-		// agent never continues one.
-		if t.role != nil && hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {
-			cmd = append(cmd, "--continue")
-		}
-		if t.prompt != "" {
-			cmd = append(cmd, t.prompt)
-		}
+	cmd := agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, "lineup-"+t.window)
+	if hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {
+		cmd = append(cmd, "--continue")
 	}
-	newWindow := []string{"window", "new", "-s", hubSession, t.window, "--focus=" + strconv.FormatBool(focus), "--json"}
-	var agent string
-	if t.boardArgs == nil {
-		out, err := rexRun(slices.Concat(newWindow, []string{"-c", dir, "--"}, cmd)...)
-		if err != nil {
-			return err
-		}
-		if agent, err = firstBlock(out); err != nil {
-			return err
-		}
-	} else {
-		out, err := rexRun(slices.Concat(newWindow, []string{"--", self}, t.boardArgs)...)
-		if err != nil {
-			return err
-		}
-		top, err := firstBlock(out)
-		if err != nil {
-			return err
-		}
-		if _, err := rexRun("block", "rename", "-s", hubSession, top, t.view); err != nil {
-			return err
-		}
-		if t.agent == "" {
-			return nil
-		}
-		split, err := rexRun(slices.Concat([]string{"split", "-s", hubSession, "-b", top, "--split", "below",
-			"--ratio", fmt.Sprint(agentRows), "--focus=false", "--json", "-c", dir, "--"}, cmd)...)
-		if err != nil {
-			return err
-		}
-		if agent, err = firstBlock(split); err != nil {
-			return err
-		}
+	if t.prompt != "" {
+		cmd = append(cmd, t.prompt)
+	}
+	out, err := rexRun(slices.Concat([]string{"window", "new", "-s", hubSession, t.window,
+		"--focus=" + strconv.FormatBool(focus), "--json", "--", self}, t.boardArgs)...)
+	if err != nil {
+		return err
+	}
+	top, err := firstBlock(out)
+	if err != nil {
+		return err
+	}
+	if _, err := rexRun("block", "rename", "-s", hubSession, top, t.view); err != nil {
+		return err
+	}
+	split, err := rexRun(slices.Concat([]string{"split", "-s", hubSession, "-b", top, "--split", "below",
+		"--ratio", fmt.Sprint(agentRows), "--focus=false", "--json", "-c", dir, "--"}, cmd)...)
+	if err != nil {
+		return err
+	}
+	agent, err := firstBlock(split)
+	if err != nil {
+		return err
 	}
 	if _, err := rexRun("block", "rename", "-s", hubSession, agent, t.agent); err != nil {
 		return err
 	}
 	theme, _ := json.Marshal(map[string]string{"background": t.bg, "scheme": "dark"})
-	_, err := rexRun("block", "call", "-s", hubSession, "-b", agent, "set_theme", string(theme))
+	_, err = rexRun("block", "call", "-s", hubSession, "-b", agent, "set_theme", string(theme))
 	return err
 }
 

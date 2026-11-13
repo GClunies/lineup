@@ -113,7 +113,7 @@ func TestAgentRoleAsksWithAskUserQuestion(t *testing.T) {
 	}
 }
 
-func TestHubHasTwoTabsAndTheHubTabCarriesTheAgent(t *testing.T) {
+func TestHubHasOneTabAndItCarriesTheAgent(t *testing.T) {
 	var tabs, agents []string
 	for _, tab := range agentTabs {
 		tabs = append(tabs, tab.window)
@@ -121,8 +121,8 @@ func TestHubHasTwoTabsAndTheHubTabCarriesTheAgent(t *testing.T) {
 			agents = append(agents, tab.window)
 		}
 	}
-	if !slices.Equal(tabs, []string{"assist", "hub"}) || !slices.Equal(agents, []string{"assist", "hub"}) {
-		t.Errorf("tabs %v with agents %v, want assist and hub, both with an agent", tabs, agents)
+	if !slices.Equal(tabs, []string{"hub"}) || !slices.Equal(agents, []string{"hub"}) {
+		t.Errorf("tabs %v with agents %v, want hub with an agent", tabs, agents)
 	}
 	i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == "hub" })
 	if got := agentTabs[i]; got.agent != "LINEUP" || !slices.Equal(got.boardArgs, []string{"board"}) {
@@ -199,7 +199,6 @@ func TestOpenHubRenamesTheWorkTab(t *testing.T) {
 		{"an old Hub", map[string]hubWindow{"work": old, "plan": {ID: "w8"}}, "hub", "w7"},
 		{"a Hub with both", map[string]hubWindow{"work": old, "hub": {ID: "w9"}}, "hub", ""},
 		{"a new Hub", map[string]hubWindow{}, "hub", ""},
-		{"a tab that kept its label", map[string]hubWindow{"work": old}, "assist", ""},
 	}
 	for _, c := range cases {
 		got := ""
@@ -228,7 +227,6 @@ func TestOpenHubReopensATabWithARetiredAgent(t *testing.T) {
 		{[]string{"REVIEWS", "REVIEWER"}, true},
 		{[]string{"BOARD", "LINEUP"}, false},
 		{[]string{"REVIEWS"}, false},
-		{[]string{"ASSIST", "shell"}, false},
 	} {
 		if got := retired(hubWindow{Blocks: c.blocks}); got != c.want {
 			t.Errorf("retired(%v) = %v, want %v", c.blocks, got, c.want)
@@ -241,7 +239,6 @@ func TestOpenHubRewritesTheAgentFilesWhenTheTabExists(t *testing.T) {
 	for name, body := range map[string]string{
 		"rex": `case "$1 $2" in
 "session inspect") echo '{"windows":[
-{"window_id":"w1","label":"assist","layers":[{"blocks":[{"label":"ASSIST"}]}]},
 {"window_id":"w2","label":"hub","layers":[{"blocks":[{"label":"BOARD"},{"label":"LINEUP"}]}]}]}';;
 esac`,
 		"launchctl": "",
@@ -257,7 +254,7 @@ esac`,
 	t.Setenv("LINEUP_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 
-	hub := agentTabs[1]
+	hub := agentTabs[0]
 	dir := filepath.Join(stateDir(), strings.ToLower(hub.agent))
 	os.MkdirAll(filepath.Join(dir, ".claude"), 0o700)
 	settings := filepath.Join(dir, ".claude", "settings.json")

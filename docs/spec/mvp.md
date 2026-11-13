@@ -201,8 +201,6 @@ A low review bot score spends a review cycle. Open threads that only bots opened
 ```
 Rex server
 ├── session "lineup hub"        (the Hub session)
-│   ├── tab "assist"                 (first tab)
-│   │   └── block "ASSIST"            claude                 (the whole tab, in assist_dir, own theme)
 │   ├── tab "plan"
 │   │   └── block "LINEAR"            lineup board --linear  (the whole tab)
 │   ├── tab "work"                   (active when a new Hub opens)
@@ -224,7 +222,7 @@ The Scheduler has no tab. launchd runs `lineup serve` as a user agent, and the l
 The rules for this layout:
 
 - `lineup` opens the Hub session. If the session does not exist, `lineup` creates it.
-- The Hub tabs are in the order assist, plan, work, review. Each run of `lineup` moves every Hub tab back to its place.
+- The Hub tabs are in the order plan, work, review. Each run of `lineup` moves every Hub tab back to its place.
 - Each Hub tab owns one kind of work. The `plan` tab plans Issues, the `work` tab holds build Tasks, and the `review` tab holds review Tasks.
 - A Hub from before the `work` tab has a tab labeled `orchestrate`. `lineup` renames it to `work`.
 - A Hub from before the one agent has tabs with an `ORCHESTRATOR`, `PLANNER`, or `REVIEWER` block. `lineup` closes each such tab and opens it again.
@@ -302,7 +300,7 @@ This sequence runs in the background. The Board shows only the Task as it change
    - The adapter takes Claude's own lock, the folder `.claude.json.lock`, and replaces the file with one rename. A lock folder older than 10 s is abandoned.
    - The Worker command sets `CLAUDE_CONFIG_DIR` itself, because Rex starts it through a login shell that runs no direnv.
 7. The Scheduler starts the Worker from the absolute path of the Harness, with the Stage's model, effort, prompt, and contract.
-   - The Worker command passes `--name <tab label> --remote-control <tab label>`. The tab label starts with the Task ID, so the user finds each Worker by its Task ID on claude.ai and on their phone. Each Hub agent gets the same flags, with the name `lineup-<tab>`: `lineup-work`, `lineup-plan`, `lineup-review`, and `lineup-assist`.
+   - The Worker command passes `--name <tab label> --remote-control <tab label>`. The tab label starts with the Task ID, so the user finds each Worker by its Task ID on claude.ai and on their phone. Each Hub agent gets the same flags, with the name `lineup-<tab>`: `lineup-work`, `lineup-plan`, and `lineup-review`.
    - `--remote-control` takes an optional value, so the command always gives it the name. Without a value, it takes the prompt as the name.
 
 Each Task keeps one Worker for its whole life. The Worker starts with `--session-id <conversation>`, and the Record keeps that conversation ID. Each agent Stage after Working types its prompt into the same Worker, in the same tab and worktree:
@@ -395,8 +393,6 @@ Each key layers on its own, as in `[budgets]`. A value that is not in the table 
 `start_skills` is a top-level key in the global file. It lists the skills that the tracker browser offers when the user starts a Task. A chosen skill is stored as the Task override `skill`.
 
 `ad_hoc_session` is a top-level key in the global file. It names the Rex session for ad hoc Tasks. The default is `ad hoc`.
-
-`assist_dir` is a top-level key in the global file. It names the folder where the `assist` tab's agent starts, for example `~/repos`. The default is the home folder. The assist agent has no lineup role, so it is a general agent for one-off questions. It starts a new conversation each time the Hub opens its tab, because the folder can hold the user's own conversations.
 
 `linear_client_id` is a top-level key in the global file. Put it above the first `[table]`, or TOML reads it as part of that table. Leave it out to sign in through lineup's own Linear OAuth app, which any workspace can use. To use your own app, register an OAuth app in Linear with the redirect URI `http://localhost:47821/callback` and no client credentials. Then set its client ID here.
 

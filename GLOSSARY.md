@@ -73,7 +73,7 @@ A Done Task that the user hid from the Board. Archiving closes the Task's tab an
 _Avoid_: Deleted, removed
 
 **Hub**:
-The Rex session of lineup's own tabs. `assist` holds a general agent, and `hub` holds the Board and the Orchestrator in the `LINEUP` pane. The Orchestrator is the one agent for the Board.
+The Rex session of lineup's own tab. `hub` holds the Board and the Orchestrator in the `LINEUP` pane. The Orchestrator is the one agent for the Board.
 _Avoid_: Home, control tab
 
 ### Actors
