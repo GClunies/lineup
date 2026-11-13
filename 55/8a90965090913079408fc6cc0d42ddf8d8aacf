@@ -1,0 +1,39 @@
+internal/scheduler/review_test.go
+  s_cb9315cd84195e::t_08944cf5c33b34 170,172-176
+  s_cb9315cd84195e::t_b64093a8bd6184 108,168-169
+internal/lifecycle/board.go
+  s_cb9315cd84195e::t_9787a36680e5d6 343
+  s_cb9315cd84195e::t_b408850b8dd0b2 341
+internal/lifecycle/review_test.go
+  s_cb9315cd84195e::t_157e96b70299bd 31-32
+cmd/lineup/agent/CLAUDE.md
+  s_cb9315cd84195e::t_4373a43736444d 48
+docs/spec/reviews.md
+  s_cb9315cd84195e::t_4373a43736444d 184,260,276,308,401
+docs/adr/0017-the-user-closes-every-task-tab.md
+  s_cb9315cd84195e::t_4373a43736444d 3-4
+docs/adr/0022-the-users-review-closes-the-review-tab.md
+  s_cb9315cd84195e::t_4373a43736444d 1-16
+internal/github/queue_test.go
+  s_cb9315cd84195e::t_157e96b70299bd 115-122
+internal/github/queue.go
+  s_cb9315cd84195e::t_adf8ee4f0d739e 12-13,15-19,68-71,77
+internal/scheduler/review.go
+  s_cb9315cd84195e::t_b8d4985701c667 214-215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "558a90965090913079408fc6cc0d42ddf8d8aacf",
+  "prompts": {},
+  "sessions": {
+    "s_cb9315cd84195e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63a76830-1bf9-40da-af50-4d201e8035e6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
