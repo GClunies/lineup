@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -79,6 +80,7 @@ const (
 	modeSkill   // the skill picker that s opens on an Issue row
 	modeRepo    // the Repo picker, when the Issue has no Repo mapping
 	modeStatus  // the status list that c opens on an Issue row
+	modeFilter  // typing the work view's filter
 )
 
 const (
@@ -144,14 +146,16 @@ type Model struct {
 	vp         viewport.Model
 	md         *markdown.Renderer // renders an Issue's description in the detail pane
 
-	lin   linearClients
-	rv    *review
-	mine  mine
-	box   captureBox
-	dests destinations
-	st    starter
-	pick  issueRow // the Issue row that the skill, Repo, or status list is about
-	sl    statusList
+	lin        linearClients
+	rv         *review
+	mine       mine
+	box        captureBox
+	dests      destinations
+	st         starter
+	pick       issueRow // the Issue row that the skill, Repo, or status list is about
+	sl         statusList
+	filter     textinput.Model // the work view's filter
+	unfiltered string          // the selection when the filter opened
 
 	alerted map[string]string // Task ID to the Attention that last toasted
 }
@@ -170,6 +174,7 @@ func New(v scheduler.BoardView, opts Options) Model {
 	m := Model{opts: opts, client: opts.Client, width: 100, height: 30, vp: viewport.New(100, 28), md: markdown.New(true)}
 	m.lin = newLinearClients(opts.Linear)
 	m.st = newStarter()
+	m.filter = newFilter()
 	m.rv = newReview(opts.Reviews)
 	m.mine = mine{lin: map[string][]linear.Issue{}, wss: map[string]linear.Workspace{}, fresh: map[string]bool{}}
 	m.box = newCaptureBox()
@@ -196,6 +201,10 @@ func (m *Model) setBoard(v scheduler.BoardView) {
 	m.issues = nil
 	if m.kind == lifecycle.KindBuild {
 		m.issues = issueRows(m.mine.linearIssues(), m.mine.loc, v.Tasks)
+	}
+	if q := m.query(); q != "" {
+		m.tasks = matching(q, m.tasks, func(t scheduler.TaskView) string { return t.ID + "  " + t.Title })
+		m.issues = matching(q, m.issues, func(r issueRow) string { return r.ID + "  " + r.Title })
 	}
 	if ids := m.rowIDs(); !slices.Contains(ids, m.sel) && len(ids) > 0 {
 		m.sel = m.fallback(ids)
@@ -232,8 +241,9 @@ func (m Model) groupOf(id string) string {
 	return ""
 }
 
-// open reports whether the group shows its rows.
-func (m Model) open(g string) bool { return !m.folds.closed(m.kind, g) }
+// open reports whether the group shows its rows. Under a filter every
+// group with a match shows them.
+func (m Model) open(g string) bool { return m.query() != "" || !m.folds.closed(m.kind, g) }
 
 // groupIDs lists the IDs of the rows in group g.
 func (m Model) groupIDs(g string) []string {
@@ -252,7 +262,8 @@ func (m Model) groupIDs(g string) []string {
 }
 
 // rowIDs lists the selection stops in screen order. Each group with a row has
-// its heading, except Needs you, and then its rows when it is open.
+// its heading, except Needs you, and then its rows when it is open. Under a
+// filter the stops are the matching rows only.
 func (m Model) rowIDs() []string {
 	var ids []string
 	for _, g := range groupOrder {
@@ -260,7 +271,7 @@ func (m Model) rowIDs() []string {
 		if len(rows) == 0 {
 			continue
 		}
-		if g != groupNeedsYou {
+		if g != groupNeedsYou && m.query() == "" {
 			ids = append(ids, headingKey(g))
 		}
 		if m.open(g) {
@@ -379,6 +390,8 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.repoKey(msg)
 	case modeStatus:
 		return m.statusKey(msg)
+	case modeFilter:
+		return m.filterKey(msg)
 	}
 
 	if m.view == viewReview && m.rv.filtering {
@@ -439,14 +452,16 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t, ok := m.current()
 	switch k {
 	case "j", "down":
-		ids := m.rowIDs()
-		if i := slices.Index(ids, m.sel); i >= 0 && i+1 < len(ids) {
-			m.sel = ids[i+1]
-		}
+		return m.move(1), nil
 	case "k", "up":
-		ids := m.rowIDs()
-		if i := slices.Index(ids, m.sel); i > 0 {
-			m.sel = ids[i-1]
+		return m.move(-1), nil
+	case "/":
+		if m.view == viewBoard {
+			return m.startFilter()
+		}
+	case "esc":
+		if m.query() != "" {
+			return m.clearFilter(), nil
 		}
 	case "z":
 		if m.opts.Zoom != nil {
@@ -515,6 +530,16 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// move moves the selection d stops down, or up for a negative d, and stops
+// at the ends.
+func (m Model) move(d int) Model {
+	ids := m.rowIDs()
+	if i := slices.Index(ids, m.sel); i >= 0 && i+d >= 0 && i+d < len(ids) {
+		m.sel = ids[i+d]
+	}
+	return m
 }
 
 // issueKey handles a key that the Issue row r takes, as issueKinds lists it.

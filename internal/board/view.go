@@ -38,6 +38,7 @@ func (m Model) View() string {
 	}
 	foot := m.footer()
 	h := max(m.height-2-lipgloss.Height(foot), 1)
+	var top []string
 	var body string
 	switch {
 	case m.mode == modeDests || m.mode == modePromote:
@@ -53,6 +54,9 @@ func (m Model) View() string {
 	case m.detail:
 		body = m.vp.View()
 	default:
+		if l := m.filterLine(); l != "" {
+			top, h = []string{l}, max(h-1, 1)
+		}
 		body = m.taskBody(h)
 	}
 	lines := strings.Split(body, "\n")
@@ -63,7 +67,7 @@ func (m Model) View() string {
 		lines = append(lines, "")
 	}
 	return m.header() + "\n" + dim.Render(strings.Repeat("─", max(m.width, 1))) + "\n" +
-		strings.Join(lines[:h], "\n") + "\n" + foot
+		strings.Join(append(top, lines[:h]...), "\n") + "\n" + foot
 }
 
 // window keeps the selected row on screen.
@@ -86,7 +90,7 @@ func (m Model) header() string {
 			s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
 		}
 	}
-	s += fmt.Sprintf("   ●%d need you", needsYou(m.tasks))
+	s += fmt.Sprintf("   ●%d need you", needsYou(m.board.OfKind(m.kind).Tasks))
 	other, name := lifecycle.KindReview, "reviews"
 	if m.kind == lifecycle.KindReview {
 		other, name = lifecycle.KindBuild, "work"
@@ -150,6 +154,8 @@ func (m Model) footer() string {
 		s = dim.Render(" type to filter  up/down move  enter pick  esc cancel")
 	case modeStatus:
 		s = dim.Render(" j/k move  enter set the status  esc cancel")
+	case modeFilter:
+		s = dim.Render(" type to filter by ID and title  up/down move  enter keep  esc clear")
 	case modePromote:
 		s = " promote " + bold.Render(m.box.promote) + " to Linear" + dim.Render("   type to filter  up/down move  enter promote  esc cancel")
 	case modeConfirm:
@@ -192,8 +198,10 @@ func (m Model) boardHints() []hint {
 	tail := []hint{{"z", "agent"}, {"R", "refresh now"}, {"q", "quit"}, {"?", "all keys"}}
 	if m.view == viewReview {
 		tail = append([]hint{{"tab", "next view"}, {"< >", "move the tab"}}, tail...)
+	} else if m.query() != "" {
+		tail = append([]hint{{"esc", "clear the filter"}, {"n", "new Issue"}}, tail...)
 	} else {
-		tail = append([]hint{{"n", "new Issue"}}, tail...)
+		tail = append([]hint{{"n", "new Issue"}, {"/", "filter"}}, tail...)
 	}
 	if m.detail {
 		return []hint{{"f", "back"}, {"j/k", "scroll"}, {"?", "all keys"}}
@@ -333,7 +341,11 @@ func (m Model) rows(w int) string {
 			b.WriteString(strings.Join(lines, "\n") + "\n")
 		}
 	}
-	if len(m.tasks)+len(m.issues) == 0 {
+	switch {
+	case len(m.tasks)+len(m.issues) > 0:
+	case m.query() != "":
+		b.WriteString(dim.Render(" no row matches the filter") + "\n")
+	default:
 		b.WriteString(dim.Render(" no Tasks") + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
@@ -414,6 +426,8 @@ const boardHelp = `
             creates the Issue there and cancels the local one
    n        capture a new Issue in the Local Tracker; tab picks a
             Linear team or Project instead
+   /        filter the rows by ID and title; enter keeps the filter,
+            esc clears it
    R        refresh now: poll GitHub for every started Task
    z        zoom the agent pane
    1 2      show the work or review view
