@@ -45,7 +45,7 @@ A review queue starts review Tasks without being asked, up to its slots. `lineup
 
 A skip holds a PR out of every queue until the user unskips it. If the PR has an open review Task, the skip closes that Task. Ask the user with `AskUserQuestion` before you run `lineup reviews skip` for such a PR. Find the open review Task in `lineup ls --json`. `lineup review <url>` reviews a skipped PR and keeps the skip.
 
-A review Task ends by itself when the user submits the review, or when the PR merges or closes.
+A review Task ends by itself when the user submits the review, or when the PR merges or closes. The user's review also closes the Task's tab. The queue reviews that PR again only when it requests the user again.
 
 ## Plans
 

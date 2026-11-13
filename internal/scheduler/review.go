@@ -211,7 +211,8 @@ func (r *Record) reviewTask() (t github.ReviewTask, ok bool) {
 	if r.Review == nil {
 		return t, false
 	}
-	return github.ReviewTask{URL: r.Review.URL, Head: r.Review.Head, Done: r.Stage == lifecycle.Done && !r.keepsTab(), Skipped: r.Outcome == lifecycle.OutcomeSkipped}, true
+	return github.ReviewTask{URL: r.Review.URL, Head: r.Review.Head, Done: r.Stage == lifecycle.Done && !r.keepsTab(),
+		Skipped: r.Outcome == lifecycle.OutcomeSkipped, Reviewed: r.Outcome == lifecycle.OutcomeReviewed}, true
 }
 
 // startOpenReview finds the open review Task of the PR. It starts the Task if

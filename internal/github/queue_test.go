@@ -112,6 +112,14 @@ func TestCandidateRules(t *testing.T) {
 			[]ReviewTask{{URL: "https://github.com/umbrella/data/pull/7", Head: "h7", Done: true}}, false},
 		{"a new head after a closed review", func(p PullRequest) PullRequest { return p },
 			[]ReviewTask{{URL: "https://github.com/umbrella/data/pull/7", Head: "h6", Done: true}}, true},
+		{"a re-request at the head of a review that the user submitted", func(p PullRequest) PullRequest {
+			p.Viewer = ViewerState{Reviewed: true, Requested: true}
+			return p
+		}, []ReviewTask{{URL: "https://github.com/umbrella/data/pull/7", Head: "h7", Done: true, Reviewed: true}}, true},
+		{"a new head with no re-request after the user's review", func(p PullRequest) PullRequest {
+			p.Viewer = ViewerState{Reviewed: true}
+			return p
+		}, []ReviewTask{{URL: "https://github.com/umbrella/data/pull/7", Head: "h6", Done: true, Reviewed: true}}, false},
 		{"a Task URL in another case", func(p PullRequest) PullRequest { return p },
 			[]ReviewTask{{URL: "https://github.com/Umbrella/Data/pull/7", Head: "h7", Done: true}}, false},
 		{"a review Task of another PR", func(p PullRequest) PullRequest { return p },

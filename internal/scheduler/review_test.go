@@ -105,7 +105,7 @@ func TestParseReviewKey(t *testing.T) {
 	}
 }
 
-func TestAReviewedTaskKeepsItsTab(t *testing.T) {
+func TestTheUsersReviewClosesTheReviewTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 
@@ -161,28 +161,19 @@ func TestAReviewedTaskKeepsItsTab(t *testing.T) {
 	if v := h.task("pr-7"); v.Outcome != "reviewed" {
 		t.Fatalf("done = %+v", v)
 	}
-	if v := h.task("pr-7"); !v.Tab || v.Worktree != "/repos/acme/data.review-pr-7" {
-		t.Fatalf("reviewed task = %+v, want its tab and worktree kept", v)
-	}
-	h.still("pr-7", lifecycle.Done)
-	if len(h.rex.open("claude reviewing")) != 1 {
-		t.Fatal("the review tab closed when the review ended")
-	}
-	for _, sp := range h.rex.allSplits() {
-		if sp.closed {
-			t.Fatal("the hunk pane closed when the review ended")
-		}
-	}
-	if n := len(h.reviewsRemoved()); n != 0 || len(h.sessionsDestroyed()) != 0 {
-		t.Fatalf("the end removed %d review worktrees and sessions %v, want none", n, h.sessionsDestroyed())
-	}
-
-	h.rex.userCloses(worker)
 	eventually(t, "the review worktree removed", func() bool { return len(h.reviewsRemoved()) == 1 })
 	if got := h.reviewsRemoved()[0]; got != "/repos/acme/data.review-pr-7" {
 		t.Fatalf("removed %s", got)
 	}
+	if len(h.rex.open("claude reviewing")) != 0 {
+		t.Fatal("the review tab stayed open after the user's review")
+	}
 	eventually(t, "the reviews session removed", func() bool { return slices.Contains(h.sessionsDestroyed(), "session:reviews") })
+	var held github.ReviewTask
+	h.s.call(func() { held, _ = h.s.recs["pr-7"].reviewTask() })
+	if !held.Done || !held.Reviewed {
+		t.Fatalf("queue hold = %+v, want a Done review that only a new request lets back", held)
+	}
 	h.wt.mu.Lock()
 	defer h.wt.mu.Unlock()
 	if len(h.wt.removed) != 0 {

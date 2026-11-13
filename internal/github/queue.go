@@ -9,12 +9,14 @@ import (
 
 // ReviewTask is a review Task as the queue rules see it: the PR that it
 // reviews, the head commit that it was added at, and whether it is Done.
-// Skipped is true when a skip ended the Task.
+// Skipped is true when a skip ended the Task, and Reviewed is true when the
+// user's review ended it.
 type ReviewTask struct {
-	URL     string `json:"url"`
-	Head    string `json:"head"`
-	Done    bool   `json:"done"`
-	Skipped bool   `json:"skipped,omitempty"`
+	URL      string `json:"url"`
+	Head     string `json:"head"`
+	Done     bool   `json:"done"`
+	Skipped  bool   `json:"skipped,omitempty"`
+	Reviewed bool   `json:"reviewed,omitempty"`
 }
 
 // Skip is a PR that the user keeps out of every review queue until they
@@ -63,15 +65,16 @@ type Candidate struct {
 //
 // A PR with an open review Task never enters, because that Task's Worker
 // reviews each new head itself. A Done review Task keeps its PR out until the
-// author pushes a new head, unless a skip ended the Task: the skip holds the
-// PR, and an unskip lets it back at the same head. A skipped PR never enters,
-// at any head, until the user unskips it.
+// author pushes a new head, unless a skip or the user's review ended the
+// Task. A skip holds the PR, and an unskip lets it back at the same head. After
+// the user's review, only a new request for the user lets it back. A skipped
+// PR never enters, at any head, until the user unskips it.
 func Rank(prs []PullRequest, h Holds) Ranking {
 	open, seen, skipped := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, t := range h.Tasks {
 		u := strings.ToLower(t.URL)
 		open[u] = open[u] || !t.Done
-		if !t.Skipped {
+		if !t.Skipped && !t.Reviewed {
 			seen[u+" "+t.Head] = true
 		}
 	}

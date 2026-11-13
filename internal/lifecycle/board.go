@@ -338,8 +338,9 @@ func (t *Task) observe(s Signal) []Effect {
 		}
 
 	case PRReviewed:
+		// The user's review is the user's own end of the Task, as x is.
 		if t.Kind == KindReview {
-			return t.finish(OutcomeReviewed)
+			return append([]Effect{Cleanup{}}, t.finish(OutcomeReviewed)...)
 		}
 
 	case PRClosed:
