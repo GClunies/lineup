@@ -1,0 +1,38 @@
+docs/adr/0025-review-tasks-give-no-alert.md
+  s_cb9315cd84195e::t_362688a1d7fe5e 1-13
+docs/spec/reviews.md
+  s_cb9315cd84195e::t_362688a1d7fe5e 30,315
+internal/board/board_test.go
+  s_cb9315cd84195e::t_cd5de8c0494460 412
+docs/adr/0016-one-front-agent.md
+  s_cb9315cd84195e::t_3797e425a2837f 4
+  s_cb9315cd84195e::t_362688a1d7fe5e 3
+internal/scheduler/alerts.go
+  s_cb9315cd84195e::t_f9be282585fac4 35-38,42-44
+cmd/lineup/main.go
+  s_cb9315cd84195e::t_f1751f9a53dfe6 37
+GLOSSARY.md
+  s_cb9315cd84195e::t_d331bc545b4ac2 86
+docs/spec/mvp.md
+  s_cb9315cd84195e::t_362688a1d7fe5e 511-512
+cmd/lineup/agent/CLAUDE.md
+  s_cb9315cd84195e::t_362688a1d7fe5e 43,87
+docs/adr/0023-the-board-has-no-review-view.md
+  s_cb9315cd84195e::t_362688a1d7fe5e 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "05bf7c7fb7a24e472323832f1abe5881cb07815b",
+  "prompts": {},
+  "sessions": {
+    "s_cb9315cd84195e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63a76830-1bf9-40da-af50-4d201e8035e6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
