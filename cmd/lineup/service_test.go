@@ -232,3 +232,19 @@ func TestWaitListeningReturnsOnceTheSchedulerListens(t *testing.T) {
 		t.Fatalf("returned after %v, want just after the listener started at 300ms", d)
 	}
 }
+
+func TestRestartRefusesABadConfigAndKeepsTheScheduler(t *testing.T) {
+	m, calls := testManager(t)
+	m.config = filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(m.config, []byte("[[review.queues]]\nname = \"q\"\nrepos = [\"acme/data\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m.ensure()
+	*calls = nil
+	if err := m.restart(); err == nil || !strings.Contains(err.Error(), "repo") {
+		t.Fatalf("restart with a bad config: %v, want the load error", err)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("restart with a bad config ran %q", *calls)
+	}
+}

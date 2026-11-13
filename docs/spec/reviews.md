@@ -230,7 +230,7 @@ If a queue leaves the config, its started review Tasks go on, and no fill starts
 
 When a review Task of a queue ends, its slot is free, and the next fill starts the next PR in queue order and rank. To stop the queue, pause it.
 
-The Scheduler reads the queues and their slots when it starts. After a change to `[[review.queues]]`, run `lineup restart`.
+The Scheduler reads the queues and their slots when it starts. After a change to `[[review.queues]]`, run `lineup restart`. `lineup restart` loads the config first. If the file is bad, it prints the error and leaves the Scheduler running on the old file. The Orchestrator can edit `[review]` and `[[review.queues]]` for the user: its settings allow it to read and edit the config file, and nothing else in that folder.
 
 ## Review Tasks
 
