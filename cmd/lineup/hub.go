@@ -469,8 +469,7 @@ func runBoard(args []string) error {
 	opts.Groups = filepath.Join(stateDir(), "groups.json")
 	if g, err := config.Load(configPath()); err == nil { // a bad file only means defaults here
 		opts.StartSkills = g.StartSkills()
-		opts.Tracker.Repos = g.Checkouts
-		opts.Tracker.Sources = boardSources(g, stateDir())
+		opts.Repos = g.Checkouts
 		opts.LocalIssues = g.LocalIssuesDir()
 		opts.Reviews.Views = reviewViews(g)
 	}

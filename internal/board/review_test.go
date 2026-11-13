@@ -156,7 +156,7 @@ func newRvEnv(t *testing.T) *rvEnv {
 
 func (e *rvEnv) open() {
 	var cmd tea.Cmd
-	e.m, cmd = press(e.m, "3")
+	e.m, cmd = press(e.m, "2")
 	e.m = drain(e.m, cmd)
 }
 
@@ -358,7 +358,7 @@ func TestReviewPaintsFromCacheFirst(t *testing.T) {
 	e := newRvEnv(t)
 	e.cache["mine"] = []github.PullRequest{{Repo: "umbrella/data", Number: 1, Title: "Cached row", URL: "u1"}}
 	var first tea.Cmd
-	e.m, first = press(e.m, "3")
+	e.m, first = press(e.m, "2")
 	batch, ok := first().(tea.BatchMsg)
 	if !ok {
 		t.Fatal("the first visit is not a batch")
@@ -722,7 +722,7 @@ func TestTheReviewsTabReopensAClosedReviewWorker(t *testing.T) {
 
 func TestTheReviewViewToastsBothKinds(t *testing.T) {
 	var toasts []string
-	m, _ := press(New(reviewBoard(), Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }}), "3")
+	m, _ := press(New(reviewBoard(), Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }}), "2")
 	v := reviewBoard()
 	v.Tasks[0] = rtv("R-14", lifecycle.ReviewReady, "data#4945 Write the usage logs again", urlLogs, 0)
 	v.Tasks[2] = tv("ENG-622", lifecycle.ReadyToLand, "data", "Move the CSV coverage readers", "#4919", 0)

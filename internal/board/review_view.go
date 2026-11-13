@@ -59,6 +59,67 @@ func (m Model) reviewBody() string {
 	return strings.Join(lines, "\n")
 }
 
+// tabStrip names the tabs, with the open tab in brackets. When the row is
+// too wide, it drops tabs from the left until the open tab fits.
+func (m Model) tabStrip(names []string, cur int) string {
+	segs := make([]string, len(names))
+	for i, name := range names {
+		if i == cur {
+			segs[i] = headRow.Render("["+name+"]") + " "
+		} else {
+			segs[i] = dim.Render(" "+name+" ") + " "
+		}
+	}
+	start := 0
+	for start < cur && ansi.StringWidth(" "+strings.Join(segs[start:cur+1], "")) > m.width {
+		start++
+	}
+	lead := " "
+	if start > 0 {
+		lead = "…"
+	}
+	return ansi.Truncate(lead+strings.Join(segs[start:], ""), m.width, "…")
+}
+
+// seg is a piece of a row with its own style.
+type seg struct {
+	text  string
+	style lipgloss.Style
+}
+
+var (
+	plain  = lipgloss.NewStyle()
+	yellow = lipgloss.NewStyle().Foreground(lipgloss.Color("#f2c94c"))
+)
+
+func segsWidth(ss []seg) int {
+	w := 0
+	for _, s := range ss {
+		w += lipgloss.Width(s.text)
+	}
+	return w
+}
+
+// richRow renders a row from segments. A selected or faded row lends its
+// style to each segment, which keeps its own color.
+func (m Model) richRow(sel, faded bool, ss []seg) string {
+	base, marker := lipgloss.NewStyle(), "  "
+	switch {
+	case sel:
+		base, marker = selRow, "▸ "
+	case faded:
+		base = dim
+	}
+	out := base.Render(" " + marker)
+	for _, s := range ss {
+		out += s.style.Inherit(base).Render(s.text)
+	}
+	return ansi.Truncate(out, m.width, "…")
+}
+
+// minTitle is the narrowest title. Columns give way first.
+const minTitle = 24
+
 // prColumns are the columns at the right of the title, in display order.
 var prColumns = []string{"AUTHOR", "CI", "REVIEW", "TASK", "AGE"}
 
@@ -271,7 +332,7 @@ const reviewHelp = `
    R        refresh now: search GitHub again and poll every started
             Task; lineup also refreshes every 2 minutes
    z        zoom the agent pane
-   1 2 3    show the plan, work, or review view
+   1 2      show the work or review view
    ?        this help      q  quit
 
  press any key to go back
@@ -300,7 +361,7 @@ const reviewTasksHelp = `
    R        refresh now: search GitHub again and poll every started
             Task; lineup also refreshes every 2 minutes
    z        zoom the agent pane
-   1 2 3    show the plan, work, or review view
+   1 2      show the work or review view
    ?        this help      q  quit
 
  press any key to go back

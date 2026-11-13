@@ -26,8 +26,8 @@ type Client interface {
 
 // Options are the hooks that the caller wires in.
 type Options struct {
-	// StartSkills are the skills that the Linear browser offers when it starts
-	// a Task. Empty means it starts at once with no skill.
+	// StartSkills are the skills that the skill picker offers when s starts a
+	// Task from an Issue row. Empty offers only "just go".
 	StartSkills []string
 	// Zoom zooms the agent pane in this tab, and back, or goes to the tab that
 	// has the agent. The Hub provides it.
@@ -43,9 +43,10 @@ type Options struct {
 	// Client replaces the socket client, for tests.
 	Client Client
 	Now    func() time.Time
-	// Tracker holds the calls of the tracker browser. Tests replace the
-	// Linear calls. Sources lists the GitHub and Local tabs.
-	Tracker Tracker
+	// Linear holds the calls to Linear. Tests replace them.
+	Linear Linear
+	// Repos lists the checkouts that the Repo picker offers.
+	Repos func() []string
 	// LocalIssues is the Local Tracker folder that the work view reads,
 	// whatever local_tracker says. Empty reads no local Issues.
 	LocalIssues string
@@ -61,7 +62,6 @@ type viewID int
 
 const (
 	viewBoard viewID = iota
-	viewTracker
 	viewReview
 )
 
@@ -75,6 +75,8 @@ const (
 	modeBox     // the capture box
 	modeDests   // the capture box's Destination list
 	modePromote // the Destination list that P opens, with no local row
+	modeSkill   // the skill picker that s opens on an Issue row
+	modeRepo    // the Repo picker, when the Issue has no Repo mapping
 )
 
 const (
@@ -121,7 +123,7 @@ type Model struct {
 	statusE bool
 
 	view          viewID
-	loaded        [3]bool // the views whose first load ran
+	reviewsRead   bool // the review view's first load ran
 	mode          mode
 	pendingTask   string // Task the current prompt is about
 	pendingOp     string // close, archive, or reviews-skip, for the y/n prompt
@@ -139,11 +141,13 @@ type Model struct {
 	detailTask string
 	vp         viewport.Model
 
-	tr    *tracker
+	lin   linearClients
 	rv    *review
 	mine  mine
 	box   captureBox
 	dests destinations
+	st    starter
+	pick  issueRow // the Issue row that the skill or Repo picker is about
 
 	alerted map[string]string // Task ID to the Attention that last toasted
 }
@@ -156,8 +160,12 @@ func New(v scheduler.BoardView, opts Options) Model {
 	if opts.Open == nil {
 		opts.Open = func(u string) error { return exec.Command("open", u).Start() }
 	}
+	if opts.Repos == nil {
+		opts.Repos = func() []string { return nil }
+	}
 	m := Model{opts: opts, client: opts.Client, width: 100, height: 30, vp: viewport.New(100, 28)}
-	m.tr = newTracker(opts.Tracker)
+	m.lin = newLinearClients(opts.Linear)
+	m.st = newStarter()
 	m.rv = newReview(opts.Reviews)
 	m.mine = mine{lin: map[string][]linear.Issue{}, fresh: map[string]bool{}}
 	m.box = newCaptureBox()
@@ -317,7 +325,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.key(msg)
 	default:
-		if m2, cmd, ok := m.tracker(msg); ok {
+		if m2, cmd, ok := m.startMsg(msg); ok {
 			return m2, cmd
 		}
 		if m2, cmd, ok := m.reviewMsg(msg); ok {
@@ -335,7 +343,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) layout() {
 	m.vp.Width, m.vp.Height = m.width, max(m.height-3, 1)
-	m.tr.vp.Width, m.tr.vp.Height = m.width, max(m.height-3, 1)
 }
 
 func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -360,11 +367,12 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.boxKey(msg)
 	case modeDests, modePromote:
 		return m.destKey(msg)
+	case modeSkill:
+		return m.skillKey(msg)
+	case modeRepo:
+		return m.repoKey(msg)
 	}
 
-	if (m.view == viewTracker && m.tr.capturing()) || m.picking() {
-		return m.trackerKey(msg)
-	}
 	if m.view == viewReview && m.rv.filtering {
 		return m.reviewKey(msg)
 	}
@@ -378,39 +386,28 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeHelp
 		return m, nil
 	case "1":
-		return m.show(viewTracker, m.kind)
-	case "2":
 		return m.show(viewBoard, lifecycle.KindBuild)
-	case "3":
+	case "2":
 		return m.show(viewReview, lifecycle.KindReview)
 	}
-	switch m.view {
-	case viewTracker:
-		return m.trackerKey(msg)
-	case viewReview:
+	if m.view == viewReview {
 		return m.reviewKey(msg)
 	}
 	return m.boardKey(msg)
 }
 
-// show switches to a view. The Linear browser and the PR search load on the
-// first visit, so a Hub that never opens them makes no call.
+// show switches to a view. The PR search loads on the first visit to the
+// review view, so a Hub that never opens it makes no call.
 func (m Model) show(v viewID, kind lifecycle.Kind) (tea.Model, tea.Cmd) {
 	m.view, m.kind = v, kind
 	m.detail, m.preview = false, false
 	m.previewGen++
 	m.setBoard(m.board)
-	if m.loaded[v] {
+	if v != viewReview || m.reviewsRead {
 		return m, nil
 	}
-	m.loaded[v] = true
-	switch v {
-	case viewTracker:
-		return m, m.loadWorkspaces()
-	case viewReview:
-		return m, m.loadReviews()
-	}
-	return m, nil
+	m.reviewsRead = true
+	return m, m.loadReviews()
 }
 
 // boardKey handles the keys of the Task rows. The work board and the review
@@ -553,7 +550,7 @@ func (m Model) afterOp(msg opMsg) (tea.Model, tea.Cmd) {
 			ok += " · " + msg.note
 		}
 		m.setStatus(ok, false)
-		if msg.label == "start" {
+		if msg.label == "start" || msg.label == "edit" {
 			return m, m.loadMine()
 		}
 	case msg.label == "start" && msg.err.Error() == capFull:
@@ -610,6 +607,13 @@ func (m Model) capture() tea.Cmd {
 func (m Model) tickCapture() tea.Cmd {
 	gen := m.previewGen
 	return tea.Tick(previewEvery, func(time.Time) tea.Msg { return captureTick(gen) })
+}
+
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func firstNonEmpty(ss ...string) string {

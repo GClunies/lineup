@@ -30,7 +30,7 @@ func openAll(m Model) Model { return withClosed(m) }
 
 // groupEnv is mineEnv with the fixture Board and groups.json in a temporary
 // folder. The work view holds ENG-20 in Backlog and ENG-9 and local-1 in Ready.
-func groupEnv(t *testing.T) *trkEnv {
+func groupEnv(t *testing.T) *workEnv {
 	t.Helper()
 	e, _ := mineEnv(t)
 	e.m.opts.Groups = filepath.Join(t.TempDir(), "groups.json")
@@ -231,7 +231,7 @@ func TestTheReviewTasksTabKeepsItsOwnClosedGroups(t *testing.T) {
 	if out := screen(e.m); !strings.Contains(out, "R-20") {
 		t.Fatalf("enter on the Done heading did not open it:\n%s", out)
 	}
-	e.press("2")
+	e.press("1")
 	if out := screen(e.m); !strings.Contains(out, "DONE  1 …") || strings.Contains(out, "ENG-1 ") {
 		t.Fatalf("a toggle on the Reviews tab changed the work view:\n%s", out)
 	}
@@ -327,7 +327,7 @@ func TestTheHeaderDropsTheGroupCounts(t *testing.T) {
 			t.Errorf("header %q lacks %q", h, want)
 		}
 	}
-	rm, _ := press(e.m, "3")
+	rm, _ := press(e.m, "2")
 	if h := ansi.Strip(rm.header()); strings.Contains(h, "working") || strings.Contains(h, "queued") {
 		t.Errorf("review header %q still shows group counts", h)
 	}

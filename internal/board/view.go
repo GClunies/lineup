@@ -27,13 +27,10 @@ var (
 
 func (m Model) View() string {
 	if m.mode == modeHelp {
-		switch m.view {
-		case viewTracker:
-			return trackerHelp
-		case viewReview:
-			if m.rv.curTab().Tasks {
-				return reviewTasksHelp
-			}
+		switch {
+		case m.view == viewReview && m.rv.curTab().Tasks:
+			return reviewTasksHelp
+		case m.view == viewReview:
 			return reviewHelp
 		}
 		return boardHelp
@@ -44,21 +41,19 @@ func (m Model) View() string {
 	switch {
 	case m.mode == modeDests || m.mode == modePromote:
 		body = m.destList()
-	case m.view == viewTracker:
-		body = m.trackerBody()
+	case m.mode == modeSkill:
+		body = m.skillPicker()
+	case m.mode == modeRepo:
+		body = m.repoPicker()
 	case m.view == viewReview:
 		body = m.reviewBody()
-	case m.picking() && m.tr.ov == ovSkill:
-		body = m.skillPicker()
-	case m.picking():
-		body = m.repoPicker()
 	case m.detail:
 		body = m.vp.View()
 	default:
 		body = m.taskBody(h)
 	}
 	lines := strings.Split(body, "\n")
-	if len(lines) > h && !m.detail && !(m.view == viewTracker && m.tr.lvl == lvlDetail) {
+	if len(lines) > h && !m.detail {
 		lines = m.window(lines, h)
 	}
 	for len(lines) < h {
@@ -115,12 +110,12 @@ func needsYou(tasks []scheduler.TaskView) int {
 	return n
 }
 
-// viewNames lists the three views with the one on screen bright.
+// viewNames lists the two views with the one on screen bright.
 func (m Model) viewNames() string {
 	names := [...]struct {
 		id   viewID
 		name string
-	}{{viewTracker, "1 plan"}, {viewBoard, "2 work"}, {viewReview, "3 review"}}
+	}{{viewBoard, "1 work"}, {viewReview, "2 review"}}
 	var parts []string
 	for _, n := range names {
 		if n.id == m.view {
@@ -134,14 +129,8 @@ func (m Model) viewNames() string {
 
 func (m Model) footer() string {
 	var s string
-	if m.view == viewTracker && m.mode == modeNormal {
-		return ansi.Truncate(m.trackerFooter(), m.width, "…")
-	}
 	if m.view == viewReview && m.mode == modeNormal {
 		return ansi.Truncate(m.reviewFooter(), m.width, "…")
-	}
-	if m.picking() && m.mode == modeNormal {
-		return ansi.Truncate(m.trackerFooter(), m.width, "…")
 	}
 	switch m.mode {
 	case modeBox:
@@ -152,6 +141,10 @@ func (m Model) footer() string {
 		return strings.Join(lines, "\n")
 	case modeDests:
 		s = dim.Render(" type to filter  up/down move  enter pick  esc back")
+	case modeSkill:
+		s = dim.Render(" type a skill  up/down move  enter start  esc cancel")
+	case modeRepo:
+		s = dim.Render(" type to filter  up/down move  enter pick  esc cancel")
 	case modePromote:
 		s = " promote " + bold.Render(m.box.promote) + " to Linear" + dim.Render("   type to filter  up/down move  enter promote  esc cancel")
 	case modeConfirm:
@@ -219,7 +212,7 @@ func (m Model) boardHints() []hint {
 		return append([]hint{{"tab", "find a PR to review"}}, tail...)
 	}
 	if !ok {
-		return append([]hint{{"1", "plan: start an Issue"}}, tail...)
+		return tail
 	}
 	var hs []hint
 	if t.StageKey == lifecycle.ReadyToLand.Key() {
@@ -361,6 +354,14 @@ func stageText(t scheduler.TaskView) string {
 	return s
 }
 
+// row is one line of a picker or a list, with the marker when it is selected.
+func (m Model) row(sel bool, text string) string {
+	if !sel {
+		return ansi.Truncate("   "+text, m.width, "…")
+	}
+	return selRow.Render(ansi.Truncate(" ▸ "+text, m.width, "…"))
+}
+
 func pad(s string, w int) string {
 	s = ansi.Truncate(s, w, "…")
 	return s + strings.Repeat(" ", max(w-lipgloss.Width(s), 0))
@@ -410,34 +411,7 @@ const boardHelp = `
             Linear team or Project instead
    R        refresh now: poll GitHub for every started Task
    z        zoom the agent pane
-   1 2 3    show the plan, work, or review view
-   ?        this help      q  quit
-
- press any key to go back
-`
-
-const trackerHelp = `
- Linear browser keys
-
-   The tabs are your favorite Linear views, then Browse. Star a view in
-   Linear to add a tab. Browse is a tree: workspace › team › Project › Issues.
-   enter goes down one level. esc goes back up, but never above a view.
-   To change the Project, press esc on the Issue list.
-
-   tab      next tab        shift+tab  previous tab
-   < >      move this view's tab left or right; lineup keeps the order
-   j k      move the selection
-   enter    open the row
-   esc      go back up one level
-   /        fuzzy search in this list
-   s        start the Issue as a Task; pick or type a skill, or just go
-   c        change the status
-   A        assign the Issue to you
-   n        add an Issue to this Project or team view
-   o        open the Issue in the browser
-   R        refresh what is on screen now
-   z        zoom the agent pane
-   1 2 3    show the plan, work, or review view
+   1 2      show the work or review view
    ?        this help      q  quit
 
  press any key to go back

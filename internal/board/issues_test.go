@@ -264,9 +264,9 @@ func TestUnblockedNeedsEveryBlockerDoneOrCanceled(t *testing.T) {
 
 // mineEnv is a tracker env whose work view has Issue rows: two Linear Issues
 // in Ready and Backlog, and local-1 in Ready.
-func mineEnv(t *testing.T) (*trkEnv, localissues.Store) {
+func mineEnv(t *testing.T) (*workEnv, localissues.Store) {
 	t.Helper()
-	e := newTrkEnv(t, acme)
+	e := newWorkEnv(t, acme)
 	e.api.issues = []linear.Issue{mineIssue("ENG-9", "unstarted", 2), mineIssue("ENG-20", "backlog", 0)}
 	store := localissues.Store{Dir: t.TempDir()}
 	is, _ := store.Create("Rename the log flag", "", "")
@@ -283,7 +283,7 @@ func TestTheWorkViewShowsReadyAndBacklogInTheirPlaces(t *testing.T) {
 	e.m.width = 200
 	out := ansi.Strip(e.m.View())
 	inOrder(t, out, "NEEDS YOU", "BACKLOG", "ENG-20", "READY", "ENG-9", "local-1", "QUEUED", "WORKING", "WAITING", "DONE")
-	rm, _ := press(e.m, "3")
+	rm, _ := press(e.m, "2")
 	if strings.Contains(ansi.Strip(rm.View()), "ENG-9") {
 		t.Fatalf("the review view shows Issue rows:\n%s", rm.View())
 	}
@@ -379,7 +379,7 @@ func TestOOnAnIssueRowOpensTheIssue(t *testing.T) {
 // The rows paint from the cache, a live list replaces them, and a cached list
 // that comes back late does not replace the live one.
 func TestIssueRowsPaintFromTheCacheThenLive(t *testing.T) {
-	e := newTrkEnv(t, acme)
+	e := newWorkEnv(t, acme)
 	e.cache["w1/my"] = []linear.Issue{mineIssue("ENG-1", "unstarted", 0)}
 	e.api.issues = []linear.Issue{mineIssue("ENG-2", "unstarted", 0)}
 	m, cmd, _ := e.m.mineMsg(mineWorkspacesMsg{wss: []linear.Workspace{acme}})

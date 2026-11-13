@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"context"
 	"maps"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -54,11 +56,17 @@ func (r issueRow) note() string {
 	return ""
 }
 
+// priorityGlyph draws Linear's priority in three cells, by priority number.
+var priorityGlyph = map[int]string{0: "···", 1: " ! ", 2: "▂▄▆", 3: "▂▄ ", 4: "▂  "}
+
 func (r issueRow) priorityText() string {
 	if r.lin == nil {
 		return ""
 	}
-	return priority(r.Priority).text
+	if g, ok := priorityGlyph[r.Priority]; ok {
+		return g
+	}
+	return priorityGlyph[0]
 }
 
 // issueRows makes the Issue rows: the Issues in Ready or Backlog that no Task
@@ -73,8 +81,8 @@ func issueRows(lin []linear.Issue, loc []localissues.Issue, tasks []scheduler.Ta
 	for _, is := range loc {
 		status[is.N] = is.Status
 	}
-	// The level graph holds every Issue, in or out of the groups, as the
-	// tracker browser's My Issues does. A local Issue joins it under its own ID.
+	// The level graph holds every Issue, in or out of the groups. A local
+	// Issue joins it under its own ID.
 	graph := slices.Clone(lin)
 	var rows []issueRow
 	for i := range lin {
@@ -182,7 +190,7 @@ type (
 // loadMine reads the signed-in workspaces and the Local Tracker folder. The
 // workspaces come back first, so that Update makes each workspace's client.
 func (m Model) loadMine() tea.Cmd {
-	wss := m.tr.deps.Workspaces
+	wss := m.lin.Workspaces
 	cmds := []tea.Cmd{func() tea.Msg {
 		w, err := wss()
 		return mineWorkspacesMsg{wss: w, err: err}
@@ -203,10 +211,10 @@ func tickMine() tea.Cmd {
 // fetchMine paints a workspace that has no list yet from the cache, and
 // fetches every workspace live. A cached list never replaces a live one.
 func (m Model) fetchMine(wss []linear.Workspace) tea.Cmd {
-	read, write := m.tr.deps.ReadCache, m.tr.deps.WriteCache
+	read, write := m.lin.ReadCache, m.lin.WriteCache
 	var cmds []tea.Cmd
 	for _, w := range wss {
-		key, api := w.ID+"/my", m.tr.api(w)
+		key, api := w.ID+"/my", m.lin.api(w)
 		if _, ok := m.mine.lin[w.ID]; !ok {
 			cmds = append(cmds, func() tea.Msg {
 				is, ok := read(key)
@@ -286,37 +294,16 @@ func (m Model) currentIssue() (issueRow, bool) {
 	return issueRow{}, false
 }
 
-// localItem is a local Issue row as the tracker browser's Local tab holds it.
-func (m Model) localItem(r issueRow) Item {
-	return Item{Kind: scheduler.KindLocal, ID: r.ID, Title: r.Title, Status: string(r.loc.Status), Repo: r.loc.Repo,
-		Path: filepath.Join(m.opts.LocalIssues, r.ID+".md")}
-}
-
-// startRow opens the skill picker for an Issue row, as s in the tracker
-// browser does. The picker and the Repo picker then add and start the Task.
-func (m Model) startRow(r issueRow) (tea.Model, tea.Cmd) {
-	t := m.tr
-	t.ov, t.skCur, t.item = ovSkill, 0, nil
-	if r.lin != nil {
-		t.pick = *r.lin
-	} else {
-		it := m.localItem(r)
-		t.item, t.itemSrc = &it, LocalSource{S: localissues.Store{Dir: m.opts.LocalIssues}}
-	}
-	t.skillIn.SetValue("")
-	return m, t.skillIn.Focus()
-}
-
-// openRow opens a Linear Issue in the browser and a local Issue in $EDITOR.
+// openRow opens a Linear Issue in the browser. It opens a local Issue's file
+// in $EDITOR, then reads the Issue rows again.
 func (m Model) openRow(r issueRow) tea.Cmd {
 	if r.lin == nil {
-		return m.editItem(m.localItem(r))
+		editor := firstNonEmpty(os.Getenv("EDITOR"), "vi")
+		path := filepath.Join(m.opts.LocalIssues, r.ID+".md")
+		return tea.ExecProcess(exec.Command(editor, path), func(err error) tea.Msg {
+			return opMsg{label: "edit", task: r.ID, err: err}
+		})
 	}
 	open, u := m.opts.Open, r.URL
 	return func() tea.Msg { return opMsg{label: "open", task: r.ID, err: open(u)} }
-}
-
-// picking reports whether the work view shows the tracker's skill or Repo picker.
-func (m Model) picking() bool {
-	return m.view == viewBoard && (m.tr.ov == ovSkill || m.tr.ov == ovRepo)
 }

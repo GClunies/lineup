@@ -240,7 +240,7 @@ func (g *Global) LocalIssuesDir() string {
 	return filepath.Join(g.home, ".local", "share", "lineup", "issues")
 }
 
-// LocalTrackerOn says whether the browser shows the Local Tracker: when no
+// LocalTrackerOn says whether the Local Tracker is on: when no
 // other Tracker is on, or when local_tracker asks for it.
 func (g *Global) LocalTrackerOn(linearOn, githubOn bool) bool {
 	return g.file.LocalTracker || (!linearOn && !githubOn)

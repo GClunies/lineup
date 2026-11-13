@@ -6,20 +6,6 @@ import (
 	"strings"
 )
 
-// Order returns issues in the tracker browser's order: dependency level
-// first, then natural ID order (ENG-9 before ENG-10). The input is unchanged.
-func Order(issues []Issue) []Issue {
-	lv := Levels(issues)
-	out := append([]Issue(nil), issues...)
-	sort.SliceStable(out, func(i, j int) bool {
-		if a, b := lv[out[i].ID], lv[out[j].ID]; a != b {
-			return a < b
-		}
-		return NaturalLess(out[i].Identifier, out[j].Identifier)
-	})
-	return out
-}
-
 // Levels returns the dependency level of each Issue, by ID. An Issue with no
 // open blocker has level 0. Any other Issue sits one level above its highest
 // open blocker. A blocker outside issues counts as level 0. A cycle is cut at
@@ -113,9 +99,6 @@ func splitID(id string) (key string, n int, ok bool) {
 	return id[:i], n, err == nil
 }
 
-// issueStateRank is the order of the state groups in a Linear view.
-var issueStateRank = map[string]int{"started": 0, "unstarted": 1, "backlog": 2, "triage": 3, "completed": 4, "canceled": 5}
-
 // projectStateRank is the order of the Project status groups in a Linear view.
 var projectStateRank = map[string]int{"started": 0, "planned": 1, "backlog": 2, "paused": 3, "completed": 4, "canceled": 5}
 
@@ -154,39 +137,6 @@ func firstNonZero(cs ...int) int {
 		}
 	}
 	return 0
-}
-
-// ViewOrder returns issues in the order of a Linear view grouped by cycle and
-// state: cycles by start date with no cycle last, then state type (started,
-// unstarted, backlog, triage, completed, canceled) with Linear's state
-// position descending inside a type, then priority (urgent first, none last),
-// then Linear's manual order. The input is unchanged.
-func ViewOrder(issues []Issue) []Issue {
-	out := append([]Issue(nil), issues...)
-	sort.SliceStable(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		return firstNonZero(
-			cmpCycle(a.Cycle, b.Cycle),
-			rankOf(issueStateRank, a.State.Type)-rankOf(issueStateRank, b.State.Type),
-			cmpFloat(b.State.Position, a.State.Position),
-			strings.Compare(a.State.Name, b.State.Name),
-			PriorityRank(a.Priority)-PriorityRank(b.Priority),
-			cmpFloat(a.PrioritySortOrder, b.PrioritySortOrder),
-		) < 0
-	})
-	return out
-}
-
-func cmpCycle(a, b *Cycle) int {
-	switch {
-	case a == nil && b == nil:
-		return 0
-	case a == nil:
-		return 1
-	case b == nil:
-		return -1
-	}
-	return firstNonZero(a.StartsAt.Compare(b.StartsAt), strings.Compare(a.Name, b.Name))
 }
 
 // ProjectOrder returns ps in the order of a Linear Project view grouped by

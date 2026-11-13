@@ -275,7 +275,7 @@ func (m Model) destKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) loadDests() tea.Cmd {
-	wss := m.tr.deps.Workspaces
+	wss := m.lin.Workspaces
 	return func() tea.Msg {
 		w, err := wss()
 		return destWorkspacesMsg{wss: w, err: err}
@@ -364,7 +364,7 @@ func (m Model) addIssue(title string, to destination) tea.Cmd {
 			return addedMsg{id: is.ID(), to: to, err: err}
 		}
 	}
-	api := m.tr.api(linear.Workspace{ID: to.Workspace, Name: to.WorkspaceName})
+	api := m.lin.api(linear.Workspace{ID: to.Workspace, Name: to.WorkspaceName})
 	n := linear.NewIssue{TeamID: to.TeamID, ProjectID: to.ProjectID, Title: title, AssignToMe: true}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -379,7 +379,7 @@ func (m Model) addIssue(title string, to destination) tea.Cmd {
 // the last list goes to Linear.
 func (m Model) promote(id string, to destination) tea.Cmd {
 	store := localissues.Store{Dir: m.opts.LocalIssues}
-	api := m.tr.api(linear.Workspace{ID: to.Workspace, Name: to.WorkspaceName})
+	api := m.lin.api(linear.Workspace{ID: to.Workspace, Name: to.WorkspaceName})
 	return func() tea.Msg {
 		is, err := store.Get(id)
 		if err != nil {
@@ -409,7 +409,7 @@ func (m Model) boxMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		ds.wss, ds.waiting = msg.wss, len(msg.wss)
 		var cmds []tea.Cmd
 		for _, w := range msg.wss {
-			cmds = append(cmds, loadTeamDests(m.tr.api(w), w))
+			cmds = append(cmds, loadTeamDests(m.lin.api(w), w))
 		}
 		return m, tea.Batch(cmds...), true
 	case destTeamsMsg:
@@ -473,7 +473,7 @@ func (m Model) destList() string {
 	// A long Project name gives way to the tag: the marker and the tag take 13 columns.
 	w = min(w, max(m.width-13, 12))
 	for i, r := range vis {
-		lines = append(lines, m.row(i == m.box.cur, pad(r.to.label(), w)+"  "+r.tag, false))
+		lines = append(lines, m.row(i == m.box.cur, pad(r.to.label(), w)+"  "+r.tag))
 	}
 	if m.dests.waiting > 0 {
 		lines = append(lines, dim.Render("   loading…"))

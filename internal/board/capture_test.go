@@ -18,7 +18,7 @@ import (
 )
 
 // captureEnv is mineEnv with destinations.json in a temporary folder.
-func captureEnv(t *testing.T) (*trkEnv, localissues.Store) {
+func captureEnv(t *testing.T) (*workEnv, localissues.Store) {
 	t.Helper()
 	e, store := mineEnv(t)
 	e.m.opts.Destinations = filepath.Join(t.TempDir(), "destinations.json")
@@ -232,7 +232,7 @@ func TestAFailedLinearCreateLeavesNoLocalFileAndNamesTheError(t *testing.T) {
 // The list offers local while the Linear Destinations load, loads them once,
 // and shows a workspace that fails as one error line.
 func TestTheListLoadsOnceAndAFailedWorkspaceIsOneLine(t *testing.T) {
-	e := newTrkEnv(t)
+	e := newWorkEnv(t)
 	e.api.teamsErr = map[string]error{"w2": errors.New("token expired")}
 	e.m.opts.LocalIssues = t.TempDir()
 	m, _ := press(e.m, "n", "Title")

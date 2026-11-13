@@ -378,7 +378,7 @@ func TestOnlyTheReviewViewShowsThatReviewsArePaused(t *testing.T) {
 		if strings.Contains(m.header(), "reviews paused") {
 			t.Errorf("paused %v: the work board shows reviews paused", paused)
 		}
-		rm, _ := press(New(v, Options{Client: &fakeClient{}}), "3")
+		rm, _ := press(New(v, Options{Client: &fakeClient{}}), "2")
 		rm.width = 200
 		if got := strings.Contains(ansi.Strip(rm.header()), "reviews paused"); got != paused {
 			t.Errorf("paused %v: the review board shows reviews paused: %v", paused, got)
@@ -426,46 +426,52 @@ func TestAgeAndRows(t *testing.T) {
 	}
 }
 
-func TestDigitKeysCycleViews(t *testing.T) {
+func TestKey1ShowsTheWorkViewKey2TheReviewViewAndKey3Nothing(t *testing.T) {
 	m := newModel(&fakeClient{}, fixture())
 	for _, c := range []struct {
 		key  string
 		view viewID
 		kind lifecycle.Kind
-	}{{"1", viewTracker, lifecycle.KindBuild}, {"3", viewReview, lifecycle.KindReview}, {"2", viewBoard, lifecycle.KindBuild}, {"3", viewReview, lifecycle.KindReview}, {"1", viewTracker, lifecycle.KindReview}} {
-		m, _ = press(m, c.key)
+	}{
+		{"2", viewReview, lifecycle.KindReview}, {"1", viewBoard, lifecycle.KindBuild}, {"3", viewBoard, lifecycle.KindBuild},
+		{"2", viewReview, lifecycle.KindReview}, {"3", viewReview, lifecycle.KindReview},
+	} {
+		before := m.View()
+		var cmd tea.Cmd
+		m, cmd = press(m, c.key)
 		if m.view != c.view || m.kind != c.kind {
 			t.Fatalf("after %s: view %d kind %v, want view %d kind %v", c.key, m.view, m.kind, c.view, c.kind)
+		}
+		if c.key == "3" && (cmd != nil || m.View() != before) {
+			t.Fatalf("3 changed the screen or ran a command:\n%s", m.View())
 		}
 	}
 }
 
-func TestDigitKeysShowEachViewAndLoadItOnce(t *testing.T) {
-	e := newTrkEnv(t)
+func TestTheHeaderNamesTwoViewsAndOnlyTheFirstReviewVisitReads(t *testing.T) {
+	e := newRvEnv(t)
+	for _, v := range []viewID{viewBoard, viewReview} {
+		e.m.view = v
+		if h := ansi.Strip(e.m.header()); !strings.Contains(h, "1 work  2 review") || strings.Contains(h, "plan") {
+			t.Fatalf("view %d header %q, want 1 work  2 review", v, h)
+		}
+	}
+	e.m.view = viewBoard
 	e.press("1")
-	if v := e.m.View(); !strings.Contains(v, "My Issues (all workspaces)") {
-		t.Fatalf("1 did not show the Linear browser:\n%s", v)
+	if len(e.api.searches) != 0 {
+		t.Fatalf("1 read the reviews %d times, want 0", len(e.api.searches))
 	}
-	e.press("esc")
-	e.press("2", "1")
-	if v := e.m.View(); strings.Contains(v, "NEEDS YOU") || !strings.Contains(ansi.Strip(e.m.header()), "1 plan  2 work  3 review") {
-		t.Fatalf("1 after 2 did not return to the Linear browser:\n%s", v)
-	}
-	if !e.m.loaded[viewTracker] || e.m.loaded[viewReview] {
-		t.Fatalf("loaded %v, want the plan view and not the review view", e.m.loaded)
+	e.press("2", "1", "2")
+	if len(e.api.searches) != 1 {
+		t.Fatalf("two visits to the review view read it %d times, want 1", len(e.api.searches))
 	}
 }
 
-func TestDigitInFilterStaysText(t *testing.T) {
-	e := newTrkEnv(t)
-	e.press("1", "/", "1", "2")
-	if e.m.view != viewTracker || e.m.tr.filter.Value() != "12" {
-		t.Fatalf("view %d, filter %q, want the plan view and 12", e.m.view, e.m.tr.filter.Value())
-	}
+func TestADigitInTheReviewSearchStaysText(t *testing.T) {
 	r := newRvEnv(t)
-	r.press("3", "tab", "/", "3", "1")
-	if r.m.view != viewReview || r.m.rv.filter.Value() != "31" {
-		t.Fatalf("view %d, filter %q, want the review view and 31", r.m.view, r.m.rv.filter.Value())
+	r.press("2", "tab", "/", "2", "1")
+	if r.m.view != viewReview || r.m.rv.filter.Value() != "21" {
+		t.Fatalf("view %d, filter %q, want the review view and 21", r.m.view, r.m.rv.filter.Value())
 	}
 }
 
@@ -627,29 +633,6 @@ func TestSpeedBudget(t *testing.T) {
 	}
 }
 
-func TestTrackerSpeedBudget(t *testing.T) {
-	e := newTrkEnv(t)
-	var cached []linear.Issue
-	for i := 1; i <= 200; i++ {
-		cached = append(cached, lissue(fmt.Sprintf("ENG-%d", i), "Some Issue title", "Todo"))
-	}
-	e.cache["w1/project:p1"] = cached
-	e.api.gate = make(chan struct{})
-	defer close(e.api.gate)
-	e.open()
-	e.press("j", "enter", "enter")
-	m, cmd := press(e.m, "enter")
-	read := cmd().(tea.BatchMsg)[0]
-	if got := median(21, func() {
-		t2, _ := m.Update(read())
-		_ = t2.(Model).View()
-	}); got > 100*time.Millisecond {
-		t.Errorf("tracker first paint from cache median %v, budget 100ms", got)
-	} else {
-		t.Logf("tracker first paint median %v", got)
-	}
-}
-
 func footerAt(m Model, width int) string {
 	m.width = width
 	lines := strings.Split(m.View(), "\n")
@@ -764,13 +747,13 @@ func TestEachViewCountsTheOtherViewsNeedsYouTasks(t *testing.T) {
 	if h := header(v); !strings.Contains(h, "●2 need you (+1 in reviews)") {
 		t.Errorf("work header %q", h)
 	}
-	if h := header(v, "3"); !strings.Contains(h, "●1 need you (+2 in work)") {
+	if h := header(v, "2"); !strings.Contains(h, "●1 need you (+2 in work)") {
 		t.Errorf("review header %q", h)
 	}
 	quiet := fixture()
 	quiet.Tasks = quiet.Tasks[:4]
 	quiet.Tasks = append(quiet.Tasks, rtv("R-4", lifecycle.Reviewing, "data#8 Fix the map", urlBase, time.Hour))
-	for _, h := range []string{header(quiet), header(quiet, "3")} {
+	for _, h := range []string{header(quiet), header(quiet, "2")} {
 		if strings.Contains(h, "(+") {
 			t.Errorf("no Needs you Task in the other view, but the header shows a count: %q", h)
 		}
@@ -810,7 +793,7 @@ func TestTheBoardToastsTheNextReadyIssueWhenASlotFrees(t *testing.T) {
 		{"no Ready row", false, board(4, landing, review), board(3, done, review), ""},
 		{"a review Task reached Done", true, board(3, landing, review), board(3, landing, reviewDone), ""},
 	} {
-		for _, keys := range [][]string{nil, {"3"}} {
+		for _, keys := range [][]string{nil, {"2"}} {
 			var toasts []string
 			m := New(c.before, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
 			m, _ = press(m, keys...)
