@@ -1,29 +1,23 @@
 # Trackers: Linear, GitHub Issues, and the Local Tracker
 
-Status: built. This spec adds two Trackers to the MVP: GitHub Issues and the Local Tracker. The decisions behind it are in `docs/adr/0011-trackers-behind-one-port.md`.
+Status: built. This spec adds two Trackers to the MVP, GitHub Issues and the Local Tracker. The decisions behind it are in `docs/adr/0011-trackers-behind-one-port.md`. The Tracker browser that this spec first added is gone (`docs/adr/0021-the-board-has-no-plan-view.md`).
 
 ## Goal
 
-The user can plan and start work from Linear, from GitHub Issues, or with no hosted Tracker at all. A user with no Linear workspace and no GitHub Tracker still gets a working `plan` tab: the Local Tracker.
+The user can plan and start work from Linear, from GitHub Issues, or with no hosted Tracker at all. A user with no Linear workspace and no GitHub Tracker still gets Issue rows on the Board, from the Local Tracker.
 
 ## Scope
 
 | In this cut | Later |
 |---|---|
 | `lineup login` for Linear and GitHub | GitHub Projects, with its Status field |
-| GitHub Issues: browse, start, create, lifecycle labels | Auto-intake from any Tracker |
+| GitHub Issues, with add, start, and lifecycle labels | Auto-intake from any Tracker |
 | The Local Tracker: Markdown Issues in one folder | Sync between the Local Tracker and a hosted one |
-| One Tracker browser with tabs from every Tracker | |
 | Orchestrator instructions for each Tracker | |
 
 ## Shape
 
 ```
-                ┌──────────── Tracker browser (plan tab) ────────────┐
-                │ Linear tabs │ GitHub tabs │ Local tab │ Browse      │
-                └──────┬──────────────┬─────────────┬─────────────────┘
-                       │ Source interface (list, start, status, create)
-          ┌────────────┼──────────────┼─────────────┐
      Linear adapter   GitHub adapter (gh)   Local adapter (Markdown files)
           └────────────┼──────────────┼─────────────┘
                        │ scheduler.Tracker port (Lookup, Begin, SetStatus)
@@ -34,7 +28,7 @@ The user can plan and start work from Linear, from GitHub Issues, or with no hos
 
 - `scheduler.Issue` gets a `Kind` field: `linear`, `github`, or `local`. A Record from before this field is `linear`.
 - A Tracker mux in `cmd/lineup/wire.go` implements the existing `scheduler.Tracker` port. It routes each call to the adapter that `Kind` names. The Scheduler does not change.
-- The Tracker browser reads Issues through a `Source` interface. Each adapter implements it. Linear-only features, for example cycles, favorite views, and Projects, stay inside the Linear source.
+- The Board reads the user's Linear Issues and the Local Tracker folder for its Issue rows. It reads no GitHub Issue. See [The Board](#the-board).
 
 ## Sign-in
 
@@ -57,7 +51,7 @@ lineup always needs `gh` for PRs, so a signed-in `gh` does not make GitHub a Tra
 | GitHub | `github.json` exists |
 | Local | No Linear workspace and no GitHub Tracker is on, or the global config sets `local_tracker = true` |
 
-"On" decides only which tabs the Tracker browser shows. A Task that links to a local Issue keeps working after the user signs in to Linear, because the Scheduler looks up each Issue by its `Kind`.
+"On" decides only what `lineup trackers` names, and so which Tracker sections the Orchestrator works in. The work view reads the Local Tracker folder whatever "on" says. A Task that links to a local Issue keeps working after the user signs in to Linear, because the Scheduler looks up each Issue by its `Kind`.
 
 ## Issue identifiers
 
@@ -67,7 +61,7 @@ lineup always needs `gh` for PRs, so a signed-in `gh` does not make GitHub a Tra
 | GitHub | `<owner>/<repo>#<n>` | `owner/repo#12` |
 | Local | `local-<n>` | `local-7` |
 
-`lineup add` takes any of these forms. An ID that starts with `local-` always names a local Issue, so a typed ID names exactly one Tracker. The Tracker browser sends each Issue's Kind with its add request, so it can still start an Issue from a Linear team keyed `LOCAL`.
+`lineup add` takes any of these forms. An ID that starts with `local-` always names a local Issue, so a typed ID names exactly one Tracker. The Board sends each Issue row's Kind with its add request, so it can still start an Issue from a Linear team keyed `LOCAL`.
 
 ## Repo for each Issue
 
@@ -125,30 +119,14 @@ The description, in Markdown.
 | `status` | `backlog`, `todo`, `started`, `in review`, `done`, `canceled` | Yes |
 | `blocked_by` | Local Issue IDs | No |
 
-- The next ID is one more than the highest ID in the folder. The adapter creates the file with `O_EXCL`, so two writers can't take one ID.
-- A new Issue gets `status: backlog`. The `2 work` view shows a `backlog` Issue in Backlog and a `todo` Issue in Ready.
+- The next ID is one more than the highest ID in the folder. The adapter creates the file with `O_EXCL`, so two writers cannot take one ID.
+- A new Issue gets `status: backlog`. The `1 work` view shows a `backlog` Issue in Backlog and a `todo` Issue in Ready.
 - The branch name is `local-<n>-<title slug>`, for example `local-7-retry-failed-loads-before-alerting`. A GitHub Issue's branch is `gh-<n>-<title slug>`.
-- The adapter reads files that the Orchestrator or the user wrote. A file that it can't parse shows in the Local tab as an error row with the file name.
+- The adapter reads files that the Orchestrator or the user wrote. The work view leaves out a file that the adapter cannot parse.
 
-## Tracker browser
+## The Board
 
-The tab row holds the tabs of every Tracker that is on, in this order:
-
-1. Linear favorites, as in the MVP
-2. `GitHub: mine`: the open Issues assigned to the user (`gh search issues --assignee @me --state open`)
-3. One `GitHub: <repo>` tab for each `[[repos]]` entry that has a GitHub `origin`
-4. `Local`: the local Issues, grouped by `status`, then by `repo`
-5. Browse, which lists only Linear teams and Projects. It shows only when a Linear workspace is signed in.
-
-The user ranks the tabs with `<` and `>`, as in the MVP.
-
-| Key | Linear | GitHub | Local |
-|---|---|---|---|
-| `s` start | Yes | Yes | Yes |
-| Status change | The team's statuses | Open or closed | The five `status` values |
-| `n` new Issue | Yes | Yes, in a `GitHub: <repo>` tab. `GitHub: mine` has no single repository, so it tells the user to open one. | Yes |
-| `o` open | In the browser | In the browser | In `$EDITOR` |
-| Detail pane | Markdown | Markdown | Markdown |
+The work view shows the user's own Linear Issues and the local Issues as Issue rows. It shows no GitHub Issue. A GitHub Issue starts with `lineup add owner/repo#12`, or through the Orchestrator. The GitHub Tracker then sets its labels, as [Lifecycle events](#lifecycle-events) says.
 
 ## Planning
 
@@ -167,9 +145,9 @@ The Orchestrator's instructions hold one section for each Tracker. Claude Code r
 |---|---|
 | `internal/scheduler` | `Issue.Kind`, and a `kind` field on the add request. A Record without `Kind` is `linear`. |
 | `cmd/lineup/wire.go` | The Tracker mux, and the GitHub and Local adapters for the port |
-| `internal/github` | Issue reads and writes through `gh`: view, list, search, create, edit, labels |
+| `internal/github` | Issue reads and writes through `gh`. It views an Issue, assigns it to the user, and sets the lifecycle labels. |
 | `internal/localissues` (new) | The Markdown folder: parse, list, create, set status |
-| `internal/board` | The `Source` interface for the GitHub and Local tabs. The Linear tabs keep their own code in `tracker.go`. |
+| `internal/board` | The local Issue rows of the work view. See `docs/spec/one-board.md`. |
 | `internal/config` | `local_tracker`, `local_issues_dir`, `[github.labels]` |
 | `cmd/lineup` | `lineup login [linear [workspace] \| github]`, `lineup logout linear \| github`, `lineup trackers`, ID parsing for `lineup add` |
 | Orchestrator instructions | The tables above |
@@ -178,9 +156,9 @@ The Orchestrator's instructions hold one section for each Tracker. Claude Code r
 
 1. **The mux:** A test adds one Issue of each Kind and checks that each port call reaches only its own adapter.
 2. **Old Records:** A Record from before `Kind` loads as a Linear Issue.
-3. **IDs:** Table tests for the three forms. A browser start of an Issue from a Linear team keyed `LOCAL` reaches the Linear adapter.
+3. **IDs:** Table tests for the three forms. A Board start of a Linear row sends the Kind `linear`. An add of `LOCAL-1` with the Kind `linear` reaches the Linear adapter.
 4. **GitHub labels:** Against recorded `gh` output, each event adds its label and removes the others. An unmapped event writes nothing.
-5. **Local folder:** Property tests show that create never reuses an ID, and that parse after write gives back the same Issue. A broken file becomes an error row.
+5. **Local folder:** Property tests show that create never reuses an ID, and that parse after write gives back the same Issue. The list names a broken file and still lists the rest.
 6. **When each Tracker is on:** Table tests over Linear signed in or not, `github.json` present or not, and `local_tracker`.
 7. **Live:**
    - A local Issue goes from `todo` to `done` through a merged PR in a sandbox repository.

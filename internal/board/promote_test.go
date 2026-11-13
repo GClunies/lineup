@@ -17,7 +17,7 @@ import (
 const local7 = "---\ntitle: Split billing ingest\nstatus: todo\n---\n\nThe ingest job does two things.\n"
 
 // promoteEnv is captureEnv with local-7 on the work view and selected.
-func promoteEnv(t *testing.T) (*trkEnv, string) {
+func promoteEnv(t *testing.T) (*workEnv, string) {
 	t.Helper()
 	e, store := captureEnv(t)
 	path := filepath.Join(store.Dir, "local-7.md")

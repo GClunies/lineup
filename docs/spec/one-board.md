@@ -1,6 +1,6 @@
 # One board: the user's own Issues on the work view
 
-Status: built. This spec adds the user's own Issues to the `2 work` view, a quick capture, and a promote from the Local Tracker to Linear. The decisions behind it are in `docs/adr/0019-the-board-holds-my-issues.md` and `docs/adr/0020-capture-defaults-to-the-local-tracker.md`.
+Status: built. This spec adds the user's own Issues to the `1 work` view, a quick capture, and a promote from the Local Tracker to Linear. It also adds the description, the status change, and the filter that replace the plan view. The decisions behind it are in `docs/adr/0019-the-board-holds-my-issues.md`, `docs/adr/0020-capture-defaults-to-the-local-tracker.md`, and `docs/adr/0021-the-board-has-no-plan-view.md`.
 
 ## Goal
 
@@ -10,7 +10,7 @@ The user sees all of their own work on one board, from a captured idea to a merg
 
 | In this cut | Later |
 |---|---|
-| Ready and Backlog groups on the `2 work` view | Columns in place of groups |
+| Ready and Backlog groups on the `1 work` view | Columns in place of groups |
 | Linear Issues assigned to the user, in every signed-in workspace | GitHub Issues in Ready and Backlog |
 | Local Issues, and a new local status, `backlog` | Sync between the Local Tracker and Linear |
 | `s` on an Issue row | A Destination picker in the Orchestrator |
@@ -19,13 +19,15 @@ The user sees all of their own work on one board, from a captured idea to a merg
 | The `unblocked` mark and the Ready order | |
 | One Needs you count across the work and review views | |
 | A toast that names the next Ready Issue when a WIP slot opens | |
+| `f` shows an Issue's description, and `c` changes its status | |
+| `/` filters the rows of the work view | |
 
-The `1 plan` view does not change. It still browses the team's Linear views.
+The Board has no plan view (ADR 0021). The keys `1` and `2` show the work view and the review view.
 
 ## Shape
 
 ```
- lineup  1 plan  2 work  3 review  WIP 4/5   ●1 need you (+1 in reviews)
+ lineup  1 work  2 review  WIP 4/5   ●1 need you (+1 in reviews)
  ──────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU  1
  ▸ ENG-590 Working ⚑    data  Add billing model        stopped                    12m
@@ -74,26 +76,54 @@ Both groups sort in this order:
 
 1. Issues with no open blocker, then the others.
 2. Priority: urgent, high, medium, low, then no priority. A local Issue has no priority.
-3. Dependency level, as in the tracker browser's My Issues.
+3. Dependency level. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker. Blockers in other Projects count too.
 4. Natural ID order.
 
 ### Load and refresh
 
-- The Board paints the Issue rows from the tracker browser's cache for each workspace's My Issues, then fetches them live.
-- It fetches again every 60 s, and right after a capture, a promote, or a start.
+- The Board paints the Issue rows from the cache of each workspace's My Issues, then fetches them live.
+- It fetches again every 60 s, and right after a capture, a promote, a start, a status change, or an edit in `$EDITOR`.
 - A failed fetch keeps the rows from the last fetch, and the footer names the workspace that failed.
 - The Board reads the Local Tracker folder whatever `local_tracker` says (ADR 0020).
 
 ## Keys on an Issue row
 
-| Key | Action |
-|---|---|
-| `s` | Start a Task from the Issue, as `s` in the tracker browser does: the skill picker when `start_skills` lists skills, the Repo picker when no mapping exists, then `add` and `start` |
-| `o` | Open the Issue. A Linear Issue opens in the browser, and a local Issue opens in `$EDITOR`. |
-| `P` | Promote a local Issue to Linear. See [Promote](#promote). |
-| `n` | Capture a new Issue. It works on every row. See [Capture](#capture). |
+| Key | Linear row | Local row |
+|---|---|---|
+| `s` | Start a Task from the Issue. The skill picker opens first, and the Repo picker opens when no mapping exists. Then the Board sends `add` and `start`. | The same |
+| `f` | Show the Issue's description from Linear, rendered from Markdown. `f` or `esc` goes back. | Show the body of the Issue's file, rendered from Markdown |
+| `c` | Change the status. The list holds the workflow states of the Issue's team. | Change the status. The list holds `backlog`, `todo`, `started`, `in review`, `done`, and `canceled`. |
+| `o` | Open the Issue in the browser | Open the Issue's file in `$EDITOR` |
+| `P` | Nothing | Promote the Issue to Linear. See [Promote](#promote). |
+| `n` | Capture a new Issue. It works on every row. See [Capture](#capture). | The same |
 
-The keys of a Task row are unchanged. A key that does not apply to the selected row does nothing, as today.
+One table, `issueKinds` in `internal/board/issuekind.go`, decides the keys of each Kind of row. The footer shows these keys in the order of the table. The keys of a Task row are unchanged. A key that does not apply to the selected row does nothing.
+
+### Status change
+
+`c` opens the status list with the cursor on the Issue's status. `j` and `k` move, `enter` sets the status, and `esc` cancels.
+
+- After a change, the Board fetches the Issue rows again. The row moves to its new group, or it leaves the Board when its new status is in neither group.
+- A failed read or write names the error in the footer, and the row does not change.
+
+## Filter
+
+`/` opens a filter line above the rows of the work view:
+
+```
+ / rename
+ READY  1
+ ▸ local-7                    Rename the log flag
+ DONE  1
+   ENG-560 Done         data  Rename config options
+```
+
+- The filter matches the ID and the title of each Task and Issue row, as a fuzzy match.
+- While the filter holds text, only the matching rows show. Every group with a match is open, whatever `groups.json` says, and each heading counts its matches. `j` and `k` skip the headings.
+- `enter` keeps the filter and gives the keys back, so the keys work on the matching rows. `esc` clears the filter and gives back the rows and the selection from before the filter.
+- Digits and letters in the filter are text, so `1` and `q` do not switch the view or quit.
+- lineup does not save the filter.
+- The review view keeps its own search.
 
 ## Capture
 
@@ -184,7 +214,7 @@ With no Ready row, the Board sends no extra toast. The Board does not start the 
 |---|---|
 | `internal/localissues` | The `backlog` status. `Create` writes `backlog`. A `Promote` write that sets `canceled` and adds the line to the body. |
 | `internal/linear` | A `Levels` function that returns the dependency level of each Issue. An `Unblocked` fact on `Issue` from the closed "blocks" relations. |
-| `internal/board` | Issue rows, their load and refresh, the Ready and Backlog groups, the keys, the capture box, the Destination list, promote, the group headings and `groups.json`, the header count, and the free slot toast |
+| `internal/board` | Issue rows, their load and refresh, the Ready and Backlog groups, the keys table in `issuekind.go`, the description, the status list, the filter in `filter.go`, the capture box, the Destination list, promote, the group headings and `groups.json`, the header count, and the free slot toast |
 | `cmd/lineup/wire.go` | The Local Tracker store for the work view, whatever `local_tracker` says |
 | Docs | `GLOSSARY.md` gets Ready, Backlog, Destination, and Promote. `docs/spec/mvp.md` and `docs/spec/trackers.md` name the new groups and the `backlog` status. |
 
@@ -215,5 +245,9 @@ Each PR lands on `main` before the next one starts.
 | `j` and `k` stop on each heading except Needs you and skip the rows of closed groups | A board test over the fixture, and a `rapid` property test over random rows and closed sets |
 | The Reviews tab keeps its own closed groups | A board test that toggles Done on each view |
 | The free slot toast names the first Ready row, and only when a slot is free | A board test that sends two board views |
+| `1` and `2` show the two views, and `3` does nothing | A board test that reads the view, the Kind, and the screen |
+| `f` shows a Linear description and a local file body, and `f` goes back | Board tests with the fake Linear client and a temporary Local Tracker folder |
+| `c` writes the new status, the row moves group or leaves the Board, and a failed write changes nothing | Board tests, and a `rapid` property test over every local status pair |
+| The filter shows only the matches, opens a closed group with a match, and `esc` gives back the exact screen | Board tests, and a `rapid` property test over random filters |
 | The first paint stays inside the speed budget | `TestSpeedBudget` with 200 Issue rows |
 | Live | A dev build of `lineup board` in a Rex pane, read with `rex`, shows the groups with real Linear data, and captures a local Issue into a temporary Local Tracker folder |

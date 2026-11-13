@@ -9,12 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/linear"
+	"github.com/gclunies/lineup/internal/markdown"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
@@ -26,8 +28,8 @@ type Client interface {
 
 // Options are the hooks that the caller wires in.
 type Options struct {
-	// StartSkills are the skills that the Linear browser offers when it starts
-	// a Task. Empty means it starts at once with no skill.
+	// StartSkills are the skills that the skill picker offers when s starts a
+	// Task from an Issue row. Empty offers only "just go".
 	StartSkills []string
 	// Zoom zooms the agent pane in this tab, and back, or goes to the tab that
 	// has the agent. The Hub provides it.
@@ -43,9 +45,10 @@ type Options struct {
 	// Client replaces the socket client, for tests.
 	Client Client
 	Now    func() time.Time
-	// Tracker holds the calls of the tracker browser. Tests replace the
-	// Linear calls. Sources lists the GitHub and Local tabs.
-	Tracker Tracker
+	// Linear holds the calls to Linear. Tests replace them.
+	Linear Linear
+	// Repos lists the checkouts that the Repo picker offers.
+	Repos func() []string
 	// LocalIssues is the Local Tracker folder that the work view reads,
 	// whatever local_tracker says. Empty reads no local Issues.
 	LocalIssues string
@@ -61,7 +64,6 @@ type viewID int
 
 const (
 	viewBoard viewID = iota
-	viewTracker
 	viewReview
 )
 
@@ -75,6 +77,10 @@ const (
 	modeBox     // the capture box
 	modeDests   // the capture box's Destination list
 	modePromote // the Destination list that P opens, with no local row
+	modeSkill   // the skill picker that s opens on an Issue row
+	modeRepo    // the Repo picker, when the Issue has no Repo mapping
+	modeStatus  // the status list that c opens on an Issue row
+	modeFilter  // typing the work view's filter
 )
 
 const (
@@ -121,7 +127,7 @@ type Model struct {
 	statusE bool
 
 	view          viewID
-	loaded        [3]bool // the views whose first load ran
+	reviewsRead   bool // the review view's first load ran
 	mode          mode
 	pendingTask   string // Task the current prompt is about
 	pendingOp     string // close, archive, or reviews-skip, for the y/n prompt
@@ -138,12 +144,18 @@ type Model struct {
 	detailGen  int
 	detailTask string
 	vp         viewport.Model
+	md         *markdown.Renderer // renders an Issue's description in the detail pane
 
-	tr    *tracker
-	rv    *review
-	mine  mine
-	box   captureBox
-	dests destinations
+	lin        linearClients
+	rv         *review
+	mine       mine
+	box        captureBox
+	dests      destinations
+	st         starter
+	pick       issueRow // the Issue row that the skill, Repo, or status list is about
+	sl         statusList
+	filter     textinput.Model // the work view's filter
+	unfiltered string          // the selection when the filter opened
 
 	alerted map[string]string // Task ID to the Attention that last toasted
 }
@@ -156,10 +168,15 @@ func New(v scheduler.BoardView, opts Options) Model {
 	if opts.Open == nil {
 		opts.Open = func(u string) error { return exec.Command("open", u).Start() }
 	}
-	m := Model{opts: opts, client: opts.Client, width: 100, height: 30, vp: viewport.New(100, 28)}
-	m.tr = newTracker(opts.Tracker)
+	if opts.Repos == nil {
+		opts.Repos = func() []string { return nil }
+	}
+	m := Model{opts: opts, client: opts.Client, width: 100, height: 30, vp: viewport.New(100, 28), md: markdown.New(true)}
+	m.lin = newLinearClients(opts.Linear)
+	m.st = newStarter()
+	m.filter = newFilter()
 	m.rv = newReview(opts.Reviews)
-	m.mine = mine{lin: map[string][]linear.Issue{}, fresh: map[string]bool{}}
+	m.mine = mine{lin: map[string][]linear.Issue{}, wss: map[string]linear.Workspace{}, fresh: map[string]bool{}}
 	m.box = newCaptureBox()
 	m.folds = readFolds(opts.Groups)
 	m.dests = destinations{linear: map[string][]destination{}, errs: map[string]string{}}
@@ -184,6 +201,10 @@ func (m *Model) setBoard(v scheduler.BoardView) {
 	m.issues = nil
 	if m.kind == lifecycle.KindBuild {
 		m.issues = issueRows(m.mine.linearIssues(), m.mine.loc, v.Tasks)
+	}
+	if q := m.query(); q != "" {
+		m.tasks = matching(q, m.tasks, func(t scheduler.TaskView) string { return t.ID + "  " + t.Title })
+		m.issues = matching(q, m.issues, func(r issueRow) string { return r.ID + "  " + r.Title })
 	}
 	if ids := m.rowIDs(); !slices.Contains(ids, m.sel) && len(ids) > 0 {
 		m.sel = m.fallback(ids)
@@ -220,8 +241,9 @@ func (m Model) groupOf(id string) string {
 	return ""
 }
 
-// open reports whether the group shows its rows.
-func (m Model) open(g string) bool { return !m.folds.closed(m.kind, g) }
+// open reports whether the group shows its rows. Under a filter every
+// group with a match shows them.
+func (m Model) open(g string) bool { return m.query() != "" || !m.folds.closed(m.kind, g) }
 
 // groupIDs lists the IDs of the rows in group g.
 func (m Model) groupIDs(g string) []string {
@@ -240,7 +262,8 @@ func (m Model) groupIDs(g string) []string {
 }
 
 // rowIDs lists the selection stops in screen order. Each group with a row has
-// its heading, except Needs you, and then its rows when it is open.
+// its heading, except Needs you, and then its rows when it is open. Under a
+// filter the stops are the matching rows only.
 func (m Model) rowIDs() []string {
 	var ids []string
 	for _, g := range groupOrder {
@@ -248,7 +271,7 @@ func (m Model) rowIDs() []string {
 		if len(rows) == 0 {
 			continue
 		}
-		if g != groupNeedsYou {
+		if g != groupNeedsYou && m.query() == "" {
 			ids = append(ids, headingKey(g))
 		}
 		if m.open(g) {
@@ -314,10 +337,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case detailMsg:
 		return m.afterDetail(msg)
+	case statusesMsg:
+		return m.openStatuses(msg), nil
 	case tea.KeyMsg:
 		return m.key(msg)
 	default:
-		if m2, cmd, ok := m.tracker(msg); ok {
+		if m2, cmd, ok := m.startMsg(msg); ok {
 			return m2, cmd
 		}
 		if m2, cmd, ok := m.reviewMsg(msg); ok {
@@ -335,7 +360,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) layout() {
 	m.vp.Width, m.vp.Height = m.width, max(m.height-3, 1)
-	m.tr.vp.Width, m.tr.vp.Height = m.width, max(m.height-3, 1)
 }
 
 func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -360,11 +384,16 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.boxKey(msg)
 	case modeDests, modePromote:
 		return m.destKey(msg)
+	case modeSkill:
+		return m.skillKey(msg)
+	case modeRepo:
+		return m.repoKey(msg)
+	case modeStatus:
+		return m.statusKey(msg)
+	case modeFilter:
+		return m.filterKey(msg)
 	}
 
-	if (m.view == viewTracker && m.tr.capturing()) || m.picking() {
-		return m.trackerKey(msg)
-	}
 	if m.view == viewReview && m.rv.filtering {
 		return m.reviewKey(msg)
 	}
@@ -378,39 +407,28 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeHelp
 		return m, nil
 	case "1":
-		return m.show(viewTracker, m.kind)
-	case "2":
 		return m.show(viewBoard, lifecycle.KindBuild)
-	case "3":
+	case "2":
 		return m.show(viewReview, lifecycle.KindReview)
 	}
-	switch m.view {
-	case viewTracker:
-		return m.trackerKey(msg)
-	case viewReview:
+	if m.view == viewReview {
 		return m.reviewKey(msg)
 	}
 	return m.boardKey(msg)
 }
 
-// show switches to a view. The Linear browser and the PR search load on the
-// first visit, so a Hub that never opens them makes no call.
+// show switches to a view. The PR search loads on the first visit to the
+// review view, so a Hub that never opens it makes no call.
 func (m Model) show(v viewID, kind lifecycle.Kind) (tea.Model, tea.Cmd) {
 	m.view, m.kind = v, kind
 	m.detail, m.preview = false, false
 	m.previewGen++
 	m.setBoard(m.board)
-	if m.loaded[v] {
+	if v != viewReview || m.reviewsRead {
 		return m, nil
 	}
-	m.loaded[v] = true
-	switch v {
-	case viewTracker:
-		return m, m.loadWorkspaces()
-	case viewReview:
-		return m, m.loadReviews()
-	}
-	return m, nil
+	m.reviewsRead = true
+	return m, m.loadReviews()
 }
 
 // boardKey handles the keys of the Task rows. The work board and the review
@@ -428,18 +446,22 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.vp, cmd = m.vp.Update(msg)
 		return m, cmd
 	}
+	if r, isRow := m.currentIssue(); isRow && r.takes(k) {
+		return m.issueKey(r, k)
+	}
 	t, ok := m.current()
-	r, isRow := m.currentIssue()
 	switch k {
 	case "j", "down":
-		ids := m.rowIDs()
-		if i := slices.Index(ids, m.sel); i >= 0 && i+1 < len(ids) {
-			m.sel = ids[i+1]
-		}
+		return m.move(1), nil
 	case "k", "up":
-		ids := m.rowIDs()
-		if i := slices.Index(ids, m.sel); i > 0 {
-			m.sel = ids[i-1]
+		return m.move(-1), nil
+	case "/":
+		if m.view == viewBoard {
+			return m.startFilter()
+		}
+	case "esc":
+		if m.query() != "" {
+			return m.clearFilter(), nil
 		}
 	case "z":
 		if m.opts.Zoom != nil {
@@ -450,10 +472,6 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "n":
 		if m.view == viewBoard {
 			return m.openBox()
-		}
-	case "P":
-		if isRow && r.loc != nil {
-			return m.openPromote(r.ID)
 		}
 	case "p":
 		m.preview = !m.preview
@@ -498,9 +516,6 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if ok && t.Group == "Queued" {
 			return m, m.op("start", scheduler.Request{Op: "start", Task: t.ID})
 		}
-		if isRow {
-			return m.startRow(r)
-		}
 	case "S":
 		if ok && t.Kind == lifecycle.KindReview {
 			return m.toggleSkip(t.PRURL, urlRef(t.PRURL))
@@ -513,9 +528,33 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.setStatus("no URL for "+t.ID, true)
 		}
-		if isRow {
-			return m, m.openRow(r)
-		}
+	}
+	return m, nil
+}
+
+// move moves the selection d stops down, or up for a negative d, and stops
+// at the ends.
+func (m Model) move(d int) Model {
+	ids := m.rowIDs()
+	if i := slices.Index(ids, m.sel); i >= 0 && i+d >= 0 && i+d < len(ids) {
+		m.sel = ids[i+d]
+	}
+	return m
+}
+
+// issueKey handles a key that the Issue row r takes, as issueKinds lists it.
+func (m Model) issueKey(r issueRow, k string) (tea.Model, tea.Cmd) {
+	switch k {
+	case "s":
+		return m.startRow(r)
+	case "f":
+		return m.showIssue(r)
+	case "c":
+		return m, m.loadStatuses(r)
+	case "o":
+		return m, m.tracker(r).open()
+	case "P":
+		return m.openPromote(r.ID)
 	}
 	return m, nil
 }
@@ -553,7 +592,7 @@ func (m Model) afterOp(msg opMsg) (tea.Model, tea.Cmd) {
 			ok += " · " + msg.note
 		}
 		m.setStatus(ok, false)
-		if msg.label == "start" {
+		if msg.label == "start" || msg.label == "edit" || msg.label == "status" {
 			return m, m.loadMine()
 		}
 	case msg.label == "start" && msg.err.Error() == capFull:
@@ -610,6 +649,13 @@ func (m Model) capture() tea.Cmd {
 func (m Model) tickCapture() tea.Cmd {
 	gen := m.previewGen
 	return tea.Tick(previewEvery, func(time.Time) tea.Msg { return captureTick(gen) })
+}
+
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func firstNonEmpty(ss ...string) string {

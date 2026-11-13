@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -626,33 +625,7 @@ func (p configPort) ResolveRepo(name string) (string, error) {
 	return "", fmt.Errorf("%d [[repos]] checkouts named %s: pass a path", len(matches), name)
 }
 
-// boardSources lists the browser's GitHub and Local tabs. GitHub tabs show
-// after lineup login github: one for the user's Issues, and one for each
-// [[repos]] checkout whose origin is on GitHub.
-func boardSources(cfg *config.Global, stateDir string) func(linearOn bool) []board.Source {
-	return func(linearOn bool) []board.Source {
-		var out []board.Source
-		_, githubOn, _ := github.TrackerLogin(stateDir)
-		if githubOn {
-			c := &github.Client{}
-			out = append(out, board.GitHubSource{C: c})
-			var seen []string
-			for _, path := range cfg.RepoPaths() {
-				if slug := originSlug(path); slug != "" && !slices.Contains(seen, slug) {
-					seen = append(seen, slug)
-					out = append(out, board.GitHubSource{C: c, Repo: slug})
-				}
-			}
-		}
-		if cfg.LocalTrackerOn(linearOn, githubOn) {
-			out = append(out, board.LocalSource{S: localissues.Store{Dir: cfg.LocalIssuesDir()}})
-		}
-		return out
-	}
-}
-
-// reviewStores keeps the review tab's cache and tab rank in the state
-// folder. The rank has its own file, apart from the Linear browser's.
+// reviewStores keeps the review tab's cache and tab rank in the state folder.
 func reviewStores(stateDir string) board.Reviews {
 	cache := github.PRCache{Dir: filepath.Join(stateDir, "cache", "github")}
 	order := config.NewViewOrder(filepath.Join(stateDir, "review_views.json"))

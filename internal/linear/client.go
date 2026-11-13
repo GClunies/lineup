@@ -1,5 +1,5 @@
 // Package linear is lineup's Linear client: OAuth sign-in, the GraphQL calls
-// the tracker browser and the Scheduler need, the browser's Issue order, and a
+// the Board and the Scheduler need, the dependency levels of Issues, and a
 // disk cache. It is a trimmed copy of the herdr-linear fork.
 package linear
 
@@ -14,7 +14,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gclunies/lineup/internal/termsafe"
 )
@@ -188,34 +187,7 @@ type Issue struct {
 	Blockers []Ref `json:"blockers,omitempty"`
 	// Unblocked is true when one or more "blocks" relations point at the
 	// Issue and every one of their Issues is done or canceled.
-	Unblocked         bool      `json:"unblocked,omitempty"`
-	PrioritySortOrder float64   `json:"prioritySortOrder"`
-	Estimate          float64   `json:"estimate"` // 0 is no estimate
-	CreatedAt         time.Time `json:"createdAt"`
-	Cycle             *Cycle    `json:"cycle"`
-	Labels            []Label   `json:"labels,omitempty"`
-	// PRs are the GitHub pull requests linked to the Issue, from its first 10 attachments.
-	PRs []PR `json:"prs,omitempty"`
-}
-
-// Cycle is the Issue's cycle. Name is Linear's display name, such as
-// "Cycle 10". Linear's cycle number can differ from the number in the name.
-type Cycle struct {
-	Name     string    `json:"name"`
-	StartsAt time.Time `json:"startsAt"`
-	EndsAt   time.Time `json:"endsAt"`
-}
-
-type Label struct {
-	Name  string `json:"name"`
-	Color string `json:"color"` // hex, such as "#bec2c8"
-}
-
-// PR is a GitHub pull request linked to an Issue.
-type PR struct {
-	Number int    `json:"number"`
-	Status string `json:"status"` // Linear's word, such as draft, inReview, merged, closed
-	URL    string `json:"url"`
+	Unblocked bool `json:"unblocked,omitempty"`
 }
 
 // BlockedBy lists the identifiers of the open Issues that block is, for "blocked by ENG-590".
@@ -229,20 +201,9 @@ func BlockedBy(is Issue) []string {
 
 func isOpen(stateType string) bool { return stateType != "completed" && stateType != "canceled" }
 
-// issueWire is an Issue as Linear sends it, with the relations pointing at
-// it. Its connection fields shadow the Issue fields of the same JSON name.
+// issueWire is an Issue as Linear sends it, with the relations pointing at it.
 type issueWire struct {
 	Issue
-	Labels struct {
-		Nodes []Label `json:"nodes"`
-	} `json:"labels"`
-	Attachments struct {
-		Nodes []struct {
-			URL        string          `json:"url"`
-			SourceType string          `json:"sourceType"`
-			Metadata   json.RawMessage `json:"metadata"`
-		} `json:"nodes"`
-	} `json:"attachments"`
 	InverseRelations struct {
 		Nodes []struct {
 			Type  string `json:"type"` // blocks | duplicate | related | similar
@@ -267,20 +228,6 @@ func (w issueWire) issue() Issue {
 		}
 	}
 	is.Unblocked = closed > 0 && len(is.Blockers) == 0
-	is.Labels = w.Labels.Nodes
-	for _, a := range w.Attachments.Nodes {
-		// metadata is free-form JSON, so one odd attachment must not fail the list.
-		var md struct {
-			Number json.Number `json:"number"`
-			Status string      `json:"status"`
-		}
-		if a.SourceType != "github" || json.Unmarshal(a.Metadata, &md) != nil {
-			continue
-		}
-		if n, err := md.Number.Int64(); err == nil && n > 0 {
-			is.PRs = append(is.PRs, PR{Number: int(n), Status: md.Status, URL: a.URL})
-		}
-	}
 	return is
 }
 
@@ -294,15 +241,12 @@ func issues(ws []issueWire) []Issue {
 
 const issueFields = `
 fragment IssueFields on Issue {
-  id identifier title branchName url priority prioritySortOrder estimate createdAt
+  id identifier title branchName url priority
   state { id name type position }
   team { id key }
   project { id name }
   assignee { id displayName name isMe }
   inverseRelations(first: 20) { nodes { type issue { id identifier state { type } } } }
-  cycle { name startsAt endsAt }
-  labels(first: 10) { nodes { name color } }
-  attachments(first: 10) { nodes { url sourceType metadata } }
 }`
 
 var openIssues = map[string]any{"state": map[string]any{"type": map[string]any{"nin": []string{"completed", "canceled"}}}}
@@ -376,19 +320,6 @@ func (c *Client) MyIssues(ctx context.Context) ([]Issue, error) {
 	return issues(ws), err
 }
 
-// ProjectIssues lists the open Issues in a Project, anyone's.
-func (c *Client) ProjectIssues(ctx context.Context, projectID string) ([]Issue, error) {
-	type reply struct {
-		Project struct {
-			Issues connection[issueWire] `json:"issues"`
-		} `json:"project"`
-	}
-	q := `query($id: String!, $after: String, $filter: IssueFilter) { project(id: $id) { issues(first: 100, after: $after, orderBy: updatedAt, filter: $filter) {
-  nodes { ...IssueFields } ` + pageFields + ` } } }` + issueFields
-	ws, err := fetchAll(ctx, c, q, map[string]any{"id": projectID, "filter": openIssues}, func(r *reply) *connection[issueWire] { return &r.Project.Issues })
-	return issues(ws), err
-}
-
 // Issue reads one Issue, with its description, by identifier such as "ENG-123".
 func (c *Client) Issue(ctx context.Context, identifier string) (Issue, error) {
 	var res struct {
@@ -412,36 +343,24 @@ func (c *Client) Teams(ctx context.Context) ([]Team, error) {
 	return ts, err
 }
 
-// ProjectInfo is a Project as the browser lists it.
+// ProjectInfo is a Project as the Destinations list orders it.
 type ProjectInfo struct {
 	ID                string  `json:"id"`
 	Name              string  `json:"name"`
-	URL               string  `json:"url"`
 	Status            string  `json:"status"`
 	StatusType        string  `json:"statusType"` // backlog | planned | started | paused | completed | canceled
 	StatusPosition    float64 `json:"statusPosition"`
 	Priority          int     `json:"priority"` // 1 urgent … 4 low, 0 none
 	PrioritySortOrder float64 `json:"prioritySortOrder"`
-	Health            string  `json:"health"` // onTrack | atRisk | offTrack, or empty
-	Lead              string  `json:"lead"`
-	TargetDate        string  `json:"targetDate"` // YYYY-MM-DD, or empty
-	Progress          float64 `json:"progress"`   // 0 to 1
 }
 
 // projectWire is a Project as projectFields selects it.
 type projectWire struct {
 	ID                string  `json:"id"`
 	Name              string  `json:"name"`
-	URL               string  `json:"url"`
 	Priority          int     `json:"priority"`
 	PrioritySortOrder float64 `json:"prioritySortOrder"`
-	Health            string  `json:"health"`
-	TargetDate        string  `json:"targetDate"`
-	Progress          float64 `json:"progress"`
-	Lead              *struct {
-		Name string `json:"name"`
-	} `json:"lead"`
-	Status struct {
+	Status            struct {
 		Name     string  `json:"name"`
 		Type     string  `json:"type"`
 		Position float64 `json:"position"`
@@ -450,26 +369,22 @@ type projectWire struct {
 
 const projectFields = `
 fragment ProjectFields on Project {
-  id name url priority prioritySortOrder health targetDate progress
-  lead { name }
+  id name priority prioritySortOrder
   status { name type position }
 }`
 
 func projects(ws []projectWire) []ProjectInfo {
 	out := make([]ProjectInfo, len(ws))
 	for i, w := range ws {
-		out[i] = ProjectInfo{ID: w.ID, Name: w.Name, URL: w.URL, Status: w.Status.Name,
+		out[i] = ProjectInfo{ID: w.ID, Name: w.Name, Status: w.Status.Name,
 			StatusType: w.Status.Type, StatusPosition: w.Status.Position, Priority: w.Priority,
-			PrioritySortOrder: w.PrioritySortOrder, Health: w.Health, TargetDate: w.TargetDate, Progress: w.Progress}
-		if w.Lead != nil {
-			out[i].Lead = w.Lead.Name
-		}
+			PrioritySortOrder: w.PrioritySortOrder}
 	}
 	return out
 }
 
 // TeamProjects lists the team's open Projects. A large workspace has more
-// open Projects than one list holds, so the browser asks one team at a time.
+// open Projects than one list holds, so the Destinations list asks one team at a time.
 func (c *Client) TeamProjects(ctx context.Context, teamID string) ([]ProjectInfo, error) {
 	type reply struct {
 		Team struct {

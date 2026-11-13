@@ -2,6 +2,7 @@ package board
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,45 +28,46 @@ var (
 
 func (m Model) View() string {
 	if m.mode == modeHelp {
-		switch m.view {
-		case viewTracker:
-			return trackerHelp
-		case viewReview:
-			if m.rv.curTab().Tasks {
-				return reviewTasksHelp
-			}
+		switch {
+		case m.view == viewReview && m.rv.curTab().Tasks:
+			return reviewTasksHelp
+		case m.view == viewReview:
 			return reviewHelp
 		}
 		return boardHelp
 	}
 	foot := m.footer()
 	h := max(m.height-2-lipgloss.Height(foot), 1)
+	var top []string
 	var body string
 	switch {
 	case m.mode == modeDests || m.mode == modePromote:
 		body = m.destList()
-	case m.view == viewTracker:
-		body = m.trackerBody()
+	case m.mode == modeSkill:
+		body = m.skillPicker()
+	case m.mode == modeRepo:
+		body = m.repoPicker()
+	case m.mode == modeStatus:
+		body = m.statusPicker()
 	case m.view == viewReview:
 		body = m.reviewBody()
-	case m.picking() && m.tr.ov == ovSkill:
-		body = m.skillPicker()
-	case m.picking():
-		body = m.repoPicker()
 	case m.detail:
 		body = m.vp.View()
 	default:
+		if l := m.filterLine(); l != "" {
+			top, h = []string{l}, max(h-1, 1)
+		}
 		body = m.taskBody(h)
 	}
 	lines := strings.Split(body, "\n")
-	if len(lines) > h && !m.detail && !(m.view == viewTracker && m.tr.lvl == lvlDetail) {
+	if len(lines) > h && !m.detail {
 		lines = m.window(lines, h)
 	}
 	for len(lines) < h {
 		lines = append(lines, "")
 	}
 	return m.header() + "\n" + dim.Render(strings.Repeat("─", max(m.width, 1))) + "\n" +
-		strings.Join(lines[:h], "\n") + "\n" + foot
+		strings.Join(append(top, lines[:h]...), "\n") + "\n" + foot
 }
 
 // window keeps the selected row on screen.
@@ -88,7 +90,7 @@ func (m Model) header() string {
 			s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
 		}
 	}
-	s += fmt.Sprintf("   ●%d need you", needsYou(m.tasks))
+	s += fmt.Sprintf("   ●%d need you", needsYou(m.board.OfKind(m.kind).Tasks))
 	other, name := lifecycle.KindReview, "reviews"
 	if m.kind == lifecycle.KindReview {
 		other, name = lifecycle.KindBuild, "work"
@@ -115,12 +117,12 @@ func needsYou(tasks []scheduler.TaskView) int {
 	return n
 }
 
-// viewNames lists the three views with the one on screen bright.
+// viewNames lists the two views with the one on screen bright.
 func (m Model) viewNames() string {
 	names := [...]struct {
 		id   viewID
 		name string
-	}{{viewTracker, "1 plan"}, {viewBoard, "2 work"}, {viewReview, "3 review"}}
+	}{{viewBoard, "1 work"}, {viewReview, "2 review"}}
 	var parts []string
 	for _, n := range names {
 		if n.id == m.view {
@@ -134,14 +136,8 @@ func (m Model) viewNames() string {
 
 func (m Model) footer() string {
 	var s string
-	if m.view == viewTracker && m.mode == modeNormal {
-		return ansi.Truncate(m.trackerFooter(), m.width, "…")
-	}
 	if m.view == viewReview && m.mode == modeNormal {
 		return ansi.Truncate(m.reviewFooter(), m.width, "…")
-	}
-	if m.picking() && m.mode == modeNormal {
-		return ansi.Truncate(m.trackerFooter(), m.width, "…")
 	}
 	switch m.mode {
 	case modeBox:
@@ -152,6 +148,14 @@ func (m Model) footer() string {
 		return strings.Join(lines, "\n")
 	case modeDests:
 		s = dim.Render(" type to filter  up/down move  enter pick  esc back")
+	case modeSkill:
+		s = dim.Render(" type a skill  up/down move  enter start  esc cancel")
+	case modeRepo:
+		s = dim.Render(" type to filter  up/down move  enter pick  esc cancel")
+	case modeStatus:
+		s = dim.Render(" j/k move  enter set the status  esc cancel")
+	case modeFilter:
+		s = dim.Render(" type to filter by ID and title  up/down move  enter keep  esc clear")
 	case modePromote:
 		s = " promote " + bold.Render(m.box.promote) + " to Linear" + dim.Render("   type to filter  up/down move  enter promote  esc cancel")
 	case modeConfirm:
@@ -194,8 +198,10 @@ func (m Model) boardHints() []hint {
 	tail := []hint{{"z", "agent"}, {"R", "refresh now"}, {"q", "quit"}, {"?", "all keys"}}
 	if m.view == viewReview {
 		tail = append([]hint{{"tab", "next view"}, {"< >", "move the tab"}}, tail...)
+	} else if m.query() != "" {
+		tail = append([]hint{{"esc", "clear the filter"}, {"n", "new Issue"}}, tail...)
 	} else {
-		tail = append([]hint{{"n", "new Issue"}}, tail...)
+		tail = append([]hint{{"n", "new Issue"}, {"/", "filter"}}, tail...)
 	}
 	if m.detail {
 		return []hint{{"f", "back"}, {"j/k", "scroll"}, {"?", "all keys"}}
@@ -208,10 +214,7 @@ func (m Model) boardHints() []hint {
 		return append([]hint{{"enter", verb}, {"j/k", "move"}}, tail...)
 	}
 	if r, ok := m.currentIssue(); ok {
-		hs := []hint{{"s", "start"}, {"o", "open the Issue"}}
-		if r.loc != nil {
-			hs = []hint{{"s", "start"}, {"o", "edit the Issue"}, {"P", "promote to Linear"}}
-		}
+		hs := slices.Clone(issueKinds[r.Kind].keys)
 		return append(append(hs, hint{"j/k", "move"}), tail...)
 	}
 	t, ok := m.current()
@@ -219,7 +222,7 @@ func (m Model) boardHints() []hint {
 		return append([]hint{{"tab", "find a PR to review"}}, tail...)
 	}
 	if !ok {
-		return append([]hint{{"1", "plan: start an Issue"}}, tail...)
+		return tail
 	}
 	var hs []hint
 	if t.StageKey == lifecycle.ReadyToLand.Key() {
@@ -338,7 +341,11 @@ func (m Model) rows(w int) string {
 			b.WriteString(strings.Join(lines, "\n") + "\n")
 		}
 	}
-	if len(m.tasks)+len(m.issues) == 0 {
+	switch {
+	case len(m.tasks)+len(m.issues) > 0:
+	case m.query() != "":
+		b.WriteString(dim.Render(" no row matches the filter") + "\n")
+	default:
 		b.WriteString(dim.Render(" no Tasks") + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
@@ -359,6 +366,14 @@ func stageText(t scheduler.TaskView) string {
 		s += " · " + t.Skill[strings.LastIndex(t.Skill, ":")+1:]
 	}
 	return s
+}
+
+// row is one line of a picker or a list, with the marker when it is selected.
+func (m Model) row(sel bool, text string) string {
+	if !sel {
+		return ansi.Truncate("   "+text, m.width, "…")
+	}
+	return selRow.Render(ansi.Truncate(" ▸ "+text, m.width, "…"))
 }
 
 func pad(s string, w int) string {
@@ -397,47 +412,25 @@ const boardHelp = `
    enter    focus the Task's tab in Rex, or restore its closed Worker
             on a group heading: open or close the group
    p        live preview of the Worker's screen
-   f        detail pane at full screen, and back
+   f        detail pane at full screen, and back; on an Issue row,
+            the Issue's description
    m        merge the PR            (Ready to land)
    x        close the Task, or its tab and worktree when it is Done,
             or archive a Done Task with no tab, after y/n
    s        start a Queued Task, or start a Task from a Ready or
             Backlog Issue; pick or type a skill, or just go
+   c        change the status of an Issue row: pick a Linear state of
+            its team, or a local status
    o        open the PR or the Issue; a local Issue opens in $EDITOR
    P        promote a local Issue: pick a Linear team or Project; lineup
             creates the Issue there and cancels the local one
    n        capture a new Issue in the Local Tracker; tab picks a
             Linear team or Project instead
+   /        filter the rows by ID and title; enter keeps the filter,
+            esc clears it
    R        refresh now: poll GitHub for every started Task
    z        zoom the agent pane
-   1 2 3    show the plan, work, or review view
-   ?        this help      q  quit
-
- press any key to go back
-`
-
-const trackerHelp = `
- Linear browser keys
-
-   The tabs are your favorite Linear views, then Browse. Star a view in
-   Linear to add a tab. Browse is a tree: workspace › team › Project › Issues.
-   enter goes down one level. esc goes back up, but never above a view.
-   To change the Project, press esc on the Issue list.
-
-   tab      next tab        shift+tab  previous tab
-   < >      move this view's tab left or right; lineup keeps the order
-   j k      move the selection
-   enter    open the row
-   esc      go back up one level
-   /        fuzzy search in this list
-   s        start the Issue as a Task; pick or type a skill, or just go
-   c        change the status
-   A        assign the Issue to you
-   n        add an Issue to this Project or team view
-   o        open the Issue in the browser
-   R        refresh what is on screen now
-   z        zoom the agent pane
-   1 2 3    show the plan, work, or review view
+   1 2      show the work or review view
    ?        this help      q  quit
 
  press any key to go back

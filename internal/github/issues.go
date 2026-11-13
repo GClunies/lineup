@@ -52,22 +52,16 @@ func ParseIssueID(id string) (repo string, number int, err error) {
 }
 
 type ghIssue struct {
-	Number     int                     `json:"number"`
-	Title      string                  `json:"title"`
-	Body       string                  `json:"body"`
-	URL        string                  `json:"url"`
-	State      string                  `json:"state"`
-	Labels     []struct{ Name string } `json:"labels"`
-	Repository *struct {
-		NameWithOwner string `json:"nameWithOwner"`
-	} `json:"repository"`
+	Number int                     `json:"number"`
+	Title  string                  `json:"title"`
+	Body   string                  `json:"body"`
+	URL    string                  `json:"url"`
+	State  string                  `json:"state"`
+	Labels []struct{ Name string } `json:"labels"`
 }
 
 func (g ghIssue) issue(repo string) Issue {
 	is := Issue{Repo: repo, Number: g.Number, Title: g.Title, Body: g.Body, URL: g.URL, State: strings.ToUpper(g.State)}
-	if g.Repository != nil {
-		is.Repo = g.Repository.NameWithOwner
-	}
 	for _, l := range g.Labels {
 		is.Labels = append(is.Labels, l.Name)
 	}
@@ -86,62 +80,8 @@ func (c *Client) Issue(ctx context.Context, repo string, number int) (Issue, err
 	return g.issue(repo), nil
 }
 
-// RepoIssues lists the repository's open Issues.
-func (c *Client) RepoIssues(ctx context.Context, repo string) ([]Issue, error) {
-	out, err := c.run(ctx, "issue", "list", "--repo", repo, "--state", "open", "--limit", "200", "--json", "number,title,url,state,labels")
-	if err != nil {
-		return nil, err
-	}
-	return decodeIssues(out, repo)
-}
-
-// MyIssues lists the open Issues assigned to the user, in every repository.
-func (c *Client) MyIssues(ctx context.Context) ([]Issue, error) {
-	out, err := c.run(ctx, "search", "issues", "--assignee", "@me", "--state", "open", "--limit", "100", "--json", "number,title,url,state,labels,repository")
-	if err != nil {
-		return nil, err
-	}
-	return decodeIssues(out, "")
-}
-
-func decodeIssues(out []byte, repo string) ([]Issue, error) {
-	var gs []ghIssue
-	if err := json.Unmarshal(out, &gs); err != nil {
-		return nil, fmt.Errorf("gh issue list: %w", err)
-	}
-	is := make([]Issue, len(gs))
-	for i, g := range gs {
-		is[i] = g.issue(repo)
-	}
-	return is, nil
-}
-
-// CreateIssue opens an Issue with an empty body. gh prints the new Issue's URL.
-func (c *Client) CreateIssue(ctx context.Context, repo, title string) (Issue, error) {
-	out, err := c.run(ctx, "issue", "create", "--repo", repo, "--title", title, "--body", "")
-	if err != nil {
-		return Issue{}, err
-	}
-	url := strings.TrimSpace(string(out))
-	n, err := strconv.Atoi(url[strings.LastIndex(url, "/")+1:])
-	if err != nil {
-		return Issue{}, fmt.Errorf("gh issue create printed %q, not an Issue URL", url)
-	}
-	return Issue{Repo: repo, Number: n, Title: title, URL: url, State: "OPEN"}, nil
-}
-
 func (c *Client) AssignToMe(ctx context.Context, repo string, number int) error {
 	_, err := c.run(ctx, "issue", "edit", strconv.Itoa(number), "--repo", repo, "--add-assignee", "@me")
-	return err
-}
-
-// SetOpen closes or reopens the Issue.
-func (c *Client) SetOpen(ctx context.Context, repo string, number int, open bool) error {
-	verb := "close"
-	if open {
-		verb = "reopen"
-	}
-	_, err := c.run(ctx, "issue", verb, strconv.Itoa(number), "--repo", repo)
 	return err
 }
 

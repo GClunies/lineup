@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// fakeIssueGH answers issue and search calls from recorded output. issue edit
+// fakeIssueGH answers issue view from recorded output. issue edit
 // fails with gh's "not found" until label create has run, as for a
 // repository that lacks the label.
 func fakeIssueGH(t *testing.T, view string) (bin, log string) {
@@ -17,14 +17,10 @@ func fakeIssueGH(t *testing.T, view string) (bin, log string) {
 	dir := t.TempDir()
 	bin, log = filepath.Join(dir, "gh"), filepath.Join(dir, "calls.log")
 	made := filepath.Join(dir, "label-made")
-	td, _ := filepath.Abs("testdata")
 	script := `#!/bin/sh
 printf '%s\n' "$(IFS='|'; echo "$*")" >> "` + log + `"
 case "$1 $2" in
 "issue view") cat "` + view + `" ;;
-"issue list") cat "` + td + `/issue_list.json" ;;
-"search issues") cat "` + td + `/issue_search.json" ;;
-"issue create") echo "https://github.com/octo/sandbox/issues/9" ;;
 "label create") touch "` + made + `" ;;
 "issue edit") if [ ! -f "` + made + `" ]; then echo "'in progress' not found" >&2; exit 1; fi ;;
 esac
@@ -35,7 +31,7 @@ esac
 	return bin, log
 }
 
-func TestRecordedIssuesDecode(t *testing.T) {
+func TestARecordedIssueViewDecodes(t *testing.T) {
 	bin, _ := fakeIssueGH(t, filepath.Join("testdata", "issue_view.json"))
 	c := &Client{Bin: bin}
 	ctx := context.Background()
@@ -48,18 +44,6 @@ func TestRecordedIssuesDecode(t *testing.T) {
 		URL:  "https://github.com/octo/sandbox/issues/2", State: "OPEN", Labels: []string{"bug"}}
 	if !reflect.DeepEqual(is, want) {
 		t.Fatalf("view\n got %#v\nwant %#v", is, want)
-	}
-	list, err := c.RepoIssues(ctx, "octo/sandbox")
-	if err != nil || len(list) != 1 || list[0].ID() != "octo/sandbox#2" {
-		t.Fatalf("list = %+v, %v", list, err)
-	}
-	mine, err := c.MyIssues(ctx)
-	if err != nil || len(mine) != 1 || mine[0].ID() != "octo/sandbox#2" || mine[0].State != "OPEN" {
-		t.Fatalf("search = %+v, %v", mine, err)
-	}
-	made, err := c.CreateIssue(ctx, "octo/sandbox", "New one")
-	if err != nil || made.Number != 9 {
-		t.Fatalf("create = %+v, %v", made, err)
 	}
 }
 

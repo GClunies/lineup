@@ -82,7 +82,7 @@ The review tab shows these tabs, in this order before the user ranks them:
 4. Each `[[review.views]]` entry, in config order.
 5. Each `[[review.queues]]` entry, named `Q: <name>`. It lists the queue's ranked PRs. See [Queues](#queues).
 
-The user ranks the tabs with `<` and `>`. A tab that is not in the saved rank, such as a new view, comes after the ranked tabs. lineup keeps the rank in `review_views.json` in the state directory, apart from the tracker browser's `views.json`, so two Board processes never overwrite each other's rank.
+The user ranks the tabs with `<` and `>`. A tab that is not in the saved rank, such as a new view, comes after the ranked tabs. lineup keeps the rank in `review_views.json` in the state directory.
 
 ### Rows
 

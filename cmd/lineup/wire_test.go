@@ -53,7 +53,7 @@ func TestTheMuxSendsEachCallOnlyToItsIssuesTracker(t *testing.T) {
 	ctx := context.Background()
 	for _, add := range []struct{ kind, id string }{
 		{"", "ENG-614"}, {"", "o/r#12"}, {"", "local-7"},
-		{scheduler.KindLinear, "LOCAL-7"}, // the browser starts an Issue from a Linear team keyed LOCAL
+		{scheduler.KindLinear, "LOCAL-7"}, // a Linear team keyed LOCAL has Issues such as LOCAL-7
 	} {
 		is, err := mux.Lookup(ctx, add.kind, add.id)
 		if err != nil {
@@ -185,41 +185,6 @@ func loadConfig(t *testing.T, text string) *config.Global {
 		t.Fatal(err)
 	}
 	return cfg
-}
-
-func TestTheBoardShowsTheTabsOfEachTrackerThatIsOn(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	checkout := filepath.Join(home, "code", "sandbox")
-	os.MkdirAll(checkout, 0o755)
-	exec.Command("git", "-C", checkout, "init", "-q").Run()
-	exec.Command("git", "-C", checkout, "remote", "add", "origin", "https://github.com/octo/sandbox.git").Run()
-	plain := filepath.Join(home, "code", "plain")
-	os.MkdirAll(plain, 0o755)
-	repos := "[[repos]]\nmatch = \"" + checkout + "\"\n[[repos]]\nmatch = \"" + plain + "\"\n"
-	names := func(srcs []board.Source) []string {
-		var out []string
-		for _, s := range srcs {
-			out = append(out, s.Name())
-		}
-		return out
-	}
-	state := t.TempDir()
-	sources := boardSources(loadConfig(t, repos), state)
-	if got := names(sources(true)); got != nil {
-		t.Fatalf("Linear on, GitHub off: %q", got)
-	}
-	if got := names(sources(false)); !slices.Equal(got, []string{"Local"}) {
-		t.Fatalf("no Tracker signed in: %q", got)
-	}
-	github.SaveTracker(state, "octo")
-	if got := names(sources(false)); !slices.Equal(got, []string{"GitHub: mine", "GitHub: sandbox"}) {
-		t.Fatalf("GitHub on: %q", got)
-	}
-	sources = boardSources(loadConfig(t, "local_tracker = true\n"+repos), state)
-	if got := names(sources(true)); !slices.Equal(got, []string{"GitHub: mine", "GitHub: sandbox", "Local"}) {
-		t.Fatalf("local_tracker on: %q", got)
-	}
 }
 
 func TestReviewViewsComeFromTheConfig(t *testing.T) {

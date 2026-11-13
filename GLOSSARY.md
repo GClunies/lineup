@@ -59,13 +59,13 @@ To move a local Issue to Linear once: lineup creates the Linear Issue and cancel
 _Avoid_: Sync, export, upgrade
 
 **Intake**:
-The act of putting a Task on the Board, from the tracker browser, the Orchestrator, or the CLI. Auto-intake is Intake that the Scheduler does by itself from a Tracker status.
+The act of putting a Task on the Board, from an Issue row on the Board, the Orchestrator, or the CLI. Auto-intake is Intake that the Scheduler does by itself from a Tracker status.
 _Avoid_: Import, claim, enqueue
 
 ### Surfaces
 
 **Board**:
-The top of the `hub` tab, above the Orchestrator. It has three views, and the keys `1`, `2`, and `3` pick one. `1 plan` is the tracker browser. `2 work` lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. `3 review` has a Reviews tab that shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
+The top of the `hub` tab, above the Orchestrator. It has two views, and the keys `1` and `2` pick one. `1 work` lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. `2 review` has a Reviews tab that shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:
@@ -83,7 +83,7 @@ The deterministic part of lineup that owns the queue, the WIP cap, Worker startu
 _Avoid_: Coordinator, daemon, engine
 
 **Orchestrator**:
-The long-lived agent that the user talks to in the `LINEUP` pane of the Hub's `work` tab. It plans Issues in the Trackers, does Intake, starts reviews, reports status and alerts, passes the user's words to Workers, and applies overrides, for build Tasks and review Tasks alike, always through the Scheduler.
+The long-lived agent that the user talks to in the `LINEUP` pane of the Hub's `hub` tab. It plans Issues in the Trackers, does Intake, starts reviews, reports status and alerts, passes the user's words to Workers, and applies overrides, for build Tasks and review Tasks alike, always through the Scheduler.
 _Avoid_: Coordinator, manager agent
 
 **Worker**:

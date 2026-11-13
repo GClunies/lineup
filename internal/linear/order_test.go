@@ -1,9 +1,10 @@
 package linear
 
 import (
+	"cmp"
+	"slices"
 	"strings"
 	"testing"
-	"time"
 )
 
 // iss makes an Issue whose ID is its identifier. Each blocker is an open
@@ -24,7 +25,27 @@ func ids(is []Issue) string {
 	return strings.Join(out, " ")
 }
 
-func TestOrder(t *testing.T) {
+// byLevel orders issues by dependency level, then natural ID, as the Board
+// orders the Issue rows of one group with the same priority.
+func byLevel(issues []Issue) []Issue {
+	lv := Levels(issues)
+	out := slices.Clone(issues)
+	slices.SortStableFunc(out, func(a, b Issue) int {
+		if c := cmp.Compare(lv[a.ID], lv[b.ID]); c != 0 {
+			return c
+		}
+		switch {
+		case NaturalLess(a.Identifier, b.Identifier):
+			return -1
+		case NaturalLess(b.Identifier, a.Identifier):
+			return 1
+		}
+		return 0
+	})
+	return out
+}
+
+func TestLevelsOrderBlockersBeforeWhatTheyBlock(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		in   []Issue
@@ -59,12 +80,12 @@ func TestOrder(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			in := append([]Issue(nil), tc.in...)
-			got := ids(Order(tc.in))
+			got := ids(byLevel(tc.in))
 			if got != tc.want {
 				t.Errorf("got  %s\nwant %s", got, tc.want)
 			}
 			if ids(in) != ids(tc.in) {
-				t.Error("Order changed its input")
+				t.Error("Levels changed its input")
 			}
 		})
 	}
@@ -103,55 +124,6 @@ func TestNaturalLess(t *testing.T) {
 		if got := NaturalLess(tc.a, tc.b); got != tc.want {
 			t.Errorf("NaturalLess(%s, %s) = %v", tc.a, tc.b, got)
 		}
-	}
-}
-
-func viewIssue(id, state, stateType string, pos float64, pri int, pso float64, cycle *Cycle) Issue {
-	return Issue{ID: id, Identifier: id, Priority: pri, PrioritySortOrder: pso, Cycle: cycle,
-		State: State{Name: state, Type: stateType, Position: pos}}
-}
-
-func TestViewOrder(t *testing.T) {
-	c9 := &Cycle{Name: "Cycle 9", StartsAt: time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)}
-	c10 := &Cycle{Name: "Cycle 10", StartsAt: time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC)}
-	// Current+ (Ada) as Linear returned it, all in Cycle 10.
-	ada := []Issue{
-		viewIssue("ENG-603", "Code Review", "started", 4000, 0, -208134, c10),
-		viewIssue("ENG-587", "Code Review", "started", 4000, 0, -192237, c10),
-		viewIssue("ENG-537", "In QA", "started", 5000, 0, -186249, c10),
-		viewIssue("ENG-486", "Ready", "unstarted", 2000, 2, -154547.88, c10),
-		viewIssue("ENG-478", "Code Review", "started", 4000, 0, -174336.43, c10),
-		viewIssue("ENG-428", "Ready", "unstarted", 2000, 4, -42549.59, c10),
-		viewIssue("ENG-34", "Ready", "unstarted", 2000, 4, 3120.53, c10),
-	}
-	for _, tc := range []struct {
-		name string
-		in   []Issue
-		want string
-	}{
-		{"Current+ (Ada) matches Linear's view", ada, "ENG-537 ENG-603 ENG-587 ENG-478 ENG-486 ENG-428 ENG-34"},
-		{"cycles by start date, no cycle last",
-			[]Issue{viewIssue("A-1", "Todo", "unstarted", 1, 0, 0, nil), viewIssue("A-2", "Todo", "unstarted", 1, 0, 0, c10),
-				viewIssue("A-3", "Todo", "unstarted", 1, 0, 0, c9)}, "A-3 A-2 A-1"},
-		{"state types in Linear's group order",
-			[]Issue{viewIssue("A-1", "Canceled", "canceled", 1, 0, 0, nil), viewIssue("A-2", "Triage", "triage", 1, 0, 0, nil),
-				viewIssue("A-3", "Backlog", "backlog", 1, 0, 0, nil), viewIssue("A-4", "Done", "completed", 1, 0, 0, nil),
-				viewIssue("A-5", "Todo", "unstarted", 1, 0, 0, nil), viewIssue("A-6", "Doing", "started", 1, 0, 0, nil)},
-			"A-6 A-5 A-3 A-2 A-4 A-1"},
-		{"urgent first, no priority after low",
-			[]Issue{viewIssue("A-1", "Todo", "unstarted", 1, 0, -9, nil), viewIssue("A-2", "Todo", "unstarted", 1, 4, 0, nil),
-				viewIssue("A-3", "Todo", "unstarted", 1, 1, 9, nil)}, "A-3 A-2 A-1"},
-		{"empty", nil, ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			in := ids(tc.in)
-			if got := ids(ViewOrder(tc.in)); got != tc.want {
-				t.Errorf("got  %s\nwant %s", got, tc.want)
-			}
-			if ids(tc.in) != in {
-				t.Error("ViewOrder changed its input")
-			}
-		})
 	}
 }
 

@@ -56,7 +56,7 @@ func (c *RepoChoices) Set(projectID, repoPath string) error {
 	return WriteJSON(c.path, m)
 }
 
-// ViewOrder remembers the user's rank of their Linear views, as View IDs.
+// ViewOrder remembers the user's rank of the review tabs, as tab keys.
 type ViewOrder struct {
 	mu   sync.Mutex
 	path string
@@ -64,15 +64,7 @@ type ViewOrder struct {
 
 func NewViewOrder(path string) *ViewOrder { return &ViewOrder{path: path} }
 
-func DefaultViewOrderPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".local", "state", "lineup", "views.json"), nil
-}
-
-// Get returns the saved View IDs, best first. With nothing saved it returns none.
+// Get returns the saved tab keys, best first. With nothing saved it returns none.
 func (v *ViewOrder) Get() ([]string, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()

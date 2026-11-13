@@ -25,7 +25,7 @@ func TestLiveMyIssues(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("%s: %d open issues assigned to you", ws[0].URLKey, len(issues))
-	for _, is := range Order(issues) {
+	for _, is := range issues {
 		t.Logf("%-8s %-12s %s %v", is.Identifier, is.State.Name, is.Title, BlockedBy(is))
 	}
 }
