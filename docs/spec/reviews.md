@@ -27,7 +27,7 @@ A review queue fills itself. Agents start the reviews of the PRs that need the u
                      in its own tab of the Rex session "reviews"
 ```
 
-- A review Task is a Task. It runs in its own tab in the `reviews` Rex session. The Board lists no review Task. Its header counts the review Tasks that need the user, as `(+1 in reviews)`, and the Board toasts their alerts.
+- A review Task is a Task. It runs in its own tab in the `reviews` Rex session. The Board lists no review Task. Its header counts the review Tasks that need the user, as `(+1 in reviews)`. A review Task gives no alert. The user sees it in the Rex sidebar and answers it in its tab. See [ADR 0025](../adr/0025-review-tasks-give-no-alert.md).
 - A review Task never writes to the PR that it reviews. lineup makes no GitHub write for it. The Worker writes to GitHub only after the user decides each finding, through `pr-review`.
 
 ## Filters
@@ -312,7 +312,7 @@ The Orchestrator in the `hub` tab adds, steers, reruns, and closes review Tasks,
 7. **Setup and cleanup.** Two review starts in one Repo fetch one after the other. Cleanup removes a clean review worktree and keeps one with an unpushed commit. A review Task never calls `wt remove`.
 8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then restores the Worker in the same conversation. A closed tab in Reviewing flags the Task `tab closed` and opens no tab, and `lineup open` or `lineup review` then resumes the Worker. Recovery with no tab in Review ready leaves the Task as it is, and in Reviewing it sets the flag. The events of the hunk pane leave the Task as it is. A closed Worker block closes the hunk pane with its tab.
 9. **Config.** Load and validation: an unknown key, an empty filter list, a bad team or repository form, a duplicate name, a bad regex, an unknown `state`, a queue on closed PRs or drafts, each old key name, a `[[review.views]]` table, and `slots` below 1 each fail at load.
-10. **Board.** The Board lists no review Task and toasts the alerts of both Kinds. Its header counts the review Tasks that need the user, and shows `reviews paused` while the queues are paused.
+10. **Board.** The Board lists no review Task and toasts the alerts of build Tasks. Its header counts the review Tasks that need the user, and shows `reviews paused` while the queues are paused.
 11. **Live.**
     - A queue on one repository starts `/pr-review` on a real PR. The Task reaches Review ready with a findings file, and nothing is written to GitHub.
     - Closing that Task's tab keeps the review in Review ready. `lineup open <task>` restores the Worker in the same conversation.

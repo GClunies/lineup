@@ -4,13 +4,12 @@ The Board had two views. `1 work` held the user's own Issues and build Tasks. `2
 
 ## Considered Options
 
-- **Keep only the Reviews tab.** Rejected. The `reviews` session in Rex already holds one tab for each started review Task. The Board toasts each alert of a review Task.
+- **Keep only the Reviews tab.** Rejected. The `reviews` session in Rex already holds one tab for each started review Task.
 - **Keep the PR tabs as a PR browser.** Rejected. GitHub already lists the user's PRs and review requests. The PR tabs searched GitHub every 2 minutes while the Board was open. The review view and its tests held 2,034 of the 7,816 lines in `internal/board`.
 
 ## Consequences
 
 - The keys `1` and `2` do nothing, and the header names no view.
-- The Board still toasts the alerts of both Kinds, as [ADR 0016](0016-one-front-agent.md) says.
 - `groups.json` keeps the closed groups of the build Tasks only. The Board ignores a `review` entry in the file.
 - `[[review.views]]` is gone. A config that holds a `[[review.views]]` table fails at load and names the table to delete. `[[review.queues]]` does not change.
 - The Scheduler's queue fill, `lineup review`, and `lineup reviews` do not change. The Orchestrator skips and unskips a PR with `lineup reviews skip` and `lineup reviews unskip`.
