@@ -4,8 +4,6 @@ import (
 	"cmp"
 	"context"
 	"maps"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -155,9 +153,20 @@ func natural(a, b string) int {
 
 // mine holds the Issues behind the Issue rows.
 type mine struct {
-	lin   map[string][]linear.Issue // My Issues, by workspace ID
-	fresh map[string]bool           // the workspaces whose live list came back
+	lin   map[string][]linear.Issue   // My Issues, by workspace ID
+	wss   map[string]linear.Workspace // the workspaces in lin, by ID
+	fresh map[string]bool             // the workspaces whose live list came back
 	loc   []localissues.Issue
+}
+
+// workspaceOf is the workspace whose My Issues hold is.
+func (mi mine) workspaceOf(is linear.Issue) linear.Workspace {
+	for id, list := range mi.lin {
+		if slices.ContainsFunc(list, func(x linear.Issue) bool { return x.ID == is.ID }) {
+			return mi.wss[id]
+		}
+	}
+	return linear.Workspace{}
 }
 
 // linearIssues lists every workspace's Issues, in workspace ID order.
@@ -254,6 +263,7 @@ func (m Model) mineMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		for id := range m.mine.lin {
 			if !signedIn[id] {
 				delete(m.mine.lin, id)
+				delete(m.mine.wss, id)
 			}
 		}
 		m.setBoard(m.board)
@@ -271,6 +281,7 @@ func (m Model) mineMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 			return m, nil, true
 		}
 		m.mine.lin[msg.ws.ID] = msg.issues
+		m.mine.wss[msg.ws.ID] = msg.ws
 		m.setBoard(m.board)
 	case mineLocalMsg:
 		if msg.err != nil {
@@ -292,18 +303,4 @@ func (m Model) currentIssue() (issueRow, bool) {
 		}
 	}
 	return issueRow{}, false
-}
-
-// openRow opens a Linear Issue in the browser. It opens a local Issue's file
-// in $EDITOR, then reads the Issue rows again.
-func (m Model) openRow(r issueRow) tea.Cmd {
-	if r.lin == nil {
-		editor := firstNonEmpty(os.Getenv("EDITOR"), "vi")
-		path := filepath.Join(m.opts.LocalIssues, r.ID+".md")
-		return tea.ExecProcess(exec.Command(editor, path), func(err error) tea.Msg {
-			return opMsg{label: "edit", task: r.ID, err: err}
-		})
-	}
-	open, u := m.opts.Open, r.URL
-	return func() tea.Msg { return opMsg{label: "open", task: r.ID, err: open(u)} }
 }

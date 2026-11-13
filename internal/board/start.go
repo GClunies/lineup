@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gclunies/lineup/internal/localissues"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
@@ -109,9 +108,9 @@ func (m Model) repoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		r, repo := m.pick, st.repos[vis[st.repoCur]]
 		m.mode = modeNormal
 		st.repoIn.Blur()
-		remember, start := m.rememberRepo(r), m.startTask(r, repo, st.skill)
+		tr, start := m.tracker(r), m.startTask(r, repo, st.skill)
 		return m, func() tea.Msg {
-			if err := remember(repo); err != nil {
+			if err := tr.rememberRepo(repo); err != nil {
 				return opMsg{label: "remember Repo", task: r.ID, err: err}
 			}
 			return start()
@@ -123,23 +122,6 @@ func (m Model) repoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
-}
-
-// rememberRepo keeps the Repo that the user picked for r: in a local Issue's
-// file, or for a Linear Issue's Project. A Linear Issue with no Project keeps
-// nothing.
-func (m Model) rememberRepo(r issueRow) func(repo string) error {
-	if r.loc != nil {
-		store := localissues.Store{Dir: m.opts.LocalIssues}
-		return func(repo string) error { return store.SetRepo(r.ID, repo) }
-	}
-	remember := m.lin.RememberRepo
-	return func(repo string) error {
-		if r.lin.Project == nil {
-			return nil
-		}
-		return remember(r.lin.Project.ID, repo)
-	}
 }
 
 // startTask adds the Issue as a Task, sets its skill if any, then starts it.

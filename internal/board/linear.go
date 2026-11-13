@@ -10,6 +10,7 @@ import (
 // LinearAPI is the part of linear.Client that the Board uses.
 type LinearAPI interface {
 	MyIssues(ctx context.Context) ([]linear.Issue, error)
+	Issue(ctx context.Context, identifier string) (linear.Issue, error)
 	Teams(ctx context.Context) ([]linear.Team, error)
 	TeamProjects(ctx context.Context, teamID string) ([]linear.ProjectInfo, error)
 	Create(ctx context.Context, n linear.NewIssue) (linear.Issue, error)

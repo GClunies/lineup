@@ -15,6 +15,7 @@ import (
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/linear"
+	"github.com/gclunies/lineup/internal/markdown"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
@@ -140,6 +141,7 @@ type Model struct {
 	detailGen  int
 	detailTask string
 	vp         viewport.Model
+	md         *markdown.Renderer // renders an Issue's description in the detail pane
 
 	lin   linearClients
 	rv    *review
@@ -163,11 +165,11 @@ func New(v scheduler.BoardView, opts Options) Model {
 	if opts.Repos == nil {
 		opts.Repos = func() []string { return nil }
 	}
-	m := Model{opts: opts, client: opts.Client, width: 100, height: 30, vp: viewport.New(100, 28)}
+	m := Model{opts: opts, client: opts.Client, width: 100, height: 30, vp: viewport.New(100, 28), md: markdown.New(true)}
 	m.lin = newLinearClients(opts.Linear)
 	m.st = newStarter()
 	m.rv = newReview(opts.Reviews)
-	m.mine = mine{lin: map[string][]linear.Issue{}, fresh: map[string]bool{}}
+	m.mine = mine{lin: map[string][]linear.Issue{}, wss: map[string]linear.Workspace{}, fresh: map[string]bool{}}
 	m.box = newCaptureBox()
 	m.folds = readFolds(opts.Groups)
 	m.dests = destinations{linear: map[string][]destination{}, errs: map[string]string{}}
@@ -425,8 +427,10 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.vp, cmd = m.vp.Update(msg)
 		return m, cmd
 	}
+	if r, isRow := m.currentIssue(); isRow && r.takes(k) {
+		return m.issueKey(r, k)
+	}
 	t, ok := m.current()
-	r, isRow := m.currentIssue()
 	switch k {
 	case "j", "down":
 		ids := m.rowIDs()
@@ -447,10 +451,6 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "n":
 		if m.view == viewBoard {
 			return m.openBox()
-		}
-	case "P":
-		if isRow && r.loc != nil {
-			return m.openPromote(r.ID)
 		}
 	case "p":
 		m.preview = !m.preview
@@ -495,9 +495,6 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if ok && t.Group == "Queued" {
 			return m, m.op("start", scheduler.Request{Op: "start", Task: t.ID})
 		}
-		if isRow {
-			return m.startRow(r)
-		}
 	case "S":
 		if ok && t.Kind == lifecycle.KindReview {
 			return m.toggleSkip(t.PRURL, urlRef(t.PRURL))
@@ -510,9 +507,21 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.setStatus("no URL for "+t.ID, true)
 		}
-		if isRow {
-			return m, m.openRow(r)
-		}
+	}
+	return m, nil
+}
+
+// issueKey handles a key that the Issue row r takes, as issueKinds lists it.
+func (m Model) issueKey(r issueRow, k string) (tea.Model, tea.Cmd) {
+	switch k {
+	case "s":
+		return m.startRow(r)
+	case "f":
+		return m.showIssue(r)
+	case "o":
+		return m, m.tracker(r).open()
+	case "P":
+		return m.openPromote(r.ID)
 	}
 	return m, nil
 }

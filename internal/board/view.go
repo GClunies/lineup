@@ -2,6 +2,7 @@ package board
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -201,10 +202,7 @@ func (m Model) boardHints() []hint {
 		return append([]hint{{"enter", verb}, {"j/k", "move"}}, tail...)
 	}
 	if r, ok := m.currentIssue(); ok {
-		hs := []hint{{"s", "start"}, {"o", "open the Issue"}}
-		if r.loc != nil {
-			hs = []hint{{"s", "start"}, {"o", "edit the Issue"}, {"P", "promote to Linear"}}
-		}
+		hs := slices.Clone(issueKinds[r.Kind].keys)
 		return append(append(hs, hint{"j/k", "move"}), tail...)
 	}
 	t, ok := m.current()
@@ -398,7 +396,8 @@ const boardHelp = `
    enter    focus the Task's tab in Rex, or restore its closed Worker
             on a group heading: open or close the group
    p        live preview of the Worker's screen
-   f        detail pane at full screen, and back
+   f        detail pane at full screen, and back; on an Issue row,
+            the Issue's description
    m        merge the PR            (Ready to land)
    x        close the Task, or its tab and worktree when it is Done,
             or archive a Done Task with no tab, after y/n

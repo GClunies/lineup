@@ -2,6 +2,7 @@ package board
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -21,6 +22,9 @@ type fakeLinear struct {
 	// teamsErr is what Teams returns, by workspace ID.
 	teamsErr  map[string]error
 	teamReads int
+	described []string // the identifiers that Issue read
+	// issueErr is what Issue returns.
+	issueErr error
 }
 
 // wsLinear is fakeLinear as one workspace sees it.
@@ -49,6 +53,21 @@ func (f *fakeLinear) TeamProjects(_ context.Context, team string) ([]linear.Proj
 		"t2": {{ID: "p2", Name: "Web", Status: "Started"}},
 	}
 	return projects[team], nil
+}
+func (f *fakeLinear) Issue(_ context.Context, id string) (linear.Issue, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.described = append(f.described, id)
+	if f.issueErr != nil {
+		return linear.Issue{}, f.issueErr
+	}
+	for _, is := range f.issues {
+		if is.Identifier == id {
+			is.Description = "# Goal\n\nBuild the **billing** model."
+			return is, nil
+		}
+	}
+	return linear.Issue{}, errors.New("not found")
 }
 func (f *fakeLinear) Create(_ context.Context, n linear.NewIssue) (linear.Issue, error) {
 	f.mu.Lock()
