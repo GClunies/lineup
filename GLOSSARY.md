@@ -65,7 +65,7 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The top of the `hub` tab, above the Orchestrator. It has three views, and the keys `1`, `2`, and `3` pick one. `1 plan` is the tracker browser. `2 work` lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Working, Waiting, Queued, Ready, Done, and Backlog. `3 review` has a Reviews tab that shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
+The top of the `hub` tab, above the Orchestrator. It has three views, and the keys `1`, `2`, and `3` pick one. `1 plan` is the tracker browser. `2 work` lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. `3 review` has a Reviews tab that shows the review Tasks in the same groups. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:

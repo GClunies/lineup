@@ -453,25 +453,25 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
  NEEDS YOU
  ▸ ENG-590 Working ⚑       data   Add billing model          stopped      12m
    ENG-588 Working ⚑       data   Backfill events           permission: Bash(make deploy)   3m
+ BACKLOG
+   ENG-620                        Split billing ingest                   ▂
+ READY
+   ENG-611                        Move the retry job        unblocked    ▂▄▆
+   local-7                 data   Rename the log flag
+ QUEUED
+   ENG-601                 data   Drop old API keys
  WORKING
    WEB-12  Responding      web    Fix map tooltip           round 1/3    5m
    ENG-592 CI debug        data   Fix flaky test            attempt 2/3  1m
  WAITING
    ENG-571 In review       data   Rate limit login          #4636 needs approval · optional failed: lint  1d
- QUEUED
-   ENG-601                 data   Drop old API keys
- READY
-   ENG-611                        Move the retry job        unblocked    ▂▄▆
-   local-7                 data   Rename the log flag
  DONE
    ENG-560 merged          data   Rename config options     #4601  today
- BACKLOG
-   ENG-620                        Split billing ingest                   ▂
 ```
 
 The header counts the Needs you Tasks of the other view in parentheses, when there are any: `(+1 in reviews)` on the work view and `(+2 in work)` on the review view.
 
-The groups are Needs you, Working, Waiting, Queued, Ready, Done, and Backlog, in that order. Ready and Backlog hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. Backlog comes last because it is the longest list.
+The groups are Needs you, Backlog, Ready, Queued, Working, Waiting, and Done, in that order. Needs you comes first, and the other groups follow the development cycle. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID.
 
 | Key | Action |
 |---|---|
