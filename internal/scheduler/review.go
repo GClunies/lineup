@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -309,7 +310,9 @@ func (s *Scheduler) removeReviewWorktree(ctx context.Context, r Record) {
 
 // pollReviews reads each review Task's PR by number and applies its level.
 // pr-review posts the review in its Step 9, so the user's review ends the Task
-// only once the Worker stops. A merge or a close ends it at once.
+// only once the Worker stops. A merge or a close ends it at once. A queue's
+// review whose PR the author renamed to a title that the queue drops ends as
+// skipped, as it would have been had the title been there at the fill.
 func (s *Scheduler) pollReviews(ctx context.Context, keys map[ReviewKey]string) {
 	if len(keys) == 0 {
 		return
@@ -332,9 +335,24 @@ func (s *Scheduler) pollReviews(ctx context.Context, keys map[ReviewKey]string) 
 			}
 			if sig := pr.Level(r.CreatedAt, r.workerWorking()); sig != nil {
 				s.apply(r, sig, "")
+			} else if s.queueDrops(r, pr.Title) {
+				s.apply(r, lifecycle.TaskClosed{Skipped: true}, "title")
 			}
 		}
 	})
+}
+
+// queueDrops reports whether the queue that added r would now leave out a PR
+// with title. In Review ready a working Worker can be posting the user's
+// decided review, so the Task waits until the Worker stops. A review that the
+// user asked for has no queue, and a queue that config no longer names has no
+// filter, so neither is dropped.
+func (s *Scheduler) queueDrops(r *Record, title string) bool {
+	if r.Queue == "" || r.Stage == lifecycle.ReviewReady && r.workerWorking() {
+		return false
+	}
+	i := slices.IndexFunc(s.d.Queues, func(q Queue) bool { return q.Name == r.Queue })
+	return i >= 0 && !s.d.Queues[i].Filter.KeepsTitle(title)
 }
 
 func keysOf[K comparable, V any](m map[K]V) []K {
