@@ -1,0 +1,23 @@
+docs/adr/0026-the-user-approves-every-reply-that-is-not-a-fix.md
+  s_8d73c92b4401e6::t_9458727afc46de 1-2,4-25
+  s_8d73c92b4401e6::t_d5ed60e9f07bf3 3
+GLOSSARY.md
+  s_8d73c92b4401e6::t_f9cc2cbbd2de11 121
+  s_8d73c92b4401e6::t_38953d1875eb1e 144-147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5d0927e5e11fe2181a78d3a26f9917ec28474c37",
+  "prompts": {},
+  "sessions": {
+    "s_8d73c92b4401e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "02254695-ee24-4ce0-8ea3-891eb75df040",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
