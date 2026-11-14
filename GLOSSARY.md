@@ -118,6 +118,7 @@ A flag on a Task, in any Stage, that says the user must act and gives the reason
 - a draft PR that passed CI
 - a review bot that did not score a passing PR
 - a spent Loop budget
+- a Draft reply
 _Avoid_: Blocked, waiting, attention state
 
 **Ready to land**:
@@ -139,6 +140,10 @@ _Avoid_: Blocking check, mandatory check
 **Review thread**:
 A thread of review comments on a line of a PR. Under the default Landing bar, a thread is done when it is resolved and the user replied in it. A thread that the user opened needs only the resolve.
 _Avoid_: Conversation, comment
+
+**Draft reply**:
+A reply to a person's Review thread that a Worker wrote and that waits for the user to approve, edit, or drop. Every reply that does not report a fix starts as one.
+_Avoid_: Pending reply, proposed comment, suggestion
 
 **Loop budget**:
 The most automatic attempts that a Stage gets before the Task gets the Needs you flag, for example 3 CI debug attempts. A lost Worker spends no budget, because lineup opens no tab by itself.
