@@ -37,16 +37,22 @@ type Filter struct {
 	ExcludeRegex    string
 }
 
-// Keep returns the PRs of a search for f whose titles match IncludeRegex,
-// when it is set, and do not match ExcludeRegex. GitHub search has no regex.
+// Keep returns the PRs of a search for f whose titles KeepsTitle accepts.
+// GitHub search has no regex.
 func (f Filter) Keep(prs []PullRequest) []PullRequest {
 	if f.IncludeRegex == "" && f.ExcludeRegex == "" {
 		return prs
 	}
-	include, exclude := regexp.MustCompile(f.IncludeRegex), regexp.MustCompile(f.ExcludeRegex)
-	return slices.DeleteFunc(slices.Clone(prs), func(pr PullRequest) bool {
-		return !include.MatchString(pr.Title) || f.ExcludeRegex != "" && exclude.MatchString(pr.Title)
-	})
+	return slices.DeleteFunc(slices.Clone(prs), func(pr PullRequest) bool { return !f.KeepsTitle(pr.Title) })
+}
+
+// KeepsTitle reports whether title matches IncludeRegex, when it is set, and
+// does not match ExcludeRegex.
+func (f Filter) KeepsTitle(title string) bool {
+	if f.IncludeRegex != "" && !regexp.MustCompile(f.IncludeRegex).MatchString(title) {
+		return false
+	}
+	return f.ExcludeRegex == "" || !regexp.MustCompile(f.ExcludeRegex).MatchString(title)
 }
 
 // Query builds the search for f, given the members of each team in

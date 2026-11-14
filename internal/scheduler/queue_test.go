@@ -383,3 +383,75 @@ func TestAPauseHoldsEveryFillAcrossARestart(t *testing.T) {
 		t.Fatal("the Board still shows the pause")
 	}
 }
+
+// workerState waits until the Task's Worker reports state.
+func (h *harness) workerState(id, state string) {
+	h.t.Helper()
+	eventually(h.t, id+" worker "+state, func() bool {
+		var got string
+		h.s.call(func() { got = h.s.recs[id].WorkerState })
+		return got == state
+	})
+}
+
+func TestARenameThatTheTitleRegexesDropEndsTheQueuesReview(t *testing.T) {
+	q := authorQueue("q", 1, "hopper")
+	q.Filter.ExcludeRegex = "^HLESS-"
+	h := queueHarness(t, q)
+	pr := queuePR("acme/data", 7, 30)
+	pr.Title = "Write the usage logs"
+	h.gh.found = map[string][]github.PullRequest{"q": {pr}}
+	snap := openPR(7, pr.Head)
+	snap.Title = pr.Title
+	h.gh.setReview(snap)
+	h.s.fill(context.Background())
+	worker := h.waitTab("claude reviewing")
+	h.writeFindings(7, pr.Head)
+	h.status(worker.BlockID, "working")
+	h.status(worker.BlockID, "done")
+	h.waitStage("pr-7", lifecycle.ReviewReady)
+
+	// The author adds a ticket that the queue excludes while the Worker can
+	// be posting the user's decided review, so the review waits for it.
+	h.status(worker.BlockID, "working")
+	h.workerState("pr-7", "working")
+	pr.Title, snap.Title = "HLESS-701 Write the usage logs", "HLESS-701 Write the usage logs"
+	h.gh.mu.Lock()
+	h.gh.found = map[string][]github.PullRequest{"q": {pr}}
+	h.gh.mu.Unlock()
+	h.gh.setReview(snap)
+	h.s.poll(context.Background(), nil)
+	if v := h.task("pr-7"); v.Stage != lifecycle.ReviewReady.String() {
+		t.Fatalf("stage %s while the Worker works, want Review ready", v.Stage)
+	}
+
+	// The queue's exclude_regex is the user's ask to drop the PR, as a skip is.
+	h.rex.mu.Lock()
+	h.rex.asked = true
+	h.rex.mu.Unlock()
+	h.status(worker.BlockID, "idle")
+	h.workerState("pr-7", "idle")
+	h.s.poll(context.Background(), nil)
+	h.waitStage("pr-7", lifecycle.Done)
+	if v := h.task("pr-7"); v.Outcome != "skipped" {
+		t.Fatalf("outcome %q, want skipped", v.Outcome)
+	}
+	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Done"}) {
+		t.Fatalf("reviews %v, want no new review of the renamed PR", got)
+	}
+}
+
+func TestATitleThatTheQueuesDropKeepsAReviewTheUserAskedFor(t *testing.T) {
+	q := authorQueue("q", 1, "hopper")
+	q.Filter.ExcludeRegex = "^HLESS-"
+	h := queueHarness(t, q)
+	snap := openPR(7, "h1")
+	snap.Title = "HLESS-701 Write the usage logs"
+	h.gh.setReview(snap)
+	h.review(prURL7)
+	h.waitTab("claude reviewing")
+	h.s.poll(context.Background(), nil)
+	if v := h.task("pr-7"); v.Stage != lifecycle.Reviewing.String() {
+		t.Fatalf("stage %s, want the requested review left running", v.Stage)
+	}
+}
