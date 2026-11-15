@@ -502,11 +502,17 @@ func TestARespondingRoundForPeopleDraftsEachReplyThatIsNotAFix(t *testing.T) {
 	for _, want := range []string{
 		"Post a reply in a thread that a person opened only when the reply reports a fix",
 		"push nothing and post nothing yet. Run `lineup ask --drafts <n> APP-1`",
-		"Leave a thread whose draft the user dropped open for the user.",
+		"post it as you wrote it, post it with the user's edit, or make the fix instead",
+		"run `lineup ask --drafts <n> APP-1` again with the count that is left",
 	} {
 		if !strings.Contains(p, want) {
 			t.Errorf("missing %q in\n%s", want, p)
 		}
+	}
+	// A draft that ends in no reply leaves its thread open, so the next poll
+	// starts a new round that drafts it again.
+	if strings.Contains(p, "drop") {
+		t.Errorf("a Draft reply can end in no reply:\n%s", p)
 	}
 	bot := task
 	bot.ReviewCycle = &lifecycle.ReviewCycle{ReviewGate: lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5}, Score: 4}

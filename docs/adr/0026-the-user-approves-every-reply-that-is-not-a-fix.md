@@ -20,6 +20,7 @@ The rule rests on three choices:
 - This ADR replaces the consequence in [ADR 0015](0015-a-landing-bar-decides-ready-to-land.md) that a Worker can answer "won't fix" and resolve the thread. Only the user can.
 - A Responding round that leaves a Draft reply ends with the Needs you flag. The flag gives the count of drafts.
 - A thread that holds a Draft reply does not start a new Responding round. The Task stays in Needs you until the user decides each draft.
-- The user approves, edits, or drops each draft in the Worker's tab. Then the Worker posts what the user decided and resolves the thread.
+- The user decides each draft in the Worker's tab: post it as written, post it with the user's edit, or make the fix instead. Then the Worker posts each reply and resolves the thread.
+- No draft ends with no reply. A thread that has no reply stays open, so the next poll would start a new Responding round for it. If the user leaves a draft undecided, the Worker sets the flag again with the count that is left.
 - The rule covers the threads that people opened. Threads that a review bot opened keep the old rule. A reply to a bot speaks to no colleague, and a draft for each bot comment stops each review cycle.
 - Comments in the body of a review, outside a thread, are not part of this decision. The poll does not read them.
