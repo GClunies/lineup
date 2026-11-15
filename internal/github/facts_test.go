@@ -161,3 +161,30 @@ func TestAThreadPastTheReadWindowIsOpen(t *testing.T) {
 		t.Errorf("ignored: open %+v, want none", got)
 	}
 }
+
+// changes_requested_dirty.json is cli/cli#13982: Copilot commented, then
+// BagToad requested changes. The poll asks for each author's __typename.
+func TestReviewFactsCountOnlyPeopleOtherThanTheUser(t *testing.T) {
+	bot := func(pr map[string]any) {
+		for _, n := range pr["latestReviews"].(map[string]any)["nodes"].([]any) {
+			a := n.(map[string]any)["author"].(map[string]any)
+			if a["login"] == "copilot-pull-request-reviewer" {
+				a["__typename"] = "Bot"
+			}
+		}
+	}
+	for _, c := range []struct {
+		fixture, viewer   string
+		reviewed, changes bool
+	}{
+		{"changes_requested_dirty", "offbyone", true, true},
+		{"changes_requested_dirty", "BagToad", false, true}, // GitHub's decision still requests changes
+		{"draft", "mrecachinas", false, false},              // only Copilot reviewed
+		{"ci_passed_approved", "BagToad", true, false},
+	} {
+		f := loadWith(t, c.fixture, bot).Facts(c.viewer)
+		if f.Reviewed != c.reviewed || f.ChangesRequested != c.changes {
+			t.Errorf("%s as %s: reviewed %v changes %v, want %v %v", c.fixture, c.viewer, f.Reviewed, f.ChangesRequested, c.reviewed, c.changes)
+		}
+	}
+}

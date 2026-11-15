@@ -324,12 +324,24 @@ func cmdSteer(c scheduler.Client, args []string, out io.Writer) error {
 	return c.Do(scheduler.Request{Op: "steer", Task: args[0], Text: args[1]}, nil)
 }
 
-// cmdAsk is the Worker's own command. It puts its question on the Task's row.
+// cmdAsk is the Worker's own command. It puts its question, or the count of
+// its Draft replies, on the Task's row.
 func cmdAsk(c scheduler.Client, args []string, out io.Writer) error {
-	if len(args) != 2 {
-		return fmt.Errorf("%w: lineup ask <task> \"<question>\"", errUsage)
+	var drafts int
+	fs, err := parse("ask", `<task> "<question>" | --drafts <n> <task>`, args, func(fs *flag.FlagSet) {
+		fs.IntVar(&drafts, "drafts", 0, "the count of Draft replies that wait for the user")
+	})
+	if err != nil {
+		return err
 	}
-	return c.Do(scheduler.Request{Op: "ask", Task: args[0], Text: args[1]}, nil)
+	switch {
+	case drafts == 0 && fs.NArg() == 2:
+		return c.Do(scheduler.Request{Op: "ask", Task: fs.Arg(0), Text: fs.Arg(1)}, nil)
+	case drafts > 0 && fs.NArg() == 1:
+		return c.Do(scheduler.Request{Op: "ask", Task: fs.Arg(0), N: drafts}, nil)
+	}
+	fs.Usage()
+	return errUsage
 }
 
 func cmdSet(c scheduler.Client, args []string, out io.Writer) error {

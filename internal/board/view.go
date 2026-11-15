@@ -315,6 +315,12 @@ func stageText(t scheduler.TaskView) string {
 		return t.Outcome
 	}
 	s := t.Stage
+	switch {
+	case t.Flag == string(lifecycle.ReasonDrafts) && t.FlagDetail != "":
+		s = t.FlagDetail
+	case t.Review != "":
+		s += " · " + t.Review
+	}
 	if t.Flag != "" {
 		s += " ⚑"
 	}

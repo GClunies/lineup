@@ -672,6 +672,20 @@ func TestRowShowsTheSkillByItsShortName(t *testing.T) {
 	}
 }
 
+func TestRowShowsDraftRepliesAndTheReviewState(t *testing.T) {
+	v := fixture()
+	v.Tasks = append(v.Tasks,
+		scheduler.TaskView{ID: "ENG-700", Title: "Retry loads", Stage: "Responding", StageKey: "responding", Group: "Needs you", Flag: "drafts", FlagDetail: "2 replies to approve", Skill: "poteto-mode"},
+		scheduler.TaskView{ID: "ENG-701", Title: "Trim logs", Stage: "In review", StageKey: "in_review", Group: "Waiting", Review: "changes requested", Skill: "poteto-mode"},
+	)
+	out := newModel(&fakeClient{}, v).View()
+	for _, w := range []string{"2 replies to approve ⚑ · poteto-mode", "In review · changes requested · poteto-mode"} {
+		if !strings.Contains(out, w) {
+			t.Errorf("view lacks %q:\n%s", w, out)
+		}
+	}
+}
+
 func TestTheBoardToastsEachNewAlertOnce(t *testing.T) {
 	var toasts []string
 	m := New(fixture(), Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})

@@ -56,3 +56,18 @@ func TestOpenIsAClientCommand(t *testing.T) {
 		t.Fatal("lineup open is not a client command")
 	}
 }
+
+func TestLineupAskDraftsSendsTheCount(t *testing.T) {
+	c, got := fakeScheduler(t, map[string]scheduler.Response{"ask": {OK: true}})
+	if err := cmdAsk(c, []string{"--drafts", "2", "ENG-1"}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if reqs := got(); len(reqs) != 1 || reqs[0].Op != "ask" || reqs[0].Task != "ENG-1" || reqs[0].N != 2 || reqs[0].Text != "" {
+		t.Fatalf("requests = %+v, want ask ENG-1 with 2 drafts", reqs)
+	}
+	for _, args := range [][]string{{"--drafts", "0", "ENG-1"}, {"--drafts", "2", "ENG-1", "why?"}, {"ENG-1"}} {
+		if err := cmdAsk(c, args, &bytes.Buffer{}); !errors.Is(err, errUsage) {
+			t.Errorf("ask %v: err = %v, want usage", args, err)
+		}
+	}
+}

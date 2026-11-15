@@ -25,9 +25,9 @@ type Review struct {
 	Author      string
 	State       string // APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, PENDING
 	SubmittedAt time.Time
-	// Commit, Bot, Viewer, and Opinion come only from the review queue's
-	// search. Commit is the head that the review read, Bot is true when a
-	// GitHub App wrote it, and Viewer is true when the user wrote it.
+	// Bot is true when a GitHub App wrote it. Commit, Viewer, and Opinion
+	// come only from the review queue's search. Commit is the head that the
+	// review read, and Viewer is true when the user wrote it.
 	// Opinion is the author's last APPROVED or CHANGES_REQUESTED, or "".
 	// GitHub's latest review of a person is their last review of any kind,
 	// so a comment after an approval hides the approval in State.
@@ -98,7 +98,7 @@ const prFields = `
 fragment F on PullRequest {
   number url state isDraft headRefOid mergeStateStatus reviewDecision
   reviewRequests { totalCount }
-  latestReviews(first: 50) { nodes { author { login } state submittedAt } }
+  latestReviews(first: 50) { nodes { author { __typename login } state submittedAt } }
   commits(last: 100) { totalCount nodes { commit { author { user { login } } } } }
   head: commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
     __typename
@@ -198,7 +198,10 @@ type gqlPR struct {
 	} `json:"reviewRequests"`
 	LatestReviews struct {
 		Nodes []struct {
-			Author      *gqlLogin `json:"author"`
+			Author *struct {
+				Typename string `json:"__typename"`
+				Login    string `json:"login"`
+			} `json:"author"`
 			State       string    `json:"state"`
 			SubmittedAt time.Time `json:"submittedAt"`
 		} `json:"nodes"`
@@ -318,7 +321,7 @@ func (g gqlPR) toPR() *PR {
 	for _, r := range g.LatestReviews.Nodes {
 		rv := Review{State: r.State, SubmittedAt: r.SubmittedAt}
 		if r.Author != nil {
-			rv.Author = r.Author.Login
+			rv.Author, rv.Bot = r.Author.Login, r.Author.Typename == "Bot"
 		}
 		pr.LatestReviews = append(pr.LatestReviews, rv)
 	}

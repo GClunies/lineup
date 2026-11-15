@@ -146,3 +146,40 @@ func TestSteerIsRecordedAsAnEvent(t *testing.T) {
 		t.Fatalf("last event = %+v, want a steer in Working", last)
 	}
 }
+
+func (h *harness) askDrafts(id string, n int) error {
+	_, err := h.s.Handle(context.Background(), Request{Op: "ask", Task: id, N: n})
+	return err
+}
+
+func TestAskDraftsFlagsARespondingTaskWithTheCount(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.working()
+	if err := h.askDrafts("ENG-1", 2); err == nil || err.Error() != "ENG-1: Draft replies wait only in Responding" {
+		t.Fatalf("drafts in Working = %v", err)
+	}
+	h.s.call(func() { h.s.recs["ENG-1"].Stage = lifecycle.Responding })
+	for n, want := range map[int]string{1: "1 reply to approve", 3: "3 replies to approve"} {
+		if err := h.askDrafts("ENG-1", n); err != nil {
+			t.Fatal(err)
+		}
+		if v := h.task("ENG-1"); v.Stage != "Responding" || v.Group != "Needs you" || v.Flag != "drafts" || v.FlagDetail != want {
+			t.Fatalf("task after %d drafts = %+v", n, v)
+		}
+	}
+}
+
+func TestAnInReviewViewSaysWhereTheReviewersAre(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.working()
+	if v := h.task("ENG-1"); v.Review != "" {
+		t.Fatalf("review text in Working = %q", v.Review)
+	}
+	h.s.call(func() {
+		r := h.s.recs["ENG-1"]
+		r.Stage, r.Standing.Reviewed = lifecycle.InReview, true
+	})
+	if v := h.task("ENG-1"); v.Review != "awaiting re-review" {
+		t.Fatalf("review text in In review = %q", v.Review)
+	}
+}

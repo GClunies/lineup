@@ -171,12 +171,13 @@ A Repo where the bot does not review must not hold a Task forever. If a gated Ta
 | `budget spent` | A Loop budget reaches 0 |
 | `draft` | `pr-seen` on a draft PR with no earlier gap |
 | `no bot review` | `review-bot-late`: the review bot did not score the head commit of a passing PR |
+| `drafts` | `lineup ask --drafts <n> <task>` from a Responding Worker: n Draft replies wait for the user in the Worker's tab, by [ADR 0026](../adr/0026-the-user-approves-every-reply-that-is-not-a-fix.md). The detail counts them, for example `2 replies to approve`. The flag clears when the Worker reports `working`. |
 | `tab closed` | The Task is in an agent Stage, and its Worker's tab or block is gone. The user closed the tab, Rex lost it, or the Rex server restarted. The detail names a Stage prompt that waits, for example `CI debug waits for the Worker`. lineup opens no tab. `lineup open <task>` restores the Worker and clears the flag. |
 | `worker silent` | `prompt-stalled`: a Stage prompt has waited 1 minute for a Worker that has sent no program status, or for a prompted Worker to report `working`. The Scheduler types nothing more into it. The flag clears when the Worker reports `working`. |
 
 When the cause clears, for example when program status goes back to `working`, the Scheduler removes the flag. The flag `tab closed` clears only when the user restores the Worker. A Task with no tab shows `tab closed` and never `worker silent`, because the silent wait counts only while a Worker runs. A restore starts that wait again.
 
-A closed tab sets `tab closed` over the flags that a Worker's own state set, which are `question`, `permission`, `auth`, `error`, `stopped`, and `worker silent`. It leaves the other flags as they are, because they hold with no Worker. A tab closed in a Stage that waits for others, for example CI running, sets no flag. The Worker is not needed there, and the next agent Stage finds the closed tab when its prompt waits.
+A closed tab sets `tab closed` over the flags that a Worker's own state set, which are `question`, `drafts`, `permission`, `auth`, `error`, `stopped`, and `worker silent`. It leaves the other flags as they are, because they hold with no Worker. A tab closed in a Stage that waits for others, for example CI running, sets no flag. The Worker is not needed there, and the next agent Stage finds the closed tab when its prompt waits.
 
 A gap of the Landing bar that finds its Loop budget spent sets `budget spent`, starts no Worker, and names the gap in the detail. Examples are `2 open threads (1 bot) after 3 rounds` and `test failed after 3 attempts`. The flag clears at the next poll after the gap closes, and the Task goes where its new first gap leads. A `budget spent` flag that a review Signal set stays until the user acts, for example with `lineup rerun`.
 
@@ -439,11 +440,12 @@ To find which statuses Linear's GitHub automation sets, query `teams { gitAutoma
 The Board shows the build Tasks and the user's own Issues that have no Task. Review Tasks run in their own tabs in the `reviews` Rex session, and the Board lists none of them (see `docs/spec/reviews.md`). The Issue rows are in `docs/spec/one-board.md`.
 
 ```
- lineup  WIP 4/5   ●2 need you (+1 in reviews)
+ lineup  WIP 4/5   ●3 need you (+1 in reviews)
  ─────────────────────────────────────────────────────────────────────────
- NEEDS YOU  2
+ NEEDS YOU  3
  ▸ ENG-590 Working ⚑       data   Add billing model          stopped      12m
    ENG-588 Working ⚑       data   Backfill events           permission: Bash(make deploy)   3m
+   ENG-580 2 replies to approve ⚑  data  Retry failed loads  drafts: 2 replies to approve    1m
  BACKLOG  7 …
  READY  2
    ENG-611                        Move the retry job        unblocked    ▂▄▆
@@ -454,11 +456,21 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
    WEB-12  Responding      web    Fix map tooltip           round 1/3    5m
    ENG-592 CI debug        data   Fix flaky test            attempt 2/3  1m
  WAITING  1
-   ENG-571 In review       data   Rate limit login          #4636 needs approval · optional failed: lint  1d
+   ENG-571 In review · awaiting re-review  data  Rate limit login  #4636 needs approval · optional failed: lint  1d
  DONE  1 …
 ```
 
 The header shows the WIP cap and the count of the build Tasks that need the user. It counts the review Tasks that need the user in parentheses, when there are any: `(+1 in reviews)`. It has no count for the other groups, because each group heading shows its own count. The header also shows `reviews paused` while the review queues are paused, and a warning when the Scheduler is offline. At 80 columns, the header with `+1 over` and the review count fits.
+
+A row's Stage column shows the Stage, then `⚑` when the Task has a flag. A Task with the flag `drafts` shows the flag's detail in place of the Stage, for example `2 replies to approve ⚑`. A Task in In review adds where its PR stands with its reviewers:
+
+| Text | When |
+|---|---|
+| `awaiting review` | No person other than the user reviewed the PR. |
+| `awaiting re-review` | A person reviewed the PR, and no review requests changes. |
+| `changes requested` | GitHub's review decision, or a person's latest review, requests changes. |
+
+Reviews by bots do not count as a person's review.
 
 The groups are Needs you, Backlog, Ready, Queued, Working, Waiting, and Done, in that order. Needs you comes first, and the other groups follow the development cycle. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
 

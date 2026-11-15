@@ -494,3 +494,32 @@ func TestHasConversationFindsTheFileInAnyProjectFolder(t *testing.T) {
 		t.Error("a conversation that the profile lacks was found")
 	}
 }
+
+// A round that people started holds back each reply that is not a fix. A
+// review cycle answers the bot as before.
+func TestARespondingRoundForPeopleDraftsEachReplyThatIsNotAFix(t *testing.T) {
+	p := Prompt(lifecycle.Responding, task, "", "")
+	for _, want := range []string{
+		"Post a reply in a thread that a person opened only when the reply reports a fix",
+		"push nothing and post nothing yet. Run `lineup ask --drafts <n> APP-1`",
+		"Leave a thread whose draft the user dropped open for the user.",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("missing %q in\n%s", want, p)
+		}
+	}
+	bot := task
+	bot.ReviewCycle = &lifecycle.ReviewCycle{ReviewGate: lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5}, Score: 4}
+	if p := Prompt(lifecycle.Responding, bot, "", ""); strings.Contains(p, "--drafts") {
+		t.Errorf("a review cycle drafts its replies:\n%s", p)
+	}
+	bot.ReviewCycle.Score, bot.Standing.Threads.Bot = 5, 2
+	if p := Prompt(lifecycle.Responding, bot, "", ""); strings.Contains(p, "--drafts") {
+		t.Errorf("a review cycle for bot threads drafts its replies:\n%s", p)
+	}
+	conflict := task
+	conflict.Standing = lifecycle.Standing{Conflict: true}
+	if p := Prompt(lifecycle.Responding, conflict, "", ""); strings.Contains(p, "--drafts") {
+		t.Errorf("a round for a conflict alone drafts its replies:\n%s", p)
+	}
+}

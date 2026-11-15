@@ -172,6 +172,9 @@ const (
 	// ready, so it waits for the user to.
 	ReasonDraft       Reason = "draft"
 	ReasonNoBotReview Reason = "no bot review"
+	// ReasonDrafts is a Responding Worker that waits for the user to decide
+	// its Draft replies. The detail counts them.
+	ReasonDrafts Reason = "drafts"
 )
 
 // reasonWorkerLost is the flag that a Record from before tab closed can carry.
@@ -182,7 +185,7 @@ const reasonWorkerLost Reason = "worker lost"
 // the user's reply clears it.
 func (r Reason) Transient() bool {
 	switch r {
-	case ReasonQuestion, ReasonPermission, ReasonAuth, ReasonError, ReasonStopped, ReasonWorkerSilent, reasonWorkerLost:
+	case ReasonQuestion, ReasonDrafts, ReasonPermission, ReasonAuth, ReasonError, ReasonStopped, ReasonWorkerSilent, reasonWorkerLost:
 		return true
 	}
 	return false
