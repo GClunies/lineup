@@ -1,0 +1,20 @@
+internal/worktree/worktree_test.go
+  s_8d73c92b4401e6::t_e261364889400f 18,31-32
+  s_8d73c92b4401e6::t_2bf9b0975038cb 12-17,19-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "705df113fe870808969d8ca09d6e60b1208e07b9",
+  "prompts": {},
+  "sessions": {
+    "s_8d73c92b4401e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "02254695-ee24-4ce0-8ea3-891eb75df040",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    }
+  }
+}
