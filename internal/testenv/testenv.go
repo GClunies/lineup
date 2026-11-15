@@ -5,6 +5,7 @@ package testenv
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -23,7 +24,16 @@ func Main(m *testing.M) {
 	os.Exit(code)
 }
 
+// isolate drops each GIT_ variable that the shell set, for example a git
+// hook's GIT_INDEX_FILE or a GIT_DIR that points at a real repo, and gives
+// git a global config of its own. That config turns off auto maintenance,
+// which can still write into a repo when t.TempDir removes it.
 func isolate(dir string) error {
+	for _, kv := range os.Environ() {
+		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "GIT_") {
+			os.Unsetenv(k)
+		}
+	}
 	global := filepath.Join(dir, "gitconfig")
 	if err := os.WriteFile(global, []byte("[maintenance]\n\tauto = false\n"), 0o644); err != nil {
 		return err

@@ -15,7 +15,10 @@ import (
 	"github.com/gclunies/lineup/internal/localissues"
 	"github.com/gclunies/lineup/internal/rex"
 	"github.com/gclunies/lineup/internal/scheduler"
+	"github.com/gclunies/lineup/internal/testenv"
 )
+
+func TestMain(m *testing.M) { testenv.Main(m) }
 
 // spyTracker records each call it gets, as "<call> <identifier>".
 type spyTracker struct {
