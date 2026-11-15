@@ -142,7 +142,7 @@ A thread of review comments on a line of a PR. Under the default Landing bar, a 
 _Avoid_: Conversation, comment
 
 **Draft reply**:
-A reply to a person's Review thread that a Worker wrote and that waits for the user to approve, edit, or drop. Every reply that does not report a fix starts as one.
+A reply to a person's Review thread that a Worker wrote and that waits for the user to approve, edit, or turn into a fix. Every reply that does not report a fix starts as one.
 _Avoid_: Pending reply, proposed comment, suggestion
 
 **Loop budget**:

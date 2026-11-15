@@ -298,8 +298,9 @@ const draftRule = "Post a reply in a thread that a person opened only when the r
 	"If you have a Draft reply, push nothing and post nothing yet. Run `lineup ask --drafts <n> %[1]s`, where n counts the Draft replies. " +
 	"Then show each Draft reply in this tab: the reviewer, the file and line, the review's state, the comment, and your reply. Show the drafts for a request for changes first. " +
 	"For a follow-up, also draft the ticket in the Task's Tracker with no Project, and let the user pick the Project. " +
-	"Wait until the user approves, edits, or drops each draft. Then push, post your replies for the fixes and the approved drafts, and resolve each thread that you fixed or that the user approved. " +
-	"Leave a thread whose draft the user dropped open for the user. This rule covers only the threads that people opened."
+	"The user decides each draft: post it as you wrote it, post it with the user's edit, or make the fix instead. " +
+	"If a draft is still undecided when you would wait, run `lineup ask --drafts <n> %[1]s` again with the count that is left. " +
+	"When the user decided each draft, push, post each reply, and resolve each thread that you answered. This rule covers only the threads that people opened."
 
 // cycleIntro opens a Responding round that a low review bot score started.
 // %[1]s is the bot, %[2]d/%[3]d its score, and %[4]d the minimum.
