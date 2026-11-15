@@ -7,28 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gclunies/lineup/internal/testenv"
 )
 
-// TestMain gives each git process a global config of its own. The user's
-// global config can start a process that writes into a repo after git
-// returns, for example a trace2 daemon, and a push, a fetch, or a commit
-// starts git's auto maintenance in the background. Either can still write
-// into a repo when t.TempDir removes it. A local push runs receive-pack with
-// no GIT_CONFIG_COUNT, but it keeps GIT_CONFIG_GLOBAL.
-func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "worktree-test")
-	if err != nil {
-		panic(err)
-	}
-	global := filepath.Join(dir, "gitconfig")
-	if err := os.WriteFile(global, []byte("[maintenance]\n\tauto = false\n"), 0o644); err != nil {
-		panic(err)
-	}
-	os.Setenv("GIT_CONFIG_GLOBAL", global)
-	code := m.Run()
-	os.RemoveAll(dir)
-	os.Exit(code)
-}
+func TestMain(m *testing.M) { testenv.Main(m) }
 
 func sh(t *testing.T, dir string, argv ...string) string {
 	t.Helper()
