@@ -1,0 +1,71 @@
+internal/lifecycle/board.go
+  s_8d73c92b4401e6::t_9fabd9b39f88b9 294
+internal/lifecycle/stage.go
+  s_8d73c92b4401e6::t_a2ccf09036e563 175-177,188
+internal/scheduler/record.go
+  s_8d73c92b4401e6::t_46e8ca381c06f6 132-144,199-200
+  s_8d73c92b4401e6::t_6fd7f72892304c 201
+cmd/lineup/agent/CLAUDE.md
+  s_8d73c92b4401e6::t_70090a06670a4b 112
+internal/github/client.go
+  s_8d73c92b4401e6::t_5c61f0650d7ba3 28-30,101,201-204,324
+internal/board/board_test.go
+  s_8d73c92b4401e6::t_a86977099727b0 675-688
+internal/github/facts.go
+  s_8d73c92b4401e6::t_5c61f0650d7ba3 43-44,46-50
+  s_8d73c92b4401e6::t_9fabd9b39f88b9 45
+internal/scheduler/api.go
+  s_8d73c92b4401e6::t_46e8ca381c06f6 53-60,217,219-221
+  s_8d73c92b4401e6::t_9fabd9b39f88b9 218
+  s_8d73c92b4401e6::t_e5306e11a65fff 222
+internal/scheduler/api_test.go
+  s_8d73c92b4401e6::t_7bd75f3e91d668 149-185
+internal/lifecycle/board_test.go
+  s_8d73c92b4401e6::t_451bd1df95fd13 310-328
+internal/lifecycle/bar_test.go
+  s_8d73c92b4401e6::t_451bd1df95fd13 326-341
+cmd/lineup/open_test.go
+  s_8d73c92b4401e6::t_e7419ceab1644e 61
+  s_8d73c92b4401e6::t_a86977099727b0 59-60,62-73
+internal/github/facts_test.go
+  s_8d73c92b4401e6::t_d8079d281dca37 177,182
+  s_8d73c92b4401e6::t_65db92b6f60550 164-176,178-181,183-190
+cmd/lineup/cli.go
+  s_8d73c92b4401e6::t_e7419ceab1644e 331,335,338-341,343-344
+  s_8d73c92b4401e6::t_09bf8be744a591 327-328,330,332-334,337
+  s_8d73c92b4401e6::t_1fc9177627837b 336
+internal/board/view.go
+  s_8d73c92b4401e6::t_09bf8be744a591 318-319,321-323
+  s_8d73c92b4401e6::t_9fabd9b39f88b9 320
+internal/harness/claude/claude_test.go
+  s_8d73c92b4401e6::t_397521c2955c62 497-515,520-525
+  s_8d73c92b4401e6::t_b5f49c276654ab 516-519
+cmd/lineup/main.go
+  s_8d73c92b4401e6::t_9961e92f8a83ba 41-42
+internal/harness/claude/claude.go
+  s_8d73c92b4401e6::t_9fabd9b39f88b9 336
+  s_8d73c92b4401e6::t_7a540144181703 293-303,337
+  s_8d73c92b4401e6::t_4018cd1eb48f0e 338
+docs/spec/mvp.md
+  s_8d73c92b4401e6::t_70090a06670a4b 174,180,443,445,448,459,465-473
+  s_8d73c92b4401e6::t_b3a1004b88a6ee 474
+internal/lifecycle/bar.go
+  s_8d73c92b4401e6::t_a2ccf09036e563 97-100,153-155,178,215-224
+  s_8d73c92b4401e6::t_713e01058a2ded 225-226
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c3fd88868b5bc99017ef0c77ff38a5d40f19f28c",
+  "prompts": {},
+  "sessions": {
+    "s_8d73c92b4401e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "02254695-ee24-4ce0-8ea3-891eb75df040",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
