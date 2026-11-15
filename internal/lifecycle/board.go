@@ -291,7 +291,7 @@ func (t *Task) observe(s Signal) []Effect {
 				t.enter(CIRunning)
 				return nil
 			}
-			if t.Flag != ReasonQuestion {
+			if t.Flag != ReasonQuestion && t.Flag != ReasonDrafts {
 				t.flag(ReasonStopped, s.Detail)
 			}
 			return nil

@@ -323,3 +323,19 @@ func TestARuleSavesByNameAndRefusesAnUnknownName(t *testing.T) {
 		t.Fatalf("an unknown rule: %v", err)
 	}
 }
+
+func TestReviewTextSaysWhereTheReviewersAre(t *testing.T) {
+	for _, c := range []struct {
+		f    PRFacts
+		want string
+	}{
+		{PRFacts{Decision: DecisionRequired}, "awaiting review"},
+		{PRFacts{Decision: DecisionRequired, Reviewed: true}, "awaiting re-review"},
+		{PRFacts{Decision: DecisionChanges, Reviewed: true}, "changes requested"},
+		{PRFacts{Reviewed: true, ChangesRequested: true}, "changes requested"},
+	} {
+		if got := (LandingBar{}).Measure(c.f).ReviewText(); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.f, got, c.want)
+		}
+	}
+}

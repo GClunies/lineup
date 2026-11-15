@@ -94,6 +94,10 @@ type PRFacts struct {
 	Decision Decision
 	// Requested counts the open review requests, required or not.
 	Requested int
+	// Reviewed is true when a person other than the user reviewed the PR.
+	// ChangesRequested is true when such a person's latest review, or GitHub's
+	// decision, requests changes. Neither gates. They are for the text.
+	Reviewed, ChangesRequested bool
 }
 
 type Check struct {
@@ -146,6 +150,9 @@ type Standing struct {
 	// approved. Review keeps GitHub's decision for the text.
 	Unapproved bool     `json:"unapproved,omitempty"`
 	Review     Decision `json:"review,omitempty"`
+	// Reviewed and Changes keep PRFacts' Reviewed and ChangesRequested.
+	Reviewed bool `json:"reviewed,omitempty"`
+	Changes  bool `json:"changes,omitempty"`
 	// Optional lists the optional checks that failed. People see them, and
 	// nothing acts on them.
 	Optional []string `json:"optional,omitempty"`
@@ -168,7 +175,7 @@ func (o OpenThreads) Open() bool { return o.Total() > 0 || o.Unread }
 
 // Measure applies the bar to one poll's facts.
 func (b LandingBar) Measure(f PRFacts) Standing {
-	s := Standing{Head: f.Head, Conflict: f.Conflict, Draft: f.Draft, Review: f.Decision}
+	s := Standing{Head: f.Head, Conflict: f.Conflict, Draft: f.Draft, Review: f.Decision, Reviewed: f.Reviewed, Changes: f.ChangesRequested}
 	noneRequired := !slices.ContainsFunc(f.Checks, func(c Check) bool { return c.Required })
 	for _, c := range f.Checks {
 		gates := b.Checks == AllChecks || c.Required || noneRequired
@@ -203,6 +210,18 @@ func (b LandingBar) Measure(f PRFacts) Standing {
 	required := f.Decision == DecisionRequired || f.Decision == DecisionChanges
 	s.Unapproved = required || b.Approvals == RequestedApprovals && f.Decision != DecisionApproved && f.Requested > 0
 	return s
+}
+
+// ReviewText says where a PR stands with its reviewers, for a Task in In
+// review.
+func (s Standing) ReviewText() string {
+	switch {
+	case s.Review == DecisionChanges || s.Changes:
+		return "changes requested"
+	case s.Reviewed:
+		return "awaiting re-review"
+	}
+	return "awaiting review"
 }
 
 func addName(names []string, name string) []string {

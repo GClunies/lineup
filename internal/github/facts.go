@@ -40,6 +40,14 @@ func (pr *PR) Facts(viewer string) lifecycle.PRFacts {
 		})
 	}
 	f.ThreadsOver = pr.ThreadsOver
+	f.ChangesRequested = pr.ReviewDecision == "CHANGES_REQUESTED"
+	for _, r := range pr.LatestReviews {
+		if r.Bot || r.Author == "" || r.Author == viewer || slices.Contains(ReviewBots[pr.Bot].Logins, r.Author) {
+			continue
+		}
+		f.Reviewed = true
+		f.ChangesRequested = f.ChangesRequested || r.State == "CHANGES_REQUESTED"
+	}
 	return f
 }
 

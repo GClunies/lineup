@@ -307,6 +307,25 @@ func TestAStopKeepsTheQuestion(t *testing.T) {
 	}
 }
 
+// A Responding Worker that waits for the user to decide its Draft replies
+// keeps the Task in Responding and in Needs you until the user answers.
+func TestDraftRepliesWaitInRespondingForTheUser(t *testing.T) {
+	b, task := taskIn(Responding)
+	b.Apply("T", WorkerStatus{State: "blocked", Kind: "drafts", Detail: "2 replies to approve"})
+	b.Apply("T", WorkerDone{ContractMet: false, Detail: "Waiting for your decisions."})
+	if task.Stage != Responding || task.Flag != ReasonDrafts || task.FlagDetail != "2 replies to approve" || task.Group() != GroupNeedsYou {
+		t.Fatalf("stage %s flag %q detail %q group %s, want Responding with the drafts kept", task.Stage, task.Flag, task.FlagDetail, task.Group())
+	}
+	b.Apply("T", WorkerStatus{State: "working"})
+	if task.Flag != "" || task.FlagDetail != "" {
+		t.Fatalf("the user's answer left flag %q detail %q", task.Flag, task.FlagDetail)
+	}
+	b.Apply("T", Pushed{})
+	if task.Stage != CIRunning {
+		t.Fatalf("stage %s after the push, want CI running", task.Stage)
+	}
+}
+
 func TestAStopCarriesTheWorkerLastLine(t *testing.T) {
 	b, task := taskIn(Working)
 	b.Apply("T", WorkerDone{ContractMet: false, Detail: `schema_version: "1.0" or "1.0.0"?`})

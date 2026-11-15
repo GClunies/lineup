@@ -50,6 +50,14 @@ type TaskDetail struct {
 
 var ErrNoRepo = errors.New("no Repo mapping")
 
+// drafts is the detail of the drafts flag, which the Board's row shows.
+func drafts(n int) string {
+	if n == 1 {
+		return "1 reply to approve"
+	}
+	return fmt.Sprintf("%d replies to approve", n)
+}
+
 // maxQuestion is the most characters of a Worker's question that the Task keeps.
 const maxQuestion = 300
 
@@ -205,6 +213,12 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 			}
 			if r.Flag != "" && !r.Flag.Transient() {
 				return fmt.Errorf("%s is flagged %s", r.ID, r.Flag)
+			}
+			if req.N > 0 {
+				if r.Stage != lifecycle.Responding {
+					return fmt.Errorf("%s: Draft replies wait only in Responding", r.ID)
+				}
+				return s.apply(r, lifecycle.WorkerStatus{State: "blocked", Kind: string(lifecycle.ReasonDrafts), Detail: drafts(req.N)}, "")
 			}
 			q := req.Text
 			if rs := []rune(q); len(rs) > maxQuestion {

@@ -129,17 +129,19 @@ type TaskView struct {
 	FlagDetail string         `json:"flag_detail,omitempty"`
 	Outcome    string         `json:"outcome,omitempty"`
 	Note       string         `json:"note,omitempty"`
-	Optional   []string       `json:"optional,omitempty"` // the optional checks that failed on a build Task's PR
-	OverCap    bool           `json:"over_cap,omitempty"`
-	Skill      string         `json:"skill,omitempty"`
-	PRNumber   int            `json:"pr_number,omitempty"`
-	PRURL      string         `json:"pr_url,omitempty"`
-	ReviewHead string         `json:"review_head,omitempty"` // the head that a review Task was added at
-	IssueURL   string         `json:"issue_url,omitempty"`
-	Worktree   string         `json:"worktree,omitempty"`
-	Since      time.Time      `json:"since"`
-	Live       bool           `json:"live"`
-	Tab        bool           `json:"tab,omitempty"`
+	// Review says where a PR in In review stands with its reviewers.
+	Review     string    `json:"review,omitempty"`
+	Optional   []string  `json:"optional,omitempty"` // the optional checks that failed on a build Task's PR
+	OverCap    bool      `json:"over_cap,omitempty"`
+	Skill      string    `json:"skill,omitempty"`
+	PRNumber   int       `json:"pr_number,omitempty"`
+	PRURL      string    `json:"pr_url,omitempty"`
+	ReviewHead string    `json:"review_head,omitempty"` // the head that a review Task was added at
+	IssueURL   string    `json:"issue_url,omitempty"`
+	Worktree   string    `json:"worktree,omitempty"`
+	Since      time.Time `json:"since"`
+	Live       bool      `json:"live"`
+	Tab        bool      `json:"tab,omitempty"`
 }
 
 type BoardView struct {
@@ -193,6 +195,9 @@ func (r *Record) view() TaskView {
 	}
 	if r.Stage.Started() {
 		v.Optional = r.Standing.Optional
+	}
+	if r.Stage == lifecycle.InReview {
+		v.Review = r.Standing.ReviewText()
 	}
 	b := r.Policy.Budgets
 	switch r.Stage {

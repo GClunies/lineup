@@ -290,6 +290,17 @@ var intros = map[lifecycle.Stage]string{
 	lifecycle.Responding: "Reviewers left feedback on the pull request for this Task. Respond to it.",
 }
 
+// draftRule holds back each reply to a person that is not a fix, by ADR 0026.
+// A Worker posts as the user, so the user approves each such reply first.
+// %[1]s is the Task's ID.
+const draftRule = "Post a reply in a thread that a person opened only when the reply reports a fix: the change that the thread asks for, in a commit that you push. " +
+	"Every other reply to a person is a Draft reply, for example a deferral to a follow-up ticket, a rebuttal, a disagreement, an answer to a question, or a reply that you cannot sort. " +
+	"If you have a Draft reply, push nothing and post nothing yet. Run `lineup ask --drafts <n> %[1]s`, where n counts the Draft replies. " +
+	"Then show each Draft reply in this tab: the reviewer, the file and line, the review's state, the comment, and your reply. Show the drafts for a request for changes first. " +
+	"For a follow-up, also draft the ticket in the Task's Tracker with no Project, and let the user pick the Project. " +
+	"Wait until the user approves, edits, or drops each draft. Then push, post your replies for the fixes and the approved drafts, and resolve each thread that you fixed or that the user approved. " +
+	"Leave a thread whose draft the user dropped open for the user. This rule covers only the threads that people opened."
+
 // cycleIntro opens a Responding round that a low review bot score started.
 // %[1]s is the bot, %[2]d/%[3]d its score, and %[4]d the minimum.
 const cycleIntro = "%[1]s scored the pull request for this Task %[2]d/%[3]d, below the minimum of %[4]d. " +
@@ -321,6 +332,9 @@ func intro(stage lifecycle.Stage, task TaskInfo) string {
 			text = append(text, intros[stage])
 			if open {
 				text = append(text, "It has "+s.Threads.String()+".")
+			}
+			if task.ReviewCycle == nil {
+				text = append(text, fmt.Sprintf(draftRule, task.ID))
 			}
 		}
 		return strings.Join(text, " ")

@@ -109,6 +109,7 @@ Ask the user every question with the `AskUserQuestion` tool, never as plain text
 | Done, and `lineup show --json` reports `"tab": true` | **Close the tab**: `lineup close <task>`. **Open the tab**: `lineup open <task>`. **Keep it open**: no command. |
 | The flag `tab closed` | **Restore**: `lineup open <task>`. **Close the Task**: `lineup close <task>`. |
 | A flag whose `note` carries a Worker's question | **Open the tab**: `lineup open <task>`. **Answer here**: `lineup steer <task> "<answer>"`. |
+| The flag `drafts` | **Open the tab**: `lineup open <task>`. **Later**: no command. The user decides each Draft reply in the Worker's tab. Never offer to decide one, and never steer an answer to one. |
 | `lineup start` fails with `wip cap full` | **Start once over the cap**: `lineup start --over-cap <task>`. **Raise the cap to <n>**: `lineup cap <n>`, then `lineup start <task>`. `<n>` is `cap` from `lineup ls --json`, plus 1. |
 | `lineup add` fails with `no Repo mapping` | One option for each Repo in `lineup ls --json`, up to 4: `lineup add --repo <repo> <ISSUE>`. |
 
