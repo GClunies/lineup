@@ -1,0 +1,19 @@
+CLAUDE.md
+  s_8d73c92b4401e6::t_40598663d6b5f2 10-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f81a1e5c41b4ccf249386d4f63b3923dc728a05f",
+  "prompts": {},
+  "sessions": {
+    "s_8d73c92b4401e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "02254695-ee24-4ce0-8ea3-891eb75df040",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
