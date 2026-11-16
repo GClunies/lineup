@@ -119,6 +119,9 @@ type Model struct {
 	pendingAsk    string
 	width, height int
 
+	menu  menu // the actions that a tap on a row opens; empty when closed
+	mouse bool // the last input was the mouse, so a prompt opens as a menu
+
 	preview    bool
 	previewTxt string
 	previewGen int
@@ -322,7 +325,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusesMsg:
 		return m.openStatuses(msg), nil
 	case tea.KeyMsg:
+		m.mouse = false
 		return m.key(msg)
+	case tea.MouseMsg:
+		return m.mouseMsg(msg)
 	default:
 		if m2, cmd, ok := m.startMsg(msg); ok {
 			return m2, cmd
@@ -343,6 +349,9 @@ func (m *Model) layout() {
 
 func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
+	if len(m.menu.items) > 0 {
+		return m.menuKey(msg)
+	}
 	switch m.mode {
 	case modeHelp:
 		m.mode = modeNormal
@@ -539,6 +548,7 @@ func (m Model) afterOp(msg opMsg) (tea.Model, tea.Cmd) {
 		}
 	case msg.label == "start" && msg.err.Error() == capFull:
 		m.mode, m.pendingTask = modeCap, msg.task
+		return m.withPromptMenu(), nil
 	default:
 		m.setStatus(what+": "+msg.err.Error(), true)
 	}

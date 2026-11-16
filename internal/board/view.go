@@ -30,10 +30,12 @@ func (m Model) View() string {
 		return boardHelp
 	}
 	foot := m.footer()
-	h := max(m.height-2-lipgloss.Height(foot), 1)
+	h := m.bodyHeight()
 	var top []string
 	var body string
 	switch {
+	case len(m.menu.items) > 0:
+		body = m.menuView()
 	case m.mode == modeDests || m.mode == modePromote:
 		body = m.destList()
 	case m.mode == modeSkill:
@@ -61,16 +63,24 @@ func (m Model) View() string {
 		strings.Join(append(top, lines[:h]...), "\n") + "\n" + foot
 }
 
+// bodyHeight is the number of lines between the header rule and the footer.
+func (m Model) bodyHeight() int { return max(m.height-2-lipgloss.Height(m.footer()), 1) }
+
 // window keeps the selected row on screen.
 func (m Model) window(lines []string, h int) []string {
+	start := windowStart(lines, h)
+	return lines[start : start+h]
+}
+
+// windowStart is the first of the h lines that window keeps.
+func windowStart(lines []string, h int) int {
 	at := 0
 	for i, l := range lines {
 		if strings.Contains(l, "▸") {
 			at = i
 		}
 	}
-	start := min(max(at-h/2, 0), len(lines)-h)
-	return lines[start : start+h]
+	return min(max(at-h/2, 0), len(lines)-h)
 }
 
 func (m Model) header() string {
@@ -128,6 +138,8 @@ func (m Model) footer() string {
 		s = bad.Render(fmt.Sprintf(" wip cap full: start once over the cap (o) or raise the cap to %d (c)?", m.board.Cap+1))
 	case modeNormal:
 		switch {
+		case len(m.menu.items) > 0:
+			s = dim.Render(" tap an action, or j/k and enter   esc back")
 		case m.status != "" && m.statusE:
 			s = bad.Render(" " + m.status)
 		case m.status != "":
@@ -168,20 +180,29 @@ func (m Model) boardHints() []hint {
 	if m.detail {
 		return []hint{{"f", "back"}, {"j/k", "scroll"}, {"?", "all keys"}}
 	}
+	hs := m.rowActions()
+	if len(hs) == 0 {
+		return tail
+	}
+	return append(append(hs, hint{"j/k", "move"}), tail...)
+}
+
+// rowActions lists the keys that act on the selected row, most useful first.
+// The footer hints and the menu that a tap opens both show them.
+func (m Model) rowActions() []hint {
 	if g, ok := headingName(m.sel); ok {
 		verb := "close"
 		if !m.open(g) {
 			verb = "open"
 		}
-		return append([]hint{{"enter", verb}, {"j/k", "move"}}, tail...)
+		return []hint{{"enter", verb}}
 	}
 	if r, ok := m.currentIssue(); ok {
-		hs := slices.Clone(issueKinds[r.Kind].keys)
-		return append(append(hs, hint{"j/k", "move"}), tail...)
+		return slices.Clone(issueKinds[r.Kind].keys)
 	}
 	t, ok := m.current()
 	if !ok {
-		return tail
+		return nil
 	}
 	var hs []hint
 	if t.StageKey == lifecycle.ReadyToLand.Key() {
@@ -204,12 +225,9 @@ func (m Model) boardHints() []hint {
 	}
 	hs = append(hs, hint{"f", "details"})
 	if t.Group == lifecycle.GroupDone.String() && !t.Tab {
-		hs = append(hs, hint{"x", "archive"})
-	} else {
-		hs = append(hs, hint{"x", "close"})
+		return append(hs, hint{"x", "archive"})
 	}
-	hs = append(hs, hint{"j/k", "move"})
-	return append(hs, tail...)
+	return append(hs, hint{"x", "close"})
 }
 
 // taskBody is the Task rows, and the Worker's screen beside them while the
@@ -236,6 +254,18 @@ func (m Model) previewPane(w, h int) string {
 }
 
 func (m Model) rows(w int) string {
+	var texts []string
+	for _, l := range m.rowLines(w) {
+		texts = append(texts, l.text)
+	}
+	return strings.Join(texts, "\n")
+}
+
+// rowLine is one line of the Task rows: a heading, a row, or a note. id is
+// the heading's key or the row's ID, and empty for a note.
+type rowLine struct{ id, text string }
+
+func (m Model) rowLines(w int) []rowLine {
 	idW, stageW, repoW, noteW := 4, 5, 4, 0
 	for _, t := range m.tasks {
 		idW = max(idW, lipgloss.Width(t.ID))
@@ -276,35 +306,35 @@ func (m Model) rows(w int) string {
 		}
 		return headRow.Render(ansi.Truncate(s, w, "…"))
 	}
-	var b strings.Builder
+	var out []rowLine
 	for _, g := range groupOrder {
-		var lines []string
+		var lines []rowLine
 		for _, t := range m.tasks {
 			if t.Group == g {
-				lines = append(lines, row(t.ID, stageText(t), t.Repo, t.Title, t.Note, m.age(t), g == groupDone || g == "Queued"))
+				lines = append(lines, rowLine{t.ID, row(t.ID, stageText(t), t.Repo, t.Title, t.Note, m.age(t), g == groupDone || g == "Queued")})
 			}
 		}
 		for _, r := range m.issues {
 			if r.Group == g {
-				lines = append(lines, row(r.ID, "", r.Repo, r.Title, r.note(), r.priorityText(), g == groupBacklog || len(r.Blockers) > 0))
+				lines = append(lines, rowLine{r.ID, row(r.ID, "", r.Repo, r.Title, r.note(), r.priorityText(), g == groupBacklog || len(r.Blockers) > 0)})
 			}
 		}
 		if len(lines) == 0 {
 			continue
 		}
-		b.WriteString(heading(g, len(lines)) + "\n")
+		out = append(out, rowLine{headingKey(g), heading(g, len(lines))})
 		if m.open(g) {
-			b.WriteString(strings.Join(lines, "\n") + "\n")
+			out = append(out, lines...)
 		}
 	}
 	switch {
 	case len(m.tasks)+len(m.issues) > 0:
 	case m.query() != "":
-		b.WriteString(dim.Render(" no row matches the filter") + "\n")
+		out = append(out, rowLine{"", dim.Render(" no row matches the filter")})
 	default:
-		b.WriteString(dim.Render(" no Tasks") + "\n")
+		out = append(out, rowLine{"", dim.Render(" no Tasks")})
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return out
 }
 
 func stageText(t scheduler.TaskView) string {
@@ -393,6 +423,10 @@ const boardHelp = `
    R        refresh now: poll GitHub for every started Task
    z        zoom the agent pane
    ?        this help      q  quit
+
+   tap a row       a menu of its actions; tap one to run it
+   tap a heading   open or close the group
+   wheel           move the selection
 
  press any key to go back
 `

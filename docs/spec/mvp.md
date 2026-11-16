@@ -496,6 +496,8 @@ Backlog and Done start closed. lineup saves the closed groups in `groups.json` i
 | `z` | Zoom this tab's agent pane to full height, and back |
 | `?` | Show all keys |
 
+The Board also works by mouse or touch, for example from Rex on a phone. A tap on a group heading opens or closes the group. A tap on a Task or Issue row selects the row and opens a menu of its actions, the same actions that the footer hints name. A tap on an action runs it as its key does, and `back` closes the menu. When a tapped action asks yes or no, as a close does, or hits the WIP cap, the question is a menu too. A tap on the detail pane goes back. The scroll wheel moves the selection, as `j` and `k` do.
+
 A Task that ends keeps its tab and worktree. Only the user closes the tab: with `x` or `lineup close <task>` on the Done Task, with the tab's own close in Rex, or with `lineup archive <task>`. A Done Task leaves the Board when the user archives it. It also leaves 7 days after it ends, but only if its tab is closed. A Done Task with an open tab stays on the Board. The Scheduler refuses `lineup add` for a Done Task's ID while that Task keeps its tab. The Scheduler keeps the Task and its events, so `lineup show <task>` still finds it. To put an archived Issue back on the Board, run `lineup add` again.
 
 ## Orchestrator
