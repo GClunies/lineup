@@ -29,7 +29,7 @@ func Run(socketPath, cachePath string, opts Options) error {
 	if opts.Client == nil {
 		opts.Client = scheduler.Client{Path: socketPath}
 	}
-	p := tea.NewProgram(New(cached, opts), tea.WithAltScreen())
+	p := tea.NewProgram(New(cached, opts), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
