@@ -7,3 +7,16 @@
 - Before you open a PR, run the CI suite locally: `test -z "$(gofmt -l .)"`, `go vet ./...`, and `go test -race -count=1 ./...`.
 - If a change depends on another open change, put both in one stack with `gh stack`, based on the branch they merge into. Land a stack with `gh stack merge <top PR> --yes`. Never merge a stack child into its parent branch by itself.
 - Open each PR ready for review. The auto-merge workflow arms auto-merge when the PR's base requires `test` and the PR is in no stack. GitHub has no auto-merge for a stacked PR.
+
+## The running Scheduler
+
+- launchd runs the `lineup` binary that `go install ./cmd/lineup` writes. That Scheduler runs old code until you rebuild it and run `lineup restart`. A restart keeps the tab of each Worker.
+- At the start of a session, and each time you see that a PR merged, compare the installed build with `main`:
+
+  ```bash
+  git fetch origin main
+  built=$(go version -m "$(go env GOPATH)/bin/lineup" | awk '$2 ~ /^vcs.revision=/ {sub("vcs.revision=", "", $2); print $2}')
+  git diff --stat "$built" origin/main -- . ':!*_test.go' ':!*.md' ':!docs'
+  ```
+
+- If the diff is not empty, or `go version -m` shows `vcs.modified=true`, update the Scheduler. In a checkout of `origin/main` with no local changes, run `go install ./cmd/lineup`, then `lineup restart`. Tell the user the old and the new commit.
