@@ -270,11 +270,15 @@ func (m Model) mineMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		return m, m.fetchMine(msg.wss), true
 	case mineIssuesMsg:
 		if msg.live {
+			prefix := "my Issues in " + msg.ws.Name + ": "
 			if msg.err != nil {
-				m.setStatus("my Issues in "+msg.ws.Name+": "+msg.err.Error(), true)
+				m.setStatus(prefix+msg.err.Error(), true)
 				if len(msg.issues) == 0 {
 					return m, nil, true
 				}
+			} else if m.statusE && strings.HasPrefix(m.status, prefix) {
+				// A good fetch ends this workspace's error.
+				m.setStatus("", false)
 			}
 			m.mine.fresh[msg.ws.ID] = true
 		} else if m.mine.fresh[msg.ws.ID] {
