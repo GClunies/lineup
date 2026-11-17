@@ -405,6 +405,25 @@ func TestAFailedFetchKeepsTheRowsAndNamesTheWorkspace(t *testing.T) {
 	}
 }
 
+func TestTheNextGoodFetchClearsTheWorkspaceError(t *testing.T) {
+	e, _ := mineEnv(t)
+	e.m = feed(e.m, mineIssuesMsg{ws: acme, live: true, err: errors.New("timeout")},
+		mineIssuesMsg{ws: acme, live: true, issues: []linear.Issue{mineIssue("ENG-9", "unstarted", 0)}})
+	if f := footerAt(e.m, 100); strings.Contains(f, "timeout") {
+		t.Fatalf("footer %q, want the error gone after a good fetch", f)
+	}
+}
+
+func TestAGoodFetchKeepsOtherMessages(t *testing.T) {
+	e, _ := mineEnv(t)
+	other := linear.Workspace{ID: "w2", Name: "beta", URLKey: "beta"}
+	e.m = feed(e.m, mineIssuesMsg{ws: other, live: true, err: errors.New("timeout")},
+		mineIssuesMsg{ws: acme, live: true, issues: []linear.Issue{mineIssue("ENG-9", "unstarted", 0)}})
+	if f := footerAt(e.m, 100); !strings.Contains(f, "my Issues in beta: timeout") {
+		t.Fatalf("footer %q, want the other workspace's error kept", f)
+	}
+}
+
 func TestASignedOutWorkspaceLosesItsRows(t *testing.T) {
 	e, _ := mineEnv(t)
 	e.m = feed(e.m, mineWorkspacesMsg{})
