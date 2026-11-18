@@ -145,13 +145,13 @@ func TestTheUsersReviewClosesTheReviewTab(t *testing.T) {
 	h.status(worker.BlockID, "working")
 	h.status(worker.BlockID, "done")
 	h.waitStage("pr-7", lifecycle.ReviewReady)
-	if v := h.task("pr-7"); v.Group != "Needs you" || v.Note != "" {
+	if v := h.task("pr-7"); v.Group != "Needs you" || v.Note != "#7 review ready" {
 		t.Fatalf("review ready = %+v", v)
 	}
 
 	moved := openPR(7, "h2")
 	h.gh.setReview(moved)
-	eventually(t, "the head moved note", func() bool { return h.task("pr-7").Note == "head moved" })
+	eventually(t, "the head moved note", func() bool { return h.task("pr-7").Note == "#7 review ready · head moved" })
 
 	// The user tells the Worker to post. While it works, the review waits.
 	h.status(worker.BlockID, "working")
@@ -184,7 +184,7 @@ func TestTheUsersReviewClosesTheReviewTab(t *testing.T) {
 	if len(h.wt.removed) != 0 {
 		t.Fatalf("a review Task ran wt remove for %v", h.wt.removed)
 	}
-	if v := h.task("pr-7"); v.Worktree != "" || v.Note != "#7" || v.Tab {
+	if v := h.task("pr-7"); v.Worktree != "" || v.Note != "#7 reviewed" || v.Tab {
 		t.Fatalf("done task after cleanup = %+v", v)
 	}
 }
@@ -487,7 +487,7 @@ func TestCleanupKeepsAReviewWorktreeWithWorkOnNoRemote(t *testing.T) {
 	h.waitTab("claude reviewing")
 	h.do(Request{Op: "close", Task: "pr-7"})
 	eventually(t, "the kept note", func() bool {
-		return h.task("pr-7").Note == "worktree kept: /repos/acme/data.review-pr-7"
+		return h.task("pr-7").Note == "#7 closed · worktree kept: /repos/acme/data.review-pr-7"
 	})
 	if v := h.task("pr-7"); v.Worktree != "/repos/acme/data.review-pr-7" || v.Outcome != "closed" {
 		t.Fatalf("closed task = %+v", v)
@@ -746,8 +746,8 @@ func TestFindingsForANewerHeadMeetTheContract(t *testing.T) {
 	h.status(worker.BlockID, "done")
 	h.waitStage("pr-7", lifecycle.ReviewReady)
 	h.still("pr-7", lifecycle.ReviewReady)
-	if v := h.task("pr-7"); v.Note != "" {
-		t.Fatalf("note %q, want none: the review read the current head", v.Note)
+	if v := h.task("pr-7"); v.Note != "#7 review ready" {
+		t.Fatalf("note %q, want no head moved: the review read the current head", v.Note)
 	}
 }
 
