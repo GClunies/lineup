@@ -410,7 +410,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 	if cmd != nil {
 		cmd()
 	}
-	if want := []string{"ENG-571 Rate limit login · #4636 ✓ approved · ready to land"}; !slices.Equal(toasts, want) {
+	if want := []string{"ENG-571 #4636 ✓ approved · ready to land | Rate limit login"}; !slices.Equal(toasts, want) {
 		t.Fatalf("toasts %q, want %q", toasts, want)
 	}
 }
@@ -817,7 +817,7 @@ func TestTheBoardToastsEachNewAlertOnce(t *testing.T) {
 	v.Tasks[2] = tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636 ✓ approved · ready to land", 0)
 	send(v)
 	send(v)
-	if want := []string{"ENG-571 Rate limit login · #4636 ✓ approved · ready to land"}; !slices.Equal(toasts, want) {
+	if want := []string{"ENG-571 #4636 ✓ approved · ready to land | Rate limit login"}; !slices.Equal(toasts, want) {
 		t.Fatalf("toasts %q, want %q", toasts, want)
 	}
 }
@@ -923,8 +923,8 @@ func TestOneSlotToastForSeveralDoneTasks(t *testing.T) {
 	_, cmd := m.Update(boardMsg(then))
 	cmd()
 	if want := []string{
-		"WEB-12 Fix map tooltip · merged",
-		"ENG-592 Fix flaky test · merged",
+		"WEB-12 merged | Fix map tooltip",
+		"ENG-592 merged | Fix flaky test",
 		"3 slots free, next ENG-611: Title of ENG-611",
 	}; !slices.Equal(toasts, want) {
 		t.Fatalf("toasts %q, want %q", toasts, want)

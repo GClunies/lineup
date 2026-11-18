@@ -33,7 +33,7 @@ func TestWatchPrintsEachAlertOnceAcrossRestarts(t *testing.T) {
 	if _, err := watchOnce(feed{view(old, working), view(old, review)}, path, false, &out); err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); got != "ENG-1 billing · question\n" {
+	if got := out.String(); got != "ENG-1 question | billing\n" {
 		t.Fatalf("first run printed %q", got)
 	}
 
@@ -41,7 +41,7 @@ func TestWatchPrintsEachAlertOnceAcrossRestarts(t *testing.T) {
 	if _, err := watchOnce(feed{view(old, review), view(old, ended)}, path, false, &out); err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); got != "ENG-1 billing · #7 closed\n" {
+	if got := out.String(); got != "ENG-1 #7 closed | billing\n" {
 		t.Fatalf("after a restart, printed %q", got)
 	}
 }
@@ -60,7 +60,7 @@ func TestWatchOnceEndsAtTheFirstAlertsAndKeepsTheRest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); !printed || got != "ENG-1 billing · question\n" {
+	if got := out.String(); !printed || got != "ENG-1 question | billing\n" {
 		t.Fatalf("first run printed %q (printed=%v), want ENG-1 alone", got, printed)
 	}
 
@@ -69,7 +69,7 @@ func TestWatchOnceEndsAtTheFirstAlertsAndKeepsTheRest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); !printed || got != "ENG-2 search · stopped\n" {
+	if got := out.String(); !printed || got != "ENG-2 stopped | search\n" {
 		t.Fatalf("second run printed %q (printed=%v), want ENG-2 alone", got, printed)
 	}
 

@@ -20,8 +20,10 @@ func (t TaskView) Attention() string {
 }
 
 // AlertText is the one line that tells the user about the Task's Attention:
-// the ID, the title, and the first line of the note, which already names the
-// Stage's state or how the Task ended. A flag detail can hold many lines of
+// the ID, the first line of the note, and the title, in that order. The note
+// already names the Stage's state or how the Task ended. It comes before the
+// title because a desktop toast cuts a long line at its end, and a title can
+// run past 100 characters. A flag detail can hold many lines of
 // stderr, so only the first line shows. A Task with no note shows its outcome,
 // or else its Stage.
 func (t TaskView) AlertText() string {
@@ -32,7 +34,7 @@ func (t TaskView) AlertText() string {
 	if note == "" {
 		note = t.Stage
 	}
-	return fmt.Sprintf("%s %s · %s", t.ID, t.Title, note)
+	return fmt.Sprintf("%s %s | %s", t.ID, note, t.Title)
 }
 
 // Alerts returns the build Tasks of v whose Attention is new since seen, and
