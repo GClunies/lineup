@@ -77,12 +77,16 @@ func TestAddReviewRetriesARefLockThatAnotherFetchHolds(t *testing.T) {
 }
 
 func TestAddReviewFailsAtOnceOnAnotherFetchError(t *testing.T) {
+	// A retry would wait a minute, far past any slow fetch on a loaded machine.
+	waits := lockWaits
+	lockWaits = []time.Duration{time.Minute}
+	t.Cleanup(func() { lockWaits = waits })
 	_, main, head := prRepo(t)
 	start := time.Now()
 	if err := AddReview(context.Background(), main, ReviewPath(main, 8), 8, "develop", head); err == nil {
 		t.Fatal("AddReview of a PR with no head ref succeeded")
 	}
-	if d := time.Since(start); d > 400*time.Millisecond {
+	if d := time.Since(start); d > 30*time.Second {
 		t.Fatalf("AddReview retried an error that is not a ref lock, for %v", d)
 	}
 }

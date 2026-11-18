@@ -99,15 +99,14 @@ func TestNewWindowEnvCwdAndClose(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The child waits for gate, so View runs before Rex closes the window at the exit.
 	ch, _ := subscribe(t, c)
 	env := map[string]string{"LINEUP_CODE": "5"}
-	w, err := c.NewWindow(ctx, sess, "env", dir, env, []string{"sh", "-c", `test "$(pwd -P)" = "$1" && exit $LINEUP_CODE; exit 9`, "sh", dir})
+	gate := filepath.Join(t.TempDir(), "go")
+	script := `while [ ! -e "$2" ]; do sleep 0.05; done; test "$(pwd -P)" = "$1" && exit $LINEUP_CODE; exit 9`
+	w, err := c.NewWindow(ctx, sess, "env", dir, env, []string{"sh", "-c", script, "sh", dir, gate})
 	if err != nil {
 		t.Fatal(err)
-	}
-	ev := waitFor(t, ch, 15*time.Second, func(e Event) bool { return e.Kind == ChildExited && e.BlockID == w.BlockID })
-	if ev.ExitCode != 5 {
-		t.Fatalf("exit code %d, want 5 from env LINEUP_CODE", ev.ExitCode)
 	}
 
 	view, err := c.View(ctx, sess)
@@ -116,6 +115,14 @@ func TestNewWindowEnvCwdAndClose(t *testing.T) {
 	}
 	if len(view.Windows) != 1 || view.Windows[0].Label != "env" || view.Windows[0].BlockIDs[0] != w.BlockID {
 		t.Fatalf("view %+v does not hold window env with block %s", view, w.BlockID)
+	}
+
+	if err := os.WriteFile(gate, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ev := waitFor(t, ch, 15*time.Second, func(e Event) bool { return e.Kind == ChildExited && e.BlockID == w.BlockID })
+	if ev.ExitCode != 5 {
+		t.Fatalf("exit code %d, want 5 from env LINEUP_CODE", ev.ExitCode)
 	}
 
 	if err := c.CloseWindow(ctx, sess, w.WindowID); err != nil {

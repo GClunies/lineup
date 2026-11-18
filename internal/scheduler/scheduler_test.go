@@ -1304,6 +1304,13 @@ func (h *harness) polls() int {
 	return len(h.gh.polled)
 }
 
+// waitPolls waits for n more polls, so the ticks before them have run.
+func (h *harness) waitPolls(n int) {
+	for start := h.polls(); h.polls() < start+n; {
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 // A gated Task waits in CI running for the bot's score, flags the user when
 // no score comes, and starts a review cycle for a low score.
 func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
@@ -1323,9 +1330,7 @@ func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
 	h.gh.set(key, 42, "review-required")
 	eventually(t, "the wait note", func() bool { return h.task("ENG-1").Note == "#42 waiting for Greptile" })
 	c.add(14 * time.Minute)
-	for n := h.polls(); h.polls() < n+3; {
-		time.Sleep(5 * time.Millisecond)
-	}
+	h.waitPolls(3)
 	if v := h.task("ENG-1"); v.Stage != "CI running" || v.Flag != "" {
 		t.Fatalf("flagged before the wait ended: %+v", v)
 	}
@@ -1587,7 +1592,8 @@ func TestOpenRefusesAWaitingTaskWithNoConversation(t *testing.T) {
 }
 
 func TestAPendingStageWaitsForTheRestore(t *testing.T) {
-	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PromptWait = 300 * time.Millisecond })
+	c := &clock{t: time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Now, d.PromptWait = c.now, time.Minute })
 	worker := h.working()
 	first := h.waitSpecs(1)
 	h.prOpens(worker)
@@ -1599,7 +1605,8 @@ func TestAPendingStageWaitsForTheRestore(t *testing.T) {
 
 	h.ciFails()
 	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Note == "tab closed: CI debug waits for the Worker" })
-	time.Sleep(400 * time.Millisecond)
+	c.add(2 * time.Minute)
+	h.waitPolls(3)
 	if v := h.task("ENG-1"); v.Flag != "tab closed" || v.Stage != "CI debug" {
 		t.Fatalf("task = %+v, want CI debug flagged tab closed, not worker silent", v)
 	}
@@ -1614,7 +1621,7 @@ func TestAPendingStageWaitsForTheRestore(t *testing.T) {
 
 	h.open("ENG-1")
 	resumed := h.waitTab("claude --resume " + first.Conversation)
-	time.Sleep(100 * time.Millisecond)
+	h.waitPolls(3)
 	if v := h.task("ENG-1"); v.Flag != "" {
 		t.Fatalf("flag = %q after the restore, want none: the wait for the Worker's first status starts at the restore", v.Flag)
 	}
