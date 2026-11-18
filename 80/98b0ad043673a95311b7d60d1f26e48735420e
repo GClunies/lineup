@@ -1,0 +1,36 @@
+GLOSSARY.md
+  s_b5c709daffd097::t_d02ff063530f39 42
+internal/harness/claude/claude_test.go
+  s_b5c709daffd097::t_d02ff063530f39 484,487
+internal/scheduler/api.go
+  s_b5c709daffd097::t_d02ff063530f39 339
+docs/spec/one-board.md
+  s_b5c709daffd097::t_d02ff063530f39 42
+internal/scheduler/scheduler_test.go
+  s_b5c709daffd097::t_a12511031799d4 1186-1194
+  s_b5c709daffd097::t_d02ff063530f39 952,955,1199,1211,1217
+cmd/lineup/agent/CLAUDE.md
+  s_b5c709daffd097::t_d02ff063530f39 32-33
+docs/plans/user-closes-tabs.md
+  s_b5c709daffd097::t_d02ff063530f39 106,308
+docs/spec/mvp.md
+  s_b5c709daffd097::t_d02ff063530f39 214
+cmd/lineup/open_test.go
+  s_b5c709daffd097::t_d02ff063530f39 13,23,26-27,29,47-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8098b0ad043673a95311b7d60d1f26e48735420e",
+  "prompts": {},
+  "sessions": {
+    "s_b5c709daffd097": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a4322933-318b-4fac-89bb-b0b062195960",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
