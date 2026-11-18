@@ -140,7 +140,7 @@ func startedReview(t *testing.T) (*harness, github.PullRequest) {
 	h.gh.found = map[string][]github.PullRequest{"q": {p7}}
 	h.gh.setReview(openPR(7, "h7"))
 	h.s.fill(context.Background())
-	h.waitTab("claude reviewing")
+	h.waitTabRecorded("claude reviewing", "pr-7")
 	return h, p7
 }
 
@@ -186,6 +186,7 @@ func TestAnUnskipLetsAPRBackInAtTheSameHead(t *testing.T) {
 	h, _ := startedReview(t)
 	ctx := context.Background()
 	h.skip(prURL7)
+	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude reviewing")) == 0 })
 	h.s.fill(ctx)
 	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Done"}) {
 		t.Fatalf("reviews %v, want only the ended pr-7", got)
@@ -205,6 +206,7 @@ func TestACloseStillHoldsThePRAtItsHead(t *testing.T) {
 	if v := h.task("pr-7"); v.Outcome != "closed" {
 		t.Fatalf("pr-7 = %+v, want the outcome closed", v)
 	}
+	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude reviewing")) == 0 })
 	h.s.fill(ctx)
 	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Done"}) {
 		t.Fatalf("reviews %v, want the close to hold the PR at its head", got)

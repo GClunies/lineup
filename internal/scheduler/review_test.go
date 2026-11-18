@@ -212,7 +212,7 @@ func TestADoneReviewWithAnOpenTabBlocksANewReviewOfThePR(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
-	h.waitTab("claude reviewing")
+	h.waitTabRecorded("claude reviewing", "pr-7")
 	// Cleanup runs in the Task's lane after the loop call that ends the Task,
 	// so for a moment the loop sees a Done review that keeps its tab.
 	h.s.call(func() { h.s.recs["pr-7"].Stage = lifecycle.Done })

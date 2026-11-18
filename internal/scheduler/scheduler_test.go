@@ -615,6 +615,16 @@ func (h *harness) waitTab(cmd string) tab {
 	return tabs[0]
 }
 
+// waitTabRecorded waits until the Scheduler has recorded the Task's tab. Rex
+// opens the tab before the Scheduler records it, so a test that ends the Task
+// right after waitTab can run before the Record holds the window.
+func (h *harness) waitTabRecorded(cmd, id string) tab {
+	h.t.Helper()
+	w := h.waitTab(cmd)
+	eventually(h.t, id+" to record its tab", func() bool { return h.task(id).Tab })
+	return w
+}
+
 func TestALongTitleCutsTheTabLabel(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.tr.title = strings.Repeat("é", 200)
