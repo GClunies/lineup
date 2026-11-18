@@ -731,6 +731,37 @@ func TestARowHasNoStateColumnAndNoFlagMark(t *testing.T) {
 	}
 }
 
+func landingBoard() Model {
+	v := narrowBoard().board
+	land := tv("ENG-810", lifecycle.ReadyToLand, "data-platform", "Freeze the legacy pricing tables", "#5084 ✓ approved · ready to land", 37*time.Minute)
+	land.Group, land.Skill = "Needs you", "poteto-mode"
+	drafts := tv("ENG-811", lifecycle.Responding, "data-platform", "Remove the kyp_v3 dependency", "drafts: 2 replies to approve", 37*time.Minute)
+	drafts.Flag, drafts.FlagDetail, drafts.Group, drafts.Skill = "drafts", "2 replies to approve", "Needs you", "poteto-mode"
+	long := tv("ENG-812", lifecycle.InReview, "data-platform", "Retire the v15 search tasks", "#5200 ✓ approved · 2 checks pending · optional failed: lint, e2e", 37*time.Minute)
+	long.Skill = "poteto-mode"
+	v.Tasks = append(v.Tasks, land, drafts, long)
+	return newModel(&fakeClient{}, v)
+}
+
+func TestALongNoteOnAnotherRowDoesNotNarrowTheTitle(t *testing.T) {
+	l := lineOf(t, viewAt(landingBoard(), 85), "ENG-810")
+	if title := cellOf(l, "#5084") - cellOf(l, "Freeze") - 2; title < 25 {
+		t.Errorf("the title is %d cells wide at 85 columns, want at least 25: %q", title, l)
+	}
+}
+
+func TestANeedsYouNoteShowsInFullAtSixtyColumns(t *testing.T) {
+	out := viewAt(landingBoard(), 60)
+	for id, note := range map[string]string{"ENG-810": "#5084 ✓ approved · ready to land", "ENG-811": "drafts: 2 replies to approve"} {
+		if l := lineOf(t, out, id); !strings.Contains(l, note) || lipgloss.Width(l) > 60 {
+			t.Errorf("%s row must show %q in full and fit in 60 cells: %q", id, note, l)
+		}
+	}
+	if l := lineOf(t, out, "ENG-812"); !strings.Contains(l, "#5200 ✓ approved") {
+		t.Errorf("a cut note keeps the PR number and the review state: %q", l)
+	}
+}
+
 func TestAWideRowAlsoShowsTheAgeTheRepoAndTheSkill(t *testing.T) {
 	l := lineOf(t, viewAt(narrowBoard(), 200), "ENG-801")
 	for _, s := range []string{"Rate limit the login endpoint", "#4636 ✗ changes requested · 2 open threads", "5h", "data-platform", "poteto-mode"} {

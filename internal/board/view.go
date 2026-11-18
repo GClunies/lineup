@@ -293,9 +293,19 @@ var columns = [numCols]column{
 	colSkill: {drop: 1, task: func(_ Model, t scheduler.TaskView) string { return t.Skill[strings.LastIndex(t.Skill, ":")+1:] }, issue: func(issueRow) string { return "" }},
 }
 
-// columnWidths drops columns until the title keeps its minimum beside the note.
-// The title keeps a quarter of their share, and the note gets the rest, so a wide
-// row widens the title.
+const (
+	// titleWant is the title width that the optional columns must leave before
+	// they show.
+	titleWant = 25
+	// noteKeep is the note width that a narrow row keeps, enough for
+	// "#25867 ✓ approved · ready to land".
+	noteKeep = 33
+)
+
+// columnWidths drops columns until the title gets titleWant cells beside the
+// note, or beside noteKeep cells of it when the note is longer. The note then
+// takes what the title leaves, but never less than noteKeep. A narrow row cuts the
+// title down to its minimum first.
 func (m Model) columnWidths(w int) [numCols]int {
 	var ws [numCols]int
 	for _, t := range m.tasks {
@@ -329,7 +339,7 @@ func (m Model) columnWidths(w int) [numCols]int {
 		}
 		return w - 3 - rest - 2*(n-1)
 	}
-	for rank := 1; rank < numCols && share() < columns[colTitle].min+ws[colNote]; rank++ {
+	for rank := 1; rank < numCols && share() < titleWant+min(ws[colNote], noteKeep); rank++ {
 		for i, c := range columns {
 			if c.drop == rank {
 				ws[i] = 0
@@ -337,7 +347,7 @@ func (m Model) columnWidths(w int) [numCols]int {
 		}
 	}
 	if ws[colNote] > 0 {
-		ws[colNote] = min(ws[colNote], max(share()-max(columns[colTitle].min, share()/4), columns[colNote].min))
+		ws[colNote] = min(ws[colNote], max(share()-titleWant, min(share()-columns[colTitle].min, noteKeep), columns[colNote].min))
 	}
 	ws[colTitle] = max(share()-ws[colNote], columns[colTitle].min)
 	return ws

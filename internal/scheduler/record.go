@@ -244,6 +244,8 @@ func (r *Record) note(pr int) string {
 		}
 	}
 	switch r.Stage {
+	case lifecycle.Working:
+		withReview()
 	case lifecycle.CIDebug:
 		withReview()
 		tail = append(tail, "fixing CI")

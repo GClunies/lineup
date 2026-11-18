@@ -45,6 +45,8 @@ func TestTheNoteSaysWhatHappensAndWhereTheReviewStands(t *testing.T) {
 			r.Outcome = lifecycle.OutcomeMerged
 			return r
 		}(), "#42 merged"},
+		{"working with a PR", build(lifecycle.Working, facts(lifecycle.DecisionRequired, false, pass)), "#42 ○ no review yet"},
+		{"working with a PR, approved", build(lifecycle.Working, facts(lifecycle.DecisionApproved, true, pass)), "#42 ✓ approved"},
 		{"working with no PR", &Record{Task: lifecycle.Task{ID: "ENG-1", Stage: lifecycle.Working}}, ""},
 		{"a flag keeps its reason and detail", flagged, "drafts: 2 replies to approve"},
 		{"reviewing", review(lifecycle.Reviewing, ""), "#7 reviewing"},
