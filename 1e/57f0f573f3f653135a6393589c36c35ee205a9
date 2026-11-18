@@ -1,0 +1,28 @@
+cmd/lineup/agent/CLAUDE.md
+  s_b5c709daffd097::t_bb0a0bdf0f175f 87
+cmd/lineup/watch_test.go
+  s_b5c709daffd097::t_20fb0395c76233 36,44,63,72
+internal/board/board_test.go
+  s_b5c709daffd097::t_bb0a0bdf0f175f 413,820,926-927
+internal/scheduler/alerts.go
+  s_b5c709daffd097::t_a466919d918abe 23-26,37
+internal/scheduler/alerts_test.go
+  s_b5c709daffd097::t_20fb0395c76233 66-68
+  s_b5c709daffd097::t_bb0a0bdf0f175f 21,24-27,53-56,59-65,69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1e57f0f573f3f653135a6393589c36c35ee205a9",
+  "prompts": {},
+  "sessions": {
+    "s_b5c709daffd097": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a4322933-318b-4fac-89bb-b0b062195960",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
