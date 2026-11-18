@@ -14,6 +14,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -651,7 +652,100 @@ func TestStatusGivesWayToHintsOnTheNextKey(t *testing.T) {
 	}
 }
 
-func TestRowShowsTheSkillByItsShortName(t *testing.T) {
+func viewAt(m Model, w int) string {
+	m.width = w
+	m.layout()
+	return ansi.Strip(openAll(m).View())
+}
+
+func lineOf(t *testing.T, out, s string) string {
+	t.Helper()
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, s) {
+			return l
+		}
+	}
+	t.Fatalf("no line holds %q:\n%s", s, out)
+	return ""
+}
+
+func cellOf(line, s string) int {
+	i := strings.Index(line, s)
+	if i < 0 {
+		return -1
+	}
+	return lipgloss.Width(line[:i])
+}
+
+func narrowBoard() Model {
+	review := tv("ENG-801", lifecycle.InReview, "data-platform", "Rate limit the login endpoint", "#4636 2 reviewers pending", 5*time.Hour)
+	review.Review, review.Skill = "awaiting re-review", "kit:poteto-mode"
+	work := tv("WEB-12", lifecycle.Responding, "web", "Fix map tooltip", "round 1/3", 5*time.Minute)
+	work.Skill = "diagnosing-bugs"
+	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Started: 2, Tasks: []scheduler.TaskView{review, work}})
+	return feed(m, mineIssuesMsg{ws: linear.Workspace{ID: "w1", Name: "Crexi"}, live: true,
+		issues: []linear.Issue{mineIssue("ENG-900", "unstarted", 2)}})
+}
+
+func TestANarrowRowKeepsTheIDStateTitleAndNoteOnTheLeft(t *testing.T) {
+	out := viewAt(narrowBoard(), 85)
+	for _, id := range []string{"ENG-801", "WEB-12"} {
+		if l := lineOf(t, out, id); lipgloss.Width(l) > 85 {
+			t.Errorf("%s row is %d cells wide: %q", id, lipgloss.Width(l), l)
+		}
+	}
+	l := lineOf(t, out, "ENG-801")
+	var at []int
+	for _, s := range []string{"ENG-801", "awaiting re-review", "Rate limit the", "#4636 2"} {
+		c := cellOf(l, s)
+		if c < 0 {
+			t.Fatalf("row lacks %q: %q", s, l)
+		}
+		at = append(at, c)
+	}
+	if !slices.IsSorted(at) {
+		t.Errorf("ID, state, title, note must run left to right, got cells %v: %q", at, l)
+	}
+}
+
+func TestAWideRowAlsoShowsTheAgeTheRepoAndTheSkill(t *testing.T) {
+	l := lineOf(t, viewAt(narrowBoard(), 200), "ENG-801")
+	for _, s := range []string{"awaiting re-review", "Rate limit the login endpoint", "#4636 2 reviewers pending", "5h", "data-platform", "poteto-mode"} {
+		if !strings.Contains(l, s) {
+			t.Errorf("row lacks %q: %q", s, l)
+		}
+	}
+	if strings.Contains(l, "kit:") || strings.Contains(l, "·") {
+		t.Errorf("the row must show the skill's short name in its own column: %q", l)
+	}
+}
+
+func TestNarrowingDropsTheSkillThenTheRepoThenTheAge(t *testing.T) {
+	m := narrowBoard()
+	var skillShown, repoNotSkill, ageNotRepo bool
+	for w := 60; w <= 200; w++ {
+		l := lineOf(t, viewAt(m, w), "ENG-801")
+		skill, repo, age := strings.Contains(l, "poteto-mode"), strings.Contains(l, "data-platform"), strings.Contains(l, "5h")
+		if skill && !repo || repo && !age {
+			t.Fatalf("width %d keeps a column that drops first (skill %v, repo %v, age %v): %q", w, skill, repo, age, l)
+		}
+		repoNotSkill = repoNotSkill || repo && !skill
+		ageNotRepo = ageNotRepo || age && !repo
+		skillShown = skillShown || skill
+	}
+	if !skillShown || !repoNotSkill || !ageNotRepo {
+		t.Errorf("each column must show at some width: skill %v, repo without skill %v, age without repo %v", skillShown, repoNotSkill, ageNotRepo)
+	}
+}
+
+func TestAnIssueRowsTitleIsNotPushedRightByALongTaskState(t *testing.T) {
+	out := viewAt(narrowBoard(), 85)
+	if c := cellOf(lineOf(t, out, "ENG-900"), "Title of ENG-900"); c < 0 || c > 32 {
+		t.Errorf("the Issue title starts at cell %d, want at most 32:\n%s", c, out)
+	}
+}
+
+func TestTheStateShowsTheReviewTextTheDraftDetailOrTheStageWithAFlag(t *testing.T) {
 	v := fixture()
 	for i := range v.Tasks {
 		switch v.Tasks[i].ID {
@@ -661,14 +755,17 @@ func TestRowShowsTheSkillByItsShortName(t *testing.T) {
 			v.Tasks[i].Skill = "diagnosing-bugs"
 		}
 	}
-	out := newModel(&fakeClient{}, v).View()
-	for _, w := range []string{"Working ⚑ · test-first", "Responding · diagnosing-bugs"} {
-		if !strings.Contains(out, w) {
-			t.Errorf("view lacks %q:\n%s", w, out)
+	out := viewAt(newModel(&fakeClient{}, v), 200)
+	for id, want := range map[string][]string{"ENG-590": {"Working ⚑", "test-first"}, "WEB-12": {"Responding", "diagnosing-bugs"}} {
+		l := lineOf(t, out, id)
+		for _, s := range want {
+			if !strings.Contains(l, s) {
+				t.Errorf("%s row lacks %q: %q", id, s, l)
+			}
 		}
-	}
-	if strings.Contains(out, "kit:") {
-		t.Errorf("the row must show the short name:\n%s", out)
+		if strings.Contains(l, "·") || strings.Contains(l, "kit:") {
+			t.Errorf("%s row must show the state and the skill apart, by short name: %q", id, l)
+		}
 	}
 }
 
@@ -678,11 +775,19 @@ func TestRowShowsDraftRepliesAndTheReviewState(t *testing.T) {
 		scheduler.TaskView{ID: "ENG-700", Title: "Retry loads", Stage: "Responding", StageKey: "responding", Group: "Needs you", Flag: "drafts", FlagDetail: "2 replies to approve", Skill: "poteto-mode"},
 		scheduler.TaskView{ID: "ENG-701", Title: "Trim logs", Stage: "In review", StageKey: "in_review", Group: "Waiting", Review: "changes requested", Skill: "poteto-mode"},
 	)
-	out := newModel(&fakeClient{}, v).View()
-	for _, w := range []string{"2 replies to approve ⚑ · poteto-mode", "In review · changes requested · poteto-mode"} {
-		if !strings.Contains(out, w) {
-			t.Errorf("view lacks %q:\n%s", w, out)
+	out := viewAt(newModel(&fakeClient{}, v), 200)
+	for id, want := range map[string]string{"ENG-700": "2 replies to", "ENG-701": "changes requested"} {
+		l := lineOf(t, out, id)
+		c := cellOf(l, want)
+		if c < 0 || cellOf(l, "poteto-mode") <= c {
+			t.Errorf("%s row must show %q, then the skill in its own column: %q", id, want, l)
 		}
+	}
+	if l := lineOf(t, out, "ENG-700"); cellOf(l, "⚑") < cellOf(l, "2 replies to") || cellOf(l, "⚑") > cellOf(l, "poteto-mode") {
+		t.Errorf("the flag must show on the row, after the state and before the skill: %q", l)
+	}
+	if l := lineOf(t, out, "ENG-701"); strings.Contains(l, "In review") {
+		t.Errorf("the review text takes the place of the stage: %q", l)
 	}
 }
 

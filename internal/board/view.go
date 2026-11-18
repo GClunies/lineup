@@ -265,28 +265,104 @@ func (m Model) rows(w int) string {
 // the heading's key or the row's ID, and empty for a note.
 type rowLine struct{ id, text string }
 
-func (m Model) rowLines(w int) []rowLine {
-	idW, stageW, repoW, noteW := 4, 5, 4, 0
+// column is one column of a row. A max of 0 is no cap, and a drop of 0 never
+// drops. A narrow row drops the lowest rank first.
+type column struct {
+	min, max int
+	drop     int
+	task     func(Model, scheduler.TaskView) string
+	issue    func(issueRow) string
+}
+
+const (
+	colID = iota
+	colState
+	colTitle
+	colNote
+	colTail
+	colRepo
+	colSkill
+	numCols
+)
+
+const (
+	stateMax  = 18
+	stateFlag = " ⚑"
+)
+
+var columns = [numCols]column{
+	colID:    {task: func(_ Model, t scheduler.TaskView) string { return t.ID }, issue: func(r issueRow) string { return r.ID }},
+	colState: {max: stateMax, task: func(_ Model, t scheduler.TaskView) string { return stateText(t) }, issue: func(issueRow) string { return "" }},
+	colTitle: {min: 12, task: func(_ Model, t scheduler.TaskView) string { return t.Title }, issue: func(r issueRow) string { return r.Title }},
+	colNote:  {min: 12, max: 36, task: func(_ Model, t scheduler.TaskView) string { return t.Note }, issue: issueRow.note},
+	colTail:  {drop: 3, task: func(m Model, t scheduler.TaskView) string { return m.age(t) }, issue: issueRow.priorityText},
+	colRepo:  {drop: 2, task: func(_ Model, t scheduler.TaskView) string { return t.Repo }, issue: func(r issueRow) string { return r.Repo }},
+	colSkill: {drop: 1, task: func(_ Model, t scheduler.TaskView) string { return t.Skill[strings.LastIndex(t.Skill, ":")+1:] }, issue: func(issueRow) string { return "" }},
+}
+
+// columnWidths drops columns until the title keeps its minimum beside the note.
+// The note gets at most half of their share, so a wide row widens the title.
+func (m Model) columnWidths(w int) [numCols]int {
+	var ws [numCols]int
 	for _, t := range m.tasks {
-		idW = max(idW, lipgloss.Width(t.ID))
-		stageW = max(stageW, lipgloss.Width(stageText(t)))
-		repoW = max(repoW, lipgloss.Width(t.Repo))
-		noteW = max(noteW, min(lipgloss.Width(t.Note), 36))
+		for i, c := range columns {
+			ws[i] = max(ws[i], lipgloss.Width(c.task(m, t)))
+		}
 	}
 	for _, r := range m.issues {
-		idW = max(idW, lipgloss.Width(r.ID))
-		repoW = max(repoW, lipgloss.Width(r.Repo))
-		noteW = max(noteW, min(lipgloss.Width(r.note()), 36))
+		for i, c := range columns {
+			ws[i] = max(ws[i], lipgloss.Width(c.issue(r)))
+		}
 	}
-	// marker 2, gaps 2 each between five columns, age 5
-	titleW := max(w-(2+idW+stageW+repoW+noteW+5+14), 12)
-	row := func(id, stage, repo, title, note, tail string, faded bool) string {
+	for i, c := range columns {
+		if ws[i] > 0 {
+			ws[i] = max(ws[i], c.min)
+			if c.max > 0 {
+				ws[i] = min(ws[i], c.max)
+			}
+		}
+	}
+	// The marker takes 3 cells, and 2 cells sit between columns.
+	share := func() int {
+		n, rest := 0, 0
+		for i, cw := range ws {
+			if cw > 0 {
+				n++
+				if i != colTitle && i != colNote {
+					rest += cw
+				}
+			}
+		}
+		return w - 3 - rest - 2*(n-1)
+	}
+	for rank := 1; rank < numCols && share() < columns[colTitle].min+ws[colNote]; rank++ {
+		for i, c := range columns {
+			if c.drop == rank {
+				ws[i] = 0
+			}
+		}
+	}
+	if ws[colNote] > 0 {
+		ws[colNote] = min(ws[colNote], max(share()/2, columns[colNote].min))
+	}
+	ws[colTitle] = max(share()-ws[colNote], columns[colTitle].min)
+	return ws
+}
+
+func (m Model) rowLines(w int) []rowLine {
+	ws := m.columnWidths(w)
+	row := func(id string, cells [numCols]string, faded bool) string {
 		marker := "  "
 		if id == m.sel {
 			marker = "▸ "
 		}
-		s := ansi.Truncate(fmt.Sprintf(" %s%s  %s  %s  %s  %s  %s",
-			marker, pad(id, idW), pad(stage, stageW), pad(repo, repoW), pad(title, titleW), pad(note, noteW), tail), w, "…")
+		var parts []string
+		for i, c := range cells {
+			if ws[i] > 0 {
+				parts = append(parts, pad(c, ws[i]))
+			}
+		}
+		s := ansi.Truncate(" "+marker+strings.Join(parts, "  "), w, "…")
 		switch {
 		case id == m.sel:
 			return selRow.Render(s)
@@ -311,12 +387,20 @@ func (m Model) rowLines(w int) []rowLine {
 		var lines []rowLine
 		for _, t := range m.tasks {
 			if t.Group == g {
-				lines = append(lines, rowLine{t.ID, row(t.ID, stageText(t), t.Repo, t.Title, t.Note, m.age(t), g == groupDone || g == "Queued")})
+				var cells [numCols]string
+				for i, c := range columns {
+					cells[i] = c.task(m, t)
+				}
+				lines = append(lines, rowLine{t.ID, row(t.ID, cells, g == groupDone || g == "Queued")})
 			}
 		}
 		for _, r := range m.issues {
 			if r.Group == g {
-				lines = append(lines, rowLine{r.ID, row(r.ID, "", r.Repo, r.Title, r.note(), r.priorityText(), g == groupBacklog || len(r.Blockers) > 0)})
+				var cells [numCols]string
+				for i, c := range columns {
+					cells[i] = c.issue(r)
+				}
+				lines = append(lines, rowLine{r.ID, row(r.ID, cells, g == groupBacklog || len(r.Blockers) > 0)})
 			}
 		}
 		if len(lines) == 0 {
@@ -337,7 +421,8 @@ func (m Model) rowLines(w int) []rowLine {
 	return out
 }
 
-func stageText(t scheduler.TaskView) string {
+// stateText cuts the text before the flag, so the flag always fits stateMax.
+func stateText(t scheduler.TaskView) string {
 	if t.Group == "Queued" {
 		return ""
 	}
@@ -349,13 +434,10 @@ func stageText(t scheduler.TaskView) string {
 	case t.Flag == string(lifecycle.ReasonDrafts) && t.FlagDetail != "":
 		s = t.FlagDetail
 	case t.Review != "":
-		s += " · " + t.Review
+		s = t.Review
 	}
 	if t.Flag != "" {
-		s += " ⚑"
-	}
-	if t.Skill != "" {
-		s += " · " + t.Skill[strings.LastIndex(t.Skill, ":")+1:]
+		s = ansi.Truncate(s, stateMax-lipgloss.Width(stateFlag), "…") + stateFlag
 	}
 	return s
 }
