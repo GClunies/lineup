@@ -1,0 +1,22 @@
+internal/lifecycle/bar_test.go
+  s_b5c709daffd097::t_c52e4637a3288f 10
+  s_b5c709daffd097::t_92b4fa41c92ef3 328,333-339,341,346-371
+internal/lifecycle/bar.go
+  s_b5c709daffd097::t_252eb80dd3de57 215-233,235,329-337
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7db31e98c3a92fada02356324bac807bb22e3417",
+  "prompts": {},
+  "sessions": {
+    "s_b5c709daffd097": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a4322933-318b-4fac-89bb-b0b062195960",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
