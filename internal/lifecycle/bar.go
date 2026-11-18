@@ -212,16 +212,27 @@ func (b LandingBar) Measure(f PRFacts) Standing {
 	return s
 }
 
-// ReviewText says where a PR stands with its reviewers, for a Task in In
-// review.
-func (s Standing) ReviewText() string {
-	switch {
-	case s.Review == DecisionChanges || s.Changes:
-		return "changes requested"
-	case s.Reviewed:
-		return "awaiting re-review"
+// reviewStates lists where a PR can stand with its reviewers, strongest first.
+// The first row that holds decides the text on the board.
+var reviewStates = []struct {
+	icon, word string
+	has        func(Standing) bool
+}{
+	{"✗", "changes requested", func(s Standing) bool { return s.Review == DecisionChanges || s.Changes }},
+	{"✓", "approved", func(s Standing) bool { return s.Review == DecisionApproved }},
+	{"●", "commented", func(s Standing) bool { return s.Reviewed }},
+	{"○", "no review yet", func(Standing) bool { return true }},
+}
+
+// ReviewState says where a PR stands with its reviewers, for example
+// "✓ approved".
+func (s Standing) ReviewState() string {
+	for _, r := range reviewStates {
+		if r.has(s) {
+			return r.icon + " " + r.word
+		}
 	}
-	return "awaiting review"
+	return ""
 }
 
 func addName(names []string, name string) []string {
@@ -314,6 +325,15 @@ func (s Standing) Met() bool { return s.Next() == NoGap }
 
 // Explain is the text of the first gap, or "" when the PR meets the bar.
 func (b LandingBar) Explain(s Standing) string { return b.why(s.Next(), s) }
+
+// Blocker is the text of the first gap, except the approval gap. ReviewState
+// already says that one. It is "" when no other gap holds.
+func (b LandingBar) Blocker(s Standing) string {
+	if s.Next() == GapApproval {
+		return ""
+	}
+	return b.Explain(s)
+}
 
 // Item is one line of the bar's checklist, for people.
 type Item struct {

@@ -443,32 +443,44 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
  lineup  WIP 4/5   ●3 need you (+1 in reviews)
  ─────────────────────────────────────────────────────────────────────────
  NEEDS YOU  3
- ▸ ENG-590 Working ⚑       data   Add billing model          stopped      12m
-   ENG-588 Working ⚑       data   Backfill events           permission: Bash(make deploy)   3m
-   ENG-580 2 replies to approve ⚑  data  Retry failed loads  drafts: 2 replies to approve    1m
+ ▸ ENG-590 data   Add billing model          stopped      12m
+   ENG-588 data   Backfill events           permission: Bash(make deploy)   3m
+   ENG-580 data   Retry failed loads        drafts: 2 replies to approve    1m
  BACKLOG  7 …
  READY  2
-   ENG-611                        Move the retry job        unblocked    ▂▄▆
-   local-7                 data   Rename the log flag
+   ENG-611        Move the retry job        unblocked    ▂▄▆
+   local-7 data   Rename the log flag
  QUEUED  1
-   ENG-601                 data   Drop old API keys
+   ENG-601 data   Drop old API keys
  WORKING  2
-   WEB-12  Responding      web    Fix map tooltip           round 1/3    5m
-   ENG-592 CI debug        data   Fix flaky test            attempt 2/3  1m
+   WEB-12  web    Fix map tooltip           #4650 ○ no review yet · answering review    5m
+   ENG-592 data   Fix flaky test            #4655 ○ no review yet · fixing CI           1m
  WAITING  1
-   ENG-571 In review · awaiting re-review  data  Rate limit login  #4636 needs approval · optional failed: lint  1d
+   ENG-571 data   Rate limit login          #4636 ● commented · 1 open thread · optional failed: lint  1d
  DONE  1 …
 ```
 
 The header shows the WIP cap and the count of the build Tasks that need the user. It counts the review Tasks that need the user in parentheses, when there are any: `(+1 in reviews)`. It has no count for the other groups, because each group heading shows its own count. The header also shows `reviews paused` while the review queues are paused, and a warning when the Scheduler is offline. At 80 columns, the header with `+1 over` and the review count fits.
 
-A row's Stage column shows the Stage, then `⚑` when the Task has a flag. A Task with the flag `drafts` shows the flag's detail in place of the Stage, for example `2 replies to approve ⚑`. A Task in In review adds where its PR stands with its reviewers:
+A row has no Stage column. The group heading says who must act, and the note says what happens. The note of a build Task with a PR starts with the PR number and where the PR stands with its reviewers. Then it says what happens now, or the next gap that the Landing bar has. The approval gap never shows, because the review state already says it.
 
-| Text | When |
+| Review state | When |
 |---|---|
-| `awaiting review` | No person other than the user reviewed the PR. |
-| `awaiting re-review` | A person reviewed the PR, and no review requests changes. |
-| `changes requested` | GitHub's review decision, or a person's latest review, requests changes. |
+| `✗ changes requested` | GitHub's review decision, or a person's latest review, requests changes. |
+| `✓ approved` | GitHub's review decision is approved. |
+| `● commented` | A person reviewed the PR, and the PR is not approved. |
+| `○ no review yet` | No person other than the user reviewed the PR. |
+
+The first row that holds is the state. The text after the review state, by Stage:
+
+| Stage | Text |
+|---|---|
+| CI debug | `fixing CI` |
+| Responding | `answering review` |
+| CI running, In review | The next gap, for example `2 checks pending` or `1 open thread`. |
+| Ready to land | `ready to land` |
+
+A review Task shows `#N reviewing`, `#N review ready` with `· head moved` when the head changed, and `#N` and its outcome when it is done. A flag replaces the note with `<flag>: <detail>`, for example `drafts: 2 replies to approve`.
 
 Reviews by bots do not count as a person's review.
 

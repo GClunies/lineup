@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"pgregory.net/rapid"
 )
 
@@ -324,18 +325,47 @@ func TestARuleSavesByNameAndRefusesAnUnknownName(t *testing.T) {
 	}
 }
 
-func TestReviewTextSaysWhereTheReviewersAre(t *testing.T) {
+func TestReviewStateSaysWhereTheReviewersAre(t *testing.T) {
 	for _, c := range []struct {
 		f    PRFacts
 		want string
 	}{
-		{PRFacts{Decision: DecisionRequired}, "awaiting review"},
-		{PRFacts{Decision: DecisionRequired, Reviewed: true}, "awaiting re-review"},
-		{PRFacts{Decision: DecisionChanges, Reviewed: true}, "changes requested"},
-		{PRFacts{Reviewed: true, ChangesRequested: true}, "changes requested"},
+		{PRFacts{Decision: DecisionRequired}, "○ no review yet"},
+		{PRFacts{}, "○ no review yet"},
+		{PRFacts{Decision: DecisionRequired, Reviewed: true}, "● commented"},
+		{PRFacts{Decision: DecisionApproved, Reviewed: true}, "✓ approved"},
+		{PRFacts{Decision: DecisionChanges, Reviewed: true}, "✗ changes requested"},
+		{PRFacts{Reviewed: true, ChangesRequested: true}, "✗ changes requested"},
+		{PRFacts{Decision: DecisionApproved, ChangesRequested: true}, "✗ changes requested"},
 	} {
-		if got := (LandingBar{}).Measure(c.f).ReviewText(); got != c.want {
+		if got := (LandingBar{}).Measure(c.f).ReviewState(); got != c.want {
 			t.Errorf("%+v: %q, want %q", c.f, got, c.want)
+		}
+	}
+}
+
+func TestEachReviewStateIsOneCellWide(t *testing.T) {
+	for _, r := range reviewStates {
+		if got := lipgloss.Width(r.icon); got != 1 {
+			t.Errorf("%q is %d cells wide", r.icon, got)
+		}
+	}
+}
+
+func TestTheBlockerLeavesOutTheApprovalTheReviewStateAlreadySays(t *testing.T) {
+	bar := LandingBar{Checks: AllChecks, Approvals: RequiredApprovals}
+	for _, c := range []struct {
+		s    Standing
+		want string
+	}{
+		{Standing{Unapproved: true}, ""},
+		{Standing{Failed: []string{"lint"}, Unapproved: true}, "lint failed"},
+		{Standing{Pending: 2, Unapproved: true}, "2 checks pending"},
+		{Standing{Conflict: true}, "conflict"},
+		{Standing{}, ""},
+	} {
+		if got := bar.Blocker(c.s); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.s, got, c.want)
 		}
 	}
 }

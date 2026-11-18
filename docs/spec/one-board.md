@@ -30,7 +30,7 @@ The Board shows the work view only. It has no plan view (ADR 0021) and no review
  lineup  WIP 4/5   ●1 need you (+1 in reviews)
  ──────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU  1
- ▸ ENG-590 Working ⚑    data  Add billing model        stopped                    12m
+ ▸ ENG-590 data  Add billing model        stopped                    12m
  BACKLOG  2
    local-9                    Retry failed loads before alerting
    ENG-620              data  Split billing ingest     △4
@@ -41,9 +41,9 @@ The Board shows the work view only. It has no plan view (ADR 0021) and no review
  QUEUED  1
    ah-9                 data  Evaluate the ADR
  WORKING  1
-   ENG-592 CI debug     data  Fix flaky test           attempt 2/3                 1m
+   ENG-592 data  Fix flaky test           #4655 ○ no review yet · fixing CI     1m
  WAITING  1
-   ENG-571 In review    data  Rate limit login         #4636 needs approval        1d
+   ENG-571 data  Rate limit login         #4636 ● commented · 1 open thread   1d
  DONE  1 …
 ```
 

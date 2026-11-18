@@ -276,7 +276,6 @@ type column struct {
 
 const (
 	colID = iota
-	colState
 	colTitle
 	colNote
 	colTail
@@ -285,23 +284,28 @@ const (
 	numCols
 )
 
-const (
-	stateMax  = 18
-	stateFlag = " ⚑"
-)
-
 var columns = [numCols]column{
 	colID:    {task: func(_ Model, t scheduler.TaskView) string { return t.ID }, issue: func(r issueRow) string { return r.ID }},
-	colState: {max: stateMax, task: func(_ Model, t scheduler.TaskView) string { return stateText(t) }, issue: func(issueRow) string { return "" }},
 	colTitle: {min: 12, task: func(_ Model, t scheduler.TaskView) string { return t.Title }, issue: func(r issueRow) string { return r.Title }},
-	colNote:  {min: 12, max: 36, task: func(_ Model, t scheduler.TaskView) string { return t.Note }, issue: issueRow.note},
+	colNote:  {min: 12, max: 48, task: func(_ Model, t scheduler.TaskView) string { return t.Note }, issue: issueRow.note},
 	colTail:  {drop: 3, task: func(m Model, t scheduler.TaskView) string { return m.age(t) }, issue: issueRow.priorityText},
 	colRepo:  {drop: 2, task: func(_ Model, t scheduler.TaskView) string { return t.Repo }, issue: func(r issueRow) string { return r.Repo }},
 	colSkill: {drop: 1, task: func(_ Model, t scheduler.TaskView) string { return t.Skill[strings.LastIndex(t.Skill, ":")+1:] }, issue: func(issueRow) string { return "" }},
 }
 
-// columnWidths drops columns until the title keeps its minimum beside the note.
-// The note gets at most half of their share, so a wide row widens the title.
+const (
+	// titleWant is the title width that the optional columns must leave before
+	// they show.
+	titleWant = 25
+	// noteKeep is the note width that a narrow row keeps, enough for
+	// "#25867 ✓ approved · ready to land".
+	noteKeep = 33
+)
+
+// columnWidths drops columns until the title gets titleWant cells beside the
+// note, or beside noteKeep cells of it when the note is longer. The note then
+// takes what the title leaves, but never less than noteKeep. A narrow row cuts the
+// title down to its minimum first.
 func (m Model) columnWidths(w int) [numCols]int {
 	var ws [numCols]int
 	for _, t := range m.tasks {
@@ -335,7 +339,7 @@ func (m Model) columnWidths(w int) [numCols]int {
 		}
 		return w - 3 - rest - 2*(n-1)
 	}
-	for rank := 1; rank < numCols && share() < columns[colTitle].min+ws[colNote]; rank++ {
+	for rank := 1; rank < numCols && share() < titleWant+min(ws[colNote], noteKeep); rank++ {
 		for i, c := range columns {
 			if c.drop == rank {
 				ws[i] = 0
@@ -343,7 +347,7 @@ func (m Model) columnWidths(w int) [numCols]int {
 		}
 	}
 	if ws[colNote] > 0 {
-		ws[colNote] = min(ws[colNote], max(share()/2, columns[colNote].min))
+		ws[colNote] = min(ws[colNote], max(share()-titleWant, min(share()-columns[colTitle].min, noteKeep), columns[colNote].min))
 	}
 	ws[colTitle] = max(share()-ws[colNote], columns[colTitle].min)
 	return ws
@@ -419,27 +423,6 @@ func (m Model) rowLines(w int) []rowLine {
 		out = append(out, rowLine{"", dim.Render(" no Tasks")})
 	}
 	return out
-}
-
-// stateText cuts the text before the flag, so the flag always fits stateMax.
-func stateText(t scheduler.TaskView) string {
-	if t.Group == "Queued" {
-		return ""
-	}
-	if t.Group == "Done" && t.Outcome != "" {
-		return t.Outcome
-	}
-	s := t.Stage
-	switch {
-	case t.Flag == string(lifecycle.ReasonDrafts) && t.FlagDetail != "":
-		s = t.FlagDetail
-	case t.Review != "":
-		s = t.Review
-	}
-	if t.Flag != "" {
-		s = ansi.Truncate(s, stateMax-lipgloss.Width(stateFlag), "…") + stateFlag
-	}
-	return s
 }
 
 // row is one line of a picker or a list, with the marker when it is selected.

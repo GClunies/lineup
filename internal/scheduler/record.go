@@ -148,19 +148,17 @@ type TaskView struct {
 	FlagDetail string         `json:"flag_detail,omitempty"`
 	Outcome    string         `json:"outcome,omitempty"`
 	Note       string         `json:"note,omitempty"`
-	// Review says where a PR in In review stands with its reviewers.
-	Review     string    `json:"review,omitempty"`
-	Optional   []string  `json:"optional,omitempty"` // the optional checks that failed on a build Task's PR
-	OverCap    bool      `json:"over_cap,omitempty"`
-	Skill      string    `json:"skill,omitempty"`
-	PRNumber   int       `json:"pr_number,omitempty"`
-	PRURL      string    `json:"pr_url,omitempty"`
-	ReviewHead string    `json:"review_head,omitempty"` // the head that a review Task was added at
-	IssueURL   string    `json:"issue_url,omitempty"`
-	Worktree   string    `json:"worktree,omitempty"`
-	Since      time.Time `json:"since"`
-	Live       bool      `json:"live"`
-	Tab        bool      `json:"tab,omitempty"`
+	Optional   []string       `json:"optional,omitempty"` // the optional checks that failed on a build Task's PR
+	OverCap    bool           `json:"over_cap,omitempty"`
+	Skill      string         `json:"skill,omitempty"`
+	PRNumber   int            `json:"pr_number,omitempty"`
+	PRURL      string         `json:"pr_url,omitempty"`
+	ReviewHead string         `json:"review_head,omitempty"` // the head that a review Task was added at
+	IssueURL   string         `json:"issue_url,omitempty"`
+	Worktree   string         `json:"worktree,omitempty"`
+	Since      time.Time      `json:"since"`
+	Live       bool           `json:"live"`
+	Tab        bool           `json:"tab,omitempty"`
 }
 
 type BoardView struct {
@@ -215,40 +213,7 @@ func (r *Record) view() TaskView {
 	if r.Stage.Started() {
 		v.Optional = r.Standing.Optional
 	}
-	if r.Stage == lifecycle.InReview {
-		v.Review = r.Standing.ReviewText()
-	}
-	b := r.Policy.Budgets
-	switch r.Stage {
-	case lifecycle.CIDebug:
-		v.Note = fmt.Sprintf("attempt %d/%d", b.CIDebug-r.Left.CIDebug, b.CIDebug)
-	case lifecycle.Responding:
-		v.Note = fmt.Sprintf("round %d/%d", b.Responding-r.Left.Responding, b.Responding)
-		if c := r.ReviewCycle(); c != nil {
-			v.Note = fmt.Sprintf("%s, cycle %d/%d", c.ScoreText(c.Score), b.ReviewCycles-r.Left.ReviewCycles, b.ReviewCycles)
-		}
-	case lifecycle.InReview, lifecycle.ReadyToLand, lifecycle.CIRunning, lifecycle.Done:
-		var parts []string
-		if v.PRNumber != 0 {
-			parts = append(parts, fmt.Sprintf("#%d", v.PRNumber))
-		}
-		if r.Stage != lifecycle.Done {
-			if why := r.Policy.Bar.Explain(r.Standing); why != "" {
-				parts = append(parts, why)
-			}
-			if o := r.Standing.Optional; len(o) > 0 {
-				parts = append(parts, "· optional failed: "+strings.Join(o, ", "))
-			}
-		}
-		v.Note = strings.Join(parts, " ")
-	case lifecycle.ReviewReady:
-		if r.ReviewedHead != "" && r.LatestHead != "" && r.LatestHead != r.ReviewedHead {
-			v.Note = "head moved"
-		}
-	}
-	if r.WorktreeKept {
-		v.Note = "worktree kept: " + r.Worktree
-	}
+	v.Note = r.note(v.PRNumber)
 	if r.Flag != "" {
 		v.Note = string(r.Flag)
 		if r.FlagDetail != "" {
@@ -256,6 +221,67 @@ func (r *Record) view() TaskView {
 		}
 	}
 	return v
+}
+
+// note says what the Task does now. A build Task with a PR also says where the
+// PR's review stands, for example "#42 ✓ approved · ready to land". A review
+// Task says what it does, or how it ended, after the PR number. A flag
+// replaces the note.
+func (r *Record) note(pr int) string {
+	var lead []string
+	if pr != 0 {
+		lead = append(lead, fmt.Sprintf("#%d", pr))
+	}
+	withReview := func() {
+		if pr != 0 {
+			lead = append(lead, r.Standing.ReviewState())
+		}
+	}
+	var tail []string
+	optional := func() {
+		if o := r.Standing.Optional; len(o) > 0 {
+			tail = append(tail, "optional failed: "+strings.Join(o, ", "))
+		}
+	}
+	switch r.Stage {
+	case lifecycle.Working:
+		withReview()
+	case lifecycle.CIDebug:
+		withReview()
+		tail = append(tail, "fixing CI")
+	case lifecycle.Responding:
+		withReview()
+		tail = append(tail, "answering review")
+	case lifecycle.CIRunning, lifecycle.InReview:
+		withReview()
+		if why := r.Policy.Bar.Blocker(r.Standing); why != "" {
+			tail = append(tail, why)
+		}
+		optional()
+	case lifecycle.ReadyToLand:
+		withReview()
+		tail = append(tail, "ready to land")
+		optional()
+	case lifecycle.Reviewing:
+		lead = append(lead, "reviewing")
+	case lifecycle.ReviewReady:
+		lead = append(lead, "review ready")
+		if r.ReviewedHead != "" && r.LatestHead != "" && r.LatestHead != r.ReviewedHead {
+			tail = append(tail, "head moved")
+		}
+	case lifecycle.Done:
+		if r.Outcome != "" {
+			lead = append(lead, string(r.Outcome))
+		}
+	}
+	if r.WorktreeKept {
+		tail = append(tail, "worktree kept: "+r.Worktree)
+	}
+	parts := tail
+	if len(lead) > 0 {
+		parts = append([]string{strings.Join(lead, " ")}, tail...)
+	}
+	return strings.Join(parts, " · ")
 }
 
 // checklist is the Landing bar's checklist for a started Task whose PR a

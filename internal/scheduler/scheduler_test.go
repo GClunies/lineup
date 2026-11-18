@@ -666,7 +666,7 @@ func TestTaskFromStartToMerged(t *testing.T) {
 	h.gh.set(key, 42, "ci-failed")
 	h.waitStage("ENG-1", lifecycle.CIDebug)
 	h.waitTyped(worker.BlockID, "prompt ci_debug")
-	if v := h.task("ENG-1"); v.Note != "attempt 1/3" {
+	if v := h.task("ENG-1"); v.Note != "#42 ○ no review yet · fixing CI" {
 		t.Fatalf("CI debug note = %q", v.Note)
 	}
 	h.gh.set(key, 42, "pushed")
@@ -675,7 +675,7 @@ func TestTaskFromStartToMerged(t *testing.T) {
 
 	h.gh.set(key, 42, "review-required")
 	h.waitStage("ENG-1", lifecycle.InReview)
-	if v := h.task("ENG-1"); v.Note != "#42 needs approval" {
+	if v := h.task("ENG-1"); v.Note != "#42 ○ no review yet" {
 		t.Fatalf("In review note = %q", v.Note)
 	}
 	h.gh.set(key, 42, "review-approved")
@@ -1106,7 +1106,7 @@ func TestTheViewShowsTheLandingBar(t *testing.T) {
 	r.Standing = bar.Measure(lifecycle.PRFacts{Head: testHead, Score: &five, Decision: lifecycle.DecisionApproved,
 		Checks: []lifecycle.Check{{Name: "test", State: lifecycle.CheckPassed, Required: true}, {Name: "lint", State: lifecycle.CheckFailed}}})
 	v := r.view()
-	if v.Note != "#42 · optional failed: lint" || !slices.Equal(v.Optional, []string{"lint"}) {
+	if v.Note != "#42 ✓ approved · ready to land · optional failed: lint" || !slices.Equal(v.Optional, []string{"lint"}) {
 		t.Errorf("note %q optional %q", v.Note, v.Optional)
 	}
 	want := []string{"✓ required checks passed", "✓ Greptile 5/5", "✓ review threads done", "✓ required reviews approved", "! optional checks failed: lint"}
@@ -1116,7 +1116,7 @@ func TestTheViewShowsTheLandingBar(t *testing.T) {
 
 	r.Stage = lifecycle.InReview
 	r.Standing = bar.Measure(lifecycle.PRFacts{Head: testHead, Score: &five, Decision: lifecycle.DecisionRequired})
-	if v := r.view(); v.Note != "#42 needs approval" || r.checklist()[3] != "✗ needs approval" {
+	if v := r.view(); v.Note != "#42 ○ no review yet" || r.checklist()[3] != "✗ needs approval" {
 		t.Errorf("In review: note %q checklist %q", v.Note, r.checklist())
 	}
 	if got := (&Record{Task: lifecycle.Task{ID: "ENG-591", Stage: lifecycle.Working}}).checklist(); got != nil {
@@ -1337,7 +1337,7 @@ func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
 	h.waitStage("ENG-1", lifecycle.CIRunning)
 
 	h.gh.set(key, 42, "review-required")
-	eventually(t, "the wait note", func() bool { return h.task("ENG-1").Note == "#42 waiting for Greptile" })
+	eventually(t, "the wait note", func() bool { return h.task("ENG-1").Note == "#42 ○ no review yet · waiting for Greptile" })
 	c.add(14 * time.Minute)
 	h.waitPolls(3)
 	if v := h.task("ENG-1"); v.Stage != "CI running" || v.Flag != "" {
@@ -1352,7 +1352,7 @@ func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
 	h.gh.set(key, 42, "scored-low")
 	h.waitStage("ENG-1", lifecycle.Responding)
 	h.waitTyped(worker.BlockID, "prompt responding")
-	if v := h.task("ENG-1"); v.Note != "Greptile 4/5, cycle 1/2" {
+	if v := h.task("ENG-1"); v.Note != "#42 ○ no review yet · answering review" {
 		t.Fatalf("review cycle note = %q", v.Note)
 	}
 	h.hn.mu.Lock()
@@ -1701,7 +1701,7 @@ func TestResumeFallsBackToSessionID(t *testing.T) {
 		t.Fatalf("fallback spec = %+v, want a Reviewing start with a conversation, so Command passes --session-id and a prompt", spec)
 	}
 	d, _ := h.s.show("pr-7")
-	if d.Stage != lifecycle.Reviewing.String() || d.Note != "" {
+	if d.Stage != lifecycle.Reviewing.String() || d.Note != "#7 reviewing" {
 		t.Fatalf("task = %+v, want Reviewing with no flag", d.TaskView)
 	}
 	var fallbacks int

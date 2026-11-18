@@ -168,18 +168,3 @@ func TestAskDraftsFlagsARespondingTaskWithTheCount(t *testing.T) {
 		}
 	}
 }
-
-func TestAnInReviewViewSaysWhereTheReviewersAre(t *testing.T) {
-	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
-	h.working()
-	if v := h.task("ENG-1"); v.Review != "" {
-		t.Fatalf("review text in Working = %q", v.Review)
-	}
-	h.s.call(func() {
-		r := h.s.recs["ENG-1"]
-		r.Stage, r.Standing.Reviewed = lifecycle.InReview, true
-	})
-	if v := h.task("ENG-1"); v.Review != "awaiting re-review" {
-		t.Fatalf("review text in In review = %q", v.Review)
-	}
-}

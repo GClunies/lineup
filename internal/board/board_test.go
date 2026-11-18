@@ -82,16 +82,16 @@ func fixture() scheduler.BoardView {
 	flagged.Flag, flagged.Group = "permission", "Needs you"
 	question := tv("ENG-590", lifecycle.Working, "data", "Add billing model", "question", 12*time.Minute)
 	question.Flag, question.Group = "question", "Needs you"
-	done := tv("ENG-560", lifecycle.Done, "data", "Rename config options", "#4601", 2*time.Hour)
+	done := tv("ENG-560", lifecycle.Done, "data", "Rename config options", "#4601 merged", 2*time.Hour)
 	done.Outcome = "merged"
 	return scheduler.BoardView{Cap: 5, Started: 4, Tasks: []scheduler.TaskView{
 		tv("ENG-601", lifecycle.Queued, "data", "Drop legacy views", "", 0),
 		done,
-		tv("ENG-571", lifecycle.InReview, "data", "Rate limit login", "#4636 2 reviewers", 26*time.Hour),
-		tv("WEB-12", lifecycle.Responding, "web", "Fix map tooltip", "round 1/3", 5*time.Minute),
+		tv("ENG-571", lifecycle.InReview, "data", "Rate limit login", "#4636 ● commented · 1 open thread", 26*time.Hour),
+		tv("WEB-12", lifecycle.Responding, "web", "Fix map tooltip", "#4650 ○ no review yet · answering review", 5*time.Minute),
 		flagged,
 		question,
-		tv("ENG-592", lifecycle.CIDebug, "data", "Fix flaky test", "attempt 2/3", time.Minute),
+		tv("ENG-592", lifecycle.CIDebug, "data", "Fix flaky test", "#4655 ○ no review yet · fixing CI", time.Minute),
 	}}
 }
 
@@ -418,7 +418,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 func TestAgeAndRows(t *testing.T) {
 	m := openAll(newModel(&fakeClient{}, fixture()))
 	out := m.View()
-	for _, w := range []string{"NEEDS YOU", "WORKING", "WAITING", "QUEUED", "DONE", "Working ⚑", "12m", "1d", "today", "merged"} {
+	for _, w := range []string{"NEEDS YOU", "WORKING", "WAITING", "QUEUED", "DONE", "12m", "1d", "today", "#4601 merged"} {
 		if !strings.Contains(out, w) {
 			t.Errorf("view lacks %q", w)
 		}
@@ -678,44 +678,98 @@ func cellOf(line, s string) int {
 }
 
 func narrowBoard() Model {
-	review := tv("ENG-801", lifecycle.InReview, "data-platform", "Rate limit the login endpoint", "#4636 2 reviewers pending", 5*time.Hour)
-	review.Review, review.Skill = "awaiting re-review", "kit:poteto-mode"
-	work := tv("WEB-12", lifecycle.Responding, "web", "Fix map tooltip", "round 1/3", 5*time.Minute)
+	review := tv("ENG-801", lifecycle.InReview, "data-platform", "Rate limit the login endpoint", "#4636 ✗ changes requested · 2 open threads", 5*time.Hour)
+	review.Skill = "kit:poteto-mode"
+	work := tv("WEB-12", lifecycle.Responding, "web", "Fix map tooltip", "#4650 ○ no review yet · answering review", 5*time.Minute)
 	work.Skill = "diagnosing-bugs"
 	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Started: 2, Tasks: []scheduler.TaskView{review, work}})
 	return feed(m, mineIssuesMsg{ws: linear.Workspace{ID: "w1", Name: "Crexi"}, live: true,
 		issues: []linear.Issue{mineIssue("ENG-900", "unstarted", 2)}})
 }
 
-func TestANarrowRowKeepsTheIDStateTitleAndNoteOnTheLeft(t *testing.T) {
-	out := viewAt(narrowBoard(), 85)
-	for _, id := range []string{"ENG-801", "WEB-12"} {
-		if l := lineOf(t, out, id); lipgloss.Width(l) > 85 {
-			t.Errorf("%s row is %d cells wide: %q", id, lipgloss.Width(l), l)
+func TestANarrowRowKeepsTheIDTitleAndNoteOnTheLeft(t *testing.T) {
+	for _, w := range []int{60, 85} {
+		out := viewAt(narrowBoard(), w)
+		for _, id := range []string{"ENG-801", "WEB-12"} {
+			if l := lineOf(t, out, id); lipgloss.Width(l) > w {
+				t.Errorf("width %d: %s row is %d cells wide: %q", w, id, lipgloss.Width(l), l)
+			}
+		}
+		l := lineOf(t, out, "ENG-801")
+		var at []int
+		for _, s := range []string{"ENG-801", "Rate limit", "#4636 ✗ changes requested"} {
+			c := cellOf(l, s)
+			if c < 0 {
+				t.Fatalf("width %d: row lacks %q: %q", w, s, l)
+			}
+			at = append(at, c)
+		}
+		if !slices.IsSorted(at) {
+			t.Errorf("width %d: ID, title, note must run left to right, got cells %v: %q", w, at, l)
 		}
 	}
-	l := lineOf(t, out, "ENG-801")
-	var at []int
-	for _, s := range []string{"ENG-801", "awaiting re-review", "Rate limit the", "#4636 2"} {
-		c := cellOf(l, s)
-		if c < 0 {
-			t.Fatalf("row lacks %q: %q", s, l)
+}
+
+func TestARowHasNoStateColumnAndNoFlagMark(t *testing.T) {
+	v := narrowBoard().board
+	drafts := scheduler.TaskView{ID: "ENG-700", Title: "Retry loads", Stage: "Responding", StageKey: "responding", Group: "Needs you",
+		Flag: "drafts", FlagDetail: "2 replies to approve", Note: "drafts: 2 replies to approve", Skill: "poteto-mode"}
+	v.Tasks = append(v.Tasks, drafts)
+	for _, w := range []int{60, 85, 200} {
+		out := viewAt(newModel(&fakeClient{}, v), w)
+		for _, id := range []string{"ENG-801", "WEB-12", "ENG-700"} {
+			l := lineOf(t, out, id)
+			for _, gone := range []string{"⚑", "Responding", "In review", "awaiting"} {
+				if strings.Contains(l, gone) {
+					t.Errorf("width %d: %s row shows %q: %q", w, id, gone, l)
+				}
+			}
 		}
-		at = append(at, c)
+		if l := lineOf(t, out, "ENG-700"); !strings.Contains(l, "drafts: 2 replies to approve") || lipgloss.Width(l) > w {
+			t.Errorf("width %d: the drafts row must name its action in full and fit: %q", w, l)
+		}
 	}
-	if !slices.IsSorted(at) {
-		t.Errorf("ID, state, title, note must run left to right, got cells %v: %q", at, l)
+}
+
+func landingBoard() Model {
+	v := narrowBoard().board
+	land := tv("ENG-810", lifecycle.ReadyToLand, "data-platform", "Freeze the legacy pricing tables", "#5084 ✓ approved · ready to land", 37*time.Minute)
+	land.Group, land.Skill = "Needs you", "poteto-mode"
+	drafts := tv("ENG-811", lifecycle.Responding, "data-platform", "Remove the kyp_v3 dependency", "drafts: 2 replies to approve", 37*time.Minute)
+	drafts.Flag, drafts.FlagDetail, drafts.Group, drafts.Skill = "drafts", "2 replies to approve", "Needs you", "poteto-mode"
+	long := tv("ENG-812", lifecycle.InReview, "data-platform", "Retire the v15 search tasks", "#5200 ✓ approved · 2 checks pending · optional failed: lint, e2e", 37*time.Minute)
+	long.Skill = "poteto-mode"
+	v.Tasks = append(v.Tasks, land, drafts, long)
+	return newModel(&fakeClient{}, v)
+}
+
+func TestALongNoteOnAnotherRowDoesNotNarrowTheTitle(t *testing.T) {
+	l := lineOf(t, viewAt(landingBoard(), 85), "ENG-810")
+	if title := cellOf(l, "#5084") - cellOf(l, "Freeze") - 2; title < 25 {
+		t.Errorf("the title is %d cells wide at 85 columns, want at least 25: %q", title, l)
+	}
+}
+
+func TestANeedsYouNoteShowsInFullAtSixtyColumns(t *testing.T) {
+	out := viewAt(landingBoard(), 60)
+	for id, note := range map[string]string{"ENG-810": "#5084 ✓ approved · ready to land", "ENG-811": "drafts: 2 replies to approve"} {
+		if l := lineOf(t, out, id); !strings.Contains(l, note) || lipgloss.Width(l) > 60 {
+			t.Errorf("%s row must show %q in full and fit in 60 cells: %q", id, note, l)
+		}
+	}
+	if l := lineOf(t, out, "ENG-812"); !strings.Contains(l, "#5200 ✓ approved") {
+		t.Errorf("a cut note keeps the PR number and the review state: %q", l)
 	}
 }
 
 func TestAWideRowAlsoShowsTheAgeTheRepoAndTheSkill(t *testing.T) {
 	l := lineOf(t, viewAt(narrowBoard(), 200), "ENG-801")
-	for _, s := range []string{"awaiting re-review", "Rate limit the login endpoint", "#4636 2 reviewers pending", "5h", "data-platform", "poteto-mode"} {
+	for _, s := range []string{"Rate limit the login endpoint", "#4636 ✗ changes requested · 2 open threads", "5h", "data-platform", "poteto-mode"} {
 		if !strings.Contains(l, s) {
 			t.Errorf("row lacks %q: %q", s, l)
 		}
 	}
-	if strings.Contains(l, "kit:") || strings.Contains(l, "·") {
+	if strings.Contains(l, "kit:") {
 		t.Errorf("the row must show the skill's short name in its own column: %q", l)
 	}
 }
@@ -742,52 +796,6 @@ func TestAnIssueRowsTitleIsNotPushedRightByALongTaskState(t *testing.T) {
 	out := viewAt(narrowBoard(), 85)
 	if c := cellOf(lineOf(t, out, "ENG-900"), "Title of ENG-900"); c < 0 || c > 32 {
 		t.Errorf("the Issue title starts at cell %d, want at most 32:\n%s", c, out)
-	}
-}
-
-func TestTheStateShowsTheReviewTextTheDraftDetailOrTheStageWithAFlag(t *testing.T) {
-	v := fixture()
-	for i := range v.Tasks {
-		switch v.Tasks[i].ID {
-		case "ENG-590":
-			v.Tasks[i].Skill = "kit:test-first"
-		case "WEB-12":
-			v.Tasks[i].Skill = "diagnosing-bugs"
-		}
-	}
-	out := viewAt(newModel(&fakeClient{}, v), 200)
-	for id, want := range map[string][]string{"ENG-590": {"Working ⚑", "test-first"}, "WEB-12": {"Responding", "diagnosing-bugs"}} {
-		l := lineOf(t, out, id)
-		for _, s := range want {
-			if !strings.Contains(l, s) {
-				t.Errorf("%s row lacks %q: %q", id, s, l)
-			}
-		}
-		if strings.Contains(l, "·") || strings.Contains(l, "kit:") {
-			t.Errorf("%s row must show the state and the skill apart, by short name: %q", id, l)
-		}
-	}
-}
-
-func TestRowShowsDraftRepliesAndTheReviewState(t *testing.T) {
-	v := fixture()
-	v.Tasks = append(v.Tasks,
-		scheduler.TaskView{ID: "ENG-700", Title: "Retry loads", Stage: "Responding", StageKey: "responding", Group: "Needs you", Flag: "drafts", FlagDetail: "2 replies to approve", Skill: "poteto-mode"},
-		scheduler.TaskView{ID: "ENG-701", Title: "Trim logs", Stage: "In review", StageKey: "in_review", Group: "Waiting", Review: "changes requested", Skill: "poteto-mode"},
-	)
-	out := viewAt(newModel(&fakeClient{}, v), 200)
-	for id, want := range map[string]string{"ENG-700": "2 replies to", "ENG-701": "changes requested"} {
-		l := lineOf(t, out, id)
-		c := cellOf(l, want)
-		if c < 0 || cellOf(l, "poteto-mode") <= c {
-			t.Errorf("%s row must show %q, then the skill in its own column: %q", id, want, l)
-		}
-	}
-	if l := lineOf(t, out, "ENG-700"); cellOf(l, "⚑") < cellOf(l, "2 replies to") || cellOf(l, "⚑") > cellOf(l, "poteto-mode") {
-		t.Errorf("the flag must show on the row, after the state and before the skill: %q", l)
-	}
-	if l := lineOf(t, out, "ENG-701"); strings.Contains(l, "In review") {
-		t.Errorf("the review text takes the place of the stage: %q", l)
 	}
 }
 
