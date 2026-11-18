@@ -19,17 +19,20 @@ func (t TaskView) Attention() string {
 	return ""
 }
 
-// AlertText is the one line that tells the user about the Task's Attention.
-// A flag detail can hold many lines of stderr, so only its first line shows.
+// AlertText is the one line that tells the user about the Task's Attention:
+// the ID, the title, and the first line of the note, which already names the
+// Stage's state or how the Task ended. A flag detail can hold many lines of
+// stderr, so only the first line shows. A Task with no note shows its outcome,
+// or else its Stage.
 func (t TaskView) AlertText() string {
 	note, _, _ := strings.Cut(t.Note, "\n")
-	if t.StageKey == lifecycle.Done.Key() && t.Outcome != "" {
+	if note == "" {
 		note = t.Outcome
 	}
 	if note == "" {
-		return fmt.Sprintf("%s %s: %s", t.ID, t.Stage, t.Title)
+		note = t.Stage
 	}
-	return fmt.Sprintf("%s %s, %s: %s", t.ID, t.Stage, note, t.Title)
+	return fmt.Sprintf("%s %s · %s", t.ID, t.Title, note)
 }
 
 // Alerts returns the build Tasks of v whose Attention is new since seen, and
