@@ -622,7 +622,7 @@ func TestALongTitleCutsTheTabLabel(t *testing.T) {
 	h.do(Request{Op: "start", Task: "ENG-1"})
 
 	setup := h.waitTab("wt ada/eng-1-billing")
-	want := "ENG-1 " + strings.Repeat("é", 121) + "…"
+	want := "ENG-1 " + strings.Repeat("é", 25) + "…"
 	if setup.label != want {
 		t.Fatalf("setup tab label = %q (%d characters), want %q", setup.label, utf8.RuneCountInString(setup.label), want)
 	}
