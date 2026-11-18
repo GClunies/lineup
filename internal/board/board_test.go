@@ -404,13 +404,13 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 	}
 
 	v.Tasks[len(v.Tasks)-1] = rtv("R-3", lifecycle.ReviewReady, "data#7 Fix the tooltip", urlBase, 0)
-	v.Tasks[2] = tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636", 0)
+	v.Tasks[2] = tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636 ✓ approved · ready to land", 0)
 	t2, cmd := m.Update(boardMsg(v))
 	m = t2.(Model)
 	if cmd != nil {
 		cmd()
 	}
-	if want := []string{"ENG-571 Ready to land, #4636: Rate limit login"}; !slices.Equal(toasts, want) {
+	if want := []string{"ENG-571 #4636 ✓ approved · ready to land | Rate limit login"}; !slices.Equal(toasts, want) {
 		t.Fatalf("toasts %q, want %q", toasts, want)
 	}
 }
@@ -814,10 +814,10 @@ func TestTheBoardToastsEachNewAlertOnce(t *testing.T) {
 		t.Fatalf("the view the Board opened on toasted %q", toasts)
 	}
 	v := fixture()
-	v.Tasks[2] = tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636", 0)
+	v.Tasks[2] = tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636 ✓ approved · ready to land", 0)
 	send(v)
 	send(v)
-	if want := []string{"ENG-571 Ready to land, #4636: Rate limit login"}; !slices.Equal(toasts, want) {
+	if want := []string{"ENG-571 #4636 ✓ approved · ready to land | Rate limit login"}; !slices.Equal(toasts, want) {
 		t.Fatalf("toasts %q, want %q", toasts, want)
 	}
 }
@@ -850,7 +850,7 @@ func TestTheBoardToastsTheNextReadyIssueWhenASlotFrees(t *testing.T) {
 		mineIssue("ENG-620", "backlog", 1), mineIssue("ENG-611", "unstarted", 2), mineIssue("ENG-612", "unstarted", 3),
 	}}
 	ready.issues[1].Title = "Move the retry job"
-	landing := tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636", 0)
+	landing := tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636 ✓ approved · ready to land", 0)
 	landing.Group = "Needs you"
 	done := tv("ENG-571", lifecycle.Done, "data", "Rate limit login", "#4636", 0)
 	done.Outcome = "merged"
@@ -918,12 +918,13 @@ func TestOneSlotToastForSeveralDoneTasks(t *testing.T) {
 	for _, i := range []int{3, 6} {
 		then.Tasks[i].Stage, then.Tasks[i].StageKey, then.Tasks[i].Group = lifecycle.Done.String(), lifecycle.Done.Key(), groupOf[lifecycle.Done]
 		then.Tasks[i].Outcome = "merged"
+		then.Tasks[i].Note = "merged"
 	}
 	_, cmd := m.Update(boardMsg(then))
 	cmd()
 	if want := []string{
-		"WEB-12 Done, merged: Fix map tooltip",
-		"ENG-592 Done, merged: Fix flaky test",
+		"WEB-12 merged | Fix map tooltip",
+		"ENG-592 merged | Fix flaky test",
 		"3 slots free, next ENG-611: Title of ENG-611",
 	}; !slices.Equal(toasts, want) {
 		t.Fatalf("toasts %q, want %q", toasts, want)

@@ -27,13 +27,13 @@ func TestWatchPrintsEachAlertOnceAcrossRestarts(t *testing.T) {
 	old := scheduler.TaskView{ID: "B-1", Title: "old", Stage: "Done", StageKey: "done", Group: "Done", Outcome: "closed"}
 	working := scheduler.TaskView{ID: "ENG-1", Title: "billing", Stage: "Working", StageKey: "working", Group: "Working"}
 	review := scheduler.TaskView{ID: "ENG-1", Title: "billing", Stage: "Working", StageKey: "working", Group: "Needs you", Flag: "question", Note: "question"}
-	ended := scheduler.TaskView{ID: "ENG-1", Title: "billing", Stage: "Done", StageKey: "done", Group: "Done", Outcome: "closed"}
+	ended := scheduler.TaskView{ID: "ENG-1", Title: "billing", Stage: "Done", StageKey: "done", Group: "Done", Outcome: "closed", Note: "#7 closed"}
 
 	var out strings.Builder
 	if _, err := watchOnce(feed{view(old, working), view(old, review)}, path, false, &out); err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); got != "ENG-1 Working, question: billing\n" {
+	if got := out.String(); got != "ENG-1 question | billing\n" {
 		t.Fatalf("first run printed %q", got)
 	}
 
@@ -41,7 +41,7 @@ func TestWatchPrintsEachAlertOnceAcrossRestarts(t *testing.T) {
 	if _, err := watchOnce(feed{view(old, review), view(old, ended)}, path, false, &out); err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); got != "ENG-1 Done, closed: billing\n" {
+	if got := out.String(); got != "ENG-1 #7 closed | billing\n" {
 		t.Fatalf("after a restart, printed %q", got)
 	}
 }
@@ -60,7 +60,7 @@ func TestWatchOnceEndsAtTheFirstAlertsAndKeepsTheRest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); !printed || got != "ENG-1 Working, question: billing\n" {
+	if got := out.String(); !printed || got != "ENG-1 question | billing\n" {
 		t.Fatalf("first run printed %q (printed=%v), want ENG-1 alone", got, printed)
 	}
 
@@ -69,7 +69,7 @@ func TestWatchOnceEndsAtTheFirstAlertsAndKeepsTheRest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); !printed || got != "ENG-2 Working, stopped: search\n" {
+	if got := out.String(); !printed || got != "ENG-2 stopped | search\n" {
 		t.Fatalf("second run printed %q (printed=%v), want ENG-2 alone", got, printed)
 	}
 
