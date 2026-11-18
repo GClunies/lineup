@@ -1,0 +1,30 @@
+internal/board/board_test.go
+  s_b5c709daffd097::t_aa5660f4cd4028 407,413,817,820,853
+  s_b5c709daffd097::t_e0f6dd0dcc61a5 921,926-927
+cmd/lineup/watch_test.go
+  s_b5c709daffd097::t_aa5660f4cd4028 30,36,44,63,72
+internal/scheduler/alerts_test.go
+  s_b5c709daffd097::t_8435b43b0732f5 10,13,21,24-27,44-56,60-70,72
+  s_b5c709daffd097::t_6ea0a5e484cc33 57-59
+  s_b5c709daffd097::t_608a15666911fe 71,73
+cmd/lineup/agent/CLAUDE.md
+  s_b5c709daffd097::t_aa5660f4cd4028 87
+internal/scheduler/alerts.go
+  s_b5c709daffd097::t_8435b43b0732f5 22-26,29,33,35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f503228dc11e95d1f9d0b4cbaadd042844a712f0",
+  "prompts": {},
+  "sessions": {
+    "s_b5c709daffd097": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a4322933-318b-4fac-89bb-b0b062195960",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
