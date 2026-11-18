@@ -3,9 +3,11 @@ package scheduler
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -81,24 +83,41 @@ type Record struct {
 	StageSince time.Time `json:"stage_since"`
 }
 
-// maxTabLabel is the longest window label, in characters, that Rex accepts.
-const maxTabLabel = 128
+// tabLabelWidth is the most characters that a tab label holds, "…" included.
+const tabLabelWidth = 32
 
-// tabLabel names the Task's tab and its Worker's conversation. A review's
-// title already names its PR, as in data#7, so the label leaves out its ID.
-// A label past maxTabLabel ends in "…".
+var (
+	repoPrefix = regexp.MustCompile(`^\S+#\d+ `)
+	issueKey   = regexp.MustCompile(`^[A-Z][A-Z0-9]*-\d+:\s*`)
+	commitType = regexp.MustCompile(`^[a-z]+(\([^)]*\))?!?:\s*`)
+)
+
+// tabLabel names the Task's tab and its Worker's conversation. It is the
+// Task's ID and its title, cut at a word to tabLabelWidth characters with a
+// closing "…". A review's title loses its repo#n prefix, its issue key, and
+// its commit type, because the ID already names the PR.
 func (r *Record) tabLabel() string {
-	label := r.ID + " " + r.Title
-	switch {
-	case r.Review != nil:
-		label = r.Title
-	case r.Issue != nil:
-		label = r.Issue.Identifier + " " + r.Title
+	title := r.Title
+	if r.Review != nil {
+		title = repoPrefix.ReplaceAllString(title, "")
+		title = issueKey.ReplaceAllString(title, "")
+		title = commitType.ReplaceAllString(title, "")
 	}
-	if rs := []rune(label); len(rs) > maxTabLabel {
-		return string(rs[:maxTabLabel-1]) + "…"
+	label := strings.TrimSpace(r.ID + " " + title)
+	rs := []rune(label)
+	if len(rs) <= tabLabelWidth {
+		return label
 	}
-	return label
+	head := rs[:tabLabelWidth-1]
+	if !unicode.IsSpace(rs[tabLabelWidth-1]) {
+		for i := len(head) - 1; i > len([]rune(r.ID)); i-- {
+			if unicode.IsSpace(head[i]) {
+				head = head[:i]
+				break
+			}
+		}
+	}
+	return strings.TrimRightFunc(string(head), func(c rune) bool { return unicode.IsSpace(c) || unicode.IsPunct(c) }) + "…"
 }
 
 // HubSession is the Rex session of the Hub. The Scheduler removes a Repo
