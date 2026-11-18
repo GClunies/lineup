@@ -949,10 +949,10 @@ func TestWIPCapFullFailsStart(t *testing.T) {
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	if _, err := h.s.Handle(context.Background(), Request{Op: "start", Task: "adhoc-1"}); err == nil || err.Error() != "wip cap full" {
+	if _, err := h.s.Handle(context.Background(), Request{Op: "start", Task: "ah-1"}); err == nil || err.Error() != "wip cap full" {
 		t.Fatalf("start over cap: err = %v, want wip cap full", err)
 	}
-	h.do(Request{Op: "start", Task: "adhoc-1", OverCap: true})
+	h.do(Request{Op: "start", Task: "ah-1", OverCap: true})
 	v := h.do(Request{Op: "ls"}).(BoardView)
 	if v.Started != 2 || v.OverCap != 1 || v.Cap != 1 {
 		t.Fatalf("board = %d started, %d over, cap %d", v.Started, v.OverCap, v.Cap)
@@ -1183,11 +1183,20 @@ func TestDoneTasksAgeOffTheBoard(t *testing.T) {
 	}
 }
 
+func TestTaskWithNoIssueGetsAnAhID(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})
+	h.do(Request{Op: "add", Repo: "web", Text: "Second"})
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"ah-1", "ah-2"}) {
+		t.Fatalf("board = %v, want ah-1 and ah-2", ids)
+	}
+}
+
 func TestTaskWithNoIssueOpensInTheAdHocSession(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "adhoc-1"})
+	h.do(Request{Op: "start", Task: "ah-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
 
 	sessions := map[string]string{}
@@ -1199,13 +1208,13 @@ func TestTaskWithNoIssueOpensInTheAdHocSession(t *testing.T) {
 		}
 		return len(sessions) == 2
 	})
-	if s := sessions["adhoc-1 Fix map tooltip"]; s != "session:ad hoc" {
+	if s := sessions["ah-1 Fix map tooltip"]; s != "session:ad hoc" {
 		t.Errorf("text Task session = %q, want session:ad hoc (all: %v)", s, sessions)
 	}
 	if s := sessions["ENG-1 Add billing model"]; s != "session:data" {
 		t.Errorf("Issue Task session = %q, want session:data", s)
 	}
-	if v := h.task("adhoc-1"); v.Repo != "web" {
+	if v := h.task("ah-1"); v.Repo != "web" {
 		t.Errorf("text Task Repo column = %q, want web", v.Repo)
 	}
 }

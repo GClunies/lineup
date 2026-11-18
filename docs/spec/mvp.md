@@ -211,7 +211,7 @@ Rex server
 ├── session "web"
 │   └── tab "WEB-12 …"
 └── session "ad hoc"                  (every ad hoc Task, whatever its Repo)
-    └── tab "adhoc-9 Evaluate the ADR …"
+    └── tab "ah-9 Evaluate the ADR …"
 ```
 
 The Scheduler has no tab. launchd runs `lineup serve` as a user agent, and the log is `~/.local/state/lineup/scheduler.log`.

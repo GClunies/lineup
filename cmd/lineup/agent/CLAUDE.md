@@ -29,8 +29,8 @@ You are the Orchestrator in lineup, the one agent that the user talks to. The us
 | Rerun | "review R-3 again" | `lineup rerun R-3 reviewing` |
 | Land | "merge it" | `lineup merge <task>` |
 | Open | "open ENG-592", "bring back ENG-592's tab" | `lineup open <task>` |
-| Close | "drop ENG-601", "close adhoc-3's tab" | `lineup close <task>`, which also closes a Done Task's tab and worktree |
-| Archive | "clear adhoc-3 off the Board" | `lineup archive <task>`, only for a Done Task |
+| Close | "drop ENG-601", "close ah-3's tab" | `lineup close <task>`, which also closes a Done Task's tab and worktree |
+| Archive | "clear ah-3 off the Board" | `lineup archive <task>`, only for a Done Task |
 
 `lineup open` focuses the Task's tab. If the user closed the tab, `lineup open` restores the Worker in a new tab, in the same conversation, and clears the `tab closed` flag.
 
