@@ -265,8 +265,8 @@ func (m Model) rows(w int) string {
 // the heading's key or the row's ID, and empty for a note.
 type rowLine struct{ id, text string }
 
-// column is one column of a row. min and max bound its width, and a max of 0
-// is no cap. A column with a drop rank leaves a narrow row, lowest rank first.
+// column is one column of a row. A max of 0 is no cap, and a drop of 0 never
+// drops. A narrow row drops the lowest rank first.
 type column struct {
 	min, max int
 	drop     int
@@ -285,9 +285,14 @@ const (
 	numCols
 )
 
+const (
+	stateMax  = 18
+	stateFlag = " ⚑"
+)
+
 var columns = [numCols]column{
 	colID:    {task: func(_ Model, t scheduler.TaskView) string { return t.ID }, issue: func(r issueRow) string { return r.ID }},
-	colState: {max: 18, task: func(_ Model, t scheduler.TaskView) string { return stateText(t) }, issue: func(issueRow) string { return "" }},
+	colState: {max: stateMax, task: func(_ Model, t scheduler.TaskView) string { return stateText(t) }, issue: func(issueRow) string { return "" }},
 	colTitle: {min: 12, task: func(_ Model, t scheduler.TaskView) string { return t.Title }, issue: func(r issueRow) string { return r.Title }},
 	colNote:  {min: 12, max: 36, task: func(_ Model, t scheduler.TaskView) string { return t.Note }, issue: issueRow.note},
 	colTail:  {drop: 3, task: func(m Model, t scheduler.TaskView) string { return m.age(t) }, issue: issueRow.priorityText},
@@ -295,11 +300,8 @@ var columns = [numCols]column{
 	colSkill: {drop: 1, task: func(_ Model, t scheduler.TaskView) string { return t.Skill[strings.LastIndex(t.Skill, ":")+1:] }, issue: func(issueRow) string { return "" }},
 }
 
-// columnWidths picks the width of each column of a row of w cells. A column
-// with no text is 0 and has no gap. The widest cell sets a width, held to the
-// column's bounds. Columns drop until the title keeps its minimum and the note
-// its full width, and the note then takes at most half of the title's and its
-// own width, so a wide screen gives the spare to the title.
+// columnWidths drops columns until the title keeps its minimum beside the note.
+// The note gets at most half of their share, so a wide row widens the title.
 func (m Model) columnWidths(w int) [numCols]int {
 	var ws [numCols]int
 	for _, t := range m.tasks {
@@ -320,8 +322,7 @@ func (m Model) columnWidths(w int) [numCols]int {
 			}
 		}
 	}
-	// share is what the title and the note split: the width less the marker,
-	// the other columns, and 2 cells between each pair of columns.
+	// The marker takes 3 cells, and 2 cells sit between columns.
 	share := func() int {
 		n, rest := 0, 0
 		for i, cw := range ws {
@@ -420,8 +421,7 @@ func (m Model) rowLines(w int) []rowLine {
 	return out
 }
 
-// stateText is the Stage, or what the Stage waits on: the review text, or the
-// detail of the draft replies. A flagged Task ends in a flag.
+// stateText cuts the text before the flag, so the flag always fits stateMax.
 func stateText(t scheduler.TaskView) string {
 	if t.Group == "Queued" {
 		return ""
@@ -437,7 +437,7 @@ func stateText(t scheduler.TaskView) string {
 		s = t.Review
 	}
 	if t.Flag != "" {
-		s += " ⚑"
+		s = ansi.Truncate(s, stateMax-lipgloss.Width(stateFlag), "…") + stateFlag
 	}
 	return s
 }

@@ -772,16 +772,19 @@ func TestTheStateShowsTheReviewTextTheDraftDetailOrTheStageWithAFlag(t *testing.
 func TestRowShowsDraftRepliesAndTheReviewState(t *testing.T) {
 	v := fixture()
 	v.Tasks = append(v.Tasks,
-		scheduler.TaskView{ID: "ENG-700", Title: "Retry loads", Stage: "Responding", StageKey: "responding", Group: "Needs you", Flag: "drafts", FlagDetail: "2 replies", Skill: "poteto-mode"},
+		scheduler.TaskView{ID: "ENG-700", Title: "Retry loads", Stage: "Responding", StageKey: "responding", Group: "Needs you", Flag: "drafts", FlagDetail: "2 replies to approve", Skill: "poteto-mode"},
 		scheduler.TaskView{ID: "ENG-701", Title: "Trim logs", Stage: "In review", StageKey: "in_review", Group: "Waiting", Review: "changes requested", Skill: "poteto-mode"},
 	)
 	out := viewAt(newModel(&fakeClient{}, v), 200)
-	for id, want := range map[string]string{"ENG-700": "2 replies ⚑", "ENG-701": "changes requested"} {
+	for id, want := range map[string]string{"ENG-700": "2 replies to", "ENG-701": "changes requested"} {
 		l := lineOf(t, out, id)
 		c := cellOf(l, want)
 		if c < 0 || cellOf(l, "poteto-mode") <= c {
 			t.Errorf("%s row must show %q, then the skill in its own column: %q", id, want, l)
 		}
+	}
+	if l := lineOf(t, out, "ENG-700"); cellOf(l, "⚑") < cellOf(l, "2 replies to") || cellOf(l, "⚑") > cellOf(l, "poteto-mode") {
+		t.Errorf("the flag must show on the row, after the state and before the skill: %q", l)
 	}
 	if l := lineOf(t, out, "ENG-701"); strings.Contains(l, "In review") {
 		t.Errorf("the review text takes the place of the stage: %q", l)
