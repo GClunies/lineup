@@ -103,7 +103,7 @@ Each live lane runs on this machine at the PR head, in a worktree that `wt` crea
 
 **You see.**
 
-- [ ] After `gh pr merge` on a sandbox PR, the watch prints `adhoc-<n> Done, merged: <title>`, and `rex window list` still lists the Task's tab.
+- [ ] After `gh pr merge` on a sandbox PR, the watch prints `ah-<n> Done, merged: <title>`, and `rex window list` still lists the Task's tab.
 - [ ] `x` then `y` on that Done row removes the tab, and `wt list` in `lineup-sandbox` no longer shows the branch.
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
@@ -305,7 +305,7 @@ Each live lane runs on this machine at the PR head, in a worktree that `wt` crea
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
 - [ ] Metric. Mean `lineup show` round trip with 50 Tasks at trunk and head. Trunk lacks `open`, so also time `lineup open` at head from the command to the restored Worker's first `idle` status.
-- [ ] Probe. `hyperfine -w 3 -r 20 'lineup show adhoc-1'` at trunk and head, interleaved. Then 10 restores at head, timed from `rex events --json`.
+- [ ] Probe. `hyperfine -w 3 -r 20 'lineup show ah-1'` at trunk and head, interleaved. Then 10 restores at head, timed from `rex events --json`.
 - [ ] Baseline. Record the trunk `lineup show` mean first.
 - [ ] Rule. Head `show` mean at most 1.1 times trunk. Each restore reaches `idle` within 10 s.
 

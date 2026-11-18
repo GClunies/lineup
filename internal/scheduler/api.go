@@ -336,7 +336,7 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 	var v TaskView
 	err = s.withLoop(func() error {
 		if r.ID == "" {
-			r.ID = s.nextID("adhoc")
+			r.ID = s.nextID("ah")
 			slug := strings.Trim(notSlug.ReplaceAllString(strings.ToLower(r.Title), "-"), "-")
 			if len(slug) > 40 {
 				slug = strings.Trim(slug[:40], "-")

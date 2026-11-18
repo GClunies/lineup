@@ -39,7 +39,7 @@ The Board shows the work view only. It has no plan view (ADR 0021) and no review
    local-7                    Rename the log flag
    ENG-614              data  Drop old API keys        blocked by ENG-610  △3
  QUEUED  1
-   adhoc-9              data  Evaluate the ADR
+   ah-9                 data  Evaluate the ADR
  WORKING  1
    ENG-592 CI debug     data  Fix flaky test           attempt 2/3                 1m
  WAITING  1
