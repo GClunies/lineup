@@ -762,3 +762,89 @@ func TestAStoredWorkerLostFlagGivesWayToTheTabFlags(t *testing.T) {
 		t.Fatalf("tab opened left the flag %q", task.Flag)
 	}
 }
+
+func TestAClosedPRFlagsABuildTaskInEveryStartedStage(t *testing.T) {
+	for _, stage := range []Stage{Working, CIRunning, CIDebug, InReview, Responding, ReadyToLand} {
+		t.Run(stage.String(), func(t *testing.T) {
+			b, task := taskIn(stage)
+			effects, err := b.Apply("T", PRClosed{Number: 5149})
+			if err != nil || len(effects) != 0 {
+				t.Fatalf("effects %v, err %v", effects, err)
+			}
+			if task.Stage != stage || task.Flag != ReasonPRClosed || task.FlagDetail != "#5149 closed without a merge" {
+				t.Fatalf("stage %s, flag %q, detail %q", task.Stage, task.Flag, task.FlagDetail)
+			}
+			if task.Group() != GroupNeedsYou || task.Outcome != OutcomeNone {
+				t.Fatalf("group %s, outcome %q", task.Group(), task.Outcome)
+			}
+		})
+	}
+}
+
+func TestARepeatedPRClosedChangesNothing(t *testing.T) {
+	b, task := taskIn(InReview)
+	b.Apply("T", PRClosed{Number: 7})
+	before := *task
+	effects, _ := b.Apply("T", PRClosed{Number: 7})
+	if len(effects) != 0 || !reflect.DeepEqual(*task, before) {
+		t.Fatalf("second pr-closed changed %+v to %+v", before, *task)
+	}
+}
+
+func TestAClosedPRWaitsForAFlagThatBlocksTheWorker(t *testing.T) {
+	b, task := taskIn(Working)
+	b.Apply("T", WorkerStatus{State: "blocked", Kind: "question", Detail: "which db?"})
+	b.Apply("T", PRClosed{Number: 7})
+	if task.Flag != ReasonQuestion {
+		t.Fatalf("flag %q, want the question", task.Flag)
+	}
+	b.Apply("T", WorkerStatus{State: "working"})
+	b.Apply("T", PRClosed{Number: 7})
+	if task.Flag != ReasonPRClosed {
+		t.Fatalf("flag %q, want pr closed once the question cleared", task.Flag)
+	}
+}
+
+func TestAWorkerStatusKeepsThePRClosedFlag(t *testing.T) {
+	b, task := taskIn(Responding)
+	b.Apply("T", PRClosed{Number: 7})
+	b.Apply("T", WorkerStatus{State: "working"})
+	b.Apply("T", TabOpened{})
+	if task.Flag != ReasonPRClosed {
+		t.Fatalf("flag %q, want pr closed", task.Flag)
+	}
+}
+
+func TestAReopenedPRClearsTheFlagAndTheTaskGoesWhereItsFactsLead(t *testing.T) {
+	cases := []struct {
+		name  string
+		stage Stage
+		seen  PRSeen
+		want  Stage
+	}{
+		{"needs review", CIRunning, needsReview, InReview},
+		{"approved", InReview, approved, ReadyToLand},
+		{"failed CI", InReview, failedCI, CIDebug},
+		{"pending", ReadyToLand, pendingCI, CIRunning},
+		{"a Worker Stage stays", Responding, approved, Responding},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			b, task := taskIn(c.stage)
+			b.Apply("T", PRClosed{Number: 7})
+			b.Apply("T", c.seen)
+			if task.Flag != "" || task.FlagDetail != "" || task.Stage != c.want {
+				t.Fatalf("stage %s, flag %q (%q), want %s with no flag", task.Stage, task.Flag, task.FlagDetail, c.want)
+			}
+		})
+	}
+}
+
+func TestAClosedPRMergedLaterEndsTheTask(t *testing.T) {
+	b, task := taskIn(InReview)
+	b.Apply("T", PRClosed{Number: 7})
+	b.Apply("T", PRMerged{})
+	if task.Stage != Done || task.Outcome != OutcomeMerged {
+		t.Fatalf("stage %s, outcome %q", task.Stage, task.Outcome)
+	}
+}

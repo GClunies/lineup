@@ -15,10 +15,14 @@ func Signals(prev, cur *PR, viewer string) []lifecycle.Signal {
 	if cur == nil {
 		return nil
 	}
-	if cur.State != "OPEN" {
-		if cur.State == "MERGED" && (prev == nil || prev.State != "MERGED") {
-			return []lifecycle.Signal{lifecycle.PRMerged{}}
-		}
+	switch {
+	case cur.State == "MERGED" && (prev == nil || prev.State != "MERGED"):
+		return []lifecycle.Signal{lifecycle.PRMerged{}}
+	case cur.State == "CLOSED":
+		// A level, not an edge: the stored prev of a Task that waited on a
+		// closed PR before this Signal existed already reads CLOSED.
+		return []lifecycle.Signal{lifecycle.PRClosed{Number: cur.Number}}
+	case cur.State != "OPEN":
 		return nil
 	}
 

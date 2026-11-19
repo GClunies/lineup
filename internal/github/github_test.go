@@ -192,12 +192,22 @@ func TestMerged(t *testing.T) {
 
 	closed := clone(open)
 	closed.State = "CLOSED"
-	check(t, Signals(open, closed, "v"), nil)
 
 	// A merge brings other changes in the same poll. Only PRMerged matters.
 	changed := clone(merged)
 	changed.HeadSHA = "new"
 	check(t, Signals(open, changed, "v"), sigs(lifecycle.PRMerged{}))
+}
+
+func TestAClosedPRSendsPRClosedOnEveryPoll(t *testing.T) {
+	open := load(t, "pending")
+	closed := clone(open)
+	closed.State = "CLOSED"
+	want := sigs(lifecycle.PRClosed{Number: closed.Number})
+	check(t, Signals(open, closed, "v"), want)
+	check(t, Signals(closed, closed, "v"), want)
+	check(t, Signals(nil, closed, "v"), want)
+	check(t, Signals(closed, open, "v"), withSeen(open, "v"))
 }
 
 func TestSnapshotSendsOneQueryForManyKeys(t *testing.T) {

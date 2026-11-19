@@ -81,8 +81,9 @@ type PRMerged struct{}
 // pending review is not submitted.
 type PRReviewed struct{}
 
-// PRClosed means the PR closed without a merge.
-type PRClosed struct{}
+// PRClosed means the PR closed without a merge. Number is the PR's number, or
+// 0 when the sender does not know it.
+type PRClosed struct{ Number int }
 
 func (Start) Name() string                   { return "start" }
 func (PRMerge) Name() string                 { return "pr-merge" }
