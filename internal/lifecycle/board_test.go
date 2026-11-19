@@ -244,6 +244,18 @@ func TestObservedSignalsOutsideTheirStageChangeNothing(t *testing.T) {
 	}
 }
 
+func TestAMissingContractLeavesTheTabClosedFlag(t *testing.T) {
+	b, task := taskIn(Working)
+	for _, s := range []Signal{TabClosed{}, WorkerDone{ContractMet: false}} {
+		if _, err := b.Apply("T", s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if task.Flag != ReasonTabClosed {
+		t.Fatalf("flag = %q, want %q: the Worker is gone, so it can't have stopped", task.Flag, ReasonTabClosed)
+	}
+}
+
 func TestNeedsYouReasons(t *testing.T) {
 	cases := []struct {
 		name   string
