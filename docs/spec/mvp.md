@@ -501,7 +501,7 @@ The groups are Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. By
 
 Each group with at least one row has a heading that shows the group name and its row count, for example `BACKLOG  7`. A heading is a row that the user can select, except the Needs you heading. `j` and `k` stop on each heading and skip the rows of a closed group. `enter` on a heading opens or closes the group. A closed group shows its heading with a `…` mark and hides its rows, as `BACKLOG  7 …` does. Needs you never closes. This keeps a long Backlog or Done group from pushing Ready and Working off the screen.
 
-Backlog and Done start closed, and `[board] collapsed` changes that. `enter` or a tap on a heading opens or closes a group for this run only. `[board] hidden` hides groups: a hidden group shows no heading and no rows, and `j` and `k` skip it. `d` shows or hides Done for this run, whatever `hidden` says, and opens Done when it shows. While the filter holds text, a hidden group shows its matches. When a Task moves into a closed group, the selection goes to that group's heading. When `n` adds a local Issue, lineup opens Backlog, so the new row shows.
+Backlog and Done start closed, and `[board] collapsed` changes that. `enter` or a tap on a heading opens or closes a group for this run only. `[board] hidden` hides groups: a hidden group shows no heading and no rows, and `j` and `k` skip it. `d` shows or hides Done for this run, whatever `hidden` says, and opens Done when it shows. While the filter holds text, a hidden group shows its matches. When a Task moves into a closed group, the selection goes to that group's heading. When `n` adds a local Issue, lineup shows and opens Backlog for this run and selects the new row.
 
 | Key | Action |
 |---|---|
@@ -515,7 +515,7 @@ Backlog and Done start closed, and `[board] collapsed` changes that. `enter` or 
 | `s` | Start a Queued Task. On an Issue row, open the skill picker, then add the Issue as a Task and start it. The first row of the picker is `just go`, which starts with no skill. The other rows are the skills in `start_skills`. Typed text filters these rows, and a typed name that is not in the list becomes its own row. The picker drops a leading `/`. When no Repo mapping exists, the Repo picker opens next. |
 | `c` | On an Issue row, change the status. A Linear row lists the workflow states of its team, and a local row lists the local statuses. |
 | `o` | Open the PR or the Issue in the browser. A local Issue opens in `$EDITOR`. |
-| `n` | Capture a new Issue at a Destination, `local` by default. `tab` picks a Linear team or Project. A local Issue opens a closed Backlog. See `docs/spec/one-board.md`. |
+| `n` | Capture a new Issue at a Destination, `local` by default. `tab` picks a Linear team or Project. A local Issue shows and opens Backlog and selects the new row. See `docs/spec/one-board.md`. |
 | `P` | Promote a local Issue to Linear. Pick a Linear team or Project. lineup creates the Issue there and cancels the local Issue. See `docs/spec/one-board.md`. |
 | `/` | Filter the rows by ID and title. `enter` keeps the filter, and `esc` clears it. |
 | `R` | Refresh now: the Scheduler polls GitHub for every started Task |

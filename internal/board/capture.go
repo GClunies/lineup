@@ -431,7 +431,8 @@ func (m Model) boxMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		}
 		m.setStatus("added "+msg.id, false)
 		if msg.to.local() {
-			m.lay = m.lay.withClosed(groupBacklog, false) // a new local Issue is in the backlog
+			m.lay = m.lay.withClosed(groupBacklog, false).withHidden(groupBacklog, false) // a new local Issue is in the backlog
+			m.want = msg.id
 			return m, m.loadMine(), true
 		}
 		ds.recent = pushRecent(ds.recent, msg.to)
