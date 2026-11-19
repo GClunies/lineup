@@ -183,6 +183,7 @@ const defaultSlots = 3
 type Global struct {
 	file     globalFile
 	board    Board
+	boardErr error
 	home     string
 	lookPath func(string) (string, error)
 }
@@ -300,8 +301,8 @@ func Load(globalPath string) (*Global, error) {
 	if err := validateReview(g.file.Review.Queues, g.file.Review.Slots); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
-	if g.board, err = resolveBoard(g.file.Board); err != nil {
-		return nil, fmt.Errorf("%s: %w", globalPath, err)
+	if g.board, g.boardErr = resolveBoard(g.file.Board); g.boardErr != nil {
+		g.board = DefaultBoard()
 	}
 	return g, nil
 }

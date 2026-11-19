@@ -111,7 +111,16 @@ func needsYou(tasks []scheduler.TaskView) int {
 	return n
 }
 
+// footer is the mode's footer. A config problem adds its own line above it.
 func (m Model) footer() string {
+	f := m.modeFooter()
+	if m.opts.ConfigErr == "" {
+		return f
+	}
+	return ansi.Truncate(bad.Render(" "+m.opts.ConfigErr), m.width, "…") + "\n" + f
+}
+
+func (m Model) modeFooter() string {
 	var s string
 	switch m.mode {
 	case modeBox:

@@ -487,14 +487,27 @@ func runBoard(args []string) error {
 	if len(args) > 0 {
 		return fmt.Errorf("usage: lineup board")
 	}
-	opts := board.Options{Zoom: func() { rexRun("zoom", "-s", hubSession, "LINEUP") }}
-	opts.Destinations = filepath.Join(stateDir(), "destinations.json")
-	if g, err := config.Load(configPath()); err == nil { // a bad file only means defaults here
-		opts.StartSkills = g.StartSkills()
-		opts.Repos = g.Checkouts
-		opts.LocalIssues = g.LocalIssuesDir()
-		opts.Board = g.Board()
-	}
+	opts := boardOptions(configPath())
+	opts.Zoom = func() { rexRun("zoom", "-s", hubSession, "LINEUP") }
 	opts.Notify = func(text string) { board.Toast(os.Stdout, text) }
 	return board.Run(socketPath(), filepath.Join(stateDir(), "board.json"), opts)
+}
+
+// boardOptions reads the config file for the Board. A file that does not load
+// means defaults, and ConfigErr says why.
+func boardOptions(path string) board.Options {
+	opts := board.Options{Destinations: filepath.Join(stateDir(), "destinations.json")}
+	g, err := config.Load(path)
+	if err != nil {
+		opts.ConfigErr = "config: " + err.Error()
+		return opts
+	}
+	opts.StartSkills = g.StartSkills()
+	opts.Repos = g.Checkouts
+	opts.LocalIssues = g.LocalIssuesDir()
+	var berr error
+	if opts.Board, berr = g.Board(); berr != nil {
+		opts.ConfigErr = "config: " + berr.Error() + " (default layout)"
+	}
+	return opts
 }
