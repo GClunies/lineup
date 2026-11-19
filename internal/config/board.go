@@ -42,8 +42,9 @@ func DefaultBoard() Board {
 	return b
 }
 
-// Board is the board's section layout.
-func (g *Global) Board() Board { return g.board }
+// Board is the board's section layout. A bad [board] table does not fail the
+// load: the layout is then the default, and the error says what is wrong.
+func (g *Global) Board() (Board, error) { return g.board, g.boardErr }
 
 func headingOf(key string) (string, bool) {
 	i := slices.IndexFunc(sections, func(s section) bool { return s.key == key })

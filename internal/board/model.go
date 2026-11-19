@@ -54,6 +54,9 @@ type Options struct {
 	Destinations string
 	// Board is the layout of the sections. The zero value is the default.
 	Board config.Board
+	// ConfigErr is a problem with the config file. The Board shows it on its
+	// own line until it quits, whatever other status shows.
+	ConfigErr string
 }
 
 type mode int

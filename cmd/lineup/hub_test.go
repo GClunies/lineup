@@ -194,6 +194,25 @@ func TestRunBoardRefusesAnArgument(t *testing.T) {
 	}
 }
 
+func TestBoardOptionsCarryTheConfigProblem(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct{ name, body, want string }{
+		{"good", "start_skills = [\"a\"]\n", ""},
+		{"bad board", "[board]\nhidden = [\"dun\"]\n", `config: board.hidden: unknown section "dun" (default layout)`},
+		{"bad file", "[github.labels]\nnope = \"x\"\n", "config: "},
+	}
+	for _, c := range cases {
+		path := filepath.Join(dir, c.name+".toml")
+		if err := os.WriteFile(path, []byte(c.body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		got := boardOptions(path).ConfigErr
+		if (c.want == "") != (got == "") || !strings.HasPrefix(got, c.want) {
+			t.Errorf("%s: ConfigErr %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 func TestOpenHubRenamesTheHubTab(t *testing.T) {
 	old := hubWindow{ID: "w7", Label: "hub"}
 	cases := []struct {

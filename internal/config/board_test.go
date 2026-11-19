@@ -19,8 +19,8 @@ func TestBoardDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, g := range map[string]*Global{"no file": missing, "no table": load(t, "start_skills = [\"a\"]\n")} {
-		if got := g.Board(); !reflect.DeepEqual(got, want) {
-			t.Errorf("%s: board %+v, want %+v", name, got, want)
+		if got, err := g.Board(); err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: board %+v, %v, want %+v", name, got, err, want)
 		}
 	}
 }
@@ -36,23 +36,24 @@ hidden = ["done"]
 		Collapsed: []string{"Backlog", "Done"},
 		Hidden:    []string{"Done"},
 	}
-	if got := g.Board(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("board %+v, want %+v", got, want)
+	if got, err := g.Board(); err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("board %+v, %v, want %+v", got, err, want)
 	}
 }
 
 func TestBoardEmptyCollapsedMeansNoneAndOrderKeepsTheRest(t *testing.T) {
 	g := load(t, "[board]\norder = [\"waiting\", \"ready\"]\ncollapsed = []\n")
-	if got := g.Board().Collapsed; len(got) != 0 {
+	b, _ := g.Board()
+	if got := b.Collapsed; len(got) != 0 {
 		t.Fatalf("collapsed %v, want none", got)
 	}
 	want := []string{"Waiting", "Ready", "Needs you", "Backlog", "Queued", "Working", "Done"}
-	if got := g.Board().Order; !slices.Equal(got, want) {
+	if got := b.Order; !slices.Equal(got, want) {
 		t.Fatalf("order %v, want %v", got, want)
 	}
 }
 
-func TestBoardRejectsABadSection(t *testing.T) {
+func TestABadBoardTableLoadsWithTheDefaultLayoutAndTheError(t *testing.T) {
 	cases := map[string]string{
 		`hidden = ["dun"]`:                  `board.hidden: unknown section "dun"`,
 		`order = ["Done"]`:                  `board.order: unknown section "Done"`,
@@ -64,10 +65,29 @@ func TestBoardRejectsABadSection(t *testing.T) {
 		`hidden = ["backlog", "needs_you"]`: `board.hidden: section "needs_you" cannot be in this list`,
 	}
 	for body, want := range cases {
-		path := write(t, filepath.Join(t.TempDir(), "config.toml"), "[board]\n"+body+"\n")
-		_, err := Load(path)
-		if err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("%s: error %v, want %q", body, err, want)
+		path := write(t, filepath.Join(t.TempDir(), "config.toml"), "start_skills = [\"a\"]\n[board]\n"+body+"\n")
+		g, err := Load(path)
+		if err != nil {
+			t.Errorf("%s: Load failed: %v", body, err)
+			continue
 		}
+		got, berr := g.Board()
+		if berr == nil || !strings.Contains(berr.Error(), want) {
+			t.Errorf("%s: board error %v, want %q", body, berr, want)
+		}
+		if !reflect.DeepEqual(got, DefaultBoard()) {
+			t.Errorf("%s: layout %+v, want the default", body, got)
+		}
+		if s := g.StartSkills(); len(s) != 1 {
+			t.Errorf("%s: the rest of the file was lost: %v", body, s)
+		}
+	}
+}
+
+func TestABadKeyOutsideBoardStillFailsTheLoad(t *testing.T) {
+	path := write(t, filepath.Join(t.TempDir(), "config.toml"), "[board]\nhidden = [\"dun\"]\n[github.labels]\nnope = \"x\"\n")
+	_, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "github.labels: unknown event") {
+		t.Fatalf("error %v", err)
 	}
 }
