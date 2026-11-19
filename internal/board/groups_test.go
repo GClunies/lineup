@@ -1,18 +1,17 @@
 package board
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 	"pgregory.net/rapid"
 
+	"github.com/gclunies/lineup/internal/config"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/localissues"
 	"github.com/gclunies/lineup/internal/scheduler"
@@ -20,7 +19,10 @@ import (
 
 // withClosed sets the closed groups, so a test names the state it reads.
 func withClosed(m Model, groups ...string) Model {
-	m.folds = folds{lifecycle.KindBuild: groups}
+	m.lay.closed = map[string]bool{}
+	for _, g := range groups {
+		m.lay.closed[g] = true
+	}
 	m.setBoard(m.board)
 	return m
 }
@@ -28,31 +30,34 @@ func withClosed(m Model, groups ...string) Model {
 // openAll opens every group, for a test that reads the rows of Backlog or Done.
 func openAll(m Model) Model { return withClosed(m) }
 
-// groupEnv is mineEnv with the fixture Board and groups.json in a temporary
-// folder. The work view holds ENG-20 in Backlog and ENG-9 and local-1 in Ready.
+// groupEnv is mineEnv with the fixture Board. The work view holds ENG-20 in
+// Backlog and ENG-9 and local-1 in Ready.
 func groupEnv(t *testing.T) *workEnv {
 	t.Helper()
 	e, _ := mineEnv(t)
-	e.m.opts.Groups = filepath.Join(t.TempDir(), "groups.json")
 	e.m = feed(e.m, boardMsg(fixture()))
 	e.m.sel = "ENG-588"
 	return e
 }
 
-func screen(m Model) string { return ansi.Strip(m.View()) }
-
-func savedFolds(t *testing.T, path string) folds {
+// layoutEnv is groupEnv under the [board] table b, 81 columns wide.
+func layoutEnv(t *testing.T, b config.Board) *workEnv {
 	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var f folds
-	if err := json.Unmarshal(data, &f); err != nil {
-		t.Fatalf("groups.json %q is not JSON: %v", data, err)
-	}
-	return f
+	e := groupEnv(t)
+	e.m.opts.Board = b
+	e.m.lay = newSections(b)
+	e.m = feed(e.m, tea.WindowSizeMsg{Width: 81, Height: 40}, boardMsg(fixture()))
+	return e
 }
+
+// userBoard is the layout that the user asked for.
+var userBoard = config.Board{
+	Order:     []string{"Done", "Needs you", "Working", "Waiting", "Queued", "Ready", "Backlog"},
+	Collapsed: []string{"Backlog"},
+	Hidden:    []string{"Done"},
+}
+
+func screen(m Model) string { return ansi.Strip(m.View()) }
 
 func TestBacklogAndDoneStartClosedWithTheirCounts(t *testing.T) {
 	e := groupEnv(t)
@@ -72,7 +77,7 @@ func TestBacklogAndDoneStartClosedWithTheirCounts(t *testing.T) {
 	}
 }
 
-func TestEnterOnAHeadingTogglesTheGroupAndSavesTheFile(t *testing.T) {
+func TestEnterOnAHeadingTogglesTheGroupForThisRunOnly(t *testing.T) {
 	e := groupEnv(t)
 	e.m.sel = headingKey("Backlog")
 	if f := footerAt(e.m, 100); !strings.HasPrefix(f, " enter open   j/k move   n new Issue") {
@@ -85,50 +90,16 @@ func TestEnterOnAHeadingTogglesTheGroupAndSavesTheFile(t *testing.T) {
 	if f := footerAt(e.m, 100); !strings.HasPrefix(f, " enter close   j/k move") {
 		t.Fatalf("footer %q, want enter close first", f)
 	}
-	if got := savedFolds(t, e.m.opts.Groups)[lifecycle.KindBuild]; !slices.Equal(got, []string{"Done"}) {
-		t.Fatalf("groups.json holds %v for build, want [Done]", got)
-	}
 
 	restart := New(fixture(), e.m.opts)
 	restart = drain(restart, restart.loadMine())
-	if out := screen(restart); !strings.Contains(out, "ENG-20") || strings.Contains(out, "ENG-560") {
-		t.Fatalf("a new Board lost the saved groups:\n%s", out)
+	if out := screen(restart); strings.Contains(out, "ENG-20") {
+		t.Fatalf("a new Board kept Backlog open:\n%s", out)
 	}
 
 	e.press("enter")
 	if out := screen(e.m); !strings.Contains(out, "BACKLOG  1 …") || strings.Contains(out, "ENG-20") {
 		t.Fatalf("Backlog did not close:\n%s", out)
-	}
-	if got := savedFolds(t, e.m.opts.Groups)[lifecycle.KindBuild]; !slices.Equal(got, []string{"Backlog", "Done"}) {
-		t.Fatalf("groups.json holds %v for build, want [Backlog Done]", got)
-	}
-}
-
-func TestAnUnreadableGroupsFileGivesTheDefaults(t *testing.T) {
-	for name, content := range map[string]*string{"missing": nil, "broken": new("not json"), "unknown Kind": new(`{"deploy":[]}`)} {
-		t.Run(name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "groups.json")
-			if content != nil {
-				if err := os.WriteFile(path, []byte(*content), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}
-			got := readFolds(path)
-			if want := defaultFolds(); !slices.Equal(got[lifecycle.KindBuild], want[lifecycle.KindBuild]) {
-				t.Fatalf("folds %v, want the defaults %v", got, want)
-			}
-		})
-	}
-}
-
-func TestAKindTheFileLeavesOutKeepsItsDefault(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "groups.json")
-	if err := os.WriteFile(path, []byte(`{"review":[]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	got := readFolds(path)
-	if want := defaultFolds(); !slices.Equal(got[lifecycle.KindBuild], want[lifecycle.KindBuild]) {
-		t.Fatalf("folds %v, want build at its default %v", got, want)
 	}
 }
 
@@ -150,22 +121,6 @@ func TestJAndKStopOnEachHeadingExceptNeedsYouAndSkipClosedRows(t *testing.T) {
 	e.press("k")
 	if e.m.sel != "ENG-571" {
 		t.Fatalf("k went to %s, want ENG-571", e.m.sel)
-	}
-}
-
-func TestNeedsYouNeverClosesEvenWhenTheFileListsIt(t *testing.T) {
-	e := groupEnv(t)
-	if err := os.WriteFile(e.m.opts.Groups, []byte(`{"build":["Needs you","Done"]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	m := New(fixture(), e.m.opts)
-	m.width, m.height = 100, 30
-	out := screen(m)
-	if !strings.Contains(out, "NEEDS YOU  2\n") || !strings.Contains(out, "ENG-588") || !strings.Contains(out, "ENG-590") {
-		t.Fatalf("Needs you hides its rows:\n%s", out)
-	}
-	if slices.Contains(m.rowIDs(), headingKey("Needs you")) {
-		t.Fatalf("Needs you is a selection stop: %v", m.rowIDs())
 	}
 }
 
@@ -214,8 +169,9 @@ func TestTheInitialSelectionIsTheFirstRowNotAHeading(t *testing.T) {
 	}
 }
 
-// For random rows and random closed sets, the selection stops are the headings
-// of the non-empty groups except Needs you, then the rows of the open groups.
+// For random rows, orders, closed sets, and hidden sets, the selection stops
+// are the headings of the non-empty shown groups except Needs you, then the
+// rows of the open ones, in the drawn order.
 func TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		var tasks []scheduler.TaskView
@@ -239,11 +195,17 @@ func TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce(t *testing.T) {
 			}
 			inGroup[g] = append(inGroup[g], fmt.Sprintf("local-%d", i+1))
 		}
-		closed := rapid.SliceOfDistinct(rapid.SampledFrom(groupOrder), func(g string) string { return g }).Draw(t, "closed")
+		all := config.DefaultBoard().Order
+		order := rapid.SliceOfNDistinct(rapid.SampledFrom(all), len(all), len(all), func(g string) string { return g }).Draw(t, "order")
+		movable := rapid.SampledFrom(slices.DeleteFunc(slices.Clone(all), func(g string) bool { return g == groupNeedsYou }))
+		same := func(g string) string { return g }
+		closed := rapid.SliceOfDistinct(movable, same).Draw(t, "closed")
+		hidden := rapid.SliceOfDistinct(movable, same).Draw(t, "hidden")
 
 		m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Tasks: tasks})
 		m.mine.loc = loc
-		m = withClosed(m, closed...)
+		m.lay = newSections(config.Board{Order: order, Collapsed: closed, Hidden: hidden})
+		m.setBoard(m.board)
 		ids := m.rowIDs()
 
 		seen := map[string]bool{}
@@ -254,21 +216,22 @@ func TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce(t *testing.T) {
 			seen[id] = true
 		}
 		var wantHeads []string
-		for _, g := range groupOrder {
+		for _, g := range order {
 			rows := inGroup[g]
+			shown := !slices.Contains(hidden, g)
 			if len(rows) == 0 {
 				if seen[headingKey(g)] {
 					t.Fatalf("the empty group %s has a heading in %v", g, ids)
 				}
 				continue
 			}
-			if g != groupNeedsYou {
+			if g != groupNeedsYou && shown {
 				wantHeads = append(wantHeads, headingKey(g))
 			}
-			if seen[headingKey(g)] != (g != groupNeedsYou) {
+			if seen[headingKey(g)] != (g != groupNeedsYou && shown) {
 				t.Fatalf("heading of %s: listed %v in %v", g, seen[headingKey(g)], ids)
 			}
-			open := g == groupNeedsYou || !slices.Contains(closed, g)
+			open := shown && !slices.Contains(closed, g)
 			for _, r := range rows {
 				if seen[r] != open {
 					t.Fatalf("row %s of %s (open %v): listed %v in %v", r, g, open, seen[r], ids)
@@ -313,5 +276,130 @@ func TestTheHeaderFitsEightyColumnsWithTheWipOverflowAndTheReviewCount(t *testin
 	h := ansi.Strip(m.header())
 	if !strings.Contains(h, "WIP 4/5 +1 over   ●2 need you (+1 in reviews)") || strings.Contains(h, "…") {
 		t.Fatalf("header %q is cut at 80 columns", h)
+	}
+}
+
+func TestTheDefaultOrderIsTheDevelopmentCycleAfterNeedsYou(t *testing.T) {
+	want := []string{groupNeedsYou, groupBacklog, groupReady, "Queued", "Working", "Waiting", groupDone}
+	if got := newSections(config.Board{}).order; !slices.Equal(got, want) {
+		t.Fatalf("default order %v, want %v", got, want)
+	}
+}
+
+func TestTheConfiguredOrderSetsTheSectionsOnScreen(t *testing.T) {
+	b := userBoard
+	b.Hidden = nil
+	e := layoutEnv(t, b)
+	out := screen(e.m)
+	inOrder(t, out, "DONE  1\n", "ENG-560", "NEEDS YOU  2", "ENG-588", "WORKING  2", "WAITING  1", "QUEUED  1", "READY  2", "BACKLOG  1 …")
+	var heads []string
+	for _, id := range e.m.rowIDs() {
+		if _, ok := headingName(id); ok {
+			heads = append(heads, id)
+		}
+	}
+	want := []string{"group:Done", "group:Working", "group:Waiting", "group:Queued", "group:Ready", "group:Backlog"}
+	if !slices.Equal(heads, want) {
+		t.Fatalf("heading stops %v, want %v", heads, want)
+	}
+}
+
+func TestTheConfiguredCollapsedSetStartsClosed(t *testing.T) {
+	b := config.DefaultBoard()
+	b.Collapsed = []string{"Ready", "Waiting"}
+	e := layoutEnv(t, b)
+	out := screen(e.m)
+	for _, want := range []string{"READY  2 …", "WAITING  1 …", "BACKLOG  1\n", "ENG-20", "DONE  1\n", "ENG-560"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("screen lacks %q:\n%s", want, out)
+		}
+	}
+	for _, gone := range []string{"ENG-9", "ENG-571"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("screen shows %s of a collapsed section:\n%s", gone, out)
+		}
+	}
+	e.m.sel = headingKey("Ready")
+	e.press("enter")
+	if !strings.Contains(screen(e.m), "ENG-9") {
+		t.Fatalf("enter did not open Ready:\n%s", screen(e.m))
+	}
+}
+
+func TestAHiddenSectionShowsNoHeadingNoRowsAndNoStopAndKeepsTheHeaderCounts(t *testing.T) {
+	shown := layoutEnv(t, config.DefaultBoard())
+	e := layoutEnv(t, userBoard)
+	out := screen(e.m)
+	for _, gone := range []string{"DONE", "ENG-560"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("screen shows %q of a hidden section:\n%s", gone, out)
+		}
+	}
+	for range 20 {
+		if e.m.sel == headingKey("Done") || e.m.sel == "ENG-560" {
+			t.Fatalf("the selection landed in the hidden section: %s", e.m.sel)
+		}
+		e.press("j")
+	}
+	if got, want := ansi.Strip(e.m.header()), ansi.Strip(shown.m.header()); got != want {
+		t.Fatalf("header %q, want %q as before the section hid", got, want)
+	}
+}
+
+func TestDShowsAndHidesDoneAndOpensIt(t *testing.T) {
+	e := layoutEnv(t, userBoard)
+	if out := screen(e.m); strings.Contains(out, "DONE") {
+		t.Fatalf("Done shows before d:\n%s", out)
+	}
+	e.press("d")
+	out := screen(e.m)
+	inOrder(t, out, "DONE  1\n", "ENG-560", "NEEDS YOU  2")
+	e.press("d")
+	if out := screen(e.m); strings.Contains(out, "DONE") || strings.Contains(out, "ENG-560") {
+		t.Fatalf("Done shows after the second d:\n%s", out)
+	}
+}
+
+func TestDHidesDoneEvenWhenTheFileHidesNothing(t *testing.T) {
+	e := layoutEnv(t, config.DefaultBoard())
+	if !strings.Contains(screen(e.m), "DONE  1 …") {
+		t.Fatalf("Done does not show by default:\n%s", screen(e.m))
+	}
+	e.press("d")
+	if strings.Contains(screen(e.m), "DONE") {
+		t.Fatalf("d did not hide Done:\n%s", screen(e.m))
+	}
+	e.press("d")
+	if !strings.Contains(screen(e.m), "DONE  1\n") || !strings.Contains(screen(e.m), "ENG-560") {
+		t.Fatalf("d did not show Done open:\n%s", screen(e.m))
+	}
+}
+
+func TestHidingDoneUnderItsSelectedRowFallsBackToAShownRow(t *testing.T) {
+	e := layoutEnv(t, config.Board{Order: config.DefaultBoard().Order})
+	e.m.sel = "ENG-560"
+	e.press("d")
+	if e.m.sel != "ENG-588" {
+		t.Fatalf("selection %q, want the first row ENG-588", e.m.sel)
+	}
+}
+
+func TestTheFilterFindsARowInAHiddenSection(t *testing.T) {
+	e := layoutEnv(t, userBoard)
+	e.press("/", "rename", "enter")
+	if out := screen(e.m); !strings.Contains(out, "ENG-560") {
+		t.Fatalf("the filter did not find ENG-560 in the hidden Done:\n%s", out)
+	}
+	e.press("esc")
+	if out := screen(e.m); strings.Contains(out, "ENG-560") || strings.Contains(out, "DONE") {
+		t.Fatalf("Done shows after the filter cleared:\n%s", out)
+	}
+}
+
+func TestTheHelpListsD(t *testing.T) {
+	e := groupEnv(t)
+	e.press("?")
+	if out := screen(e.m); !strings.Contains(out, "d        show or hide Done") {
+		t.Fatalf("help lacks d:\n%s", out)
 	}
 }

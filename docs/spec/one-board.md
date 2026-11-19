@@ -47,7 +47,7 @@ The Board shows the work view only. It has no plan view (ADR 0021) and no review
  DONE  1 …
 ```
 
-Each heading shows its row count. Backlog is open in this picture, and Done is closed. The header has no per-group counts. See "Fold the groups" below.
+Each heading shows its row count. Backlog is open in this picture, and Done is closed. The header has no per-group counts. See "Lay out the groups" below.
 
 An Issue row is an Issue of the user's own with no Task on the Board. The Board reads the Issues itself. The Scheduler and its store do not change.
 
@@ -70,7 +70,7 @@ An Issue row is an Issue of the user's own with no Task on the Board. The Board 
 - A row shows the ID, the Repo when it is known, the title, a note, and the priority. The note is `blocked by <IDs>`, `unblocked`, or empty.
 - `unblocked` means that the Issue has one or more blockers and that every blocker is done or canceled. A Linear blocker is a "blocks" relation. A local blocker is an entry in `blocked_by`.
 
-The group order is Needs you, Backlog, Ready, Queued, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. The other groups follow the development cycle, from an idea to a merged PR.
+The default group order is Needs you, Backlog, Ready, Queued, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
 
 Both groups sort in this order:
 
@@ -119,7 +119,7 @@ One table, `issueKinds` in `internal/board/issuekind.go`, decides the keys of ea
 ```
 
 - The filter matches the ID and the title of each Task and Issue row, as a fuzzy match.
-- While the filter holds text, only the matching rows show. Every group with a match is open, whatever `groups.json` says, and each heading counts its matches. `j` and `k` skip the headings.
+- While the filter holds text, only the matching rows show. Every group with a match is open and shown, whatever `[board]` says, and each heading counts its matches. `j` and `k` skip the headings.
 - `enter` keeps the filter and gives the keys back, so the keys work on the matching rows. `esc` clears the filter and gives back the rows and the selection from before the filter.
 - Digits and letters in the filter are text, so `q` does not quit.
 - lineup does not save the filter.
@@ -180,19 +180,30 @@ The header has no count for the other groups. Each group heading shows its count
 
 The Board already holds the Tasks of both Kinds, so this needs no new data.
 
-## Fold the groups
+## Lay out the groups
 
-A long Backlog or Done group can push Ready and Working off a 24-row pane. Each group heading is a selectable row, so the user can close the groups that they do not need now.
+A long Backlog or Done group can push Ready and Working off a 24-row pane. The board must show first what needs the user. The `[board]` table in the global file sets the order of the groups, which groups start closed, and which groups are hidden. Each group heading is a selectable row, so the user can also close a group for this run.
+
+```toml
+[board]
+order = ["done", "needs_you", "working", "waiting", "queued", "ready", "backlog"]
+collapsed = ["backlog"]
+hidden = ["done"]
+```
+
+The keys of a group are `needs_you`, `backlog`, `ready`, `queued`, `working`, `waiting`, and `done`. A key that is absent takes its default, and an empty list means none. A group that `order` leaves out follows the listed groups, in the default order. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` stop the load with an error that names the key, for example `board.hidden: unknown section "dun"`.
 
 | Rule | Behavior |
 |---|---|
 | Heading | The group name in upper case and its row count, as `BACKLOG  7`. A closed group adds ` …` and hides its rows. A group with no row has no heading. |
 | Needs you | It never closes, and its heading is not a selection stop. |
-| Keys | `j` and `k` move through the headings and the rows of open groups. `enter` on a heading opens or closes the group. The footer reads `enter open` or `enter close`, then `j/k move`. |
-| Defaults | Backlog and Done start closed. |
-| State | `groups.json` in the state folder holds the closed groups, as `{"build": ["Backlog", "Done"]}`. A missing or unreadable file gives the defaults, and so does a file that leaves out `build`. |
+| Keys | `j` and `k` move through the headings and the rows of open groups, and skip a hidden group. `enter` on a heading opens or closes the group. The footer reads `enter open` or `enter close`, then `j/k move`. |
+| Order | `order`. The default is the order above. |
+| Closed | `collapsed` starts closed at each board start. The default is Backlog and Done. `enter` or a tap on a heading opens or closes a group for this run only. |
+| Hidden | `hidden` groups show no heading and no rows, and `j` and `k` skip them. The header counts do not change. The default is none. The filter finds a row in a hidden group. |
+| `d` | Shows Done if it is hidden, and opens it. Hides Done if it shows. It changes this run only, whatever `hidden` says. |
 | Selection | A Task that moves into a closed group selects that group's heading. Any other lost selection goes to the first row, or to the first heading when every group is closed. |
-| Capture | `n` into a closed Backlog opens Backlog and saves the file. |
+| Capture | `n` into a closed Backlog opens Backlog. |
 
 ## The free slot toast
 
@@ -210,7 +221,7 @@ With no Ready row, the Board sends no extra toast. The Board does not start the 
 |---|---|
 | `internal/localissues` | The `backlog` status. `Create` writes `backlog`. A `Promote` write that sets `canceled` and adds the line to the body. |
 | `internal/linear` | A `Levels` function that returns the dependency level of each Issue. An `Unblocked` fact on `Issue` from the closed "blocks" relations. |
-| `internal/board` | Issue rows, their load and refresh, the Ready and Backlog groups, the keys table in `issuekind.go`, the description, the status list, the filter in `filter.go`, the capture box, the Destination list, promote, the group headings and `groups.json`, the header count, and the free slot toast |
+| `internal/board` | Issue rows, their load and refresh, the Ready and Backlog groups, the keys table in `issuekind.go`, the description, the status list, the filter in `filter.go`, the capture box, the Destination list, promote, the group headings and the `[board]` layout, the header count, and the free slot toast |
 | `cmd/lineup/wire.go` | The Local Tracker store for the work view, whatever `local_tracker` says |
 | Docs | `GLOSSARY.md` gets Ready, Backlog, Destination, and Promote. `docs/spec/mvp.md` and `docs/spec/trackers.md` name the new groups and the `backlog` status. |
 
@@ -237,8 +248,11 @@ Each PR lands on `main` before the next one starts.
 | The default Destination is `local`, even after the user picks a Linear one | A board test that captures twice |
 | Promote changes the local file only after the Linear create succeeds | A board test with a failing fake create |
 | The header names no view, shows the review Tasks' Needs you count and `reviews paused`, has no per-group counts, and fits 80 columns | Board tests that read the header |
-| Backlog and Done start closed with their counts, and `enter` on a heading opens or closes the group and saves `groups.json` | Board tests that read the screen, the footer, and the file, and a restart |
-| `j` and `k` stop on each heading except Needs you and skip the rows of closed groups | A board test over the fixture, and a `rapid` property test over random rows and closed sets |
+| Backlog and Done start closed with their counts, and `enter` on a heading opens or closes the group for this run only | Board tests that read the screen and the footer, and a restart |
+| The groups show in the `[board]` order, `collapsed` groups start closed, and `hidden` groups show nothing | Board tests that read the screen at 81 columns |
+| `d` shows or hides Done, and opens it when it shows | Board tests that read the screen before and after `d` |
+| `[board]` fails at load on an unknown group, a duplicate, and `needs_you` in `collapsed` or `hidden` | Config tests that read the error |
+| `j` and `k` stop on each shown heading except Needs you and skip the rows of closed groups | A board test over the fixture, and a `rapid` property test over random rows, orders, closed sets, and hidden sets |
 | The free slot toast names the first Ready row, and only when a slot is free | A board test that sends two board views |
 | `1`, `2`, and `3` do nothing | A board test that reads the screen and the command |
 | `f` shows a Linear description and a local file body, and `f` goes back | Board tests with the fake Linear client and a temporary Local Tracker folder |

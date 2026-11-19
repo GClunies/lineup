@@ -143,6 +143,7 @@ type globalFile struct {
 		Slots  *int        `toml:"slots"`
 		Queues []queueFile `toml:"queues"`
 	} `toml:"review"`
+	Board boardFile `toml:"board"`
 }
 
 // PRFilter picks pull requests. Its keys are named after GitHub's search
@@ -181,6 +182,7 @@ const defaultSlots = 3
 
 type Global struct {
 	file     globalFile
+	board    Board
 	home     string
 	lookPath func(string) (string, error)
 }
@@ -251,7 +253,7 @@ func Load(globalPath string) (*Global, error) {
 	if err != nil {
 		return nil, fmt.Errorf("find home folder: %w", err)
 	}
-	g := &Global{home: home, lookPath: exec.LookPath}
+	g := &Global{home: home, lookPath: exec.LookPath, board: DefaultBoard()}
 	data, err := os.ReadFile(globalPath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -296,6 +298,9 @@ func Load(globalPath string) (*Global, error) {
 		}
 	}
 	if err := validateReview(g.file.Review.Queues, g.file.Review.Slots); err != nil {
+		return nil, fmt.Errorf("%s: %w", globalPath, err)
+	}
+	if g.board, err = resolveBoard(g.file.Board); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	return g, nil

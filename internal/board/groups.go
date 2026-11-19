@@ -1,19 +1,15 @@
 package board
 
 import (
-	"cmp"
-	"encoding/json"
 	"maps"
-	"os"
 	"slices"
 	"strings"
 
 	"github.com/gclunies/lineup/internal/config"
-	"github.com/gclunies/lineup/internal/lifecycle"
 )
 
-// This file holds the group headings of the Board, and the closed groups
-// that the Board keeps between runs.
+// This file holds the group headings of the Board, and the layout of its
+// sections.
 
 const (
 	groupNeedsYou = "Needs you"
@@ -28,58 +24,42 @@ func headingKey(g string) string { return headingPrefix + g }
 // headingName returns the group that a heading's selection key names.
 func headingName(id string) (string, bool) { return strings.CutPrefix(id, headingPrefix) }
 
-// folds lists the closed groups of each Kind, in group order. Needs you
-// never closes, whatever the list holds.
-type folds map[lifecycle.Kind][]string
-
-func defaultFolds() folds {
-	return folds{lifecycle.KindBuild: {groupBacklog, groupDone}}
+// sections is the order of the sections, and which ones are closed or out of
+// sight. It starts as the [board] table says. A key press changes it for this
+// run only.
+type sections struct {
+	order  []string
+	closed map[string]bool
+	hidden map[string]bool
 }
 
-// readFolds reads groups.json. A missing or unreadable file gives the defaults,
-// and so does a Kind that the file leaves out.
-func readFolds(path string) folds {
-	f := defaultFolds()
-	if path == "" {
-		return f
+func newSections(b config.Board) sections {
+	if len(b.Order) == 0 {
+		b = config.DefaultBoard()
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return f
-	}
-	var saved folds
-	if json.Unmarshal(data, &saved) != nil {
-		return f
-	}
-	maps.Copy(f, saved)
-	return f
-}
-
-// writeFolds saves f to path. An empty path keeps f for this run only.
-func writeFolds(path string, f folds) error {
-	if path == "" {
-		return nil
-	}
-	return config.WriteJSON(path, f)
-}
-
-func (f folds) closed(k lifecycle.Kind, g string) bool {
-	return g != groupNeedsYou && slices.Contains(f[k], g)
-}
-
-// with returns f with group g of Kind k closed or open. f stays as it was.
-func (f folds) with(k lifecycle.Kind, g string, closed bool) folds {
-	gs := []string{}
-	for _, x := range f[k] {
-		if x != g {
-			gs = append(gs, x)
+	set := func(groups []string) map[string]bool {
+		s := map[string]bool{}
+		for _, g := range groups {
+			s[g] = true
 		}
+		return s
 	}
-	if closed {
-		gs = append(gs, g)
-	}
-	slices.SortFunc(gs, func(a, b string) int { return cmp.Compare(slices.Index(groupOrder, a), slices.Index(groupOrder, b)) })
-	out := maps.Clone(f)
-	out[k] = gs
-	return out
+	return sections{order: b.Order, closed: set(b.Collapsed), hidden: set(b.Hidden)}
+}
+
+// rank is the place of group g in the order.
+func (l sections) rank(g string) int { return slices.Index(l.order, g) }
+
+// withClosed returns l with group g closed or open. l stays as it was.
+func (l sections) withClosed(g string, closed bool) sections {
+	l.closed = maps.Clone(l.closed)
+	l.closed[g] = closed
+	return l
+}
+
+// withHidden returns l with group g hidden or shown. l stays as it was.
+func (l sections) withHidden(g string, hidden bool) sections {
+	l.hidden = maps.Clone(l.hidden)
+	l.hidden[g] = hidden
+	return l
 }

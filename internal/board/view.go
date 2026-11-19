@@ -387,7 +387,10 @@ func (m Model) rowLines(w int) []rowLine {
 		return headRow.Render(ansi.Truncate(s, w, "…"))
 	}
 	var out []rowLine
-	for _, g := range groupOrder {
+	for _, g := range m.lay.order {
+		if !m.shown(g) {
+			continue
+		}
 		var lines []rowLine
 		for _, t := range m.tasks {
 			if t.Group == g {
@@ -468,6 +471,7 @@ const boardHelp = `
    j k      move the selection
    enter    focus the Task's tab in Rex, or restore its closed Worker
             on a group heading: open or close the group
+   d        show or hide Done
    p        live preview of the Worker's screen
    f        detail pane at full screen, and back; on an Issue row,
             the Issue's description

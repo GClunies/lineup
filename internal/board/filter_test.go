@@ -1,7 +1,6 @@
 package board
 
 import (
-	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -119,18 +118,6 @@ func TestARunOfRunesThatSpellsAKeyNameStaysText(t *testing.T) {
 	}
 	if e.m.mode != modeFilter || e.m.filter.Value() != "updownescentertab" {
 		t.Fatalf("mode %d filter %q, want the filter open with updownescentertab", e.m.mode, e.m.filter.Value())
-	}
-}
-
-func TestTheFilterIsNotSaved(t *testing.T) {
-	e := groupEnv(t)
-	e.press("/", "rename", "enter", "esc")
-	if _, err := os.Stat(e.m.opts.Groups); !os.IsNotExist(err) {
-		t.Fatalf("the filter wrote groups.json: %v", err)
-	}
-	fresh := groupEnv(t)
-	if fresh.m.filter.Value() != "" {
-		t.Fatalf("a new Board starts with the filter %q", fresh.m.filter.Value())
 	}
 }
 

@@ -388,6 +388,17 @@ Each key layers on its own, as in `[budgets]`. A value that is not in the table 
 
 `start_skills` is a top-level key in the global file. It lists the skills that the skill picker offers when the user starts a Task from an Issue row. A chosen skill is stored as the Task override `skill`.
 
+`[board]` is a table in the global file. It sets the layout of the Board's groups:
+
+```toml
+[board]
+order = ["done", "needs_you", "working", "waiting", "queued", "ready", "backlog"]
+collapsed = ["backlog"]
+hidden = ["done"]
+```
+
+`order` lists the groups, first to last. A group that it leaves out follows the listed ones, in the default order: `needs_you`, `backlog`, `ready`, `queued`, `working`, `waiting`, `done`. `collapsed` lists the groups that start closed. Its default is `backlog` and `done`. `hidden` lists the groups that the Board does not show. Its default is none. A key that is absent takes its default, and an empty list means none. `needs_you` cannot be in `collapsed` or `hidden`. The load fails with an error that names the key, for example `board.hidden: unknown section "dun"`, on an unknown group, on a duplicate in one list, and on `needs_you` in `collapsed` or `hidden`.
+
 `ad_hoc_session` is a top-level key in the global file. It names the Rex session for ad hoc Tasks. The default is `ad hoc`.
 
 `linear_client_id` is a top-level key in the global file. Put it above the first `[table]`, or TOML reads it as part of that table. Leave it out to sign in through lineup's own Linear OAuth app, which any workspace can use. To use your own app, register an OAuth app in Linear with the redirect URI `http://localhost:47821/callback` and no client credentials. Then set its client ID here.
@@ -484,15 +495,16 @@ A review Task shows `#N reviewing`, `#N review ready` with `· head moved` when 
 
 Reviews by bots do not count as a person's review.
 
-The groups are Needs you, Backlog, Ready, Queued, Working, Waiting, and Done, in that order. Needs you comes first, and the other groups follow the development cycle. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
+The groups are Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. By default they show in that order: Needs you comes first, and the other groups follow the development cycle. The `[board]` table in the global file changes the order. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
 
 Each group with at least one row has a heading that shows the group name and its row count, for example `BACKLOG  7`. A heading is a row that the user can select, except the Needs you heading. `j` and `k` stop on each heading and skip the rows of a closed group. `enter` on a heading opens or closes the group. A closed group shows its heading with a `…` mark and hides its rows, as `BACKLOG  7 …` does. Needs you never closes. This keeps a long Backlog or Done group from pushing Ready and Working off the screen.
 
-Backlog and Done start closed. lineup saves the closed groups in `groups.json` in the state folder as soon as the user opens or closes a group. A missing or unreadable file gives these defaults. When a Task moves into a closed group, the selection goes to that group's heading. When `n` adds a local Issue, lineup opens Backlog, so the new row shows.
+Backlog and Done start closed, and `[board] collapsed` changes that. `enter` or a tap on a heading opens or closes a group for this run only. `[board] hidden` hides groups: a hidden group shows no heading and no rows, and `j` and `k` skip it. `d` shows or hides Done for this run, whatever `hidden` says, and opens Done when it shows. While the filter holds text, a hidden group shows its matches. When a Task moves into a closed group, the selection goes to that group's heading. When `n` adds a local Issue, lineup opens Backlog, so the new row shows.
 
 | Key | Action |
 |---|---|
 | `j` `k` | Move the selection through the group headings and the rows of open groups |
+| `d` | Show or hide Done |
 | `enter` | On a Task row, focus the Task's tab in Rex. If the Task has started and has no live Worker, restore the Worker with `claude --resume`, as `lineup open` does. The hint reads `restore the Worker`. On a group heading, open or close the group. The hint reads `open` or `close`. |
 | `p` | Show a live preview of the Worker's screen beside the Board |
 | `f` | Show the detail pane at full screen, and back. On an Issue row, the pane shows the Issue's description. |
