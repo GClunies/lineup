@@ -127,12 +127,11 @@ func issueRows(lin []linear.Issue, loc []localissues.Issue, tasks []scheduler.Ta
 	return out
 }
 
-// cmpIssueRows orders by group, then rows with no open blocker first, then
-// priority, dependency level, and natural ID. The URL only makes the order
+// cmpIssueRows orders rows with no open blocker first, then by priority,
+// dependency level, and natural ID. The URL only makes the order
 // total, for two workspaces whose teams share a key.
 func cmpIssueRows(a, b issueRow) int {
 	return cmp.Or(
-		cmp.Compare(slices.Index(groupOrder, a.Group), slices.Index(groupOrder, b.Group)),
 		cmp.Compare(min(len(a.Blockers), 1), min(len(b.Blockers), 1)),
 		cmp.Compare(linear.PriorityRank(a.Priority), linear.PriorityRank(b.Priority)),
 		cmp.Compare(a.Level, b.Level),

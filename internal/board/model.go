@@ -3,6 +3,7 @@
 package board
 
 import (
+	"cmp"
 	"fmt"
 	"os/exec"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gclunies/lineup/internal/config"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/linear"
 	"github.com/gclunies/lineup/internal/markdown"
@@ -50,9 +52,8 @@ type Options struct {
 	// Destinations is destinations.json in the state folder. It keeps the
 	// last Destinations that the user picked. Empty keeps them for this run.
 	Destinations string
-	// Groups is groups.json in the state folder. It keeps the groups that the
-	// user closed. Empty keeps them for this run.
-	Groups string
+	// Board is the layout of the sections. The zero value is the default.
+	Board config.Board
 }
 
 type mode int
@@ -75,9 +76,6 @@ const (
 	previewEvery = 500 * time.Millisecond
 	capFull      = "wip cap full"
 )
-
-// groupOrder puts Needs you first, then follows the development cycle.
-var groupOrder = []string{groupNeedsYou, groupBacklog, groupReady, "Queued", "Working", "Waiting", groupDone}
 
 type (
 	boardMsg  scheduler.BoardView
@@ -108,7 +106,7 @@ type Model struct {
 	tasks   []scheduler.TaskView // the build Tasks, in group order
 	issues  []issueRow           // the Issue rows of the work view, in group order
 	sel     string               // the ID of the selected Task or Issue row, or a heading's key
-	folds   folds                // the closed groups, by Kind
+	lay     sections             // the order of the sections, and which are closed or hidden
 	online  bool
 	status  string
 	statusE bool
@@ -162,7 +160,7 @@ func New(v scheduler.BoardView, opts Options) Model {
 	m.filter = newFilter()
 	m.mine = mine{lin: map[string][]linear.Issue{}, wss: map[string]linear.Workspace{}, fresh: map[string]bool{}}
 	m.box = newCaptureBox()
-	m.folds = readFolds(opts.Groups)
+	m.lay = newSections(opts.Board)
 	m.dests = destinations{linear: map[string][]destination{}, errs: map[string]string{}}
 	m.setBoard(v)
 	m.alerted = map[string]string{}
@@ -174,7 +172,7 @@ func (m *Model) setBoard(v scheduler.BoardView) {
 	m.board = v
 	m.tasks = m.tasks[:0]
 	own := v.OfKind(lifecycle.KindBuild).Tasks
-	for _, g := range groupOrder {
+	for _, g := range m.lay.order {
 		for _, t := range own {
 			if t.Group == g {
 				m.tasks = append(m.tasks, t)
@@ -182,10 +180,16 @@ func (m *Model) setBoard(v scheduler.BoardView) {
 		}
 	}
 	m.issues = issueRows(m.mine.linearIssues(), m.mine.loc, v.Tasks)
+	slices.SortStableFunc(m.issues, func(a, b issueRow) int { return cmp.Compare(m.lay.rank(a.Group), m.lay.rank(b.Group)) })
 	if q := m.query(); q != "" {
 		m.tasks = matching(q, m.tasks, func(t scheduler.TaskView) string { return t.ID + "  " + t.Title })
 		m.issues = matching(q, m.issues, func(r issueRow) string { return r.ID + "  " + r.Title })
 	}
+	m.keepSelection()
+}
+
+// keepSelection picks a new selection when the old one is not on the screen.
+func (m *Model) keepSelection() {
 	if ids := m.rowIDs(); !slices.Contains(ids, m.sel) && len(ids) > 0 {
 		m.sel = m.fallback(ids)
 	}
@@ -195,7 +199,7 @@ func (m *Model) setBoard(v scheduler.BoardView) {
 // group now hides selects that group's heading. Any other loss selects the
 // first row, or the first heading when no group is open.
 func (m Model) fallback(ids []string) string {
-	if g := m.groupOf(m.sel); g != "" && !m.open(g) {
+	if g := m.groupOf(m.sel); g != "" && m.shown(g) && !m.open(g) {
 		return headingKey(g)
 	}
 	for _, id := range ids {
@@ -223,7 +227,11 @@ func (m Model) groupOf(id string) string {
 
 // open reports whether the group shows its rows. Under a filter every
 // group with a match shows them.
-func (m Model) open(g string) bool { return m.query() != "" || !m.folds.closed(lifecycle.KindBuild, g) }
+func (m Model) open(g string) bool { return m.query() != "" || !m.lay.closed[g] }
+
+// shown reports whether the group shows at all. Under a filter every group
+// with a match shows, a hidden one too.
+func (m Model) shown(g string) bool { return m.query() != "" || !m.lay.hidden[g] }
 
 // groupIDs lists the IDs of the rows in group g.
 func (m Model) groupIDs(g string) []string {
@@ -241,14 +249,14 @@ func (m Model) groupIDs(g string) []string {
 	return ids
 }
 
-// rowIDs lists the selection stops in screen order. Each group with a row has
-// its heading, except Needs you, and then its rows when it is open. Under a
-// filter the stops are the matching rows only.
+// rowIDs lists the selection stops in screen order. Each shown group with a
+// row has its heading, except Needs you, and then its rows when it is open.
+// Under a filter the stops are the matching rows only.
 func (m Model) rowIDs() []string {
 	var ids []string
-	for _, g := range groupOrder {
+	for _, g := range m.lay.order {
 		rows := m.groupIDs(g)
-		if len(rows) == 0 {
+		if len(rows) == 0 || !m.shown(g) {
 			continue
 		}
 		if g != groupNeedsYou && m.query() == "" {
@@ -262,18 +270,19 @@ func (m Model) rowIDs() []string {
 }
 
 // toggleGroup opens the group if it is closed, and closes it if it is open.
-// It saves the choice.
 func (m Model) toggleGroup(g string) Model {
-	return m.setGroup(lifecycle.KindBuild, g, m.open(g))
+	m.lay = m.lay.withClosed(g, m.open(g))
+	return m
 }
 
-// setGroup closes or opens the group of Kind k and saves the choice. A failed
-// save leaves the choice in force for this run.
-func (m Model) setGroup(k lifecycle.Kind, g string, closed bool) Model {
-	m.folds = m.folds.with(k, g, closed)
-	if err := writeFolds(m.opts.Groups, m.folds); err != nil {
-		m.setStatus("save groups: "+err.Error(), true)
+// toggleDone hides Done if it shows, and shows it, open, if it is hidden.
+func (m Model) toggleDone() Model {
+	hide := !m.lay.hidden[groupDone]
+	m.lay = m.lay.withHidden(groupDone, hide)
+	if !hide {
+		m.lay = m.lay.withClosed(groupDone, false)
 	}
+	m.keepSelection()
 	return m
 }
 
@@ -414,6 +423,8 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.move(1), nil
 	case "k", "up":
 		return m.move(-1), nil
+	case "d":
+		return m.toggleDone(), nil
 	case "/":
 		return m.startFilter()
 	case "esc":
