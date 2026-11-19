@@ -69,6 +69,20 @@ func TestNIntoAClosedBacklogOpensIt(t *testing.T) {
 	inOrder(t, out, "BACKLOG  2\n", "ENG-20", "Retry failed loads")
 }
 
+func TestNIntoAHiddenBacklogShowsItAndSelectsTheNewRow(t *testing.T) {
+	e, _ := captureEnv(t)
+	e.m.lay = e.m.lay.withHidden(groupBacklog, true)
+	e.m = feed(e.m, boardMsg(fixture()))
+	if out := ansi.Strip(e.m.View()); strings.Contains(out, "BACKLOG") {
+		t.Fatalf("Backlog shows before the add:\n%s", out)
+	}
+	e.press("n", "Retry failed loads", "enter")
+	inOrder(t, ansi.Strip(e.m.View()), "BACKLOG  2\n", "ENG-20", "Retry failed loads")
+	if e.m.sel != "local-2" {
+		t.Fatalf("selection %q, want the new row local-2", e.m.sel)
+	}
+}
+
 func TestAFailedAddLeavesABacklogClosed(t *testing.T) {
 	e, _ := captureEnv(t)
 	e.m.opts.LocalIssues = ""

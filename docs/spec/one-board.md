@@ -203,7 +203,7 @@ The keys of a group are `needs_you`, `backlog`, `ready`, `queued`, `working`, `w
 | Hidden | `hidden` groups show no heading and no rows, and `j` and `k` skip them. The header counts do not change. The default is none. The filter finds a row in a hidden group. |
 | `d` | Shows Done if it is hidden, and opens it. Hides Done if it shows. It changes this run only, whatever `hidden` says. |
 | Selection | A Task that moves into a closed group selects that group's heading. Any other lost selection goes to the first row, or to the first heading when every group is closed. |
-| Capture | `n` into a closed Backlog opens Backlog. |
+| Capture | `n` into a closed or hidden Backlog shows and opens Backlog for this run, and selects the new row. |
 
 ## The free slot toast
 

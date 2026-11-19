@@ -139,6 +139,7 @@ type Model struct {
 	sl         statusList
 	filter     textinput.Model // the work view's filter
 	unfiltered string          // the selection when the filter opened
+	want       string          // the row to select once it loads, such as a new local Issue
 
 	alerted map[string]string // Task ID to the Attention that last toasted
 }
@@ -190,7 +191,11 @@ func (m *Model) setBoard(v scheduler.BoardView) {
 
 // keepSelection picks a new selection when the old one is not on the screen.
 func (m *Model) keepSelection() {
-	if ids := m.rowIDs(); !slices.Contains(ids, m.sel) && len(ids) > 0 {
+	ids := m.rowIDs()
+	if m.want != "" && slices.Contains(ids, m.want) {
+		m.sel, m.want = m.want, ""
+	}
+	if !slices.Contains(ids, m.sel) && len(ids) > 0 {
 		m.sel = m.fallback(ids)
 	}
 }
