@@ -314,6 +314,9 @@ func (t *Task) observe(s Signal) []Effect {
 		if t.Kind != KindBuild {
 			return nil
 		}
+		if t.Flag == ReasonPRClosed {
+			t.flag("", "")
+		}
 		t.Standing = t.Policy.Bar.Measure(s.Facts)
 		if t.settles() {
 			return t.settle()
@@ -347,6 +350,13 @@ func (t *Task) observe(s Signal) []Effect {
 	case PRClosed:
 		if t.Kind == KindReview {
 			return t.finish(OutcomeClosed)
+		}
+		if t.Flag == "" {
+			detail := "closed without a merge"
+			if s.Number != 0 {
+				detail = fmt.Sprintf("#%d %s", s.Number, detail)
+			}
+			t.flag(ReasonPRClosed, detail)
 		}
 	}
 	return nil

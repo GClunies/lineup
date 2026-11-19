@@ -378,6 +378,9 @@ func (g *fakeGitHub) Signals(prev, cur *PRSnapshot) []lifecycle.Signal {
 		}
 	}
 	for _, n := range names {
+		if n == "pr-closed" {
+			return []lifecycle.Signal{lifecycle.PRClosed{Number: cur.Number}}
+		}
 		if f, ok := factsByName[n]; ok {
 			out = append(out, lifecycle.PRSeen{Facts: f})
 		}
@@ -1393,6 +1396,42 @@ func TestAPollSavesTheStanding(t *testing.T) {
 		return err == nil && json.Unmarshal(raw["ENG-7"], &saved) == nil &&
 			saved.Stage == lifecycle.CIRunning && saved.Standing.ScoreDue && saved.Standing.Head == testHead
 	})
+}
+
+// A Task that waited on a PR which closed before pr-closed existed has the
+// closed PR as its stored snapshot. The first poll after the upgrade flags it,
+// and later polls change nothing.
+func TestAStuckTaskWithAClosedPRGetsTheFlagOnceAtTheFirstPoll(t *testing.T) {
+	closed := PRSnapshot{Number: 5149, URL: "https://github.com/acme/data/pull/5149", Raw: json.RawMessage(`["pr-closed"]`)}
+	seed := func(st *store.Store) {
+		r := Record{Task: lifecycle.Task{ID: "ENG-7", Stage: lifecycle.InReview, Policy: lifecycle.Policy{}, Left: lifecycle.Budgets{}},
+			Title: "Backfill events", RepoSlug: "acme/data", Branch: "ada/eng-7", StageSince: time.Now(), PR: &closed}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, func(d *Deps) { d.PollInterval = time.Hour })
+	key := PRKey{Repo: "acme/data", Branch: "ada/eng-7"}
+	h.gh.set(key, 5149, "pr-closed")
+	h.do(Request{Op: "poll"})
+	eventually(t, "the pr closed flag", func() bool { return h.task("ENG-7").Flag == "pr closed" })
+	v := h.task("ENG-7")
+	if v.StageKey != "in_review" || v.Group != lifecycle.GroupNeedsYou.String() ||
+		v.Note != "pr closed: #5149 closed without a merge" {
+		t.Fatalf("stage %s, group %s, note %q", v.StageKey, v.Group, v.Note)
+	}
+	h.do(Request{Op: "poll"})
+	h.do(Request{Op: "poll"})
+	events, err := h.st.Events("ENG-7")
+	if err != nil || len(events) != 1 || events[0].Signal != "pr-closed" {
+		t.Fatalf("events %+v, err %v: want one pr-closed transition", events, err)
+	}
+
+	h.gh.set(key, 5149, "review-required")
+	h.do(Request{Op: "poll"})
+	eventually(t, "the flag cleared by a reopened PR", func() bool { return h.task("ENG-7").Flag == "" })
+	if got := h.task("ENG-7").StageKey; got != "in_review" {
+		t.Fatalf("stage %s after the reopen", got)
+	}
 }
 
 func (h *harness) waitSpecs(n int) WorkerSpec {

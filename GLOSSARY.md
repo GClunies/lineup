@@ -118,6 +118,7 @@ A flag on a Task, in any Stage, that says the user must act and gives the reason
 - a draft PR that passed CI
 - a review bot that did not score a passing PR
 - a spent Loop budget
+- a PR that closed without a merge
 - a Draft reply
 _Avoid_: Blocked, waiting, attention state
 

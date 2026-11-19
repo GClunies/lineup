@@ -74,3 +74,21 @@ func TestAlertText(t *testing.T) {
 		}
 	}
 }
+
+func TestAClosedPRAlertsOnceAndAgainAfterAReopen(t *testing.T) {
+	inReview := TaskView{ID: "ENG-1", Title: "Add billing model", Stage: "In review", StageKey: "in_review", Group: "Waiting", Note: "#5149 ○ no review yet"}
+	closed := inReview
+	closed.Group, closed.Flag, closed.Note = "Needs you", "pr closed", "pr closed: #5149 closed without a merge"
+	seen := map[string]string{}
+	for i, s := range []struct {
+		task TaskView
+		want int
+	}{{inReview, 0}, {closed, 1}, {closed, 0}, {inReview, 0}, {closed, 1}} {
+		if got := Alerts(seen, BoardView{Tasks: []TaskView{s.task}}); len(got) != s.want {
+			t.Fatalf("step %d: %d alerts, want %d", i, len(got), s.want)
+		}
+	}
+	if got, want := closed.AlertText(), "ENG-1 pr closed: #5149 closed without a merge | Add billing model"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}

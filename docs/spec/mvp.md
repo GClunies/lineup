@@ -94,6 +94,7 @@ A Responding round that pushes nothing meets its contract when the latest poll s
 | In review | `review-commented`, `review-changes-requested`, or `review-additional-authors` | Responding |
 | Ready to land | `review-commented` or `review-changes-requested` | Responding |
 | CI debug, Responding, with a `budget spent` flag that `pr-seen` set | `pr-seen` | The Stage that the first gap leads to |
+| Any started build Stage | `pr-closed`, and the Task has no flag | The same Stage, with the Needs you flag `pr closed`. `pr-seen` on a reopened PR clears the flag. |
 | Ready to land | `pr-merge` (user key `m`) | Done, marked merged |
 | Any Stage | `pr-merged` outside lineup, for example by a person or by GitHub auto-merge | Done, marked merged |
 | Any Stage except Done | `task-closed` (user key `x`, confirmed) | Done, marked closed. The Scheduler closes the tab and removes the worktree. |
@@ -171,6 +172,7 @@ A Repo where the bot does not review must not hold a Task forever. If a gated Ta
 | `budget spent` | A Loop budget reaches 0 |
 | `draft` | `pr-seen` on a draft PR with no earlier gap |
 | `no bot review` | `review-bot-late`: the review bot did not score the head commit of a passing PR |
+| `pr closed` | `pr-closed`: the PR of a build Task closed without a merge. The detail names the PR, for example `#5149 closed without a merge`. The Task keeps its Stage, tab, and worktree, because the work is the user's. The user reopens the PR, and the next poll clears the flag and moves the Task where the PR's facts lead. Or the user closes the Task with `x`. `pr-closed` is a level, so the first poll after a restart also flags a Task whose stored PR already reads closed. A Task with another flag gets `pr closed` when that flag clears. |
 | `drafts` | `lineup ask --drafts <n> <task>` from a Responding Worker: n Draft replies wait for the user in the Worker's tab, by [ADR 0026](../adr/0026-the-user-approves-every-reply-that-is-not-a-fix.md). The detail counts them, for example `2 replies to approve`. The flag clears when the Worker reports `working`. |
 | `tab closed` | The Task is in an agent Stage, and its Worker's tab or block is gone. The user closed the tab, Rex lost it, or the Rex server restarted. The detail names a Stage prompt that waits, for example `CI debug waits for the Worker`. lineup opens no tab. `lineup open <task>` restores the Worker and clears the flag. |
 | `worker silent` | `prompt-stalled`: a Stage prompt has waited 1 minute for a Worker that has sent no program status, or for a prompted Worker to report `working`. The Scheduler types nothing more into it. The flag clears when the Worker reports `working`. |

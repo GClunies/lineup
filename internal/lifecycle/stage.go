@@ -175,6 +175,9 @@ const (
 	// ReasonDrafts is a Responding Worker that waits for the user to decide
 	// its Draft replies. The detail counts them.
 	ReasonDrafts Reason = "drafts"
+	// ReasonPRClosed is a build Task whose PR closed without a merge. The work
+	// is the user's: they reopen the PR or close the Task.
+	ReasonPRClosed Reason = "pr closed"
 )
 
 // reasonWorkerLost is the flag that a Record from before tab closed can carry.
