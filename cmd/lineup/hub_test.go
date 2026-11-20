@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -255,6 +256,26 @@ func TestOpenHubReopensATabWithARetiredAgent(t *testing.T) {
 	} {
 		if got := retired(hubWindow{Blocks: c.blocks}); got != c.want {
 			t.Errorf("retired(%v) = %v, want %v", c.blocks, got, c.want)
+		}
+	}
+}
+
+func TestOpenHubReopensATabThatRexRestoredAsShells(t *testing.T) {
+	w := hubWindow{Blocks: []string{"BOARD", "LINEUP"}, BlockIDs: []string{"block:board", "block:agent"}}
+	for _, c := range []struct {
+		name string
+		idle map[string]bool
+		err  error
+		want bool
+	}{
+		{"both panes restored", map[string]bool{"block:board": true, "block:agent": true}, nil, true},
+		{"the Board restored", map[string]bool{"block:board": true}, nil, true},
+		{"both panes live", map[string]bool{}, nil, false},
+		{"Rex cannot read the panes", map[string]bool{"block:board": true}, errors.New("rex: cannot connect"), false},
+	} {
+		idle := func(b string) (bool, error) { return c.idle[b], c.err }
+		if got := restored(w, idle); got != c.want {
+			t.Errorf("%s: restored = %v, want %v", c.name, got, c.want)
 		}
 	}
 }

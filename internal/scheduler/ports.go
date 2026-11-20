@@ -28,6 +28,10 @@ type Rex interface {
 	DestroySession(ctx context.Context, session string) error
 	// Blocks returns the IDs of the live blocks in a session. A missing session has none.
 	Blocks(ctx context.Context, session string) (map[string]bool, error)
+	// IdleShell reports whether a block holds only a plain tab's shell, with
+	// nothing in its foreground. Rex restores every block that way after a
+	// restart, so lineup's program in it is gone.
+	IdleShell(ctx context.Context, session, block string) (bool, error)
 	ProgramStatus(ctx context.Context, session, block string) (Status, error)
 	Type(ctx context.Context, session, block, text string) error
 	// Focus shows the block in the Rex app.

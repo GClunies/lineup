@@ -224,6 +224,7 @@ The rules for this layout:
 - The Hub has one tab, `hub`. Its Board shows the build Tasks and the user's own Issues.
 - A Hub from before the `lineup` tab has a session named `lineup hub` and a tab labeled `hub`. `lineup` renames them to `my-lineup` and `lineup`, so the agent keeps its conversation. It closes the old `orchestrate`, `plan`, and `review` tabs.
 - A Hub from before the one agent has tabs with an `ORCHESTRATOR`, `PLANNER`, or `REVIEWER` block. `lineup` closes each such tab and opens it again.
+- After a Rex server restart, each pane of the `lineup` tab holds an idle shell. `lineup` closes the tab and opens it again, and the agent continues its conversation. If `lineup` runs in that tab, it stops with an error, because the close would end it. Run `lineup` in another tab.
 - The Hub session is named `my-lineup`. A Repo session is named after its folder, and the Scheduler removes it after its last Task. A Repo whose folder is named `my-lineup` gets the session `<parent>-my-lineup`, so no Repo session takes the Hub's name.
 - The Scheduler creates each Task tab with `rex window new -s <session> <label> --focus=false -- <command>`. The user stays on the Hub.
 - The label is the Task ID, or the Issue identifier, and the title. Rex refuses a label longer than 128 characters, so a longer label stops at 127 characters and ends in `…`.
@@ -283,6 +284,8 @@ A PR whose head commit has no checks meets the check items of the Landing bar, s
 When `lineup serve` starts, it compares the store with `rex ls` and `rex session inspect`. Each Task in an agent Stage whose tab or block is gone gets the flag `tab closed`. Recovery opens no tab, because only the user restores a closed tab. A Task whose setup tab is gone, or whose Worker never started, starts again, because it never had a Worker to restore.
 
 Recovery also runs after a Rex server restart. The Scheduler reads the Rex server's instance id every 5 s. When the id changes, every Worker is gone, so the Scheduler exits. launchd starts it again. Startup recovery flags each Task whose Worker is gone. The user restores each one with `lineup open <task>` or with `enter` on its row.
+
+Rex brings back each tab after its restart, with the same IDs, but as a login shell with no program. Recovery reads each tab's process with `rex block call process`. A tab that holds only an idle login shell counts as gone, and recovery closes it. A tab where the user started a program in that shell counts as live. Recovery reads no process for a Done Task, so its tab stays until the user closes it.
 
 ## Start a Task
 

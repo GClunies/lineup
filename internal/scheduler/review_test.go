@@ -953,6 +953,22 @@ func TestRecoveryKeepsALiveHunkPane(t *testing.T) {
 	}
 }
 
+func TestRecoveryClosesAReviewTabThatRexRestoredAsAShell(t *testing.T) {
+	restored := &tab{Window: Window{"session:reviews", "window:live", "block:live"}, shell: true}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{restored}, splits: []*split{{BlockID: "split:9", window: "window:live"}}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReviewTab(lifecycle.ReviewReady, "window:live", "block:live", "split:9"), func(d *Deps) { d.Rex = rex })
+	eventually(t, "the restored tab closed", func() bool { return rex.allSplits()[0].closed })
+	h.still("R-3", lifecycle.ReviewReady)
+	if v := h.task("R-3"); v.Live || v.Tab {
+		t.Fatalf("task = %+v, want no Worker and no tab", v)
+	}
+	rex.mu.Lock()
+	defer rex.mu.Unlock()
+	if !slices.Equal(rex.calls, []string{"close window:live"}) || len(rex.splits) != 1 {
+		t.Fatalf("calls = %v with %d hunk panes, want one close and no new pane", rex.calls, len(rex.splits))
+	}
+}
+
 // pr-review asks for the decision on each finding with AskUserQuestion after
 // it saves the findings.
 func TestAReviewQuestionMeetsTheContractOnlyAfterTheFindings(t *testing.T) {

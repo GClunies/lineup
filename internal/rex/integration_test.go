@@ -266,3 +266,30 @@ func TestClaudeProgramStatus(t *testing.T) {
 		t.Fatalf("focus: %v", err)
 	}
 }
+
+func TestIdleShellTellsAPlainTabFromAProgram(t *testing.T) {
+	c, sess := newTestSession(t)
+	ctx := context.Background()
+	shell, err := c.NewWindow(ctx, sess, "shell", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := c.NewWindow(ctx, sess, "sleep", "", nil, []string{"sleep", "60"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		idle, err := c.IdleShell(ctx, sess, shell.BlockID)
+		if err == nil && idle {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the plain tab: IdleShell = %v, %v, want true", idle, err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if idle, err := c.IdleShell(ctx, sess, program.BlockID); err != nil || idle {
+		t.Fatalf("the program's tab: IdleShell = %v, %v, want false", idle, err)
+	}
+}
