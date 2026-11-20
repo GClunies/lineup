@@ -227,6 +227,8 @@ The rules for this layout:
 - After a Rex server restart, each pane of the `lineup` tab holds an idle shell. If the `BOARD` or `LINEUP` pane is an idle shell, `lineup` closes the tab and opens it again, and the agent continues its conversation. A pane that the user added does not count. If `lineup` runs in that tab, it stops with an error, because the close would end it. Run `lineup` in another tab.
 - The Hub session is named `my-lineup`. A Repo session is named after its folder, and the Scheduler removes it after its last Task. A Repo whose folder is named `my-lineup` gets the session `<parent>-my-lineup`, so no Repo session takes the Hub's name.
 - The Scheduler creates each Task tab with `rex window new -s <session> <label> --focus=false -- <command>`. The user stays on the Hub.
+- The setup tab also gets `--keep-open`, so it stays after worktrunk exits. The Task's first Worker opens in it with `rex split -b <setup block> --focus=false`. Then the Scheduler closes the setup block with `rex block close`, and the tab holds only the Worker. So the Task's tab appears once. If the user closed the setup tab, the Worker opens in a new tab.
+- A failed setup keeps its tab, so the user can read worktrunk's error. `lineup close` closes that tab. A rerun closes it before it opens a new setup tab.
 - The label is the Task ID, or the Issue identifier, and the title. Rex refuses a label longer than 128 characters, so a longer label stops at 127 characters and ends in `…`.
 - Each Task tab names its command. A tab without a command reports exit code 0 when its shell exits, whatever the real code is.
 - If a Worker exits within about 1 s, Rex keeps its tab open so that the user can read the error. The Scheduler never closes that tab by itself. A later prompt for the Task sets the flag `tab closed`. When the user runs `lineup open <task>`, the Scheduler closes the kept tab and opens a new one, because the user asked for the Worker.
@@ -281,7 +283,7 @@ A PR whose head commit has no checks meets the check items of the Landing bar, s
 
 ### Recovery
 
-When `lineup serve` starts, it compares the store with `rex ls` and `rex session inspect`. Each Task in an agent Stage whose tab or block is gone gets the flag `tab closed`. Recovery opens no tab, because only the user restores a closed tab. A Task whose setup tab is gone, or whose Worker never started, starts again, because it never had a Worker to restore.
+When `lineup serve` starts, it compares the store with `rex ls` and `rex session inspect`. Each Task in an agent Stage whose tab or block is gone gets the flag `tab closed`. Recovery opens no tab, because only the user restores a closed tab. A Task whose setup tab is gone, or whose Worker never started, starts again, because it never had a Worker to restore. A setup tab that Rex kept after worktrunk exited counts as gone, and recovery closes it. If worktrunk exited while the Scheduler was down, recovery reads its exit code with `rex block call process`, and the Task goes on as if the Scheduler had seen the exit.
 
 Recovery also runs after a Rex server restart. The Scheduler reads the Rex server's instance id every 5 s. When the id changes, every Worker is gone, so the Scheduler exits. launchd starts it again. Startup recovery flags each Task whose Worker is gone. The user restores each one with `lineup open <task>` or with `enter` on its row.
 
@@ -294,13 +296,13 @@ This sequence runs in the background. The Board shows only the Task as it change
 1. The Scheduler checks the WIP cap. If the cap is full, the Board asks the user to start this Task once over the cap or to raise the cap. A start over the cap shows `+1 over` in the header.
 2. The Scheduler assigns the Issue to the user and sets the `started` status from the team's status map. See [Linear status map](#linear-status-map).
 3. The Scheduler picks the Repo. The Repo comes from the team or Project mapping in the configuration. If no mapping exists, a fuzzy picker opens and remembers the choice for that Project.
-4. The Scheduler creates the Repo session if it does not exist, and then a tab for the Task with `--focus=false`.
+4. The Scheduler creates the Repo session if it does not exist, and then a setup tab for the Task with `--focus=false --keep-open`.
 5. In that tab, the Scheduler runs `wt switch --create <branch>`. The branch is Linear's `branchName` for the Issue. The worktrunk `copy` steps and `pre-start` hooks set up the worktree.
 6. The Claude adapter marks the worktree as trusted. Claude stores this in `projects[<real path>].hasTrustDialogAccepted` in the `.claude.json` of the Claude configuration folder that the Repo uses. Without this step, the Worker stops at a trust prompt that reports no program status. The rules for this step:
    - The configuration folder comes from `direnv exec <Repo main checkout> printenv CLAUDE_CONFIG_DIR`. An empty value is the default profile, `~/.claude.json`. The worktree path does not decide it, because worktrees live outside the Repo.
    - The adapter takes Claude's own lock, the folder `.claude.json.lock`, and replaces the file with one rename. A lock folder older than 10 s is abandoned.
    - The Worker command sets `CLAUDE_CONFIG_DIR` itself, because Rex starts it through a login shell that runs no direnv.
-7. The Scheduler starts the Worker from the absolute path of the Harness, with the Stage's model, effort, prompt, and contract.
+7. The Scheduler starts the Worker in the setup tab, from the absolute path of the Harness, with the Stage's model, effort, prompt, and contract.
    - The Worker command passes `--name <tab label> --remote-control <tab label>`. The tab label starts with the Task ID, so the user finds each Worker by its Task ID on claude.ai and on their phone. Each Hub agent gets the same flags, with the name `lineup-<tab>`: `lineup-work`, `lineup-plan`, and `lineup-review`.
    - `--remote-control` takes an optional value, so the command always gives it the name. Without a value, it takes the prompt as the name.
 

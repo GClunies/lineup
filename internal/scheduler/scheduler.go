@@ -366,7 +366,10 @@ func (s *Scheduler) setup(ctx context.Context, r Record) {
 		s.setupFailed(r.ID, "rex session: "+err.Error())
 		return
 	}
-	w, err := s.d.Rex.NewWindow(ctx, session, r.tabLabel(), r.Repo, nil, s.d.Worktrees.CreateArgv(r.Repo, r.Branch))
+	if r.keptSetupTab() {
+		s.closeTab(ctx, r)
+	}
+	w, err := s.d.Rex.NewWindow(ctx, session, r.tabLabel(), r.Repo, nil, s.d.Worktrees.CreateArgv(r.Repo, r.Branch), true)
 	if err != nil {
 		s.setupFailed(r.ID, "rex tab: "+err.Error())
 		return
@@ -476,7 +479,8 @@ func (s *Scheduler) sessionEmpty(ctx context.Context, session string) bool {
 
 // closeTab forgets the Task's tab before it closes it, so the tab's close is
 // not read as the user's. Only the user's own act reaches it: a close, an
-// archive, or a restore of a tab that Rex kept after its program exited.
+// archive, a rerun of a failed setup, or a restore of a tab that Rex kept
+// after its program exited.
 func (s *Scheduler) closeTab(ctx context.Context, r Record) {
 	if r.WindowID == "" {
 		return
@@ -836,6 +840,7 @@ func prURL(p *PRSnapshot) string {
 // recover compares the store with Rex. Each Task in an agent Stage whose tab is
 // gone gets the tab closed flag, and no tab opens until the user asks. A tab
 // that Rex restored as an idle shell after a restart is gone too, and closes.
+// So does a setup tab that Rex kept after worktrunk exited.
 func (s *Scheduler) recover(ctx context.Context) {
 	live := map[string]map[string]bool{}
 	blocksOf := func(r *Record) (map[string]bool, bool) {
@@ -874,7 +879,18 @@ func (s *Scheduler) recover(ctx context.Context) {
 			continue
 		}
 		live := r.BlockID != "" && blocks[r.BlockID]
-		restored := live && s.idleShell(ctx, r)
+		if live && r.Job == JobSetup {
+			// worktrunk can exit while the Scheduler is down.
+			code, exited, err := s.d.Rex.LastExit(ctx, r.SessionID, r.BlockID)
+			if err != nil {
+				s.d.Log.Warn("read the setup tab's exit", "task", r.ID, "err", err)
+			}
+			if exited {
+				s.onRex(RexEvent{Kind: EvExited, BlockID: r.BlockID, ExitCode: code})
+				continue
+			}
+		}
+		restored := live && (r.keptSetupTab() || s.idleShell(ctx, r))
 		if live && !restored {
 			if r.Job == JobWorker {
 				if st, err := s.d.Rex.ProgramStatus(ctx, r.SessionID, r.BlockID); err == nil && st.State != "" {

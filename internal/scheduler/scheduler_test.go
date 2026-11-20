@@ -31,6 +31,10 @@ type tab struct {
 	blockGone bool
 	// shell marks a tab that Rex restored as an idle shell after a restart.
 	shell bool
+	// keep marks a tab that stays open after its program exits, and exited
+	// marks that exit with code.
+	keep, exited bool
+	code         int
 }
 
 // split is a block that Split opened beside the anchor block of a tab.
@@ -61,7 +65,7 @@ type fakeRex struct {
 	focused []string
 	// calls lists each window that NewWindow opened and CloseWindow closed, in order.
 	calls []string
-	// hold makes NewWindow of a Worker wait for the channel to close.
+	// hold makes NewWindow and NewBlock of a Worker wait for the channel to close.
 	hold chan struct{}
 	// t fails the test when lineup closes a live tab that the user did not
 	// ask to close. asked is true after a close, archive, open, or review op.
@@ -75,26 +79,66 @@ func (f *fakeRex) EnsureSession(_ context.Context, label string) (string, error)
 	return "session:" + label, nil
 }
 
-func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, env map[string]string, argv []string) (Window, error) {
+func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, env map[string]string, argv []string, keep bool) (Window, error) {
 	if utf8.RuneCountInString(label) > 128 {
 		return Window{}, errors.New("label must be at most 128 characters")
 	}
-	f.mu.Lock()
-	hold := f.hold
-	f.mu.Unlock()
-	if hold != nil && len(argv) > 0 && argv[0] == "claude" {
-		<-hold
-	}
+	f.waitHold(argv)
 	f.mu.Lock()
 	f.n++
 	w := Window{session, fmt.Sprintf("window:%d", f.n), fmt.Sprintf("block:%d", f.n)}
-	f.tabs = append(f.tabs, &tab{Window: w, label: label, cwd: cwd, env: env, argv: argv})
+	f.tabs = append(f.tabs, &tab{Window: w, label: label, cwd: cwd, env: env, argv: argv, keep: keep})
 	f.calls = append(f.calls, "new "+w.WindowID)
 	f.mu.Unlock()
 	if f.exitFast != "" && argv[0] == f.exitFast {
 		f.exits(tab{Window: w}, 0)
 	}
 	return w, nil
+}
+
+func (f *fakeRex) waitHold(argv []string) {
+	f.mu.Lock()
+	hold := f.hold
+	f.mu.Unlock()
+	if hold != nil && len(argv) > 0 && argv[0] == "claude" {
+		<-hold
+	}
+}
+
+// NewBlock opens a block in the tab of a block that is not closed. The tab
+// keeps its label, as in Rex.
+func (f *fakeRex) NewBlock(_ context.Context, _, block, cwd string, env map[string]string, argv []string) (string, error) {
+	f.waitHold(argv)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, t := range f.tabs {
+		if t.BlockID == block && !t.closed {
+			f.n++
+			w := Window{t.SessionID, t.WindowID, fmt.Sprintf("block:%d", f.n)}
+			f.tabs = append(f.tabs, &tab{Window: w, label: t.label, cwd: cwd, env: env, argv: argv})
+			return w.BlockID, nil
+		}
+	}
+	return "", fmt.Errorf("block target %q not found", block)
+}
+
+// CloseBlock closes one block, and Rex reports the block closed.
+func (f *fakeRex) CloseBlock(_ context.Context, _, block string) error {
+	f.mu.Lock()
+	var closed bool
+	for _, t := range f.tabs {
+		if t.BlockID == block && !t.closed {
+			if !t.exited && !f.asked && f.t != nil {
+				f.t.Errorf("lineup closed the live block %s (%s) that the user did not ask to close", block, strings.Join(t.argv, " "))
+			}
+			t.closed, closed = true, true
+		}
+	}
+	f.mu.Unlock()
+	if closed {
+		f.events <- RexEvent{Kind: EvClosed, BlockID: block}
+	}
+	return nil
 }
 
 func (f *fakeRex) Split(_ context.Context, _, block, cwd string, argv []string) (string, error) {
@@ -119,7 +163,7 @@ func (f *fakeRex) CloseWindow(_ context.Context, _, window string) error {
 	f.calls = append(f.calls, "close "+window)
 	for _, t := range f.tabs {
 		if t.WindowID == window {
-			if !t.closed && !t.blockGone && !t.shell && !f.asked && f.t != nil {
+			if !t.closed && !t.blockGone && !t.shell && !t.exited && !f.asked && f.t != nil {
 				f.t.Errorf("lineup closed the live tab %s (%s) that the user did not ask to close", window, strings.Join(t.argv, " "))
 			}
 			t.closed = true
@@ -185,6 +229,17 @@ func (f *fakeRex) IdleShell(_ context.Context, _, block string) (bool, error) {
 	return false, nil
 }
 
+func (f *fakeRex) LastExit(_ context.Context, _, block string) (int, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, t := range f.tabs {
+		if t.BlockID == block {
+			return t.code, t.exited, nil
+		}
+	}
+	return 0, false, nil
+}
+
 func (f *fakeRex) ProgramStatus(context.Context, string, string) (Status, error) {
 	return Status{}, nil
 }
@@ -219,13 +274,13 @@ func (f *fakeRex) typedInto(block string) []string {
 	return out
 }
 
-// exits ends the program in a tab as Rex does after about 1 s: the tab
-// closes, and Rex reports the exit.
+// exits ends the program in a tab, and Rex reports the exit. A tab opened
+// with keep stays open. Rex closes any other tab after about 1 s.
 func (f *fakeRex) exits(w tab, code int) {
 	f.mu.Lock()
 	for _, t := range f.tabs {
-		if t.WindowID == w.WindowID {
-			t.closed = true
+		if t.WindowID == w.WindowID && !t.closed {
+			t.exited, t.closed, t.code = t.keep, !t.keep, code
 		}
 	}
 	f.mu.Unlock()
@@ -780,7 +835,7 @@ func TestADoneTabTheUserClosesRemovesTheWorktree(t *testing.T) {
 
 func TestADoneTabTheUserClosesKeepsASessionWithAnotherTab(t *testing.T) {
 	h, worker := doneWithATab(t)
-	if _, err := h.rex.NewWindow(context.Background(), worker.SessionID, "another tab", "/", nil, []string{"zsh"}); err != nil {
+	if _, err := h.rex.NewWindow(context.Background(), worker.SessionID, "another tab", "/", nil, []string{"zsh"}, false); err != nil {
 		t.Fatal(err)
 	}
 	h.rex.userCloses(worker)
@@ -2515,21 +2570,145 @@ func TestABlockThatClosesAfterItsProgramExitedFlagsTheTask(t *testing.T) {
 	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Flag == "tab closed" })
 }
 
-// Rex closes the setup tab after worktrunk exits. That close is not the user's.
-func TestASetupTabThatExitsAndClosesFlagsNothing(t *testing.T) {
+// The user can close the setup tab after worktrunk exits and before the Worker
+// opens in it. That close is not a lost Worker, so the Worker opens in a new tab.
+func TestASetupTabThatTheUserClosesGivesTheWorkerANewTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	hold := make(chan struct{})
+	h.rex.mu.Lock()
+	h.rex.hold = hold
+	h.rex.mu.Unlock()
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	setup := h.waitTab("wt ada/eng-1-billing")
+	setup := h.waitTabRecorded("wt ada/eng-1-billing", "ENG-1")
 	h.rex.exits(setup, 0)
-	h.rex.blockCloses(setup)
-	h.waitTab("claude working")
+	eventually(t, "the Worker command built", func() bool {
+		h.hn.mu.Lock()
+		defer h.hn.mu.Unlock()
+		return len(h.hn.specs) > 0
+	})
+	h.rex.userCloses(setup)
+	eventually(t, "the setup tab forgotten", func() bool { return !h.task("ENG-1").Tab })
+	close(hold)
+
+	worker := h.waitTab("claude working")
+	if worker.WindowID == setup.WindowID {
+		t.Fatalf("the Worker runs in the closed setup tab %s", setup.WindowID)
+	}
 	eventually(t, "a live Worker", func() bool { return h.task("ENG-1").Live })
 	if got := h.events("ENG-1"); slices.Contains(got, "tab-closed") {
-		t.Fatalf("events = %q, want no tab-closed: Rex closed the setup tab", got)
+		t.Fatalf("events = %q, want no tab-closed: the setup tab had no Worker", got)
 	}
 	if f := h.task("ENG-1").Flag; f != "" {
 		t.Fatalf("flag = %q, want none", f)
+	}
+}
+
+// A failed setup keeps its tab, so the user can read worktrunk's error.
+func TestAFailedSetupKeepsItsTabUntilTheUserClosesTheTask(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	setup := h.waitTabRecorded("wt ada/eng-1-billing", "ENG-1")
+	h.rex.exits(setup, 1)
+	eventually(t, "the setup failed flag", func() bool { return h.task("ENG-1").Flag == "setup failed" })
+	time.Sleep(100 * time.Millisecond)
+	h.rex.mu.Lock()
+	calls := slices.Clone(h.rex.calls)
+	h.rex.mu.Unlock()
+	if v := h.task("ENG-1"); !v.Tab || !slices.Equal(calls, []string{"new " + setup.WindowID}) {
+		t.Fatalf("task %+v and tab calls %q, want the setup tab kept", v, calls)
+	}
+
+	h.do(Request{Op: "close", Task: "ENG-1"})
+	eventually(t, "the setup tab closed", func() bool { return len(h.rex.open("wt ada/eng-1-billing")) == 0 })
+}
+
+// A rerun after a failed setup closes the failed setup's tab first, so the Task
+// keeps one tab.
+func TestARerunAfterAFailedSetupReplacesItsTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	failed := h.waitTabRecorded("wt ada/eng-1-billing", "ENG-1")
+	h.rex.exits(failed, 1)
+	eventually(t, "the setup failed flag", func() bool { return h.task("ENG-1").Flag == "setup failed" })
+
+	h.do(Request{Op: "rerun", Task: "ENG-1", Stage: "working"})
+	again := h.waitNewTab("wt ada/eng-1-billing", failed.BlockID)
+	h.rex.mu.Lock()
+	calls := slices.Clone(h.rex.calls)
+	h.rex.mu.Unlock()
+	if want := []string{"new " + failed.WindowID, "close " + failed.WindowID, "new " + again.WindowID}; !slices.Equal(calls, want) {
+		t.Fatalf("tab calls = %q, want %q", calls, want)
+	}
+}
+
+// keptSetupTab seeds a Task whose setup tab Rex kept, with job as the Record's
+// Job, and adds the tab to Rex with exited marking worktrunk's exit with code.
+func keptSetupTab(job Job, exited bool, code int) (func(*store.Store), func(*Deps)) {
+	seed := func(st *store.Store) {
+		pending := lifecycle.Working
+		r := Record{
+			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Policy: testPolicy, Left: testPolicy.Budgets},
+			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data", Branch: "ada/eng-7",
+			SessionID: "session:data", WindowID: "window:kept", BlockID: "block:kept", Job: job, Pending: &pending,
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+	tabs := func(d *Deps) {
+		rex := d.Rex.(*fakeRex)
+		rex.tabs = append(rex.tabs, &tab{Window: Window{"session:data", "window:kept", "block:kept"}, argv: []string{"wt", "ada/eng-7"}, keep: true, exited: exited, code: code})
+	}
+	return seed, tabs
+}
+
+// A kept setup tab holds no program, so recovery closes it and sets up again.
+func TestRecoveryClosesAKeptSetupTabAndSetsUpAgain(t *testing.T) {
+	seed, tabs := keptSetupTab(JobExited, true, 0)
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, tabs)
+	setup := h.waitNewTab("wt ada/eng-7", "block:kept")
+	h.rex.mu.Lock()
+	calls := slices.Clone(h.rex.calls)
+	h.rex.mu.Unlock()
+	if want := []string{"close window:kept", "new " + setup.WindowID}; !slices.Equal(calls, want) {
+		t.Fatalf("tab calls = %q, want %q", calls, want)
+	}
+}
+
+// worktrunk can exit while the Scheduler is down. Recovery reads the exit from
+// Rex, so the Worker opens in the setup tab.
+func TestRecoveryGoesOnFromASetupThatExitedWhileTheSchedulerWasDown(t *testing.T) {
+	seed, tabs := keptSetupTab(JobSetup, true, 0)
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, tabs)
+	worker := h.waitTab("claude working")
+	if worker.WindowID != "window:kept" {
+		t.Fatalf("the Worker runs in %s, want the setup tab window:kept", worker.WindowID)
+	}
+	eventually(t, "a live Worker", func() bool { return h.task("ENG-7").Live })
+}
+
+func TestRecoveryFlagsASetupThatFailedWhileTheSchedulerWasDown(t *testing.T) {
+	seed, tabs := keptSetupTab(JobSetup, true, 1)
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, tabs)
+	eventually(t, "the setup failed flag", func() bool { return h.task("ENG-7").Flag == "setup failed" })
+	if !h.task("ENG-7").Tab || len(h.rex.open("wt ada/eng-7")) != 1 {
+		t.Fatal("recovery closed the failed setup's tab")
+	}
+}
+
+// A setup that still runs at the restart reports its exit later.
+func TestRecoveryWaitsForASetupThatStillRuns(t *testing.T) {
+	seed, tabs := keptSetupTab(JobSetup, false, 0)
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, tabs)
+	h.still("ENG-7", lifecycle.Working)
+	if n := h.tabs(); n != 1 || !h.task("ENG-7").Tab {
+		t.Fatalf("%d tabs, want the running setup tab only", n)
+	}
+	h.rex.exits(tab{Window: Window{"session:data", "window:kept", "block:kept"}}, 0)
+	if worker := h.waitTab("claude working"); worker.WindowID != "window:kept" {
+		t.Fatalf("the Worker runs in %s, want the setup tab window:kept", worker.WindowID)
 	}
 }
 

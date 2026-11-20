@@ -188,6 +188,10 @@ func (v BoardView) OfKind(k lifecycle.Kind) BoardView {
 // that had one and has no tab now waits for the user, so no prompt opens a tab.
 func (r *Record) hadWorker() bool { return r.WorkerStage != lifecycle.Queued }
 
+// keptSetupTab reports whether the Task's tab is its setup tab, which Rex keeps
+// after worktrunk exits. The Task's first Worker opens in it.
+func (r *Record) keptSetupTab() bool { return r.Job == JobExited && !r.hadWorker() && r.BlockID != "" }
+
 func (r *Record) keepsTab() bool { return r.Stage == lifecycle.Done && r.WindowID != "" }
 
 func (r *Record) view() TaskView {
