@@ -151,14 +151,20 @@ func retired(w hubWindow) bool {
 	return slices.ContainsFunc(w.Blocks, func(b string) bool { return slices.Contains(retiredAgents, b) })
 }
 
-// restored reports whether a pane of w holds an idle shell, as each pane does
-// after a Rex restart. openHub closes such a window and opens the tab again.
-// A pane that idle cannot read counts as live.
-func restored(w hubWindow, idle func(block string) (bool, error)) bool {
-	return slices.ContainsFunc(w.BlockIDs, func(b string) bool {
-		ok, err := idle(b)
-		return err == nil && ok
-	})
+// restored reports whether the Board or agent pane of t in w holds an idle
+// shell, as each pane does after a Rex restart. A Rex restart keeps the pane
+// labels. openHub closes such a window and opens the tab again. A pane that
+// the user added, or one that idle cannot read, counts as live.
+func restored(w hubWindow, t agentTab, idle func(block string) (bool, error)) bool {
+	for i, label := range w.Blocks {
+		if label != t.view && label != t.agent {
+			continue
+		}
+		if ok, err := idle(w.BlockIDs[i]); err == nil && ok {
+			return true
+		}
+	}
+	return false
 }
 
 func rexRun(args ...string) ([]byte, error) {
@@ -398,7 +404,7 @@ func openHub() error {
 			}
 			windows[t.window] = w
 		}
-		if w, ok := windows[t.window]; ok && (retired(w) || restored(w, idle)) {
+		if w, ok := windows[t.window]; ok && (retired(w) || restored(w, t, idle)) {
 			// A close of the window would end this lineup before the tab opens again.
 			if slices.Contains(w.BlockIDs, os.Getenv("REX_BLOCK")) {
 				return fmt.Errorf("lineup runs in the %s tab and must reopen it: run lineup in another tab", t.window)
