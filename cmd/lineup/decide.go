@@ -58,6 +58,26 @@ var choicesFor = map[lifecycle.Reason][]choice{
 	lifecycle.ReasonSetupFailed: {openTab, closeTask},
 }
 
+// reviewReady holds the choices for a review Task in Needs you with no flag,
+// which is Review ready, the only review Stage in that group.
+var reviewReady = []choice{openTab, closeTask}
+
+// choicesOf lists the choices for t. A typed answer needs a Worker to read it.
+func choicesOf(t scheduler.TaskView) []choice {
+	reason := lifecycle.Reason(t.Flag)
+	cs, ok := choicesFor[reason]
+	switch {
+	case t.Kind == lifecycle.KindReview && reason == readyToLand:
+		cs = reviewReady
+	case !ok:
+		cs = []choice{openTab}
+	}
+	if t.Live {
+		return cs
+	}
+	return slices.DeleteFunc(slices.Clone(cs), func(ch choice) bool { return ch.TakesText })
+}
+
 type decision struct {
 	scheduler.TaskView
 	Choices []choice `json:"choices"`
@@ -65,15 +85,12 @@ type decision struct {
 
 func decisions(v scheduler.BoardView) []decision {
 	ds := []decision{}
-	for _, t := range v.OfKind(lifecycle.KindBuild).Tasks {
-		if t.Group != lifecycle.GroupNeedsYou.String() {
-			continue
+	for _, kind := range []lifecycle.Kind{lifecycle.KindBuild, lifecycle.KindReview} {
+		for _, t := range v.OfKind(kind).Tasks {
+			if t.Group == lifecycle.GroupNeedsYou.String() {
+				ds = append(ds, decision{t, choicesOf(t)})
+			}
 		}
-		cs, ok := choicesFor[lifecycle.Reason(t.Flag)]
-		if !ok {
-			cs = []choice{openTab}
-		}
-		ds = append(ds, decision{t, cs})
 	}
 	return ds
 }

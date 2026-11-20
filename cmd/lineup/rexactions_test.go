@@ -3,8 +3,12 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/gclunies/lineup/internal/lifecycle"
 )
 
 func TestInstallRexActionsWritesTheLineupPath(t *testing.T) {
@@ -70,5 +74,33 @@ func TestLuaStringEscapesForLua51(t *testing.T) {
 		if got := luaString(in); got != want {
 			t.Errorf("luaString(%q) = %s, want %s", in, got, want)
 		}
+	}
+}
+
+func TestRunAStageAgainOffersEachAgentStage(t *testing.T) {
+	table := regexp.MustCompile(`(?s)local AGENT_STAGES = \{\n(.*?)\n\}\n`).FindStringSubmatch(rexActions)
+	if table == nil {
+		t.Fatal("lineup.lua has no AGENT_STAGES table")
+	}
+	var got []string
+	kind := ""
+	for _, line := range strings.Split(table[1], "\n") {
+		if m := regexp.MustCompile(`^  (\w+) = \{$`).FindStringSubmatch(line); m != nil {
+			kind = m[1]
+		}
+		if m := regexp.MustCompile(`\{ id = "(\w+)", title = "([^"]+)" \}`).FindStringSubmatch(line); m != nil {
+			got = append(got, kind+" "+m[1]+" "+m[2])
+		}
+	}
+	var want []string
+	for _, k := range []lifecycle.Kind{lifecycle.KindBuild, lifecycle.KindReview} {
+		for _, s := range lifecycle.Stages() {
+			if s.Agent() && k.Has(s) {
+				want = append(want, k.String()+" "+s.Key()+" "+s.String())
+			}
+		}
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("AGENT_STAGES = %q, want %q", got, want)
 	}
 }
