@@ -48,6 +48,10 @@ func (p rexPort) DestroySession(ctx context.Context, session string) error {
 	return p.c.DestroySession(ctx, session)
 }
 
+func (p rexPort) IdleShell(ctx context.Context, session, block string) (bool, error) {
+	return p.c.IdleShell(ctx, session, block)
+}
+
 func (p rexPort) Blocks(ctx context.Context, session string) (map[string]bool, error) {
 	live := map[string]bool{}
 	if session == "" {

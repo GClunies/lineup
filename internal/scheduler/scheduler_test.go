@@ -29,6 +29,8 @@ type tab struct {
 	argv      []string
 	closed    bool
 	blockGone bool
+	// shell marks a tab that Rex restored as an idle shell after a restart.
+	shell bool
 }
 
 // split is a block that Split opened beside the anchor block of a tab.
@@ -53,8 +55,10 @@ type fakeRex struct {
 	// capture is what Capture returns.
 	capture   string
 	blocksErr error
-	typed     []typed
-	focused   []string
+	// idleErr fails every IdleShell call.
+	idleErr error
+	typed   []typed
+	focused []string
 	// calls lists each window that NewWindow opened and CloseWindow closed, in order.
 	calls []string
 	// hold makes NewWindow of a Worker wait for the channel to close.
@@ -115,7 +119,7 @@ func (f *fakeRex) CloseWindow(_ context.Context, _, window string) error {
 	f.calls = append(f.calls, "close "+window)
 	for _, t := range f.tabs {
 		if t.WindowID == window {
-			if !t.closed && !t.blockGone && !f.asked && f.t != nil {
+			if !t.closed && !t.blockGone && !t.shell && !f.asked && f.t != nil {
 				f.t.Errorf("lineup closed the live tab %s (%s) that the user did not ask to close", window, strings.Join(t.argv, " "))
 			}
 			t.closed = true
@@ -165,6 +169,20 @@ func (f *fakeRex) Blocks(_ context.Context, session string) (map[string]bool, er
 		}
 	}
 	return live, nil
+}
+
+func (f *fakeRex) IdleShell(_ context.Context, _, block string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.idleErr != nil {
+		return false, f.idleErr
+	}
+	for _, t := range f.tabs {
+		if t.BlockID == block {
+			return t.shell, nil
+		}
+	}
+	return false, nil
 }
 
 func (f *fakeRex) ProgramStatus(context.Context, string, string) (Status, error) {
@@ -1004,6 +1022,65 @@ func TestRecoveryFlagsATaskWhoseTabIsGone(t *testing.T) {
 	}
 	if last := d.Events[len(d.Events)-1]; last.Signal != "tab-closed" {
 		t.Fatalf("last event = %+v, want tab-closed", last)
+	}
+}
+
+func seedWorker(id string) func(*store.Store) {
+	return func(st *store.Store) {
+		r := Record{
+			Task:  lifecycle.Task{ID: id, Stage: lifecycle.Working, Policy: testPolicy, Left: testPolicy.Budgets},
+			Title: id, Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data", Branch: "b-" + id, Worktree: "/wt/" + id,
+			Conversation: "conv-" + id, SessionID: "session:data", WindowID: "window:" + id, BlockID: "block:" + id, Job: JobWorker,
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+}
+
+// restoredTabs adds a tab for each Task that Rex brought back as an idle shell.
+func restoredTabs(ids ...string) func(*Deps) {
+	return func(d *Deps) {
+		rex := d.Rex.(*fakeRex)
+		for _, id := range ids {
+			rex.tabs = append(rex.tabs, &tab{Window: Window{"session:data", "window:" + id, "block:" + id}, shell: true})
+		}
+	}
+}
+
+func TestRecoveryFlagsAndClosesAWorkerTabThatRexRestoredAsAShell(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedWorker("ENG-7"), restoredTabs("ENG-7"))
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-7").Flag == "tab closed" })
+	eventually(t, "the restored tab closed", func() bool {
+		h.rex.mu.Lock()
+		defer h.rex.mu.Unlock()
+		return h.rex.tabs[0].closed
+	})
+	if v := h.task("ENG-7"); v.Tab || v.Live || v.Group != "Needs you" {
+		t.Fatalf("task = %+v, want Needs you with no tab", v)
+	}
+	if n := h.tabs(); n != 1 {
+		t.Fatalf("recovery opened %d tabs, want none until the user asks", n-1)
+	}
+}
+
+func TestRecoveryKeepsAWorkerTabWhenRexCannotReadItsProcess(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedWorker("ENG-7"), restoredTabs("ENG-7"), func(d *Deps) {
+		d.Rex.(*fakeRex).idleErr = errors.New("rex block call: cannot connect to the rex server")
+	})
+	h.still("ENG-7", lifecycle.Working)
+	if v := h.task("ENG-7"); !v.Tab || v.Flag != "" {
+		t.Fatalf("task = %+v, want its tab kept", v)
+	}
+}
+
+func TestRecoveryLeavesTheRestoredShellOfADoneTaskToTheUser(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedDone("ENG-done", time.Hour, true), restoredTabs("ENG-done"))
+	h.still("ENG-done", lifecycle.Done)
+	if got := h.worktreesRemoved(); len(got) != 0 {
+		t.Fatalf("removed %v for a Done Task whose tab is open", got)
+	}
+	if v := h.task("ENG-done"); !v.Tab {
+		t.Fatalf("task = %+v, want its tab kept", v)
 	}
 }
 

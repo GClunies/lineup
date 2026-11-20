@@ -660,11 +660,26 @@ func (s *Scheduler) forgetTab(r *Record) {
 	if r.Review == nil || window == "" {
 		return
 	}
+	s.closeLater(id, session, window)
+}
+
+func (s *Scheduler) closeLater(id, session, window string) {
 	s.enqueue(id, func(ctx context.Context) {
 		if err := s.d.Rex.CloseWindow(ctx, session, window); err != nil {
 			s.d.Log.Warn("close tab", "task", id, "err", err)
 		}
 	})
+}
+
+// idleShell reports whether Rex restored the Task's tab as an idle shell. If
+// Rex cannot tell, the tab counts as live.
+func (s *Scheduler) idleShell(ctx context.Context, r *Record) bool {
+	idle, err := s.d.Rex.IdleShell(ctx, r.SessionID, r.BlockID)
+	if err != nil {
+		s.d.Log.Warn("read the tab's process", "task", r.ID, "err", err)
+		return false
+	}
+	return idle
 }
 
 func (s *Scheduler) keepOrphan(ev RexEvent) {
@@ -819,7 +834,8 @@ func prURL(p *PRSnapshot) string {
 }
 
 // recover compares the store with Rex. Each Task in an agent Stage whose tab is
-// gone gets the tab closed flag, and no tab opens until the user asks.
+// gone gets the tab closed flag, and no tab opens until the user asks. A tab
+// that Rex restored as an idle shell after a restart is gone too, and closes.
 func (s *Scheduler) recover(ctx context.Context) {
 	live := map[string]map[string]bool{}
 	blocksOf := func(r *Record) (map[string]bool, bool) {
@@ -857,7 +873,9 @@ func (s *Scheduler) recover(ctx context.Context) {
 		if !ok {
 			continue
 		}
-		if r.BlockID != "" && blocks[r.BlockID] {
+		live := r.BlockID != "" && blocks[r.BlockID]
+		restored := live && s.idleShell(ctx, r)
+		if live && !restored {
 			if r.Job == JobWorker {
 				if st, err := s.d.Rex.ProgramStatus(ctx, r.SessionID, r.BlockID); err == nil && st.State != "" {
 					s.onRex(RexEvent{Kind: EvStatus, BlockID: r.BlockID, Status: st})
@@ -869,9 +887,13 @@ func (s *Scheduler) recover(ctx context.Context) {
 			}
 			continue
 		}
-		job := r.Job
+		job, window := r.Job, r.WindowID
 		s.forgetTab(r)
 		s.save(r)
+		// forgetTab closes a review tab itself.
+		if restored && r.Review == nil {
+			s.closeLater(r.ID, r.SessionID, window)
+		}
 		if r.Flag != "" && !r.Flag.Transient() {
 			continue
 		}

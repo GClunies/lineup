@@ -115,3 +115,25 @@ func TestAFailedTypeClearsTheInputBox(t *testing.T) {
 		t.Fatalf("writes = %q, want %q", got, want)
 	}
 }
+
+// The records come from a live Rex at API revision 18.
+func TestIdleShellReadsOnlyALoginShellWithNothingInItsForeground(t *testing.T) {
+	cases := []struct {
+		name, out string
+		want      bool
+	}{
+		{"a restored tab", `{"last_exit":null,"child":{"pid":93443,"name":"login","path":"/usr/bin/login"},"foreground":{"pid":93468,"name":"zsh","path":"/bin/zsh","argv0":"-zsh"},"ancestors":[{"pid":93443,"name":"login","path":"/usr/bin/login"}]}`, true},
+		{"a shell that runs claude", `{"last_exit":null,"child":{"pid":93510,"name":"login","path":"/usr/bin/login"},"foreground":{"pid":95752,"name":"2.1.311","argv0":"claude"},"ancestors":[{"pid":93616,"name":"zsh","path":"/bin/zsh"},{"pid":93510,"name":"login","path":"/usr/bin/login"}]}`, false},
+		{"a Worker that lineup started", `{"last_exit":null,"child":{"pid":51237,"name":"2.1.311","path":"/Users/g/.local/share/claude/versions/2.1.311","argv0":"/Users/g/.local/bin/claude"},"foreground":{"pid":51237,"name":"2.1.311"}}`, false},
+		{"the Board", `{"last_exit":null,"child":{"pid":98430,"name":"lineup","path":"/Users/g/go/bin/lineup"},"foreground":{"pid":98430,"name":"lineup"}}`, false},
+	}
+	for _, c := range cases {
+		got, err := idleShell([]byte(c.out))
+		if err != nil || got != c.want {
+			t.Errorf("%s: idleShell = %v, %v, want %v", c.name, got, err, c.want)
+		}
+	}
+	if _, err := idleShell([]byte("not json")); err == nil {
+		t.Error("idleShell read text that is not JSON")
+	}
+}

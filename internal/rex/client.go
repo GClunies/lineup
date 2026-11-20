@@ -250,6 +250,36 @@ func (c *Client) ProgramStatus(ctx context.Context, session, block string) ([]St
 	return rs, nil
 }
 
+// loginShell is the program that Rex starts in a plain tab on macOS.
+const loginShell = "/usr/bin/login"
+
+// IdleShell reports whether a block holds only the login shell of a plain tab,
+// with no program in its foreground. Rex restores every block that way after a
+// restart, so a program that lineup started there no longer runs.
+func (c *Client) IdleShell(ctx context.Context, session, block string) (bool, error) {
+	out, err := c.run(ctx, "block", "call", "-s", session, "-b", block, "process")
+	if err != nil {
+		return false, err
+	}
+	return idleShell(out)
+}
+
+// idleShell reads the record of the process method. Ancestors lists the
+// foreground program's parents up to the block's own child, so the shell
+// itself in the foreground has one ancestor, the login shell.
+func idleShell(out []byte) (bool, error) {
+	var v struct {
+		Child struct {
+			Path string `json:"path"`
+		} `json:"child"`
+		Ancestors []json.RawMessage `json:"ancestors"`
+	}
+	if err := json.Unmarshal(out, &v); err != nil {
+		return false, err
+	}
+	return v.Child.Path == loginShell && len(v.Ancestors) <= 1, nil
+}
+
 // Type writes each part to the block, then presses Enter. Claude reads text and
 // Enter in one write as a paste, so a short pause follows each write. After a
 // failure, Type clears the input box, so a retry does not append to a half-typed

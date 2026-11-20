@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/harness/claude"
 	"github.com/gclunies/lineup/internal/linear"
+	"github.com/gclunies/lineup/internal/rex"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
@@ -154,6 +156,16 @@ func retired(w hubWindow) bool {
 	return slices.ContainsFunc(w.Blocks, func(b string) bool { return slices.Contains(retiredAgents, b) })
 }
 
+// restored reports whether a pane of w holds an idle shell, as each pane does
+// after a Rex restart. openHub closes such a window and opens the tab again.
+// A pane that idle cannot read counts as live.
+func restored(w hubWindow, idle func(block string) (bool, error)) bool {
+	return slices.ContainsFunc(w.BlockIDs, func(b string) bool {
+		ok, err := idle(b)
+		return err == nil && ok
+	})
+}
+
 func rexRun(args ...string) ([]byte, error) {
 	var errb bytes.Buffer
 	cmd := exec.Command("rex", args...)
@@ -265,9 +277,10 @@ func agentFiles(role []byte, settings, issuesDir, configFile, self string) ([]by
 }
 
 type hubWindow struct {
-	ID     string
-	Label  string
-	Blocks []string // block labels
+	ID       string
+	Label    string
+	Blocks   []string // block labels
+	BlockIDs []string
 }
 
 // renameFormerHub gives a Hub session under its former name the current one,
@@ -297,6 +310,7 @@ func hubWindows() (map[string]hubWindow, bool, error) {
 			Label  string `json:"label"`
 			Layers []struct {
 				Blocks []struct {
+					ID    string `json:"block_id"`
 					Label string `json:"label"`
 				} `json:"blocks"`
 			} `json:"layers"`
@@ -311,6 +325,7 @@ func hubWindows() (map[string]hubWindow, bool, error) {
 		for _, l := range w.Layers {
 			for _, b := range l.Blocks {
 				hw.Blocks = append(hw.Blocks, b.Label)
+				hw.BlockIDs = append(hw.BlockIDs, b.ID)
 			}
 		}
 		ws[w.Label] = hw
@@ -348,6 +363,8 @@ func openHub() error {
 	if err != nil {
 		return err
 	}
+	rc := &rex.Client{}
+	idle := func(block string) (bool, error) { return rc.IdleShell(context.Background(), hubSession, block) }
 	var shell string
 	if !exists {
 		out, err := rexRun("session", "new", hubSession, "--window", "scratch", "--json")
@@ -386,7 +403,11 @@ func openHub() error {
 			}
 			windows[t.window] = w
 		}
-		if w, ok := windows[t.window]; ok && retired(w) {
+		if w, ok := windows[t.window]; ok && (retired(w) || restored(w, idle)) {
+			// A close of the window would end this lineup before the tab opens again.
+			if slices.Contains(w.BlockIDs, os.Getenv("REX_BLOCK")) {
+				return fmt.Errorf("lineup runs in the %s tab and must reopen it: run lineup in another tab", t.window)
+			}
 			if _, err := rexRun("window", "close", "-s", hubSession, w.ID); err != nil {
 				return err
 			}
