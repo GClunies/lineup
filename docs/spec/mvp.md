@@ -560,7 +560,7 @@ The Hub starts the Orchestrator with a first message that tells it to run `lineu
 
 ### Choices in Rex's palette
 
-A choice is one thing that the user can do about a build Task that needs them. `lineup decide` lists the build Tasks in the Needs you group, which are the Tasks that the lineup tab counts. Each Task comes with its choices, the default first. `lineup decide <task> <choice>` runs one choice. It refuses a Task that does not need the user, and a choice that the Task does not have.
+A choice is one thing that the user can do about a Task that needs them. `lineup decide` lists the build Tasks and the review Tasks in the Needs you group. Each Task comes with its choices, the default first. `lineup decide <task> <choice>` runs one choice. It refuses a Task that does not need the user, and a choice that the Task does not have. Answer here needs a Worker to read the answer, so a Task with no live Worker does not get it.
 
 | The Task needs the user because | Choices, the default first | Commands |
 |---|---|---|
@@ -570,14 +570,27 @@ A choice is one thing that the user can do about a build Task that needs them. `
 | `stopped` or `setup failed` | Open the tab, Close the Task | `lineup open`, `lineup close` |
 | `budget spent` | Run the Stage again, Open the tab, Close the Task | `lineup rerun <task> <stage>`, `lineup open`, `lineup close` |
 | `pr closed` | Close the Task, Open the tab | `lineup close`, `lineup open` |
+| A review is ready | Open the tab, Close the Task | `lineup open`, `lineup close` |
 | Any other reason | Open the tab | `lineup open` |
 
-Each time that `lineup` opens the Hub, it writes `lineup.lua` beside Rex's `init.lua`, which is `REX_CONFIG` when that variable is set. The file runs lineup by the absolute path of the binary, because `rex.exec` runs a command with the Rex server's `PATH`. The line `require("lineup")` in `init.lua` adds two actions to Rex's command palette:
+Each time that `lineup` opens the Hub, it writes `lineup.lua` beside Rex's `init.lua`, which is `REX_CONFIG` when that variable is set. The file runs lineup by the absolute path of the binary, because `rex.exec` runs a command with the Rex server's `PATH`. The line `require("lineup")` in `init.lua` adds these actions to Rex's command palette, in the category Lineup:
 
 | Action | What it does |
 |---|---|
 | What Needs Me… | Lists the Tasks of `lineup decide`. Then it lists the choices of the Task that the user picks. A lone Open the tab runs with no second question. For Answer here, it asks for the user's words. Then it runs `lineup decide <task> <choice>`. |
 | Tell a Worker… | Lists the Tasks with a live Worker, asks for the user's words, and runs `lineup steer`. |
+| Go to a Task… | Lists the Tasks on the Board, except a Done Task with no tab, and runs `lineup open`. |
+| Start a Task… | Lists the Queued Tasks. The user can type an Issue instead, which `lineup add` adds first. Then it runs `lineup start`. |
+| Start an Ad Hoc Task… | Lists the Repos of the build Tasks on the Board. The user can type another Repo. It asks for the job, then runs `lineup add --repo` and `lineup start`. |
+| Review a PR… | Asks for a PR URL and runs `lineup review`. |
+| Close a Task… | Lists the Tasks of Go to a Task…, asks again, and runs `lineup close`. |
+| Archive Done Tasks… | Lists the Done Tasks with no item ticked, and runs `lineup archive` for each ticked one. |
+| Run a Stage Again… | Lists the started Tasks, then the agent Stages of the Task's Kind, the current Stage first. Then it runs `lineup rerun`. |
+| Set the WIP Cap… | Asks for the cap, with the current cap in the field, and runs `lineup cap`. |
+| Pause Reviews, Resume Reviews | Run `lineup reviews pause` or `lineup reviews resume`. |
+| Set a Task's Model… | Lists the Tasks that are not Done, then the Claude models. The user can type another model. It runs `lineup set <task> model=<model>`. The model applies when the Task's next Worker starts. |
+
+When a Task start finds the WIP cap full, the action asks to start the Task once over the cap or to leave it in Queued.
 
 The actions ask with Rex prompts, which need Rex API revision 17 or later. On an older server, `lineup.lua` defines no action. Rex asks every connected Rex app, so the user can answer on another device. The first answer wins.
 

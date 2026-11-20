@@ -35,18 +35,27 @@ func decideBoard() scheduler.BoardView {
 	done := needing("ENG-11", "")
 	done.Stage, done.StageKey, done.Group = "Done", "done", "Done"
 	review := needing("R-1", "")
-	review.Kind, review.Stage, review.StageKey = lifecycle.KindReview, "Review ready", "review_ready"
+	review.Kind, review.Stage, review.StageKey, review.Note = lifecycle.KindReview, "Review ready", "review_ready", "#7 review ready"
+	asked := needing("R-2", lifecycle.ReasonQuestion)
+	asked.Kind, asked.Stage, asked.StageKey, asked.Live = lifecycle.KindReview, "Review ready", "review_ready", true
+	lost := needing("R-3", lifecycle.ReasonTabClosed)
+	lost.Kind, lost.Stage, lost.StageKey = lifecycle.KindReview, "Reviewing", "reviewing"
+	reviewing := needing("R-4", "")
+	reviewing.Kind, reviewing.Stage, reviewing.StageKey, reviewing.Group = lifecycle.KindReview, "Reviewing", "reviewing", "Working"
+	question := needing("ENG-3", lifecycle.ReasonQuestion)
+	question.Live = true
 	return scheduler.BoardView{Tasks: []scheduler.TaskView{
 		landing,
 		needing("ENG-2", lifecycle.ReasonTabClosed),
-		needing("ENG-3", lifecycle.ReasonQuestion),
+		question,
+		needing("ENG-12", lifecycle.ReasonQuestion),
 		needing("ENG-4", lifecycle.ReasonStopped),
 		spent,
 		needing("ENG-6", lifecycle.ReasonPRClosed),
 		needing("ENG-7", lifecycle.ReasonSetupFailed),
 		needing("ENG-8", lifecycle.ReasonPermission),
 		needing("ENG-9", lifecycle.ReasonDrafts),
-		working, done, review,
+		working, done, review, asked, lost, reviewing,
 	}}
 }
 
@@ -77,17 +86,21 @@ func listDecisions(t *testing.T, v scheduler.BoardView) listed {
 	return got
 }
 
-func TestDecideListsTheBuildTasksThatNeedYou(t *testing.T) {
+func TestDecideListsTheTasksThatNeedYou(t *testing.T) {
 	want := map[string][]string{
-		"ENG-1": {"merge Merge the PR", "open Open the tab"},
-		"ENG-2": {"open Restore the Worker", "close Close the Task"},
-		"ENG-3": {"answer Answer here (text)", "open Open the tab"},
-		"ENG-4": {"open Open the tab", "close Close the Task"},
-		"ENG-5": {"rerun Run the Stage again", "open Open the tab", "close Close the Task"},
-		"ENG-6": {"close Close the Task", "open Open the tab"},
-		"ENG-7": {"open Open the tab", "close Close the Task"},
-		"ENG-8": {"open Open the tab"},
-		"ENG-9": {"open Open the tab"},
+		"ENG-1":  {"merge Merge the PR", "open Open the tab"},
+		"ENG-2":  {"open Restore the Worker", "close Close the Task"},
+		"ENG-3":  {"answer Answer here (text)", "open Open the tab"},
+		"ENG-12": {"open Open the tab"},
+		"R-1":    {"open Open the tab", "close Close the Task"},
+		"R-2":    {"answer Answer here (text)", "open Open the tab"},
+		"R-3":    {"open Restore the Worker", "close Close the Task"},
+		"ENG-4":  {"open Open the tab", "close Close the Task"},
+		"ENG-5":  {"rerun Run the Stage again", "open Open the tab", "close Close the Task"},
+		"ENG-6":  {"close Close the Task", "open Open the tab"},
+		"ENG-7":  {"open Open the tab", "close Close the Task"},
+		"ENG-8":  {"open Open the tab"},
+		"ENG-9":  {"open Open the tab"},
 	}
 	got := listDecisions(t, decideBoard())
 	var ids []string
@@ -108,7 +121,7 @@ func TestDecideListsTheBuildTasksThatNeedYou(t *testing.T) {
 			t.Errorf("%s: title %q, note %q", task.ID, task.Title, task.Note)
 		}
 	}
-	if wantIDs := []string{"ENG-1", "ENG-2", "ENG-3", "ENG-4", "ENG-5", "ENG-6", "ENG-7", "ENG-8", "ENG-9"}; !slices.Equal(ids, wantIDs) {
+	if wantIDs := []string{"ENG-1", "ENG-2", "ENG-3", "ENG-12", "ENG-4", "ENG-5", "ENG-6", "ENG-7", "ENG-8", "ENG-9", "R-1", "R-2", "R-3"}; !slices.Equal(ids, wantIDs) {
 		t.Fatalf("listed %q, want %q", ids, wantIDs)
 	}
 }
@@ -135,6 +148,18 @@ func TestReadyToLandIsTheOnlyBuildStageInNeedsYou(t *testing.T) {
 	}
 	if !slices.Equal(got, []lifecycle.Stage{lifecycle.ReadyToLand}) {
 		t.Fatalf("build Stages in Needs you with no flag: %v, want only Ready to land, which choicesFor[readyToLand] merges", got)
+	}
+}
+
+func TestReviewReadyIsTheOnlyReviewStageInNeedsYou(t *testing.T) {
+	var got []lifecycle.Stage
+	for _, s := range lifecycle.Stages() {
+		if task := (lifecycle.Task{Kind: lifecycle.KindReview, Stage: s}); lifecycle.KindReview.Has(s) && task.Group() == lifecycle.GroupNeedsYou {
+			got = append(got, s)
+		}
+	}
+	if !slices.Equal(got, []lifecycle.Stage{lifecycle.ReviewReady}) {
+		t.Fatalf("review Stages in Needs you with no flag: %v, want only Review ready, which reviewReady opens or closes", got)
 	}
 }
 
@@ -187,7 +212,7 @@ func TestDecideRefusesWhatTheTaskCannotDo(t *testing.T) {
 		requests int
 	}{
 		{[]string{"ENG-10", "open"}, false, "ENG-10 does not need you", 1},
-		{[]string{"R-1", "open"}, false, "R-1 does not need you", 1},
+		{[]string{"R-4", "open"}, false, "R-4 does not need you", 1},
 		{[]string{"ENG-2", "merge"}, false, `ENG-2 has no choice "merge". Its choices are open, close`, 1},
 		{[]string{"ENG-3", "answer"}, true, "", 1},
 		{[]string{"ENG-3", "answer", "  "}, true, "", 1},

@@ -123,7 +123,7 @@ A flag on a Task, in any Stage, that says the user must act and gives the reason
 _Avoid_: Blocked, waiting, attention state
 
 **Choice**:
-One thing that the user can do about a build Task that needs them, for example Restore the Worker or Close the Task. Each Needs you reason has a fixed list of choices, the default first. `lineup decide` lists them, and Rex's palette asks them.
+One thing that the user can do about a Task that needs them, for example Restore the Worker or Close the Task. Each Needs you reason has a fixed list of choices, the default first. `lineup decide` lists them, and Rex's palette asks them.
 _Avoid_: Option, action
 
 **Ready to land**:
