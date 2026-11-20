@@ -88,7 +88,7 @@ func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 	}
 }
 
-func TestAgentRoleAsksWithAskUserQuestion(t *testing.T) {
+func TestAgentRoleLeavesNeedsYouToThePalette(t *testing.T) {
 	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup")
 	if err != nil {
 		t.Fatal(err)
@@ -99,18 +99,22 @@ func TestAgentRoleAsksWithAskUserQuestion(t *testing.T) {
 		t.Fatalf("the role has no Questions section:\n%s", role)
 	}
 	questions, _, _ = strings.Cut(questions, "\n## ")
-	for _, want := range []string{
-		"`AskUserQuestion`",
-		"**Close the tab**", "**Open the tab**", "**Keep it open**",
-		"**Restore**", "**Close the Task**",
-		"**Answer here**", "`lineup steer <task>",
-		"`lineup close <task>`", "`lineup open <task>`",
-	} {
+	for _, want := range []string{"`AskUserQuestion`", "`wip cap full`", "`lineup start --over-cap <task>`", "`no Repo mapping`"} {
 		if !strings.Contains(questions, want) {
 			t.Errorf("the Questions section has no %s", want)
 		}
 	}
-	for _, plain := range []string{"in chat", "Do not act on an alert yourself"} {
+	_, needs, ok := strings.Cut(role, "\n## Needs you\n")
+	if !ok {
+		t.Fatalf("the role has no Needs you section:\n%s", role)
+	}
+	needs, _, _ = strings.Cut(needs, "\n## ")
+	for _, want := range []string{"What Needs Me…", "`lineup decide`", "`lineup decide <task> <choice>`", "You get no alerts"} {
+		if !strings.Contains(needs, want) {
+			t.Errorf("the Needs you section has no %s", want)
+		}
+	}
+	for _, plain := range []string{"in chat", "Do not act on an alert yourself", "lineup watch", "## Alerts"} {
 		if strings.Contains(role, plain) {
 			t.Errorf("the role still says %q", plain)
 		}
@@ -160,7 +164,7 @@ func permits(t *testing.T, settings, cmd string) (allow, deny bool) {
 
 func TestAgentSettingsUnionAllowsEveryLineupCommand(t *testing.T) {
 	cmds := []string{
-		"lineup add ENG-1", "lineup start ENG-1", "lineup merge ENG-1", "lineup watch --once",
+		"lineup add ENG-1", "lineup start ENG-1", "lineup merge ENG-1",
 		"lineup review https://github.com/o/r/pull/1", "lineup reviews --json", "lineup steer R-1 hi",
 		"linear issue update ENG-1", "linear issue relation add ENG-1 blocks ENG-2", "gh issue edit 12",
 		"gh pr view 1", "gh search prs --review-requested @me",

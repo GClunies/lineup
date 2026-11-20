@@ -2,6 +2,8 @@
 
 [ADR 0029](0029-the-palette-runs-everyday-lineup-commands.md) changes two parts: `lineup decide` also lists review Tasks, and the palette gets actions that go to a Task and start a Task.
 
+[ADR 0030](0030-the-orchestrator-gets-no-alerts.md) removes the Orchestrator's alert questions, so the palette is the one place to decide.
+
 Each Needs you reason has a fixed list of choices in lineup. `lineup decide` lists the build Tasks that need the user, each with its choices, and it runs the choice that the user picks. Two actions in Rex's command palette, What Needs Me… and Tell a Worker…, ask with Rex prompts and run `lineup decide` and `lineup steer`. We chose this because the user can then decide from the tab that they are in, or from another device, and no agent turn runs. The Orchestrator's alert questions offer the same choices, but each one costs an agent turn, and the user must go to the lineup tab to answer.
 
 ## Considered Options

@@ -42,10 +42,6 @@ const (
 	agentRows        = 25 // percent of the tab
 )
 
-// watchPrompt is the Orchestrator's first message each time the Hub starts
-// it, because a background command does not survive a restart of Claude.
-const watchPrompt = "Start the lineup watch, as CLAUDE.md says under Alerts."
-
 // agentSettings gives the Orchestrator its status line, lets it run lineup
 // and edit the Trackers without a permission prompt, and keeps it from
 // writing to a PR. Only the user posts a review or merges outside lineup.
@@ -112,14 +108,13 @@ type agentTab struct {
 	role                []byte
 	settings            string
 	bg                  string // agent pane background
-	prompt              string // the agent's first message, if any
 	// compose, if set, fills in role and settings when the Hub writes them.
 	compose func(role []byte, settings string) ([]byte, string, error)
 }
 
 // agentTabs are in Hub tab order.
 var agentTabs = []agentTab{
-	{"lineup", "BOARD", "LINEUP", []string{"board"}, agentRole, agentSettings, "#1b2733", watchPrompt, composeAgent},
+	{"lineup", "BOARD", "LINEUP", []string{"board"}, agentRole, agentSettings, "#1b2733", composeAgent},
 }
 
 // activeTab is the tab that a new Hub opens on.
@@ -437,9 +432,6 @@ func openAgentTab(t agentTab, dir, self, claudeBin string, focus bool) error {
 	cmd := agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, t.window)
 	if hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {
 		cmd = append(cmd, "--continue")
-	}
-	if t.prompt != "" {
-		cmd = append(cmd, t.prompt)
 	}
 	out, err := rexRun(slices.Concat([]string{"window", "new", "-s", hubSession, t.window,
 		"--focus=" + strconv.FormatBool(focus), "--json", "--", self}, t.boardArgs)...)
