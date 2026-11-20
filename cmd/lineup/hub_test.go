@@ -366,3 +366,61 @@ esac`,
 		t.Errorf("lineup opened a second Hub:\n%s", calls)
 	}
 }
+
+// fakeHubRex is a rex whose Hub has one lineup tab. Rex restored its BOARD
+// pane as an idle shell, and its LINEUP pane runs a program. It logs each call.
+func fakeHubRex(t *testing.T) string {
+	t.Helper()
+	bin := t.TempDir()
+	log := filepath.Join(t.TempDir(), "rex.log")
+	idle := `{"child":{"name":"login","path":"/usr/bin/login"},"foreground":{"name":"zsh","path":"/bin/zsh"},"ancestors":[{"name":"login","path":"/usr/bin/login"}]}`
+	live := `{"child":{"name":"claude","path":"/bin/claude"},"foreground":{"name":"claude","path":"/bin/claude"}}`
+	for name, body := range map[string]string{
+		"rex": `echo "$@" >> '` + log + `'
+case "$1 $2" in
+"session inspect") echo '{"windows":[{"window_id":"w2","label":"lineup","layers":[{"blocks":[{"block_id":"b1","label":"BOARD"},{"block_id":"b2","label":"LINEUP"}]}]}]}';;
+"block call") if [ "$7" = process ] && [ "$6" = b1 ]; then echo '` + idle + `'; elif [ "$7" = process ]; then echo '` + live + `'; fi;;
+"window new") echo '{"window_id":"w9","block_ids":["b9"]}';;
+"split -s") echo '{"block_ids":["b10"]}';;
+esac`,
+		"launchctl": "",
+		"gh":        "",
+		"wt":        "",
+		"claude":    "",
+	} {
+		os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755)
+	}
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LINEUP_STATE_DIR", t.TempDir())
+	t.Setenv("LINEUP_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	return log
+}
+
+func TestOpenHubReopensATabThatARexRestartLeftAsAShell(t *testing.T) {
+	log := fakeHubRex(t)
+	t.Setenv("REX_BLOCK", "block:elsewhere")
+	if err := openHub(); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(log)
+	calls := string(raw)
+	closed, opened := strings.Index(calls, "window close -s my-lineup w2"), strings.Index(calls, "window new -s my-lineup lineup")
+	if closed < 0 || opened < closed {
+		t.Fatalf("lineup did not close the restored tab, then open it again:\n%s", calls)
+	}
+}
+
+func TestOpenHubRefusesToCloseTheTabThatItRunsIn(t *testing.T) {
+	log := fakeHubRex(t)
+	t.Setenv("REX_BLOCK", "b1")
+	err := openHub()
+	if err == nil || !strings.Contains(err.Error(), "run lineup in another tab") {
+		t.Fatalf("openHub = %v, want an error that names another tab", err)
+	}
+	raw, _ := os.ReadFile(log)
+	if strings.Contains(string(raw), "window close") || strings.Contains(string(raw), "window new") {
+		t.Fatalf("lineup closed or opened a tab:\n%s", raw)
+	}
+}
