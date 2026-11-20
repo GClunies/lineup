@@ -34,7 +34,6 @@ const usage = `usage: lineup [command]
                                stop or restart every review queue fill
   lineup ls [--json]           list the Tasks
   lineup show [--json] <task>
-  lineup watch [--once]        print a line each time a build Task needs you or ends
   lineup decide [--json]       list the Tasks that need you, with your choices for each
   lineup decide <task> <choice> ["<text>"]
                                do one of those choices, for example lineup decide ENG-34 close

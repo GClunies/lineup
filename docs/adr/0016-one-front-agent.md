@@ -1,5 +1,7 @@
 # One front agent over a board for each Kind
 
+[ADR 0030](0030-the-orchestrator-gets-no-alerts.md) changes a third: the Orchestrator reports no alert. The user decides each Task that needs them in Rex's palette.
+
 [ADR 0025](0025-review-tasks-give-no-alert.md) changes one part: a review Task gives no alert, so none reaches the chat.
 
 [ADR 0027](0027-the-board-reports-needs-you-to-rex.md) changes another: the Board shows a build Task in Needs you as a Rex status record, not as a toast.
