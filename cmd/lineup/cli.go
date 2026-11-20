@@ -26,6 +26,7 @@ var clientCommands = map[string]func(c scheduler.Client, args []string, out io.W
 	"ls":      cmdLs,
 	"watch":   cmdWatch,
 	"show":    cmdShow,
+	"decide":  cmdDecide,
 	"steer":   cmdSteer,
 	"ask":     cmdAsk,
 	"set":     cmdSet,
