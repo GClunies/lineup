@@ -881,7 +881,6 @@ func (s *Scheduler) recover(ctx context.Context) {
 		}
 		live := r.BlockID != "" && blocks[r.BlockID]
 		if live && r.Job == JobSetup {
-			// worktrunk can exit while the Scheduler is down.
 			code, exited, err := s.d.Rex.LastExit(ctx, r.SessionID, r.BlockID)
 			if err != nil {
 				s.d.Log.Warn("read the setup tab's exit", "task", r.ID, "err", err)
@@ -891,9 +890,8 @@ func (s *Scheduler) recover(ctx context.Context) {
 				continue
 			}
 		}
-		// A failed setup's tab shows worktrunk's error, so it stays.
-		kept := r.keptSetupTab() && r.Flag != lifecycle.ReasonSetupFailed
-		restored := live && (kept || s.idleShell(ctx, r))
+		spentSetup := r.keptSetupTab() && r.Flag != lifecycle.ReasonSetupFailed
+		restored := live && (spentSetup || s.idleShell(ctx, r))
 		if live && !restored {
 			if r.Job == JobWorker {
 				if st, err := s.d.Rex.ProgramStatus(ctx, r.SessionID, r.BlockID); err == nil && st.State != "" {

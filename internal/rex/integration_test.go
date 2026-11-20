@@ -197,8 +197,6 @@ func TestAWindowOutlivesItsAnchorWhileASplitRuns(t *testing.T) {
 	}
 }
 
-// A new block takes the place of a kept block whose command exited, so the
-// window keeps its ID and label.
 func TestANewBlockTakesThePlaceOfAKeptBlock(t *testing.T) {
 	c, sess := newTestSession(t)
 	ctx := context.Background()

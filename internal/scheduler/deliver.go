@@ -98,8 +98,7 @@ func (s *Scheduler) spec(r Record, stage lifecycle.Stage) WorkerSpec {
 	return spec
 }
 
-// openWorker opens the Task's Worker and reports whether it did. The first
-// Worker opens in the kept setup tab, and any other Worker in a new tab.
+// openWorker opens the Task's Worker and reports whether it did.
 func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.Stage, fresh bool) bool {
 	if r.Review != nil {
 		if !s.setupReview(ctx, r) {
@@ -173,8 +172,7 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 }
 
 // workerInSetupTab opens the Task's first Worker beside the block where setup
-// ran, so the Task's tab appears once. It reports false when the Task has no
-// kept setup tab or the tab is gone.
+// ran, so the Task's tab appears once.
 func (s *Scheduler) workerInSetupTab(ctx context.Context, r Record, folder string, env map[string]string, argv []string) (Window, bool) {
 	if !r.keptSetupTab() {
 		return Window{}, false

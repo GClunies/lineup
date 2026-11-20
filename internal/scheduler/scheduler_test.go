@@ -105,8 +105,6 @@ func (f *fakeRex) waitHold(argv []string) {
 	}
 }
 
-// NewBlock opens a block in the tab of a block that is not closed. The tab
-// keeps its label, as in Rex.
 func (f *fakeRex) NewBlock(_ context.Context, _, block, cwd string, env map[string]string, argv []string) (string, error) {
 	f.waitHold(argv)
 	f.mu.Lock()
@@ -122,7 +120,6 @@ func (f *fakeRex) NewBlock(_ context.Context, _, block, cwd string, env map[stri
 	return "", fmt.Errorf("block target %q not found", block)
 }
 
-// CloseBlock closes one block, and Rex reports the block closed.
 func (f *fakeRex) CloseBlock(_ context.Context, _, block string) error {
 	f.mu.Lock()
 	var closed bool
@@ -2624,8 +2621,6 @@ func TestAFailedSetupKeepsItsTabUntilTheUserClosesTheTask(t *testing.T) {
 	eventually(t, "the setup tab closed", func() bool { return len(h.rex.open("wt ada/eng-1-billing")) == 0 })
 }
 
-// A rerun after a failed setup closes the failed setup's tab first, so the Task
-// keeps one tab.
 func TestARerunAfterAFailedSetupReplacesItsTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
@@ -2664,7 +2659,6 @@ func keptSetupTab(job Job, exited bool, code int) (func(*store.Store), func(*Dep
 	return seed, tabs
 }
 
-// A kept setup tab holds no program, so recovery closes it and sets up again.
 func TestRecoveryClosesAKeptSetupTabAndSetsUpAgain(t *testing.T) {
 	seed, tabs := keptSetupTab(JobExited, true, 0)
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, tabs)
@@ -2677,8 +2671,6 @@ func TestRecoveryClosesAKeptSetupTabAndSetsUpAgain(t *testing.T) {
 	}
 }
 
-// A failed setup's tab shows worktrunk's error, so it stays until the user
-// closes the Task.
 func TestRecoveryKeepsTheTabOfAFailedSetup(t *testing.T) {
 	_, tabs := keptSetupTab(JobExited, true, 1)
 	seed := func(st *store.Store) {
@@ -2702,8 +2694,6 @@ func TestRecoveryKeepsTheTabOfAFailedSetup(t *testing.T) {
 	}
 }
 
-// worktrunk can exit while the Scheduler is down. Recovery reads the exit from
-// Rex, so the Worker opens in the setup tab.
 func TestRecoveryGoesOnFromASetupThatExitedWhileTheSchedulerWasDown(t *testing.T) {
 	seed, tabs := keptSetupTab(JobSetup, true, 0)
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, tabs)
@@ -2723,7 +2713,6 @@ func TestRecoveryFlagsASetupThatFailedWhileTheSchedulerWasDown(t *testing.T) {
 	}
 }
 
-// A setup that still runs at the restart reports its exit later.
 func TestRecoveryWaitsForASetupThatStillRuns(t *testing.T) {
 	seed, tabs := keptSetupTab(JobSetup, false, 0)
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, tabs)
@@ -2737,7 +2726,6 @@ func TestRecoveryWaitsForASetupThatStillRuns(t *testing.T) {
 	}
 }
 
-// The Worker starts in the tab where setup ran, so the Task's tab appears once.
 func TestTheWorkerStartsInTheSetupTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
