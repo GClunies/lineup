@@ -1,0 +1,47 @@
+internal/rex/client_test.go
+  s_da43d82dcc18c3::t_895f0e2e41c57e 118-139
+cmd/lineup/wire.go
+  s_da43d82dcc18c3::t_087086ac540c07 51-54
+internal/scheduler/review_test.go
+  s_da43d82dcc18c3::t_44527378568566 956-971
+cmd/lineup/hub_test.go
+  s_da43d82dcc18c3::t_62b2512613cf4c 6,263-278
+  s_da43d82dcc18c3::t_bab1aca4378d61 279-282
+internal/scheduler/scheduler_test.go
+  s_da43d82dcc18c3::t_688814b343459d 61
+  s_da43d82dcc18c3::t_44527378568566 186,1028-1086
+  s_da43d82dcc18c3::t_bda32a24c9239a 32-33,58-60,122,174-185
+  s_da43d82dcc18c3::t_f9198ce27ba0ac 187
+internal/scheduler/ports.go
+  s_da43d82dcc18c3::t_087086ac540c07 31-34
+internal/rex/integration_test.go
+  s_da43d82dcc18c3::t_895f0e2e41c57e 269-295
+internal/rex/client.go
+  s_da43d82dcc18c3::t_895f0e2e41c57e 253-282
+internal/scheduler/scheduler.go
+  s_da43d82dcc18c3::t_087086ac540c07 663-666,674-684,837-838,876-878,890,893-896
+cmd/lineup/hub.go
+  s_da43d82dcc18c3::t_62b2512613cf4c 159-162,164-168,280-283,313,328,366-367,406
+  s_da43d82dcc18c3::t_6eeceb7dd32cc5 163
+  s_da43d82dcc18c3::t_cc15aa8f578d96 407-410
+  s_da43d82dcc18c3::t_141e54a396cf10 5,21
+docs/spec/mvp.md
+  s_da43d82dcc18c3::t_33f9715d549490 227,288
+  s_da43d82dcc18c3::t_d5b3053576974f 289
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "371176fbb30f6d0763db7fbb4ee7f99496e41022",
+  "prompts": {},
+  "sessions": {
+    "s_da43d82dcc18c3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "29157b4a-29fd-4771-9160-79b541b98750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
