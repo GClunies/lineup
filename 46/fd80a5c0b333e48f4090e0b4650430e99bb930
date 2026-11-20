@@ -1,0 +1,68 @@
+GLOSSARY.md
+  s_da43d82dcc18c3::t_a4b7d34eb5f1df 125-128
+cmd/lineup/rex/lineup.lua
+  s_da43d82dcc18c3::t_9bc2d4d9e0af5a 59,83,107,115
+  s_da43d82dcc18c3::t_ab83490c8dbd50 33-40,47
+  s_da43d82dcc18c3::t_1b333a3f65e912 75
+  s_da43d82dcc18c3::t_923d3d45a00b19 3-8,11-29,31-32,41-46,48-58,60-67,69-74,76-80,82,84-106,108-114,116-121
+  s_da43d82dcc18c3::t_80d756b0660015 1-2,9-10
+  s_da43d82dcc18c3::t_33db2333af0125 30
+  s_da43d82dcc18c3::t_4b29503aa192cf 81
+  s_da43d82dcc18c3::t_b73d8384c3c8f8 68
+cmd/lineup/rexactions.go
+  s_da43d82dcc18c3::t_d29b896aad3a4b 15
+  s_da43d82dcc18c3::t_38e8cece3a84ce 1-14,16-28,30,34-40,43-59
+  s_da43d82dcc18c3::t_2ceb251330c7f4 29,31-33
+  s_da43d82dcc18c3::t_fa25c0b7fd79bf 41-42
+cmd/lineup/main.go
+  s_da43d82dcc18c3::t_9d75d0e7b03a42 38-40
+cmd/lineup/decide.go
+  s_da43d82dcc18c3::t_0190f7356bf3e4 1-7,9-15,20-39,41-44,51,53-80,83-103,111-112,114-115,123,125-133,136-137,143,145-146,148
+  s_da43d82dcc18c3::t_f5f5612f711337 81-82
+  s_da43d82dcc18c3::t_732f88085c3545 119,121
+  s_da43d82dcc18c3::t_0176b57daec9e7 134-135
+  s_da43d82dcc18c3::t_ded96594a28f88 45-50,52
+  s_da43d82dcc18c3::t_bb807ac8d8f924 8
+  s_da43d82dcc18c3::t_f216d0b867062e 138-142,144,147
+  s_da43d82dcc18c3::t_589dca0cf24c8c 40
+  s_da43d82dcc18c3::t_7643548727eb56 16-19
+  s_da43d82dcc18c3::t_cc0230792f7216 104-110,113,116-118,120,122,124
+cmd/lineup/hub.go
+  s_da43d82dcc18c3::t_c980579389e282 334-339
+cmd/lineup/cli.go
+  s_da43d82dcc18c3::t_9d75d0e7b03a42 29
+docs/adr/0028-rex-asks-the-needs-you-choices.md
+  s_da43d82dcc18c3::t_c0635a5a51a266 14-15
+  s_da43d82dcc18c3::t_a4b7d34eb5f1df 1-13,16
+docs/spec/mvp.md
+  s_da43d82dcc18c3::t_a4b7d34eb5f1df 557-570,572-574,576-579
+  s_da43d82dcc18c3::t_c0635a5a51a266 571,575,613
+cmd/lineup/decide_test.go
+  s_da43d82dcc18c3::t_cddc066270b536 1-58,62-98,100-115,117-122,124-125,138-183,188,197-208,211-213
+  s_da43d82dcc18c3::t_27ee286dc052f1 59-61
+  s_da43d82dcc18c3::t_db5cf5acc6a730 99
+  s_da43d82dcc18c3::t_68bbd0c36fc8af 116,123,126-137
+  s_da43d82dcc18c3::t_58d3bee046c45f 184-187,189-196
+  s_da43d82dcc18c3::t_738d8a993b1edd 209-210
+cmd/lineup/rexactions_test.go
+  s_da43d82dcc18c3::t_303fd5a50d468e 48-62
+  s_da43d82dcc18c3::t_af557892bf69a6 1-25,27-36,38-47,63-74
+  s_da43d82dcc18c3::t_9e15376fa65bc3 26
+  s_da43d82dcc18c3::t_6a4181686bdccb 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "46fd80a5c0b333e48f4090e0b4650430e99bb930",
+  "prompts": {},
+  "sessions": {
+    "s_da43d82dcc18c3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "29157b4a-29fd-4771-9160-79b541b98750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
