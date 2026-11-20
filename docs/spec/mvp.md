@@ -554,6 +554,29 @@ A Task alerts when it enters the Needs you group or Done. It alerts again only a
 
 The Hub starts the Orchestrator with a first message that tells it to run `lineup watch --once` as a background Bash command. The command exits at the next alerts, and the exit wakes the Orchestrator. The Orchestrator starts the command again, then asks the user with `AskUserQuestion` what to do. For a Done Task with a tab, the options are Close the tab, Open the tab, and Keep it open. For a `tab closed` flag, they are Restore and Close the Task. For other alerts, it tells the user what changed and what the user can say next. An idle Orchestrator writes nothing to its chat.
 
+### Choices in Rex's palette
+
+A choice is one thing that the user can do about a build Task that needs them. `lineup decide` lists the build Tasks in the Needs you group, which are the Tasks that the lineup tab counts. Each Task comes with its choices, the default first. `lineup decide <task> <choice>` runs one choice. It refuses a Task that does not need the user, and a choice that the Task does not have.
+
+| The Task needs the user because | Choices, the default first | Commands |
+|---|---|---|
+| Its PR is ready to land | Merge the PR, Open the tab | `lineup merge`, `lineup open` |
+| `tab closed` | Restore the Worker, Close the Task | `lineup open`, `lineup close` |
+| `question` | Answer here, Open the tab | `lineup steer <task> "<text>"`, `lineup open` |
+| `stopped` or `setup failed` | Open the tab, Close the Task | `lineup open`, `lineup close` |
+| `budget spent` | Run the Stage again, Open the tab, Close the Task | `lineup rerun <task> <stage>`, `lineup open`, `lineup close` |
+| `pr closed` | Close the Task, Open the tab | `lineup close`, `lineup open` |
+| Any other reason | Open the tab | `lineup open` |
+
+Each time that `lineup` opens the Hub, it writes `lineup.lua` beside Rex's `init.lua`, which is `REX_CONFIG` when that variable is set. The file runs lineup by the absolute path of the binary, because `rex.exec` runs a command with the Rex server's `PATH`. The line `require("lineup")` in `init.lua` adds two actions to Rex's command palette:
+
+| Action | What it does |
+|---|---|
+| What Needs Me… | Lists the Tasks of `lineup decide`. Then it lists the choices of the Task that the user picks. A lone Open the tab runs with no second question. For Answer here, it asks for the user's words. Then it runs `lineup decide <task> <choice>`. |
+| Tell a Worker… | Lists the Tasks with a live Worker, asks for the user's words, and runs `lineup steer`. |
+
+The actions ask with Rex prompts, which need Rex API revision 17 or later. On an older server, `lineup.lua` defines no action. Rex asks every connected Rex app, so the user can answer on another device. The first answer wins.
+
 ## Planning
 
 The Orchestrator shapes the backlog in Linear with the `linear` CLI. Planning has four jobs:
@@ -587,6 +610,7 @@ The Board shows cached data and refreshes it in the background.
 | Each transition in the table above is correct | Table-driven unit tests of a pure transition function |
 | The started-Task count never passes the WIP cap without a recorded override | Property-based tests with `pgregory.net/rapid` on random sequences of Signals |
 | Each started Task ends in Done or carries the Needs you flag | The same property-based tests, with every Worker made to stall or fail |
+| Each Needs you reason has a choice, Ready to land is the only build Stage in Needs you with no flag, and each choice sends exactly one request | Tests of `lineup decide` through a fake Scheduler socket |
 | The Scheduler reads program status correctly | An integration test that runs `claude` in a throwaway Rex session and reads `working`, `done`, and `blocked` (`kind: permission`) |
 | Recovery flags a lost Worker and opens no tab, and `lineup open` restores it | An integration test that kills a Task tab, restarts `lineup serve`, and runs `lineup open` |
 | The GitHub Signals are correct | Tests against recorded GraphQL responses for each PR state |

@@ -122,6 +122,10 @@ A flag on a Task, in any Stage, that says the user must act and gives the reason
 - a Draft reply
 _Avoid_: Blocked, waiting, attention state
 
+**Choice**:
+One thing that the user can do about a build Task that needs them, for example Restore the Worker or Close the Task. Each Needs you reason has a fixed list of choices, the default first. `lineup decide` lists them, and Rex's palette asks them.
+_Avoid_: Option, action
+
 **Ready to land**:
 The Stage where a PR that meets its Landing bar waits for the user to merge it. The Task leaves it when the PR stops meeting the bar.
 _Avoid_: Mergeable, approved

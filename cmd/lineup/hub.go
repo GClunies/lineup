@@ -331,6 +331,12 @@ func openHub() error {
 	if err != nil {
 		return err
 	}
+	if err := installRexActions(rexConfigDir(), self, func() error {
+		_, err := rexRun("config", "reload")
+		return err
+	}); err != nil {
+		fmt.Fprintln(os.Stderr, "lineup: the Rex palette actions:", err)
+	}
 	claudeBin, err := exec.LookPath("claude")
 	if err != nil {
 		return fmt.Errorf("claude is required and is not on PATH")
