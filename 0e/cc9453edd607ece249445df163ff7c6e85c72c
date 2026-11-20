@@ -1,0 +1,38 @@
+cmd/lineup/agent/CLAUDE.md
+  s_da43d82dcc18c3::t_5c9b6ada2ff433 25-26,84,86,88,90-92,103
+docs/adr/0009-orchestrator-alerts-come-from-a-monitor.md
+  s_da43d82dcc18c3::t_aa508efe419787 3-4
+docs/adr/0027-the-board-reports-needs-you-to-rex.md
+  s_da43d82dcc18c3::t_aa508efe419787 3-4
+docs/adr/0016-one-front-agent.md
+  s_da43d82dcc18c3::t_aa508efe419787 3-4
+GLOSSARY.md
+  s_da43d82dcc18c3::t_aa508efe419787 86
+docs/spec/mvp.md
+  s_da43d82dcc18c3::t_36d3782a3f53a3 539,558
+docs/adr/0028-rex-asks-the-needs-you-choices.md
+  s_da43d82dcc18c3::t_c0a01999ad283e 5-6
+cmd/lineup/hub.go
+  s_da43d82dcc18c3::t_2dcab62ca49069 117
+cmd/lineup/hub_test.go
+  s_da43d82dcc18c3::t_aabfa566df81d1 91,102,107-117
+  s_da43d82dcc18c3::t_2dcab62ca49069 167
+docs/adr/0030-the-orchestrator-gets-no-alerts.md
+  s_da43d82dcc18c3::t_aa508efe419787 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0ecc9453edd607ece249445df163ff7c6e85c72c",
+  "prompts": {},
+  "sessions": {
+    "s_da43d82dcc18c3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "29157b4a-29fd-4771-9160-79b541b98750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
