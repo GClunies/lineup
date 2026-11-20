@@ -1,6 +1,7 @@
 package board
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -52,5 +53,24 @@ func Run(socketPath, cachePath string, opts Options) error {
 // for this pane, so a click on it brings the user back to the pane.
 func Toast(w io.Writer, text string) error {
 	_, err := fmt.Fprintf(w, "\x1b]777;notify;lineup;%s\x07", termsafe.Clean(text, false))
+	return err
+}
+
+// Status tells the terminal how many build Tasks need the user. It writes the
+// root record of the Program Status Protocol (OSC 7501). A count above 0
+// writes a blocked record whose message names the count, and Rex marks the tab
+// while the record stands. A count of 0 clears the record. Rex drops a blocked
+// record when the Board exits.
+func Status(w io.Writer, n int) error {
+	if n <= 0 {
+		_, err := io.WriteString(w, "\x1b]7501;state=clear\x1b\\")
+		return err
+	}
+	msg := fmt.Sprintf("%d Tasks need you", n)
+	if n == 1 {
+		msg = "1 Task needs you"
+	}
+	_, err := fmt.Fprintf(w, "\x1b]7501;state=blocked:kind=question:app=lineup:msg=%s\x1b\\",
+		base64.StdEncoding.EncodeToString([]byte(msg)))
 	return err
 }

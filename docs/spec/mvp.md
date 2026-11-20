@@ -26,7 +26,7 @@ The MVP is complete when this sequence works with no manual step other than the 
 | `lineup` CLI for the Orchestrator | Per-workspace WIP caps |
 | Claude Harness adapter | Edits to labels, priority, cycles, and milestones |
 | Worktree setup through worktrunk | |
-| Alerts in the Orchestrator and toasts from the Board | |
+| Alerts in the Orchestrator, and a status record and toasts from the Board | |
 
 The design for the phase 2 Trackers is in `docs/spec/trackers.md`.
 
@@ -549,7 +549,8 @@ A Task alerts when it enters the Needs you group or Done. It alerts again only a
 | Part | What it does |
 |---|---|
 | `lineup watch` | Prints one line for each alert of a build Task. For example, it prints `ENG-34 Working, stopped: <title>`. It keeps the alerts it printed in `alerted.json` in the state directory, so a restart repeats none of them. On its first run, Tasks that are already Done print nothing. A lock on `watch.lock` allows one watch at a time. With `--once`, it exits after the first Board that has new alerts. |
-| The Board | It prints an OSC 777 notification for each alert of a build Task. Rex shows it as a desktop toast for the Board's pane. A click on the toast opens that pane. The view that the Board opens on makes no toast. |
+| The Board | It prints an OSC 777 notification for each alert of a build Task that reaches Done. Rex shows it as a desktop toast for the Board's pane. A click on the toast opens that pane. A build Task that enters Needs you gets no toast, because the status record reports it. The view that the Board opens on makes no toast. |
+| The status record | While a build Task is in Needs you, the Board keeps one Rex program status record (OSC 7501) on its pane. The record has `state=blocked` and `kind=question`. Its message names the count, for example `2 Tasks need you`. The count is the one that the header shows. Rex shows a dot and the message on the `lineup` tab. The Board sends the record at start, and again each time the set of those Tasks changes. A Task changes the set when it joins or leaves Needs you, or when its Stage or its flag changes. A review Task does not count. When no build Task is in Needs you, the Board clears the record. Rex drops the record when the Board quits. |
 | The free slot toast | When a build Task alerts for Done and the started build Tasks are fewer than the WIP cap, the Board sends one more toast that names the first Ready row, for example `1 slot free, next ENG-611: Move the retry job`. A Board view sends at most one such toast. With no Ready row, it sends none. The Board does not start the Issue. |
 
 The Hub starts the Orchestrator with a first message that tells it to run `lineup watch --once` as a background Bash command. The command exits at the next alerts, and the exit wakes the Orchestrator. The Orchestrator starts the command again, then asks the user with `AskUserQuestion` what to do. For a Done Task with a tab, the options are Close the tab, Open the tab, and Keep it open. For a `tab closed` flag, they are Restore and Close the Task. For other alerts, it tells the user what changed and what the user can say next. An idle Orchestrator writes nothing to its chat.

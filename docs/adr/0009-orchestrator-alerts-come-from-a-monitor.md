@@ -1,5 +1,7 @@
 # Orchestrator alerts come from a background watch
 
+[ADR 0027](0027-the-board-reports-needs-you-to-rex.md) changes one part: the Board shows a build Task in Needs you as a Rex status record, not as a toast.
+
 The Orchestrator learns about each alert from `lineup watch --once`, which it runs as a background Bash command. The watch prints the alerts of every Task, build or review. The command exits at the next alerts, and the exit wakes the Orchestrator. Each board shows the alerts of its own Tasks as a Rex toast. We chose a background command because an organization policy can block channels. Under such a policy, `claude --dangerously-load-development-channels server:lineup` shows "blocked by org policy", and the channel event does not reach Claude.
 
 ## Considered Options

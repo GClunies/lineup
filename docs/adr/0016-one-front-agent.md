@@ -2,6 +2,8 @@
 
 [ADR 0025](0025-review-tasks-give-no-alert.md) changes one part: a review Task gives no alert, so none reaches the chat.
 
+[ADR 0027](0027-the-board-reports-needs-you-to-rex.md) changes another: the Board shows a build Task in Needs you as a Rex status record, not as a toast.
+
 The Hub has one agent that the user talks to, the Orchestrator, in the `LINEUP` pane of the `hub` tab. It plans Issues, takes build Tasks and review Tasks, and reports the alerts of every Task. We chose this because the user wants every alert to reach one chat and every answer to leave from it. With one agent for each tab, a review alert reached no chat, and "what needs me?" left out the other Kind.
 
 ## Considered Options
