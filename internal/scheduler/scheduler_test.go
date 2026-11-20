@@ -2677,6 +2677,31 @@ func TestRecoveryClosesAKeptSetupTabAndSetsUpAgain(t *testing.T) {
 	}
 }
 
+// A failed setup's tab shows worktrunk's error, so it stays until the user
+// closes the Task.
+func TestRecoveryKeepsTheTabOfAFailedSetup(t *testing.T) {
+	_, tabs := keptSetupTab(JobExited, true, 1)
+	seed := func(st *store.Store) {
+		r := Record{
+			Task: lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Flag: lifecycle.ReasonSetupFailed,
+				Policy: testPolicy, Left: testPolicy.Budgets},
+			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data", Branch: "ada/eng-7",
+			SessionID: "session:data", WindowID: "window:kept", BlockID: "block:kept", Job: JobExited,
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, tabs)
+	h.do(Request{Op: "ls"})
+	time.Sleep(100 * time.Millisecond)
+	h.rex.mu.Lock()
+	calls := slices.Clone(h.rex.calls)
+	h.rex.mu.Unlock()
+	if len(calls) != 0 || !h.task("ENG-7").Tab {
+		t.Fatalf("tab calls = %q, Tab = %v, want the failed setup's tab kept", calls, h.task("ENG-7").Tab)
+	}
+}
+
 // worktrunk can exit while the Scheduler is down. Recovery reads the exit from
 // Rex, so the Worker opens in the setup tab.
 func TestRecoveryGoesOnFromASetupThatExitedWhileTheSchedulerWasDown(t *testing.T) {

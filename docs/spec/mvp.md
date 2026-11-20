@@ -283,7 +283,7 @@ A PR whose head commit has no checks meets the check items of the Landing bar, s
 
 ### Recovery
 
-When `lineup serve` starts, it compares the store with `rex ls` and `rex session inspect`. Each Task in an agent Stage whose tab or block is gone gets the flag `tab closed`. Recovery opens no tab, because only the user restores a closed tab. A Task whose setup tab is gone, or whose Worker never started, starts again, because it never had a Worker to restore. A setup tab that Rex kept after worktrunk exited counts as gone, and recovery closes it. If worktrunk exited while the Scheduler was down, recovery reads its exit code with `rex block call process`, and the Task goes on as if the Scheduler had seen the exit.
+When `lineup serve` starts, it compares the store with `rex ls` and `rex session inspect`. Each Task in an agent Stage whose tab or block is gone gets the flag `tab closed`. Recovery opens no tab, because only the user restores a closed tab. A Task whose setup tab is gone, or whose Worker never started, starts again, because it never had a Worker to restore. A setup tab that Rex kept after worktrunk exited counts as gone, and recovery closes it. A failed setup's tab stays, because it shows worktrunk's error. If worktrunk exited while the Scheduler was down, recovery reads its exit code with `rex block call process`, and the Task goes on as if the Scheduler had seen the exit.
 
 Recovery also runs after a Rex server restart. The Scheduler reads the Rex server's instance id every 5 s. When the id changes, every Worker is gone, so the Scheduler exits. launchd starts it again. Startup recovery flags each Task whose Worker is gone. The user restores each one with `lineup open <task>` or with `enter` on its row.
 

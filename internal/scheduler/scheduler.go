@@ -840,7 +840,8 @@ func prURL(p *PRSnapshot) string {
 // recover compares the store with Rex. Each Task in an agent Stage whose tab is
 // gone gets the tab closed flag, and no tab opens until the user asks. A tab
 // that Rex restored as an idle shell after a restart is gone too, and closes.
-// So does a setup tab that Rex kept after worktrunk exited.
+// So does a setup tab that Rex kept after worktrunk exited, unless the setup
+// failed.
 func (s *Scheduler) recover(ctx context.Context) {
 	live := map[string]map[string]bool{}
 	blocksOf := func(r *Record) (map[string]bool, bool) {
@@ -890,7 +891,9 @@ func (s *Scheduler) recover(ctx context.Context) {
 				continue
 			}
 		}
-		restored := live && (r.keptSetupTab() || s.idleShell(ctx, r))
+		// A failed setup's tab shows worktrunk's error, so it stays.
+		kept := r.keptSetupTab() && r.Flag != lifecycle.ReasonSetupFailed
+		restored := live && (kept || s.idleShell(ctx, r))
 		if live && !restored {
 			if r.Job == JobWorker {
 				if st, err := s.d.Rex.ProgramStatus(ctx, r.SessionID, r.BlockID); err == nil && st.State != "" {
