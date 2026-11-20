@@ -1,0 +1,61 @@
+internal/scheduler/scheduler_test.go
+  s_e19d1af478f36a::t_26d31a73e8a22d 35,37,232-242,283
+  s_e19d1af478f36a::t_d5194004d96348 282,838
+  s_e19d1af478f36a::t_dc38e8941c06a0 2638,2651,2655,2671
+  s_e19d1af478f36a::t_421b770cba1917 2573-2575,2577-2580,2583,2585-2597,2600,2607-2637,2639-2650,2652-2654,2656-2670,2672-2713
+  s_e19d1af478f36a::t_49771771d08141 108-109
+  s_e19d1af478f36a::t_b4bc29a9f37b4f 34,36,68,82,86,90,99-107,110-143,166,277-278
+  s_e19d1af478f36a::t_231a7b10bcd57e 2714
+cmd/lineup/wire.go
+  s_e19d1af478f36a::t_26d31a73e8a22d 49,63-66
+  s_e19d1af478f36a::t_1212e8d62a6049 34-35,43-48
+  s_e19d1af478f36a::t_26875435893ff7 50
+internal/rex/client_test.go
+  s_e19d1af478f36a::t_272c05c6a8112e 140-162
+internal/scheduler/scheduler.go
+  s_e19d1af478f36a::t_e2b0bb5b54cca1 843
+  s_e19d1af478f36a::t_d236131b8187c4 482-483
+  s_e19d1af478f36a::t_4d8beffc72c371 369-372
+  s_e19d1af478f36a::t_e334faa0b4b8ad 882-892
+  s_e19d1af478f36a::t_e02bad13de6570 893
+internal/scheduler/review_test.go
+  s_e19d1af478f36a::t_d5194004d96348 264
+docs/spec/mvp.md
+  s_e19d1af478f36a::t_acd900404fbf58 230-231,286,299,305
+internal/rex/client.go
+  s_e19d1af478f36a::t_cbf57c5221d752 122-124,126-128,132,149-166,171-184,188,204-210
+  s_e19d1af478f36a::t_776048ed4542bc 330
+  s_e19d1af478f36a::t_188a2dfa658e4b 211,313-329,331-340
+  s_e19d1af478f36a::t_7a028c16898d5a 212
+internal/scheduler/deliver.go
+  s_e19d1af478f36a::t_46dd06bc6d47b3 101-102
+  s_e19d1af478f36a::t_aca8908835d15e 145-150
+  s_e19d1af478f36a::t_ec9a301db47ef4 162-168,175-187
+  s_e19d1af478f36a::t_b9d54ecb2538d6 188-189
+internal/rex/integration_test.go
+  s_e19d1af478f36a::t_ee3251c81a343f 200-251
+  s_e19d1af478f36a::t_d5194004d96348 82,107,155,182,281,325,329
+internal/scheduler/ports.go
+  s_e19d1af478f36a::t_a96a8db81d5556 23
+  s_e19d1af478f36a::t_d7628a3140a819 28
+  s_e19d1af478f36a::t_ca5e7570accbe5 24,29-31
+  s_e19d1af478f36a::t_26d31a73e8a22d 40-42
+internal/scheduler/record.go
+  s_e19d1af478f36a::t_a7179d8883cd5c 191-194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5cde160fd663d78349181637bbbde6b1422f14c5",
+  "prompts": {},
+  "sessions": {
+    "s_e19d1af478f36a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "46d667d4-0469-46f6-bb70-572884a01627",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
