@@ -265,7 +265,7 @@ func TestOpenHubReopensATabWithARetiredAgent(t *testing.T) {
 }
 
 func TestOpenHubReopensATabThatRexRestoredAsShells(t *testing.T) {
-	w := hubWindow{Blocks: []string{"BOARD", "LINEUP"}, BlockIDs: []string{"block:board", "block:agent"}}
+	w := hubWindow{Blocks: []string{"BOARD", "LINEUP", "shell"}, BlockIDs: []string{"block:board", "block:agent", "block:mine"}}
 	for _, c := range []struct {
 		name string
 		idle map[string]bool
@@ -275,10 +275,11 @@ func TestOpenHubReopensATabThatRexRestoredAsShells(t *testing.T) {
 		{"both panes restored", map[string]bool{"block:board": true, "block:agent": true}, nil, true},
 		{"the Board restored", map[string]bool{"block:board": true}, nil, true},
 		{"both panes live", map[string]bool{}, nil, false},
+		{"only the user's own shell idle", map[string]bool{"block:mine": true}, nil, false},
 		{"Rex cannot read the panes", map[string]bool{"block:board": true}, errors.New("rex: cannot connect"), false},
 	} {
 		idle := func(b string) (bool, error) { return c.idle[b], c.err }
-		if got := restored(w, idle); got != c.want {
+		if got := restored(w, agentTabs[0], idle); got != c.want {
 			t.Errorf("%s: restored = %v, want %v", c.name, got, c.want)
 		}
 	}
