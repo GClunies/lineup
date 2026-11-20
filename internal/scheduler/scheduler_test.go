@@ -2532,3 +2532,26 @@ func TestASetupTabThatExitsAndClosesFlagsNothing(t *testing.T) {
 		t.Fatalf("flag = %q, want none", f)
 	}
 }
+
+// The Worker starts in the tab where setup ran, so the Task's tab appears once.
+func TestTheWorkerStartsInTheSetupTab(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	setup := h.waitTab("wt ada/eng-1-billing")
+	h.rex.exits(setup, 0)
+	worker := h.waitTab("claude working")
+	if worker.WindowID != setup.WindowID {
+		t.Fatalf("the Worker runs in %s, want the setup tab %s", worker.WindowID, setup.WindowID)
+	}
+	eventually(t, "a live Worker", func() bool { return h.task("ENG-1").Live })
+	h.rex.mu.Lock()
+	calls := slices.Clone(h.rex.calls)
+	h.rex.mu.Unlock()
+	if !slices.Equal(calls, []string{"new " + setup.WindowID}) {
+		t.Fatalf("tab calls = %q, want one new tab and no close", calls)
+	}
+	if got := h.events("ENG-1"); slices.Contains(got, "tab-closed") {
+		t.Fatalf("events = %q, want no tab-closed", got)
+	}
+}
