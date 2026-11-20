@@ -388,12 +388,15 @@ func TestTheHeaderShowsThatReviewsArePaused(t *testing.T) {
 	}
 }
 
-// The work view lists and counts only build Tasks. Every view toasts both Kinds.
+// The work view lists and counts only build Tasks. A build Task in Needs you
+// gives no toast, because Status reports it, and a review Task in Review ready
+// gives no alert and no count.
 func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 	var toasts []string
+	log := &statusLog{}
 	v := fixture()
 	v.Tasks = append(v.Tasks, rtv("R-3", lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour))
-	m := New(v, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
+	m := New(v, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }, Status: log.record})
 	m.width, m.height = 160, 30
 	if out := m.View(); strings.Contains(out, "R-3") || !strings.Contains(m.header(), "●2 need you") {
 		t.Fatalf("the work board shows the review Task:\n%s", out)
@@ -405,13 +408,12 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 
 	v.Tasks[len(v.Tasks)-1] = rtv("R-3", lifecycle.ReviewReady, "data#7 Fix the tooltip", urlBase, 0)
 	v.Tasks[2] = tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636 ✓ approved · ready to land", 0)
-	t2, cmd := m.Update(boardMsg(v))
-	m = t2.(Model)
-	if cmd != nil {
-		cmd()
+	show(m, v)
+	if len(toasts) != 0 {
+		t.Fatalf("toasts %q, want none", toasts)
 	}
-	if want := []string{"ENG-571 #4636 ✓ approved · ready to land | Rate limit login"}; !slices.Equal(toasts, want) {
-		t.Fatalf("toasts %q, want %q", toasts, want)
+	if got, want := log.take(), []int{3}; !slices.Equal(got, want) {
+		t.Fatalf("the Board reported %v, want %v: ENG-571 joins the 2 build Tasks that need the user, and R-3 does not count", got, want)
 	}
 }
 
@@ -815,10 +817,38 @@ func TestTheBoardToastsEachNewAlertOnce(t *testing.T) {
 		t.Fatalf("the view the Board opened on toasted %q", toasts)
 	}
 	v := fixture()
-	v.Tasks[2] = tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636 ✓ approved · ready to land", 0)
+	merged := tv("ENG-571", lifecycle.Done, "data", "Rate limit login", "#4636 merged", 0)
+	merged.Outcome = "merged"
+	v.Tasks[2] = merged
 	send(v)
 	send(v)
-	if want := []string{"ENG-571 #4636 ✓ approved · ready to land | Rate limit login"}; !slices.Equal(toasts, want) {
+	if want := []string{"ENG-571 #4636 merged | Rate limit login"}; !slices.Equal(toasts, want) {
+		t.Fatalf("toasts %q, want %q", toasts, want)
+	}
+}
+
+// A Task that needs the user has no toast, because Status reports it. The
+// toast that a Task earns when it ends stays, also for a Task that needed the
+// user before.
+func TestANeedsYouAlertGivesNoToastAndADoneAlertStillToasts(t *testing.T) {
+	var toasts []string
+	m := New(fixture(), Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
+
+	landing := tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636 ✓ approved · ready to land", 0)
+	failed := tv("WEB-12", lifecycle.Responding, "web", "Fix map tooltip", "error: exit code 1", time.Minute)
+	failed.Flag, failed.Group = "error", "Needs you"
+	v := fixture()
+	v.Tasks[2], v.Tasks[3] = landing, failed
+	m = show(m, v)
+	if len(toasts) != 0 {
+		t.Fatalf("a Task that needs the user toasted %q", toasts)
+	}
+
+	merged := tv("ENG-571", lifecycle.Done, "data", "Rate limit login", "#4636 merged", 0)
+	merged.Outcome = "merged"
+	v.Tasks[2] = merged
+	show(m, v)
+	if want := []string{"ENG-571 #4636 merged | Rate limit login"}; !slices.Equal(toasts, want) {
 		t.Fatalf("toasts %q, want %q", toasts, want)
 	}
 }

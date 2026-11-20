@@ -104,12 +104,14 @@ func (m Model) header() string {
 func needsYou(tasks []scheduler.TaskView) int {
 	n := 0
 	for _, t := range tasks {
-		if t.Group == lifecycle.GroupNeedsYou.String() {
+		if inNeedsYou(t) {
 			n++
 		}
 	}
 	return n
 }
+
+func inNeedsYou(t scheduler.TaskView) bool { return t.Group == lifecycle.GroupNeedsYou.String() }
 
 // footer is the mode's footer. A config problem adds its own line above it.
 func (m Model) footer() string {

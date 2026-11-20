@@ -496,6 +496,7 @@ func runBoard(args []string) error {
 	opts := boardOptions(configPath())
 	opts.Zoom = func() { rexRun("zoom", "-s", hubSession, "LINEUP") }
 	opts.Notify = func(text string) { board.Toast(os.Stdout, text) }
+	opts.Status = func(n int) { board.Status(os.Stdout, n) }
 	return board.Run(socketPath(), filepath.Join(stateDir(), "board.json"), opts)
 }
 

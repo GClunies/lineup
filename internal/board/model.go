@@ -5,6 +5,7 @@ package board
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"os/exec"
 	"slices"
 	"time"
@@ -34,9 +35,16 @@ type Options struct {
 	// Zoom zooms the agent pane in this tab, and back, or goes to the tab that
 	// has the agent. The Hub provides it.
 	Zoom func()
-	// Notify shows one alert line as a desktop toast. It fires for every
-	// Kind.
+	// Notify shows one line as a desktop toast. It fires when a build Task
+	// reaches Done, and for the free slot hint. A build Task in Needs you gets
+	// no toast, because Status reports it. A review Task gives no alert.
 	Notify func(text string)
+	// Status reports how many build Tasks are in Needs you. It fires once at
+	// start. It fires again when the set of those Tasks changes: a Task joins
+	// or leaves the group, or a Task in it changes its Stage or its flag. Init
+	// and Update call it, so the reports keep the order of the views. It must
+	// not block. A nil Status reports nothing.
+	Status func(n int)
 	// Open opens a URL. The default runs `open`.
 	Open func(url string) error
 	// Client replaces the socket client, for tests.
@@ -144,7 +152,8 @@ type Model struct {
 	unfiltered string          // the selection when the filter opened
 	want       string          // the row to select once it loads, such as a new local Issue
 
-	alerted map[string]string // Task ID to the Attention that last toasted
+	alerted  map[string]string // Task ID to the Attention that last toasted
+	reported map[string]string // Task ID to the Attention of each build Task in Needs you that the last Status report counted
 }
 
 // New builds a Model that paints from the given view.
@@ -169,6 +178,7 @@ func New(v scheduler.BoardView, opts Options) Model {
 	m.setBoard(v)
 	m.alerted = map[string]string{}
 	scheduler.Alerts(m.alerted, v) // what is on the Board now is not news
+	m.reported = needsYouNow(v)    // Init reports it
 	return m
 }
 
@@ -308,8 +318,12 @@ func (m Model) current() (scheduler.TaskView, bool) {
 	return scheduler.TaskView{}, false
 }
 
-// Init loads the Issue rows and fetches them again every minute.
-func (m Model) Init() tea.Cmd { return tea.Batch(m.loadMine(), tickMine()) }
+// Init reports the build Tasks that need the user, loads the Issue rows, and
+// fetches them again every minute.
+func (m Model) Init() tea.Cmd {
+	m.sendStatus()
+	return tea.Batch(m.loadMine(), tickMine())
+}
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -317,9 +331,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.layout()
 	case boardMsg:
+		v := scheduler.BoardView(msg)
 		m.online = true
-		m.setBoard(scheduler.BoardView(msg))
-		return m, m.toasts(scheduler.BoardView(msg))
+		m.setBoard(v)
+		if now := needsYouNow(v); !maps.Equal(now, m.reported) {
+			m.reported = now
+			m.sendStatus()
+		}
+		return m, m.toasts(v)
 	case onlineMsg:
 		m.online = bool(msg)
 	case opMsg:
@@ -631,8 +650,12 @@ func firstNonEmpty(ss ...string) string {
 	return ""
 }
 
+// toasts is the command that toasts v: one line for each Task that reached
+// Done, then the free slot hint. A Task in Needs you gets no toast, because the
+// status record reports it. The Alerts call still records its Attention, so the
+// Task toasts when it reaches Done.
 func (m Model) toasts(v scheduler.BoardView) tea.Cmd {
-	alerts := scheduler.Alerts(m.alerted, v)
+	alerts := slices.DeleteFunc(scheduler.Alerts(m.alerted, v), inNeedsYou)
 	var texts []string
 	for _, t := range alerts {
 		texts = append(texts, t.AlertText())
@@ -648,6 +671,30 @@ func (m Model) toasts(v scheduler.BoardView) tea.Cmd {
 			m.opts.Notify(s)
 		}
 		return nil
+	}
+}
+
+// needsYouNow maps the ID of each build Task of v in Needs you to its
+// Attention, which holds the Stage and the flag. A Task that changes its
+// reason is a new entry, even when the count stays the same.
+func needsYouNow(v scheduler.BoardView) map[string]string {
+	now := map[string]string{}
+	for _, t := range v.OfKind(lifecycle.KindBuild).Tasks {
+		if inNeedsYou(t) {
+			now[t.ID] = t.Attention()
+		}
+	}
+	return now
+}
+
+// sendStatus gives Status the count of the build Tasks in Needs you that the
+// last report named. Init and Update call it themselves, not through a command.
+// Bubbletea runs each command on its own goroutine, so two reports in a row can
+// reach the terminal in the wrong order, and the record then keeps the older
+// count.
+func (m Model) sendStatus() {
+	if m.opts.Status != nil {
+		m.opts.Status(len(m.reported))
 	}
 }
 
