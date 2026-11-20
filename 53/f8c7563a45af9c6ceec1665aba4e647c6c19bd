@@ -1,0 +1,23 @@
+cmd/lineup/hub.go
+  s_da43d82dcc18c3::t_7303dc51e172af 154-167,407
+cmd/lineup/hub_test.go
+  s_da43d82dcc18c3::t_7303dc51e172af 268,278,282
+docs/spec/mvp.md
+  s_da43d82dcc18c3::t_0513771c537231 227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "53f8c7563a45af9c6ceec1665aba4e647c6c19bd",
+  "prompts": {},
+  "sessions": {
+    "s_da43d82dcc18c3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "29157b4a-29fd-4771-9160-79b541b98750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
