@@ -137,3 +137,26 @@ func TestIdleShellReadsOnlyALoginShellWithNothingInItsForeground(t *testing.T) {
 		t.Error("idleShell read text that is not JSON")
 	}
 }
+
+// The records come from a live Rex.
+func TestLastExitReadsOnlyAKeptBlockWhoseCommandExited(t *testing.T) {
+	cases := []struct {
+		name, out string
+		code      int
+		exited    bool
+	}{
+		{"a kept block after exit 0", `{"last_exit":{"exit_code":0},"home":"/Users/g"}`, 0, true},
+		{"a kept block after exit 3", `{"last_exit":{"exit_code":3,"error":"exit status 3"},"home":"/Users/g"}`, 3, true},
+		{"a running command", `{"last_exit":null,"child":{"pid":22579,"name":"sleep","path":"/bin/sleep"},"foreground":{"pid":22579,"name":"sleep"}}`, 0, false},
+		{"a plain shell", `{"last_exit":null,"child":{"pid":22591,"name":"login","path":"/usr/bin/login"},"foreground":{"pid":22601,"name":"zsh","path":"/bin/zsh"},"ancestors":[{"pid":22591,"name":"login","path":"/usr/bin/login"}]}`, 0, false},
+	}
+	for _, c := range cases {
+		code, exited, err := lastExit([]byte(c.out))
+		if err != nil || code != c.code || exited != c.exited {
+			t.Errorf("%s: lastExit = %d, %v, %v, want %d, %v", c.name, code, exited, err, c.code, c.exited)
+		}
+	}
+	if _, _, err := lastExit([]byte("not json")); err == nil {
+		t.Error("lastExit read text that is not JSON")
+	}
+}

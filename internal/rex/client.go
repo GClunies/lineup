@@ -119,27 +119,17 @@ func (c *Client) EnsureSession(ctx context.Context, label string) (string, error
 	return v.ID, nil
 }
 
-// NewWindow opens a tab that runs argv. Rex starts argv through a login shell
-// that runs no direnv, so env is set by prefixing argv with env K=V.
-func (c *Client) NewWindow(ctx context.Context, session, label, cwd string, env map[string]string, argv []string) (Window, error) {
+// NewWindow opens a tab that runs argv. With keep, the tab stays open after
+// argv exits, so another block can take its place.
+func (c *Client) NewWindow(ctx context.Context, session, label, cwd string, env map[string]string, argv []string, keep bool) (Window, error) {
 	args := []string{"window", "new", "-s", session, label, "--focus=false", "--json"}
+	if keep {
+		args = append(args, "--keep-open")
+	}
 	if cwd != "" {
 		args = append(args, "-c", cwd)
 	}
-	args = append(args, "--")
-	if len(env) > 0 {
-		args = append(args, "env")
-		keys := make([]string, 0, len(env))
-		for k := range env {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			args = append(args, k+"="+env[k])
-		}
-	}
-	args = append(args, argv...)
-	out, err := c.run(ctx, args...)
+	out, err := c.run(ctx, append(append(args, "--"), withEnv(env, argv)...)...)
 	if err != nil {
 		return Window{}, err
 	}
@@ -156,15 +146,46 @@ func (c *Client) NewWindow(ctx context.Context, session, label, cwd string, env 
 	return Window{SessionID: session, WindowID: v.WindowID, BlockID: v.BlockIDs[0]}, nil
 }
 
+// withEnv sets env for argv. Rex starts argv through a login shell that runs no
+// direnv, so env is set by prefixing argv with env K=V.
+func withEnv(env map[string]string, argv []string) []string {
+	if len(env) == 0 {
+		return argv
+	}
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := []string{"env"}
+	for _, k := range keys {
+		out = append(out, k+"="+env[k])
+	}
+	return append(out, argv...)
+}
+
 // Split opens argv in a new block labeled hunk to the right of block, with
 // half of the tab, and keeps the focus where it is. It returns the new
 // block's ID.
 func (c *Client) Split(ctx context.Context, session, block, cwd string, argv []string) (string, error) {
-	args := []string{"split", "-s", session, "-b", block, "--split", "right", "--ratio", "50", "--label", "hunk", "--focus=false", "--json"}
+	return c.split(ctx, session, block, cwd, "hunk", nil, argv)
+}
+
+// NewBlock opens argv in a new block of block's tab, as Split does. The new
+// block gets the label of a new tab's block.
+func (c *Client) NewBlock(ctx context.Context, session, block, cwd string, env map[string]string, argv []string) (string, error) {
+	return c.split(ctx, session, block, cwd, "", env, argv)
+}
+
+func (c *Client) split(ctx context.Context, session, block, cwd, label string, env map[string]string, argv []string) (string, error) {
+	args := []string{"split", "-s", session, "-b", block, "--split", "right", "--ratio", "50", "--focus=false", "--json"}
+	if label != "" {
+		args = append(args, "--label", label)
+	}
 	if cwd != "" {
 		args = append(args, "-c", cwd)
 	}
-	out, err := c.run(ctx, append(append(args, "--"), argv...)...)
+	out, err := c.run(ctx, append(append(args, "--"), withEnv(env, argv)...)...)
 	if err != nil {
 		return "", err
 	}
@@ -178,6 +199,15 @@ func (c *Client) Split(ctx context.Context, session, block, cwd string, argv []s
 		return "", errors.New("rex split returned no block")
 	}
 	return v.BlockIDs[0], nil
+}
+
+// CloseBlock closes one block. Its tab stays while it holds another block.
+func (c *Client) CloseBlock(ctx context.Context, session, block string) error {
+	_, err := c.run(ctx, "block", "close", "-s", session, block)
+	if IsNotFound(err) {
+		return nil
+	}
+	return err
 }
 
 func (c *Client) CloseWindow(ctx context.Context, session, windowID string) error {
@@ -278,6 +308,34 @@ func idleShell(out []byte) (bool, error) {
 		return false, err
 	}
 	return v.Child.Path == loginShell && len(v.Ancestors) <= 1, nil
+}
+
+// LastExit returns the exit code of a block's command after it exits in a block
+// that Rex keeps open. exited is false while a program runs in the block.
+func (c *Client) LastExit(ctx context.Context, session, block string) (code int, exited bool, err error) {
+	out, err := c.run(ctx, "block", "call", "-s", session, "-b", block, "process")
+	if err != nil {
+		return 0, false, err
+	}
+	return lastExit(out)
+}
+
+// lastExit reads the record of the process method. A kept block whose command
+// exited has a last exit and no child.
+func lastExit(out []byte) (int, bool, error) {
+	var v struct {
+		LastExit *struct {
+			ExitCode int `json:"exit_code"`
+		} `json:"last_exit"`
+		Child *struct{} `json:"child"`
+	}
+	if err := json.Unmarshal(out, &v); err != nil {
+		return 0, false, err
+	}
+	if v.LastExit == nil || v.Child != nil {
+		return 0, false, nil
+	}
+	return v.LastExit.ExitCode, true, nil
 }
 
 // Type writes each part to the block, then presses Enter. Claude reads text and

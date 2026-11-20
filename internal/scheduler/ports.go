@@ -20,10 +20,15 @@ type Status struct{ State, Kind, Msg string }
 
 type Rex interface {
 	EnsureSession(ctx context.Context, label string) (string, error)
-	NewWindow(ctx context.Context, session, label, cwd string, env map[string]string, argv []string) (Window, error)
+	// NewWindow opens a tab that runs argv. With keep, the tab stays after argv exits.
+	NewWindow(ctx context.Context, session, label, cwd string, env map[string]string, argv []string, keep bool) (Window, error)
 	// Split opens argv beside block, in block's tab, and keeps the focus on
 	// block. It returns the new block.
 	Split(ctx context.Context, session, block, cwd string, argv []string) (string, error)
+	// NewBlock opens argv in a new block of block's tab and returns the new block.
+	NewBlock(ctx context.Context, session, block, cwd string, env map[string]string, argv []string) (string, error)
+	// CloseBlock closes one block. Its tab stays while it holds another block.
+	CloseBlock(ctx context.Context, session, block string) error
 	CloseWindow(ctx context.Context, session, window string) error
 	DestroySession(ctx context.Context, session string) error
 	// Blocks returns the IDs of the live blocks in a session. A missing session has none.
@@ -32,6 +37,9 @@ type Rex interface {
 	// nothing in its foreground. Rex restores every block that way after a
 	// restart, so lineup's program in it is gone.
 	IdleShell(ctx context.Context, session, block string) (bool, error)
+	// LastExit returns the exit code of block's program in a tab that Rex
+	// kept after the exit. exited is false while the program runs.
+	LastExit(ctx context.Context, session, block string) (code int, exited bool, err error)
 	ProgramStatus(ctx context.Context, session, block string) (Status, error)
 	Type(ctx context.Context, session, block, text string) error
 	// Focus shows the block in the Rex app.

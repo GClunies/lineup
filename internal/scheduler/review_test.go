@@ -261,7 +261,7 @@ func TestMergedAndClosedPRsEndTheReview(t *testing.T) {
 
 func TestTheLastReviewKeepsASessionThatHoldsOtherTabs(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
-	if _, err := h.rex.NewWindow(context.Background(), "session:reviews", "the user's own tab", "/", nil, []string{"zsh"}); err != nil {
+	if _, err := h.rex.NewWindow(context.Background(), "session:reviews", "the user's own tab", "/", nil, []string{"zsh"}, false); err != nil {
 		t.Fatal(err)
 	}
 	h.gh.setReview(openPR(7, "h1"))

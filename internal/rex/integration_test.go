@@ -79,7 +79,7 @@ func TestChildExitedThenBlockClosed(t *testing.T) {
 	}
 
 	ch, _ := subscribe(t, c)
-	w, err := c.NewWindow(ctx, sess, "exit3", "", nil, []string{"sh", "-c", "sleep 2; exit 3"})
+	w, err := c.NewWindow(ctx, sess, "exit3", "", nil, []string{"sh", "-c", "sleep 2; exit 3"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestNewWindowEnvCwdAndClose(t *testing.T) {
 	env := map[string]string{"LINEUP_CODE": "5"}
 	gate := filepath.Join(t.TempDir(), "go")
 	script := `while [ ! -e "$2" ]; do sleep 0.05; done; test "$(pwd -P)" = "$1" && exit $LINEUP_CODE; exit 9`
-	w, err := c.NewWindow(ctx, sess, "env", dir, env, []string{"sh", "-c", script, "sh", dir, gate})
+	w, err := c.NewWindow(ctx, sess, "env", dir, env, []string{"sh", "-c", script, "sh", dir, gate}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestSplitRunsBesideItsAnchor(t *testing.T) {
 		t.Fatal(err)
 	}
 	ch, _ := subscribe(t, c)
-	w, err := c.NewWindow(ctx, sess, "anchor", "", nil, []string{"sleep", "30"})
+	w, err := c.NewWindow(ctx, sess, "anchor", "", nil, []string{"sleep", "30"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestAWindowOutlivesItsAnchorWhileASplitRuns(t *testing.T) {
 	c, sess := newTestSession(t)
 	ctx := context.Background()
 	ch, _ := subscribe(t, c)
-	w, err := c.NewWindow(ctx, sess, "anchor", "", nil, []string{"sleep", "2"})
+	w, err := c.NewWindow(ctx, sess, "anchor", "", nil, []string{"sleep", "2"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,6 +194,56 @@ func TestAWindowOutlivesItsAnchorWhileASplitRuns(t *testing.T) {
 	}
 	if len(view.Windows) != 1 || !slices.Equal(view.Windows[0].BlockIDs, []string{split}) {
 		t.Fatalf("view %+v, want the window with the split %s only", view, split)
+	}
+}
+
+func TestANewBlockTakesThePlaceOfAKeptBlock(t *testing.T) {
+	c, sess := newTestSession(t)
+	ctx := context.Background()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch, _ := subscribe(t, c)
+	w, err := c.NewWindow(ctx, sess, "setup", "", nil, []string{"sh", "-c", "sleep 1.5"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, ch, 15*time.Second, func(e Event) bool { return e.Kind == ChildExited && e.BlockID == w.BlockID })
+	if code, exited, err := c.LastExit(ctx, sess, w.BlockID); err != nil || !exited || code != 0 {
+		t.Fatalf("LastExit = %d, %v, %v, want 0 after the exit", code, exited, err)
+	}
+
+	gate := filepath.Join(t.TempDir(), "go")
+	script := `while [ ! -e "$2" ]; do sleep 0.05; done; test "$(pwd -P)" = "$1" && exit $LINEUP_CODE; exit 9`
+	block, err := c.NewBlock(ctx, sess, w.BlockID, dir, map[string]string{"LINEUP_CODE": "5"}, []string{"sh", "-c", script, "sh", dir, gate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exited, err := c.LastExit(ctx, sess, block); err != nil || exited {
+		t.Fatalf("LastExit = %v, %v, want a running block", exited, err)
+	}
+	if err := c.CloseBlock(ctx, sess, w.BlockID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, ch, 15*time.Second, func(e Event) bool { return e.Kind == BlockClosed && e.BlockID == w.BlockID })
+	view, err := c.View(ctx, sess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Windows) != 1 || view.Windows[0].ID != w.WindowID || view.Windows[0].Label != "setup" || !slices.Equal(view.Windows[0].BlockIDs, []string{block}) {
+		t.Fatalf("view %+v, want window %s labeled setup with the new block %s only", view, w.WindowID, block)
+	}
+	if err := c.CloseBlock(ctx, sess, w.BlockID); err != nil {
+		t.Fatalf("second close: %v", err)
+	}
+
+	if err := os.WriteFile(gate, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ev := waitFor(t, ch, 15*time.Second, func(e Event) bool { return e.Kind == ChildExited && e.BlockID == block })
+	if ev.ExitCode != 5 {
+		t.Fatalf("exit code %d, want 5 from env LINEUP_CODE in the new block's folder", ev.ExitCode)
 	}
 }
 
@@ -226,7 +276,7 @@ func TestClaudeProgramStatus(t *testing.T) {
 	claude := os.ExpandEnv("$HOME/.local/bin/claude")
 	w, err := c.NewWindow(ctx, sess, "claude", dir,
 		map[string]string{"CLAUDE_CONFIG_DIR": profile},
-		[]string{claude, "--model", "haiku", "--permission-mode", "default"})
+		[]string{claude, "--model", "haiku", "--permission-mode", "default"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,11 +320,11 @@ func TestClaudeProgramStatus(t *testing.T) {
 func TestIdleShellTellsAPlainTabFromAProgram(t *testing.T) {
 	c, sess := newTestSession(t)
 	ctx := context.Background()
-	shell, err := c.NewWindow(ctx, sess, "shell", "", nil, nil)
+	shell, err := c.NewWindow(ctx, sess, "shell", "", nil, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	program, err := c.NewWindow(ctx, sess, "sleep", "", nil, []string{"sleep", "60"})
+	program, err := c.NewWindow(ctx, sess, "sleep", "", nil, []string{"sleep", "60"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}

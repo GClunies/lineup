@@ -98,7 +98,7 @@ func (s *Scheduler) spec(r Record, stage lifecycle.Stage) WorkerSpec {
 	return spec
 }
 
-// openWorker opens a tab for the Task's Worker and reports whether it did.
+// openWorker opens the Task's Worker and reports whether it did.
 func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.Stage, fresh bool) bool {
 	if r.Review != nil {
 		if !s.setupReview(ctx, r) {
@@ -141,10 +141,12 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 		s.fail(r.ID, "rex session", err)
 		return false
 	}
-	w, err := s.d.Rex.NewWindow(ctx, session, r.tabLabel(), folder, env, argv)
-	if err != nil {
-		s.fail(r.ID, "rex tab", err)
-		return false
+	w, inSetup := s.workerInSetupTab(ctx, r, folder, env, argv)
+	if !inSetup {
+		if w, err = s.d.Rex.NewWindow(ctx, session, r.tabLabel(), folder, env, argv, false); err != nil {
+			s.fail(r.ID, "rex tab", err)
+			return false
+		}
 	}
 	since := r.PendingSince
 	s.update(r.ID, func(rec *Record) {
@@ -156,10 +158,31 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 		}
 	})
 	s.attach(r.ID, w, JobWorker)
+	// The Record holds the Worker's block now, so the setup block's close is
+	// not read as the user's.
+	if inSetup {
+		if err := s.d.Rex.CloseBlock(ctx, r.SessionID, r.BlockID); err != nil {
+			s.d.Log.Warn("close the setup block", "task", r.ID, "err", err)
+		}
+	}
 	if r.Review != nil {
 		s.openHunk(ctx, r.ID, w.SessionID, w.BlockID, r.Worktree, r.Review.URL)
 	}
 	return true
+}
+
+// workerInSetupTab opens the Task's first Worker beside the block where setup
+// ran, so the Task's tab appears once.
+func (s *Scheduler) workerInSetupTab(ctx context.Context, r Record, folder string, env map[string]string, argv []string) (Window, bool) {
+	if !r.keptSetupTab() {
+		return Window{}, false
+	}
+	block, err := s.d.Rex.NewBlock(ctx, r.SessionID, r.BlockID, folder, env, argv)
+	if err != nil {
+		s.d.Log.Warn("open the Worker in the setup tab", "task", r.ID, "err", err)
+		return Window{}, false
+	}
+	return Window{SessionID: r.SessionID, WindowID: r.WindowID, BlockID: block}, true
 }
 
 // promptedState is the WorkerState from a typed prompt until the Worker reports

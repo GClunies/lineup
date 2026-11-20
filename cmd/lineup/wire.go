@@ -31,13 +31,21 @@ func (p rexPort) EnsureSession(ctx context.Context, label string) (string, error
 	return p.c.EnsureSession(ctx, label)
 }
 
-func (p rexPort) NewWindow(ctx context.Context, session, label, cwd string, env map[string]string, argv []string) (scheduler.Window, error) {
-	w, err := p.c.NewWindow(ctx, session, label, cwd, env, argv)
+func (p rexPort) NewWindow(ctx context.Context, session, label, cwd string, env map[string]string, argv []string, keep bool) (scheduler.Window, error) {
+	w, err := p.c.NewWindow(ctx, session, label, cwd, env, argv, keep)
 	return scheduler.Window(w), err
 }
 
 func (p rexPort) Split(ctx context.Context, session, block, cwd string, argv []string) (string, error) {
 	return p.c.Split(ctx, session, block, cwd, argv)
+}
+
+func (p rexPort) NewBlock(ctx context.Context, session, block, cwd string, env map[string]string, argv []string) (string, error) {
+	return p.c.NewBlock(ctx, session, block, cwd, env, argv)
+}
+
+func (p rexPort) CloseBlock(ctx context.Context, session, block string) error {
+	return p.c.CloseBlock(ctx, session, block)
 }
 
 func (p rexPort) CloseWindow(ctx context.Context, session, window string) error {
@@ -50,6 +58,10 @@ func (p rexPort) DestroySession(ctx context.Context, session string) error {
 
 func (p rexPort) IdleShell(ctx context.Context, session, block string) (bool, error) {
 	return p.c.IdleShell(ctx, session, block)
+}
+
+func (p rexPort) LastExit(ctx context.Context, session, block string) (int, bool, error) {
+	return p.c.LastExit(ctx, session, block)
 }
 
 func (p rexPort) Blocks(ctx context.Context, session string) (map[string]bool, error) {
