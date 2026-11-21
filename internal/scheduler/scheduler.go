@@ -451,10 +451,10 @@ func (s *Scheduler) replay(id string) (replaced bool, steers []string) {
 	return replaced, steers
 }
 
-// openHunk shows the PR in hunk beside a review Worker. A failed split leaves
+// openHunk runs argv in a hunk pane beside the Worker. A failed split leaves
 // the Worker running.
-func (s *Scheduler) openHunk(ctx context.Context, id, session, block, worktree, url string) {
-	hunk, err := s.d.Rex.Split(ctx, session, block, worktree, hunkArgv(url))
+func (s *Scheduler) openHunk(ctx context.Context, id, session, block, worktree string, argv []string) {
+	hunk, err := s.d.Rex.Split(ctx, session, block, worktree, argv)
 	if err != nil {
 		s.d.Log.Warn("hunk pane", "task", id, "err", err)
 		return
@@ -657,11 +657,11 @@ func (s *Scheduler) tabClosedByUser(r *Record, detail string) {
 }
 
 // forgetTab drops the Task's tab after its block is gone. The hunk pane
-// holds a review tab open, so the Scheduler closes that tab.
+// holds the tab open, so the Scheduler closes the tab.
 func (s *Scheduler) forgetTab(r *Record) {
 	id, session, window := r.ID, r.SessionID, r.WindowID
 	r.WindowID, r.BlockID, r.HunkBlockID, r.Job = "", "", "", JobNone
-	if r.Review == nil || window == "" {
+	if window == "" {
 		return
 	}
 	s.closeLater(id, session, window)
@@ -897,20 +897,16 @@ func (s *Scheduler) recover(ctx context.Context) {
 				if st, err := s.d.Rex.ProgramStatus(ctx, r.SessionID, r.BlockID); err == nil && st.State != "" {
 					s.onRex(RexEvent{Kind: EvStatus, BlockID: r.BlockID, Status: st})
 				}
-				if r.Review != nil && !blocks[r.HunkBlockID] {
-					id, session, block, worktree, url := r.ID, r.SessionID, r.BlockID, r.Worktree, r.Review.URL
-					s.enqueue(id, func(ctx context.Context) { s.openHunk(ctx, id, session, block, worktree, url) })
+				if !blocks[r.HunkBlockID] {
+					id, session, block, worktree, argv := r.ID, r.SessionID, r.BlockID, r.Worktree, r.hunkCommand()
+					s.enqueue(id, func(ctx context.Context) { s.openHunk(ctx, id, session, block, worktree, argv) })
 				}
 			}
 			continue
 		}
-		job, window := r.Job, r.WindowID
+		job := r.Job
 		s.forgetTab(r)
 		s.save(r)
-		// forgetTab closes a review tab itself.
-		if restored && r.Review == nil {
-			s.closeLater(r.ID, r.SessionID, window)
-		}
 		if r.Flag != "" && !r.Flag.Transient() {
 			continue
 		}
