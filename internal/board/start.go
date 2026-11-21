@@ -149,8 +149,8 @@ func (m Model) startTask(r issueRow, repo, skill string) tea.Cmd {
 }
 
 func (m Model) loadRepos() tea.Cmd {
-	f := m.opts.Repos
-	return func() tea.Msg { return reposMsg{repos: f()} }
+	f, kind := m.opts.Repos, m.pick.Kind
+	return func() tea.Msg { return reposMsg{repos: f(kind)} }
 }
 
 // startMsg handles the messages of the start. ok is false for any other message.

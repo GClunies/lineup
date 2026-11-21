@@ -248,3 +248,20 @@ func TestRestartRefusesABadConfigAndKeepsTheScheduler(t *testing.T) {
 		t.Fatalf("restart with a bad config ran %q", *calls)
 	}
 }
+
+func TestRestartRefusesAnUnknownTrackerInTheTrackersKey(t *testing.T) {
+	m, calls := testManager(t)
+	m.config = filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(m.config, []byte("[[repos]]\nmatch = \"~/repos/gclunies/hod\"\ntrackers = [\"local\", \"jira\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m.ensure()
+	*calls = nil
+	err := m.restart()
+	if err == nil || !strings.Contains(err.Error(), `trackers[1] "jira" is not a Tracker`) {
+		t.Fatalf("restart with an unknown tracker: %v, want the load error", err)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("restart with an unknown tracker ran %q", *calls)
+	}
+}

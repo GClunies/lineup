@@ -664,3 +664,46 @@ func TestTheRestartsHintTellsTheUserToDeleteTheLine(t *testing.T) {
 		t.Fatalf("err = %v, want a hint that names the restarts line", err)
 	}
 }
+
+func TestTheTrackersKeyLocksARepo(t *testing.T) {
+	g := load(t, `
+[[repos]]
+match = "~/repos/gclunies/*"
+trackers = ["local", "github"]
+[[repos]]
+match = "~/repos/gclunies/hod"
+trackers = ["local"]
+[[repos]]
+match = "~/repos/acme/data"
+teams = ["ENG"]
+`)
+	for repo, want := range map[string][]string{
+		"~/repos/gclunies/hod":       {"local"},
+		"/home/u/repos/gclunies/hod": {"local"},
+		"~/repos/gclunies/web":       {"local", "github"},
+		"~/repos/acme/data":          nil,
+	} {
+		if got := g.RepoTrackers(repo); !slices.Equal(got, want) || (want == nil) != (got == nil) {
+			t.Errorf("RepoTrackers(%s) = %q, want %q", repo, got, want)
+		}
+	}
+	want := []LockedRepo{{"~/repos/gclunies/*", []string{"local", "github"}}, {"~/repos/gclunies/hod", []string{"local"}}}
+	if got := g.LockedRepos(); !reflect.DeepEqual(got, want) {
+		t.Errorf("LockedRepos = %+v, want %+v", got, want)
+	}
+}
+
+func TestTheTrackersKeyTakesOnlyKnownTrackers(t *testing.T) {
+	for _, c := range []struct{ body, want string }{
+		{`trackers = ["jira"]`, `repos[0]: trackers[0] "jira" is not a Tracker: use linear, github, local`},
+		{`trackers = ["Local"]`, `trackers[0] "Local" is not a Tracker`},
+		{`trackers = []`, "repos[0]: trackers must name at least one of linear, github, local"},
+		{"trackers = [\"local\"]\nteams = [\"ENG\"]", "teams maps Linear teams to the Repo, so trackers must hold linear"},
+	} {
+		path := write(t, filepath.Join(t.TempDir(), "config.toml"), "[[repos]]\nmatch = \"~/repos/gclunies/hod\"\n"+c.body+"\n")
+		if _, err := Load(path); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: err = %v, want %q", c.body, err, c.want)
+		}
+	}
+	load(t, "[[repos]]\nmatch = \"~/repos/acme/data\"\nteams = [\"ENG\"]\ntrackers = [\"linear\", \"local\"]\n")
+}

@@ -576,6 +576,8 @@ func (p configPort) RepoForIssue(is scheduler.Issue) (string, bool) {
 	return "", false
 }
 
+func (p configPort) RepoTrackers(repo string) []string { return p.cfg.RepoTrackers(repo) }
+
 // RepoForGitHub finds the checkout whose origin is the repository owner/name:
 // a [[repos]] path first, then a [[repos]] checkout with the repository's
 // name. The name ignores case, as GitHub names do.

@@ -10,6 +10,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/gclunies/lineup/internal/config"
+	"github.com/gclunies/lineup/internal/scheduler"
 )
 
 func TestAgentTabsAreDistinct(t *testing.T) {
@@ -37,7 +40,7 @@ func TestAgentArgvUnsetsAnEmptyConfigDir(t *testing.T) {
 }
 
 func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
-	role, settings, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup")
+	role, settings, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +83,7 @@ func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 }
 
 func TestAgentRoleLeavesNeedsYouToThePalette(t *testing.T) {
-	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup")
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -418,5 +421,75 @@ func TestOpenHubRefusesToCloseTheTabThatItRunsIn(t *testing.T) {
 	raw, _ := os.ReadFile(log)
 	if strings.Contains(string(raw), "window close") || strings.Contains(string(raw), "window new") {
 		t.Fatalf("lineup closed or opened a tab:\n%s", raw)
+	}
+}
+
+// lockedConfig writes a config with two checkouts, hod locked to the Local
+// Tracker and data open to every Tracker.
+func lockedConfig(t *testing.T) (path, hod, data string) {
+	t.Helper()
+	root := t.TempDir()
+	hod, data = filepath.Join(root, "hod"), filepath.Join(root, "data")
+	for _, d := range []string{hod, data} {
+		if err := os.MkdirAll(filepath.Join(d, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path = filepath.Join(root, "config.toml")
+	body := "[[repos]]\nmatch = \"" + root + "/*\"\n\n[[repos]]\nmatch = \"" + hod + "\"\ntrackers = [\"local\"]\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path, hod, data
+}
+
+func TestTheRepoPickerOffersALockedRepoOnlyForItsTrackers(t *testing.T) {
+	path, hod, data := lockedConfig(t)
+	opts := boardOptions(path)
+	if opts.ConfigErr != "" {
+		t.Fatal(opts.ConfigErr)
+	}
+	for kind, want := range map[string][]string{
+		scheduler.KindLinear: {data},
+		scheduler.KindGitHub: {data},
+		scheduler.KindLocal:  {data, hod},
+	} {
+		if got := opts.Repos(kind); !slices.Equal(got, want) {
+			t.Errorf("Repos(%s) = %q, want %q", kind, got, want)
+		}
+	}
+}
+
+func TestTheRoleNamesEachLockedRepoAndItsTrackers(t *testing.T) {
+	path, hod, _ := lockedConfig(t)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", cfg.LockedRepos())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, locked, ok := strings.Cut(string(raw), "\n## Locked Repos\n")
+	if !ok {
+		t.Fatalf("the role has no Locked Repos section:\n%s", raw)
+	}
+	locked, _, _ = strings.Cut(locked, "\n## ")
+	for _, want := range []string{"| `" + hod + "` | `local` |", "Plan the Issues of a locked Repo only in its Trackers", "`trackers` key", path} {
+		if !strings.Contains(locked, want) {
+			t.Errorf("the Locked Repos section has no %q:\n%s", want, locked)
+		}
+	}
+	_, questions, _ := strings.Cut(string(raw), "\n## Questions\n")
+	if !strings.Contains(questions, "Leave out each Repo that the Locked Repos section locks to other Trackers") {
+		t.Errorf("the no Repo mapping row offers locked Repos:\n%s", questions)
+	}
+
+	open, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(open), "No Repo is locked.") {
+		t.Errorf("a config with no lock gives no plain Locked Repos section")
 	}
 }

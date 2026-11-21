@@ -255,11 +255,30 @@ func composeAgent(role []byte, settings string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	return agentFiles(role, settings, cfg.LocalIssuesDir(), configPath(), self)
+	return agentFiles(role, settings, cfg.LocalIssuesDir(), configPath(), self, cfg.LockedRepos())
 }
 
-func agentFiles(role []byte, settings, issuesDir, configFile, self string) ([]byte, string, error) {
-	out := slices.Concat(role, linearSection, githubSection, localSection)
+// lockedReposSection names each locked Repo and its Trackers.
+func lockedReposSection(locked []config.LockedRepo) []byte {
+	var b strings.Builder
+	b.WriteString("\n## Locked Repos\n\n")
+	if len(locked) == 0 {
+		b.WriteString("No Repo is locked. Each Repo takes Tasks for the Issues of every Tracker.\n")
+		return []byte(b.String())
+	}
+	b.WriteString("A locked Repo takes Tasks only for the Issues of its Trackers. The `trackers` key of its `[[repos]]` entry in `{{config}}` sets the lock.\n\n")
+	b.WriteString("| Repo | Trackers |\n|---|---|\n")
+	for _, r := range locked {
+		fmt.Fprintf(&b, "| `%s` | `%s` |\n", r.Match, strings.Join(r.Trackers, "`, `"))
+	}
+	b.WriteString("\n- Plan the Issues of a locked Repo only in its Trackers. Never write an Issue for it in another Tracker.\n" +
+		"- `lineup add` refuses an Issue of another Tracker for a locked Repo. Never pass a locked Repo with `--repo` for such an Issue.\n" +
+		"- An ad hoc Task, from `lineup add --repo`, can use a locked Repo.\n")
+	return []byte(b.String())
+}
+
+func agentFiles(role []byte, settings, issuesDir, configFile, self string, locked []config.LockedRepo) ([]byte, string, error) {
+	out := slices.Concat(role, linearSection, githubSection, localSection, lockedReposSection(locked))
 	out = bytes.ReplaceAll(out, []byte("{{issues}}"), []byte(issuesDir))
 	out = bytes.ReplaceAll(out, []byte("{{config}}"), []byte(configFile))
 	// The rules write /{{issues}}, as a rule path that starts with // is
@@ -529,7 +548,7 @@ func boardOptions(path string) board.Options {
 		return opts
 	}
 	opts.StartSkills = g.StartSkills()
-	opts.Repos = g.Checkouts
+	opts.Repos = g.CheckoutsFor
 	opts.LocalIssues = g.LocalIssuesDir()
 	var berr error
 	if opts.Board, berr = g.Board(); berr != nil {

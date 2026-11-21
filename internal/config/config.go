@@ -119,6 +119,18 @@ type repoEntry struct {
 	layer
 	Match string   `toml:"match"`
 	Teams []string `toml:"teams"`
+	// Trackers locks the Repo to these Kinds of Tracker. nil means every Tracker.
+	Trackers []string `toml:"trackers"`
+}
+
+// TrackerKinds are the names that a trackers list can hold, one for each
+// Kind of Tracker.
+var TrackerKinds = []string{"linear", "github", "local"}
+
+// LockedRepo is a [[repos]] entry with a trackers list.
+type LockedRepo struct {
+	Match    string
+	Trackers []string
 }
 
 type linearWorkspace struct {
@@ -273,6 +285,9 @@ func Load(globalPath string) (*Global, error) {
 		if err := g.validate(&r.layer, fmt.Sprintf("repos[%d]", i)); err != nil {
 			return nil, fmt.Errorf("%s: %w", globalPath, err)
 		}
+		if err := r.checkTrackers(); err != nil {
+			return nil, fmt.Errorf("%s: repos[%d]: %w", globalPath, i, err)
+		}
 	}
 	for ws, w := range g.file.Linear {
 		for team, events := range w.Status {
@@ -295,6 +310,25 @@ func Load(globalPath string) (*Global, error) {
 		g.board = DefaultBoard()
 	}
 	return g, nil
+}
+
+func (r repoEntry) checkTrackers() error {
+	if r.Trackers == nil {
+		return nil
+	}
+	kinds := strings.Join(TrackerKinds, ", ")
+	if len(r.Trackers) == 0 {
+		return fmt.Errorf("trackers must name at least one of %s", kinds)
+	}
+	for j, t := range r.Trackers {
+		if !slices.Contains(TrackerKinds, t) {
+			return fmt.Errorf("trackers[%d] %q is not a Tracker: use %s", j, t, kinds)
+		}
+	}
+	if len(r.Teams) > 0 && !slices.Contains(r.Trackers, "linear") {
+		return errors.New("teams maps Linear teams to the Repo, so trackers must hold linear")
+	}
+	return nil
 }
 
 func validateReview(queues []queueFile, slots *int) error {
@@ -746,6 +780,45 @@ func (g *Global) RepoForTeam(teamKey string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// RepoTrackers is the trackers list of the most specific [[repos]] entry that
+// matches the Repo and has one. nil means that the Repo takes every Tracker.
+func (g *Global) RepoTrackers(repoPath string) []string {
+	repoPath = filepath.Clean(g.expand(repoPath))
+	var out []string
+	best := -1
+	for _, r := range g.file.Repos {
+		if r.Trackers == nil || !g.matches(r, repoPath) {
+			continue
+		}
+		if n := specificity(g.expand(r.Match)); n > best {
+			out, best = slices.Clone(r.Trackers), n
+		}
+	}
+	return out
+}
+
+// LockedRepos lists the [[repos]] entries with a trackers list, in config order.
+func (g *Global) LockedRepos() []LockedRepo {
+	var out []LockedRepo
+	for _, r := range g.file.Repos {
+		if r.Trackers != nil {
+			out = append(out, LockedRepo{Match: r.Match, Trackers: slices.Clone(r.Trackers)})
+		}
+	}
+	return out
+}
+
+// CheckoutsFor lists the Checkouts that take Tasks for Issues of the kind.
+func (g *Global) CheckoutsFor(kind string) []string {
+	var out []string
+	for _, c := range g.Checkouts() {
+		if ts := g.RepoTrackers(c); ts == nil || slices.Contains(ts, kind) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // RepoPaths lists the [[repos]] entries whose match is a plain path.
