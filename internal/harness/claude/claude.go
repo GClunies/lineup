@@ -305,8 +305,7 @@ const draftRule = "Post a reply to a person only when the reply reports a fix: t
 	"This rule covers the threads that people opened and people's comments outside threads. It does not cover the threads that a review bot opened."
 
 // scopeRule makes a Worker ask before it pushes a change that the Task did
-// not ask for, because a Worker pushes in the user's name. It covers the
-// changes that a CI fix needs and the suggestions of people and review bots.
+// not ask for, because a Worker pushes in the user's name.
 // %[1]s is the Task's ID.
 const scopeRule = "Before you make a change, check it against the intent of the pull request and the scope of the Task. " +
 	"Check each change that a fix needs, and each suggestion from a person or a review bot before you apply or decline it. " +

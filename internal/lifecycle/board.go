@@ -251,7 +251,10 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 		if !s.Stage.Agent() || !t.Kind.Has(s.Stage) || t.Stage == Queued || t.Stage == Done {
 			return nil, notAllowed
 		}
-		return t.startAgent(s.Stage), nil
+		effects := t.startAgent(s.Stage)
+		// enter drops the bot score, so a rerun of Responding is a round for people.
+		t.Take = s.Stage == Responding
+		return effects, nil
 
 	case PRMerged:
 		if t.Stage == Done || t.Stage == Queued {
@@ -386,7 +389,7 @@ func (t *Task) measure(f PRFacts) {
 		taken := latest(f)
 		t.Taken, t.Take = &taken, false
 	}
-	t.Standing.Comments = t.Policy.Bar.NewFeedback(f, *t.Taken)
+	t.Standing.Comments = t.Policy.Bar.newFeedback(f, *t.Taken)
 }
 
 // lostTab flags a Task in an agent Stage whose Worker has no tab. A flag that
@@ -498,12 +501,15 @@ type loop struct {
 	stage Stage
 	left  func(*Budgets) *int
 	unit  string // one turn of the loop, in a flag detail
+	// takes is true when the loop's prompt names people's Feedback, so that
+	// the round takes it.
+	takes bool
 }
 
 var (
-	ciDebugLoop     = loop{CIDebug, func(b *Budgets) *int { return &b.CIDebug }, "attempt"}
-	respondingLoop  = loop{Responding, func(b *Budgets) *int { return &b.Responding }, "round"}
-	reviewCycleLoop = loop{Responding, func(b *Budgets) *int { return &b.ReviewCycles }, "cycle"}
+	ciDebugLoop     = loop{CIDebug, func(b *Budgets) *int { return &b.CIDebug }, "attempt", false}
+	respondingLoop  = loop{Responding, func(b *Budgets) *int { return &b.Responding }, "round", true}
+	reviewCycleLoop = loop{Responding, func(b *Budgets) *int { return &b.ReviewCycles }, "cycle", false}
 )
 
 // spend enters the loop's agent Stage. With budget left it starts a Worker.
@@ -514,7 +520,9 @@ func (t *Task) spend(l loop, why string) []Effect {
 	left := l.left(&t.Left)
 	if *left > 0 {
 		*left--
-		return t.startAgent(l.stage)
+		effects := t.startAgent(l.stage)
+		t.Take = l.takes
+		return effects
 	}
 	t.enter(l.stage)
 	detail := l.stage.String()
@@ -532,17 +540,12 @@ func (t *Task) spend(l loop, why string) []Effect {
 func (t *Task) reviewCycle() []Effect {
 	effects := t.spend(reviewCycleLoop, t.why())
 	score := *t.Standing.Score
-	// The cycle's prompt names the bot's review, so people's comments wait
-	// for a round of their own.
-	t.BotScore, t.Take = &score, false
+	t.BotScore = &score
 	return effects
 }
 
-// startAgent enters stage and prompts the Worker. A Responding round takes
-// people's Feedback, so the next poll marks it as taken.
 func (t *Task) startAgent(stage Stage) []Effect {
 	t.enter(stage)
-	t.Take = stage == Responding && t.Kind == KindBuild
 	return []Effect{PromptWorker{stage}}
 }
 
