@@ -36,15 +36,6 @@ func TestAgentArgvUnsetsAnEmptyConfigDir(t *testing.T) {
 	}
 }
 
-func TestAdHocSessionRefusesTheHub(t *testing.T) {
-	if _, err := adHocSession(hubSession); err == nil {
-		t.Error("the Hub's session was accepted for ad hoc Tasks")
-	}
-	if got, err := adHocSession("ad hoc"); err != nil || got != "ad hoc" {
-		t.Errorf("ad hoc = %q, %v", got, err)
-	}
-}
-
 func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 	role, settings, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup")
 	if err != nil {

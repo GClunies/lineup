@@ -29,7 +29,6 @@ const (
 	defaultModel        = "claude-opus-5-5"
 	defaultEffort       = "high"
 	repoFileName        = ".lineup.toml"
-	defaultAdHocSession = "ad hoc"
 	defaultReviewCycles = 3
 )
 
@@ -131,7 +130,6 @@ type globalFile struct {
 	layer
 	StartSkills    []string                   `toml:"start_skills"`
 	LinearClientID string                     `toml:"linear_client_id"`
-	AdHocSession   string                     `toml:"ad_hoc_session"`
 	Repos          []repoEntry                `toml:"repos"`
 	Linear         map[string]linearWorkspace `toml:"linear"`
 	GitHub         struct {
@@ -190,14 +188,6 @@ type Global struct {
 
 // StartSkills lists the skills that the Linear browser offers when it starts a Task.
 func (g *Global) StartSkills() []string { return g.file.StartSkills }
-
-// AdHocSession is the Rex session for Tasks with no Issue.
-func (g *Global) AdHocSession() string {
-	if s := strings.TrimSpace(g.file.AdHocSession); s != "" {
-		return s
-	}
-	return defaultAdHocSession
-}
 
 // LinearClientID is the Linear OAuth app to sign in to a workspace with: the
 // workspace's own client_id, else linear_client_id, else "" for lineup's.
@@ -407,6 +397,8 @@ var renamedFilterKeys = map[string]string{
 
 const restartsHint = ". A lost Worker no longer restarts by itself, so delete the restarts line from the [budgets] table"
 
+const adHocSessionHint = ". An ad hoc Task opens in its Repo's session, so delete the ad_hoc_session line"
+
 func decodeStrict(text string, v any) error {
 	md, err := toml.Decode(text, v)
 	if err != nil {
@@ -428,6 +420,9 @@ func decodeStrict(text string, v any) error {
 		msg := "unknown keys: " + strings.Join(names, ", ")
 		if slices.Contains(names, "budgets.restarts") {
 			msg += restartsHint
+		}
+		if slices.Contains(names, "ad_hoc_session") {
+			msg += adHocSessionHint
 		}
 		for _, k := range keys {
 			if len(k) == 3 && k[0] == "review" {

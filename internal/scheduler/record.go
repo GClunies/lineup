@@ -33,7 +33,7 @@ type Record struct {
 	Text     string `json:"text,omitempty"`
 	Repo     string `json:"repo"`
 	RepoSlug string `json:"repo_slug"`
-	// Session is the Rex session: the Repo's label, or the ad hoc session.
+	// Session is the Rex session: the Repo's label.
 	Session   string `json:"session"`
 	RepoLabel string `json:"repo_label,omitempty"`
 	// Branch is "" for a review Task: lineup makes no branch for it.

@@ -210,10 +210,9 @@ Rex server
 ├── session "data"                    (one session for each Repo with an open Task)
 │   ├── tab "ENG-590 Add billing model"
 │   └── tab "ENG-592 Fix flaky test"
-├── session "web"
-│   └── tab "WEB-12 …"
-└── session "ad hoc"                  (every ad hoc Task, whatever its Repo)
-    └── tab "ah-9 Evaluate the ADR …"
+└── session "web"
+    ├── tab "WEB-12 …"
+    └── tab "ah-9 Evaluate the ADR …"  (an ad hoc Task opens in its Repo's session too)
 ```
 
 The Scheduler has no tab. launchd runs `lineup serve` as a user agent, and the log is `~/.local/state/lineup/scheduler.log`.
@@ -235,7 +234,7 @@ The rules for this layout:
 - If a Worker exits within about 1 s, Rex keeps its tab open so that the user can read the error. The Scheduler never closes that tab by itself. A later prompt for the Task sets the flag `tab closed`. When the user runs `lineup open <task>`, the Scheduler closes the kept tab and opens a new one, because the user asked for the Worker.
 - The Scheduler creates a Repo session with the first Task in that Repo. It removes the session when the last Task tab in it closes and the session holds no other tab. A tab that the user or another Scheduler opened keeps the session.
 - If two Repos have the same folder name, the session label adds the parent folder, for example `acme-data`.
-- An ad hoc Task opens in the session `ad hoc`, or in the session that `ad_hoc_session` names. The Board still shows its Repo. The Scheduler removes this session after its last Task, as with a Repo session, so `ad_hoc_session` can't be `my-lineup`.
+- An ad hoc Task opens in its Repo's session, as an Issue's Task does.
 - The Scheduler passes `-s <session>` on every block call. Without it, Rex resolves the block only inside the caller's own session and returns `block target ... not found`.
 - Each agent block uses a terminal `theme` with its own background color. The Orchestrator's block is `LINEUP`, and its Claude status line reads `Lineup`.
 
@@ -413,8 +412,6 @@ hidden = ["done"]
 ```
 
 `order` lists the groups, first to last. A group that it leaves out follows the listed ones, in the default order: `needs_you`, `backlog`, `ready`, `queued`, `working`, `waiting`, `done`. `collapsed` lists the groups that start closed. Its default is `backlog` and `done`. `hidden` lists the groups that the Board does not show. Its default is none. A key that is absent takes its default, and an empty list means none. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors, but they do not fail the load. The Scheduler starts, and the Board uses the default layout. The Board shows the error on its own line until it quits, for example `config: board.hidden: unknown section "dun" (default layout)`. If the load fails for any other reason, the Board runs with defaults and shows `config: <error>` the same way.
-
-`ad_hoc_session` is a top-level key in the global file. It names the Rex session for ad hoc Tasks. The default is `ad hoc`.
 
 `linear_client_id` is a top-level key in the global file. Put it above the first `[table]`, or TOML reads it as part of that table. Leave it out to sign in through lineup's own Linear OAuth app, which any workspace can use. To use your own app, register an OAuth app in Linear with the redirect URI `http://localhost:47821/callback` and no client credentials. Then set its client ID here.
 

@@ -353,9 +353,6 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 		}
 		r.RepoLabel = sessionLabel(r.Repo, s.repos())
 		r.Session = r.RepoLabel
-		if r.Issue == nil {
-			r.Session = s.d.AdHocSession
-		}
 		r.Task = *s.board.Add(r.ID, policy)
 		s.board.Tasks[r.ID] = &r.Task
 		s.recs[r.ID] = r
