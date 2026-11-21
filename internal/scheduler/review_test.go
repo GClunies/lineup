@@ -818,7 +818,6 @@ func TestEachReviewWorkerTabOpensThePRInHunkBesideIt(t *testing.T) {
 	}
 }
 
-// hunkDiff shows the worktree's changes since it left the default branch.
 var hunkDiff = []string{"sh", "-c", `b=$(git symbolic-ref -q --short refs/remotes/origin/HEAD) || b=origin/main; exec hunk diff --watch "$(git merge-base HEAD "$b")"`, "hunk"}
 
 func TestEachBuildWorkerTabOpensItsDiffInHunkBesideIt(t *testing.T) {

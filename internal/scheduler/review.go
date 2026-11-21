@@ -289,9 +289,8 @@ func hunkArgv(url string) []string {
 }
 
 // hunkCommand is the program of the hunk pane beside the Task's Worker. A
-// review Task shows its PR. A build Task shows its worktree's changes since
-// the worktree left the default branch, or origin/main if the clone names no
-// default branch.
+// build Task shows its worktree's changes since the worktree left the default
+// branch, or origin/main if the clone names no default branch.
 func (r *Record) hunkCommand() []string {
 	if r.Review != nil {
 		return hunkArgv(r.Review.URL)
