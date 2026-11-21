@@ -856,6 +856,83 @@ func TestAClosedBuildWorkerClosesItsHunkPane(t *testing.T) {
 	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Flag == "tab closed" })
 }
 
+func TestHunkPaneEventsLeaveTheBuildTaskAsItWas(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
+	worker := h.waitTab("claude working")
+	pane := h.waitSplit(1)
+	eventually(t, "the Worker live", func() bool { return h.task("ENG-1").Live })
+	before := h.task("ENG-1")
+
+	for _, ev := range []RexEvent{
+		{Kind: EvStatus, Status: Status{State: "done"}},
+		{Kind: EvStatus, Status: Status{State: "blocked", Kind: "question"}},
+		{Kind: EvExited, ExitCode: 1},
+		{Kind: EvClosed},
+	} {
+		ev.BlockID = pane.BlockID
+		h.rex.events <- ev
+	}
+	h.still("ENG-1", lifecycle.Working)
+	if v := h.task("ENG-1"); !reflect.DeepEqual(v, before) {
+		t.Fatalf("task = %+v after hunk pane events, want it as it was: %+v", v, before)
+	}
+	if tabs := h.rex.open("claude working"); len(tabs) != 1 || tabs[0].BlockID != worker.BlockID {
+		t.Fatalf("Worker tabs %+v, want the first Worker only", tabs)
+	}
+
+	conversation := h.lastSpec().Conversation
+	h.rex.userCloses(worker)
+	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: pane.BlockID}
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Flag == "tab closed" })
+	h.still("ENG-1", lifecycle.Working)
+	h.open("ENG-1")
+	h.waitTab("claude --resume " + conversation)
+}
+
+func seedBuildTab(hunk string) func(*store.Store) {
+	return func(st *store.Store) {
+		r := Record{
+			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Policy: testPolicy, Left: testPolicy.Budgets},
+			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data", Branch: "ada/eng-7", Worktree: "/wt/eng-7",
+			Conversation: "conv-7", SessionID: "session:data", WindowID: "window:live", BlockID: "block:live", HunkBlockID: hunk, Job: JobWorker,
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+}
+
+func TestRecoveryOpensAMissingHunkPaneBesideALiveBuildWorker(t *testing.T) {
+	live := &tab{Window: Window{"session:data", "window:live", "block:live"}, argv: []string{"claude", "working"}}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{{BlockID: "split:9", window: "window:live", closed: true}}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedBuildTab("split:9"), func(d *Deps) { d.Rex = rex })
+	eventually(t, "a new hunk pane", func() bool { return len(rex.allSplits()) == 2 })
+	if got := rex.allSplits()[1]; got.anchor != "block:live" || got.cwd != "/wt/eng-7" || !slices.Equal(got.argv, hunkDiff) {
+		t.Fatalf("split = %+v", got)
+	}
+	h.still("ENG-7", lifecycle.Working)
+	if v := h.task("ENG-7"); !v.Live || v.Flag != "" {
+		t.Fatalf("task = %+v, want its Worker kept", v)
+	}
+}
+
+// The kept pane is the Task's, so it closes with its Worker.
+func TestRecoveryKeepsALiveHunkPaneBesideABuildWorker(t *testing.T) {
+	live := &tab{Window: Window{"session:data", "window:live", "block:live"}, argv: []string{"claude", "working"}}
+	rex := &fakeRex{tabs: []*tab{live}, splits: []*split{{BlockID: "split:9", window: "window:live"}}}
+	// The Scheduler reads the events of the harness's Rex.
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedBuildTab("split:9"), func(d *Deps) { rex.events = d.Rex.(*fakeRex).events; d.Rex = rex })
+	h.still("ENG-7", lifecycle.Working)
+	if n := len(rex.allSplits()); n != 1 {
+		t.Fatalf("%d hunk panes, want the live one only", n)
+	}
+
+	rex.blockCloses(*live)
+	eventually(t, "the hunk pane closed", func() bool { return rex.allSplits()[0].closed })
+}
+
 // syncBuffer is a log that a test reads while lanes write to it.
 type syncBuffer struct {
 	mu sync.Mutex
