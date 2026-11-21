@@ -11,8 +11,9 @@ The user sees all of their own work on one board, from a captured idea to a merg
 | In this cut | Later |
 |---|---|
 | Ready and Backlog groups on the work view | Columns in place of groups |
-| Linear Issues assigned to the user, in every signed-in workspace | GitHub Issues in Ready and Backlog |
-| Local Issues, and a new local status, `backlog` | Sync between the Local Tracker and Linear |
+| Linear Issues assigned to the user, in every signed-in workspace | Sync between the Local Tracker and Linear |
+| Local Issues, and a new local status, `backlog` | |
+| The user's own GitHub Issues, while the GitHub Tracker is on | |
 | `s` on an Issue row | A Destination picker in the Orchestrator |
 | `n` captures one line at a Destination, `local` by default | A blocked Issue that starts on its blocker's branch as a stack |
 | `P` promotes a local Issue to Linear | |
@@ -53,8 +54,8 @@ An Issue row is an Issue of the user's own with no Task on the Board. The Board 
 
 ```
  Linear MyIssues (each workspace) ─┐
-                                   ├─► Issue rows ─► Ready, Backlog ─► s ─► add + start (Scheduler)
- Local Tracker folder ─────────────┘        ▲
+ Local Tracker folder ─────────────┼─► Issue rows ─► Ready, Backlog ─► s ─► add + start (Scheduler)
+ gh search issues (GitHub Tracker) ┘        ▲
                                             └─ minus each ID that a Task on the Board holds
 ```
 
@@ -64,18 +65,20 @@ An Issue row is an Issue of the user's own with no Task on the Board. The Board 
 |---|---|---|
 | Linear, assigned to the user | State type `unstarted` | State type `backlog` or `triage` |
 | Local | `status: todo` | `status: backlog` |
+| GitHub, the user's own and open | No backlog label | The backlog label, from `[github.labels]` |
 
 - An Issue in a started, completed, or canceled state is in neither group.
-- An Issue whose ID a Task on the Board holds has no Issue row. The Task row shows that Issue. A Linear ID is in upper case, for example `LOCAL-5`, and a local ID is in lower case, for example `local-5`, so an exact match names one Tracker.
-- A row shows the ID, the Repo when it is known, the title, a note, and the priority. The note is `blocked by <IDs>`, `unblocked`, or empty.
-- `unblocked` means that the Issue has one or more blockers and that every blocker is done or canceled. A Linear blocker is a "blocks" relation. A local blocker is an entry in `blocked_by`.
+- A GitHub Issue is the user's own when the user is an assignee, or when it has no assignee and the user opened it. A pull request gets no row. `docs/spec/trackers.md` ("The Board") gives the details.
+- An Issue whose ID a Task on the Board holds has no Issue row. The Task row shows that Issue. A Linear ID is in upper case, for example `LOCAL-5`, a local ID is in lower case, for example `local-5`, and a GitHub ID is `owner/repo#12`, so an exact match names one Tracker.
+- A row shows the ID, the Repo when it is known, the title, a note, and the priority. The note is `blocked by <IDs>`, `unblocked`, or empty. A GitHub row's Repo is the repository name, and its note names a blocker in the same repository as `#12`.
+- `unblocked` means that the Issue has one or more blockers and that every blocker is done or canceled. A Linear blocker is a "blocks" relation. A local blocker is an entry in `blocked_by`. A GitHub blocker is a `Blocked by #12` line in the body, and it is done when GitHub reports it closed.
 
 The default group order is Needs you, Backlog, Ready, Queued, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
 
 Both groups sort in this order:
 
 1. Issues with no open blocker, then the others.
-2. Priority: urgent, high, medium, low, then no priority. A local Issue has no priority.
+2. Priority: urgent, high, medium, low, then no priority. A local or GitHub Issue has no priority.
 3. Dependency level. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker. Blockers in other Projects count too.
 4. Natural ID order.
 
@@ -85,17 +88,18 @@ Both groups sort in this order:
 - It fetches again every 60 s, and right after a capture, a promote, a start, a status change, or an edit in `$EDITOR`.
 - A failed fetch keeps the rows from the last fetch, and the footer names the workspace that failed.
 - The Board reads the Local Tracker folder whatever `local_tracker` says (ADR 0020).
+- The Board reads GitHub Issues at each load while the GitHub Tracker is on, and it has no cache for them. A failed read keeps the GitHub rows from the last read, and the footer shows `GitHub Issues:` and the error. The other rows stay. When the Tracker turns off, the GitHub rows leave.
 
 ## Keys on an Issue row
 
-| Key | Linear row | Local row |
-|---|---|---|
-| `s` | Start a Task from the Issue. The skill picker opens first, and the Repo picker opens when no mapping exists. Then the Board sends `add` and `start`. | The same |
-| `f` | Show the Issue's description from Linear, rendered from Markdown. `f` or `esc` goes back. | Show the body of the Issue's file, rendered from Markdown |
-| `c` | Change the status. The list holds the workflow states of the Issue's team. | Change the status. The list holds `backlog`, `todo`, `started`, `in review`, `done`, and `canceled`. |
-| `o` | Open the Issue in the browser | Open the Issue's file in `$EDITOR` |
-| `P` | Nothing | Promote the Issue to Linear. See [Promote](#promote). |
-| `n` | Capture a new Issue. It works on every row. See [Capture](#capture). | The same |
+| Key | Linear row | Local row | GitHub row |
+|---|---|---|---|
+| `s` | Start a Task from the Issue. The skill picker opens first, and the Repo picker opens when no mapping exists. Then the Board sends `add` and `start`. | The same | The same |
+| `f` | Show the Issue's description from Linear, rendered from Markdown. `f` or `esc` goes back. | Show the body of the Issue's file, rendered from Markdown | Show the Issue's body, rendered from Markdown |
+| `c` | Change the status. The list holds the workflow states of the Issue's team. | Change the status. The list holds `backlog`, `todo`, `started`, `in review`, `done`, and `canceled`. | Nothing. A GitHub Issue has no status. |
+| `o` | Open the Issue in the browser | Open the Issue's file in `$EDITOR` | Open the Issue in the browser |
+| `P` | Nothing | Promote the Issue to Linear. See [Promote](#promote). | Nothing |
+| `n` | Capture a new Issue. It works on every row. See [Capture](#capture). | The same | The same |
 
 One table, `issueKinds` in `internal/board/issuekind.go`, decides the keys of each Kind of row. The footer shows these keys in the order of the table. The keys of a Task row are unchanged. A key that does not apply to the selected row does nothing.
 
@@ -220,9 +224,11 @@ With no Ready row, the Board sends no extra toast. The Board does not start the 
 | Area | Change |
 |---|---|
 | `internal/localissues` | The `backlog` status. `Create` writes `backlog`. A `Promote` write that sets `canceled` and adds the line to the body. |
+| `internal/github` | `OwnIssues`: the user's own open Issues from two `gh search issues` calls, with each blocker's state from one GraphQL call |
 | `internal/linear` | A `Levels` function that returns the dependency level of each Issue. An `Unblocked` fact on `Issue` from the closed "blocks" relations. |
 | `internal/board` | Issue rows, their load and refresh, the Ready and Backlog groups, the keys table in `issuekind.go`, the description, the status list, the filter in `filter.go`, the capture box, the Destination list, promote, the group headings and the `[board]` layout, the header count, and the free slot toast |
 | `cmd/lineup/wire.go` | The Local Tracker store for the work view, whatever `local_tracker` says |
+| `cmd/lineup/hub.go` | The GitHub Tracker check and the backlog label for the work view |
 | Docs | `GLOSSARY.md` gets Ready, Backlog, Destination, and Promote. `docs/spec/mvp.md` and `docs/spec/trackers.md` name the new groups and the `backlog` status. |
 
 ## Delivery
@@ -256,6 +262,7 @@ Each PR lands on `main` before the next one starts.
 | `j` and `k` stop on each shown heading except Needs you and skip the rows of closed groups | A board test over the fixture, and a `rapid` property test over random rows, orders, closed sets, and hidden sets |
 | The free slot toast names the first Ready row, and only when a slot is free | A board test that sends two board views |
 | `1`, `2`, and `3` do nothing | A board test that reads the screen and the command |
+| GitHub rows: assigned, unassigned and opened by the user, opened by someone else and unassigned (no row), a PR (no row), the backlog label, `Blocked by`, an Issue that a Task holds, the Tracker off, and a failed `gh` call | Board tests with recorded `gh` output in `internal/github/testdata` |
 | `f` shows a Linear description and a local file body, and `f` goes back | Board tests with the fake Linear client and a temporary Local Tracker folder |
 | `c` writes the new status, the row moves group or leaves the Board, and a failed write changes nothing | Board tests, and a `rapid` property test over every local status pair |
 | The filter shows only the matches, opens a closed group with a match, and `esc` gives back the exact screen | Board tests, and a `rapid` property test over random filters |

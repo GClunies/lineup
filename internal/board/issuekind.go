@@ -2,6 +2,7 @@ package board
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/linear"
 	"github.com/gclunies/lineup/internal/localissues"
 	"github.com/gclunies/lineup/internal/scheduler"
@@ -39,6 +41,11 @@ var issueKinds = map[string]issueKind{
 		keys:    []hint{{"s", "start"}, {"f", "details"}, {"c", "status"}, {"o", "edit the Issue"}, {"P", "promote to Linear"}},
 		tracker: Model.localRow,
 	},
+	// A GitHub Issue has no status, so its row takes no c.
+	scheduler.KindGitHub: {
+		keys:    []hint{{"s", "start"}, {"f", "details"}, {"o", "open the Issue"}},
+		tracker: Model.githubRow,
+	},
 }
 
 // takes says whether the row takes the key.
@@ -52,8 +59,8 @@ type rowTracker interface {
 	facts() string
 	// description is the Issue's description, as Markdown.
 	description(ctx context.Context) (string, error)
-	// open shows the Issue: a Linear Issue in the browser, a local Issue's
-	// file in $EDITOR.
+	// open shows the Issue: a Linear or GitHub Issue in the browser, a
+	// local Issue's file in $EDITOR.
 	open() tea.Cmd
 	// rememberRepo keeps the Repo that the user picked for the Issue.
 	rememberRepo(repo string) error
@@ -123,6 +130,47 @@ func (l linearRow) statuses(ctx context.Context) ([]string, int, error) {
 
 func (l linearRow) setStatus(ctx context.Context, name string) error {
 	return l.api.SetStatusByName(ctx, l.is, name)
+}
+
+// githubRow is a GitHub Issue row. The search that made the row read the
+// whole Issue, so the row asks GitHub for nothing more.
+type githubRow struct {
+	is      github.OwnIssue
+	openURL func(string) error
+}
+
+func (m Model) githubRow(r issueRow) rowTracker {
+	return githubRow{is: *r.gh, openURL: m.opts.Open}
+}
+
+func (g githubRow) facts() string {
+	labels, who := "no labels", "unassigned"
+	if len(g.is.Labels) > 0 {
+		labels = strings.Join(g.is.Labels, ", ")
+	}
+	if len(g.is.Assignees) > 0 {
+		who = strings.Join(g.is.Assignees, ", ")
+	}
+	return strings.Join([]string{g.is.Repo, labels, who}, " · ")
+}
+
+func (g githubRow) description(context.Context) (string, error) { return g.is.Body, nil }
+
+func (g githubRow) open() tea.Cmd {
+	id, u, open := g.is.ID(), g.is.URL, g.openURL
+	return func() tea.Msg { return opMsg{label: "open", task: id, err: open(u)} }
+}
+
+// rememberRepo keeps nothing. lineup finds a GitHub Issue's Repo by the
+// origin remote of each checkout.
+func (githubRow) rememberRepo(string) error { return nil }
+
+func (githubRow) statuses(context.Context) ([]string, int, error) {
+	return nil, -1, errors.New("a GitHub Issue has no status")
+}
+
+func (githubRow) setStatus(context.Context, string) error {
+	return errors.New("a GitHub Issue has no status")
 }
 
 // localRow is a local Issue row, in the Local Tracker's folder.
