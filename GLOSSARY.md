@@ -43,8 +43,12 @@ One unit of work on the Board, in exactly one Repo, done by one Worker in one is
 _Avoid_: Job, thread, card, item
 
 **Ad hoc Task**:
-A Task with no Issue, made from the user's own words. Its ID has the form `ah-<n>`, and its tab opens in its Repo's session.
+A Task with no Issue, made from the user's own words. Its ID has the form `ah-<n>`, or `<prefix>-<n>` when its Repo has a Repo prefix. Its tab opens in its Repo's session.
 _Avoid_: Text Task, one-off
+
+**Repo prefix**:
+The `prefix` key of a Repo's `[[repos]]` entry, for example `hod`. The Repo's Local Issues and ad hoc Tasks take IDs of the form `<prefix>-<n>`, numbered on their own.
+_Avoid_: Repo key, team key
 
 **Ready**:
 The Board group of the user's own Issues that have no Task and that the user chose to do next: a Linear Issue assigned to the user in an unstarted state, or a local Issue with `status: todo`.

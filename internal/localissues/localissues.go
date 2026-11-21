@@ -1,10 +1,11 @@
 // Package localissues is the Local Tracker: one folder of Markdown Issues,
-// each a file local-<n>.md with a frontmatter of title, repo, status, and
-// blocked_by.
+// each a file <prefix>-<n>.md with a frontmatter of title, repo, status, and
+// blocked_by. The prefix is local, or the prefix of a Repo, such as hod.
 package localissues
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -30,7 +31,12 @@ const (
 // Statuses are the values of the status field, in workflow order.
 var Statuses = []Status{Backlog, Todo, Started, InReview, Done, Canceled}
 
+// DefaultPrefix starts the ID of a local Issue whose Repo has no prefix.
+const DefaultPrefix = "local"
+
 type Issue struct {
+	// Prefix starts the ID. "" means DefaultPrefix.
+	Prefix    string
 	N         int
 	Title     string
 	Repo      string
@@ -39,11 +45,18 @@ type Issue struct {
 	Body      string
 }
 
-func (is Issue) ID() string { return "local-" + strconv.Itoa(is.N) }
+func (is Issue) ID() string { return id(is.Prefix, is.N) }
+
+func id(prefix string, n int) string {
+	if prefix == "" {
+		prefix = DefaultPrefix
+	}
+	return prefix + "-" + strconv.Itoa(n)
+}
 
 var notSlug = regexp.MustCompile(`[^a-z0-9]+`)
 
-// Branch is local-<n>-<title slug>.
+// Branch is <prefix>-<n>-<title slug>.
 func (is Issue) Branch() string {
 	slug := strings.Trim(notSlug.ReplaceAllString(strings.ToLower(is.Title), "-"), "-")
 	if len(slug) > 40 {
@@ -61,23 +74,40 @@ type Broken struct {
 	Err  error
 }
 
-var fileName = regexp.MustCompile(`^local-([1-9][0-9]*)\.md$`)
+var idForm = regexp.MustCompile(`^(.+)-([1-9][0-9]*)$`)
 
-// ParseID reads n from local-<n>, in any case.
-func ParseID(id string) (int, error) {
-	m := fileName.FindStringSubmatch(strings.ToLower(id) + ".md")
-	if m == nil {
-		return 0, fmt.Errorf("%q is not a local Issue ID such as local-7", id)
-	}
-	return strconv.Atoi(m[1])
+// Store is the folder. Prefixes are the Repo prefixes whose Issues it holds
+// besides local-<n>.
+type Store struct {
+	Dir      string
+	Prefixes []string
 }
 
-type Store struct{ Dir string }
+// ParseID reads the prefix and n from <prefix>-<n>, in any case. The prefix
+// must be local or one of the Store's Prefixes.
+func (s Store) ParseID(id string) (prefix string, n int, err error) {
+	m := idForm.FindStringSubmatch(strings.ToLower(id))
+	if m == nil || (m[1] != DefaultPrefix && !slices.Contains(s.Prefixes, m[1])) {
+		return "", 0, fmt.Errorf("%q is not a local Issue ID such as local-7", id)
+	}
+	n, err = strconv.Atoi(m[2])
+	return m[1], n, err
+}
 
-func (s Store) path(n int) string { return filepath.Join(s.Dir, "local-"+strconv.Itoa(n)+".md") }
+func (s Store) path(prefix string, n int) string { return filepath.Join(s.Dir, id(prefix, n)+".md") }
 
-// List reads every Issue in the folder, lowest ID first. A missing folder
-// holds no Issues.
+// file reads the prefix and n from a file name, or ok is false.
+func (s Store) file(name string) (prefix string, n int, ok bool) {
+	base, isMD := strings.CutSuffix(name, ".md")
+	if !isMD || base != strings.ToLower(base) {
+		return "", 0, false
+	}
+	prefix, n, err := s.ParseID(base)
+	return prefix, n, err == nil
+}
+
+// List reads every Issue in the folder: local-<n> first, then by prefix,
+// lowest n first. A missing folder holds no Issues.
 func (s Store) List() ([]Issue, []Broken, error) {
 	ents, err := os.ReadDir(s.Dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -89,43 +119,45 @@ func (s Store) List() ([]Issue, []Broken, error) {
 	var out []Issue
 	var broken []Broken
 	for _, e := range ents {
-		m := fileName.FindStringSubmatch(e.Name())
-		if m == nil || e.IsDir() {
+		prefix, n, ok := s.file(e.Name())
+		if !ok || e.IsDir() {
 			continue
 		}
-		n, _ := strconv.Atoi(m[1])
-		is, err := s.read(n)
+		is, err := s.read(prefix, n)
 		if err != nil {
 			broken = append(broken, Broken{File: e.Name(), Err: err})
 			continue
 		}
 		out = append(out, is)
 	}
-	slices.SortFunc(out, func(a, b Issue) int { return a.N - b.N })
+	slices.SortFunc(out, func(a, b Issue) int { return cmp.Or(strings.Compare(a.Prefix, b.Prefix), a.N-b.N) })
 	return out, broken, nil
 }
 
 func (s Store) Get(id string) (Issue, error) {
-	n, err := ParseID(id)
+	prefix, n, err := s.ParseID(id)
 	if err != nil {
 		return Issue{}, err
 	}
-	return s.read(n)
+	return s.read(prefix, n)
 }
 
-func (s Store) read(n int) (Issue, error) {
-	data, err := os.ReadFile(s.path(n))
+func (s Store) read(prefix string, n int) (Issue, error) {
+	data, err := os.ReadFile(s.path(prefix, n))
 	if err != nil {
 		return Issue{}, err
 	}
 	is, err := Parse(data)
 	is.N = n
+	if prefix != DefaultPrefix {
+		is.Prefix = prefix
+	}
 	return is, err
 }
 
-// Create writes a new Issue in the backlog with the next free ID. O_EXCL
-// makes two writers that pick the same ID retry instead of overwriting each
-// other.
+// Create writes a new local-<n> Issue in the backlog with the next free ID.
+// O_EXCL makes two writers that pick the same ID retry instead of
+// overwriting each other.
 func (s Store) Create(title, repo, body string) (Issue, error) {
 	title = strings.TrimSpace(title)
 	if title == "" || strings.ContainsAny(title, "\r\n") {
@@ -136,11 +168,12 @@ func (s Store) Create(title, repo, body string) (Issue, error) {
 	}
 	is := Issue{Title: title, Repo: strings.TrimSpace(repo), Status: Backlog, Body: body}
 	for range 100 {
-		n, err := s.next()
+		hi, err := s.Highest(DefaultPrefix)
 		if err != nil {
 			return Issue{}, err
 		}
-		f, err := os.OpenFile(s.path(n), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		n := hi + 1
+		f, err := os.OpenFile(s.path(DefaultPrefix, n), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if errors.Is(err, fs.ErrExist) {
 			continue
 		}
@@ -157,19 +190,23 @@ func (s Store) Create(title, repo, body string) (Issue, error) {
 	return Issue{}, errors.New("no free local Issue ID after 100 tries")
 }
 
-func (s Store) next() (int, error) {
+// Highest is the highest n of the files <prefix>-<n>.md, or 0. A missing
+// folder holds none.
+func (s Store) Highest(prefix string) (int, error) {
 	ents, err := os.ReadDir(s.Dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
+	}
 	if err != nil {
 		return 0, err
 	}
 	hi := 0
 	for _, e := range ents {
-		if m := fileName.FindStringSubmatch(e.Name()); m != nil {
-			n, _ := strconv.Atoi(m[1])
+		if p, n, ok := s.file(e.Name()); ok && p == prefix {
 			hi = max(hi, n)
 		}
 	}
-	return hi + 1, nil
+	return hi, nil
 }
 
 // SetStatus rewrites the status line and leaves the rest of the file as it is.
@@ -192,11 +229,11 @@ func (s Store) Promote(id, linearID string) error {
 // setField rewrites one frontmatter line, or adds it. A tail goes at the end
 // of the body as a paragraph of its own.
 func (s Store) setField(id, key, value, tail string) error {
-	n, err := ParseID(id)
+	prefix, n, err := s.ParseID(id)
 	if err != nil {
 		return err
 	}
-	data, err := os.ReadFile(s.path(n))
+	data, err := os.ReadFile(s.path(prefix, n))
 	if err != nil {
 		return err
 	}
@@ -219,11 +256,11 @@ func (s Store) setField(id, key, value, tail string) error {
 		rest += "\n" + tail
 	}
 	out := "---\n" + strings.Join(lines, "\n") + "\n---\n" + rest
-	tmp := s.path(n) + ".tmp"
+	tmp := s.path(prefix, n) + ".tmp"
 	if err := os.WriteFile(tmp, []byte(out), 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path(n))
+	return os.Rename(tmp, s.path(prefix, n))
 }
 
 // split returns the frontmatter without its fences, and the text after it.

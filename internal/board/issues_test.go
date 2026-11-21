@@ -3,6 +3,7 @@ package board
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -440,5 +441,23 @@ func TestTheMinuteTickFetchesTheRowsAgain(t *testing.T) {
 	e.m = drain(e.m, load)
 	if got := rowIDs(e.m.issues); !slices.Equal(got, []string{"ENG-30", "local-1"}) {
 		t.Fatalf("rows after the tick %v, want ENG-30 and local-1", got)
+	}
+}
+
+// A prefixed Issue is a row of its own, and its blockers read by ID, so
+// hod-1 and local-1 are two Issues.
+func TestAPrefixedLocalIssueBlocksByItsOwnID(t *testing.T) {
+	hod1 := localIssue(1, localissues.Done)
+	hod1.Prefix = "hod"
+	hod2 := localIssue(2, localissues.Todo, "HOD-1")
+	hod2.Prefix = "hod"
+	waits := localIssue(5, localissues.Todo, "local-1", "hod-1")
+	rows := issueRows(nil, []localissues.Issue{localIssue(1, localissues.Started), hod1, hod2, waits}, nil)
+	notes := map[string]string{}
+	for _, r := range rows {
+		notes[r.ID] = r.note()
+	}
+	if want := map[string]string{"hod-2": "unblocked", "local-5": "blocked by local-1"}; !maps.Equal(notes, want) {
+		t.Fatalf("notes = %v, want %v", notes, want)
 	}
 }

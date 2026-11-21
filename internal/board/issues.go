@@ -75,9 +75,11 @@ func issueRows(lin []linear.Issue, loc []localissues.Issue, tasks []scheduler.Ta
 	for _, t := range tasks {
 		held[t.ID] = true
 	}
-	status := map[int]localissues.Status{}
+	// status holds each local Issue's status by its ID, which a blocked_by
+	// item can write in any case.
+	status := map[string]localissues.Status{}
 	for _, is := range loc {
-		status[is.N] = is.Status
+		status[is.ID()] = is.Status
 	}
 	// The level graph holds every Issue, in or out of the groups. A local
 	// Issue joins it under its own ID.
@@ -93,13 +95,14 @@ func issueRows(lin []linear.Issue, loc []localissues.Issue, tasks []scheduler.Ta
 		node := linear.Issue{ID: is.ID(), Identifier: is.ID()}
 		var open []string
 		for _, b := range is.BlockedBy {
-			n, err := localissues.ParseID(b)
-			if err == nil && closedLocal[status[n]] {
+			id := strings.ToLower(b)
+			st, local := status[id]
+			if closedLocal[st] {
 				continue
 			}
 			open = append(open, b)
-			if err == nil {
-				node.Blockers = append(node.Blockers, linear.Ref{ID: localissues.Issue{N: n}.ID()})
+			if local {
+				node.Blockers = append(node.Blockers, linear.Ref{ID: id})
 			}
 		}
 		graph = append(graph, node)
@@ -205,7 +208,7 @@ func (m Model) loadMine() tea.Cmd {
 	}}
 	if dir := m.opts.LocalIssues; dir != "" {
 		cmds = append(cmds, func() tea.Msg {
-			is, _, err := localissues.Store{Dir: dir}.List()
+			is, _, err := m.localStore().List()
 			return mineLocalMsg{issues: is, err: err}
 		})
 	}

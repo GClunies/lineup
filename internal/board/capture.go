@@ -18,7 +18,6 @@ import (
 
 	"github.com/gclunies/lineup/internal/config"
 	"github.com/gclunies/lineup/internal/linear"
-	"github.com/gclunies/lineup/internal/localissues"
 )
 
 // This file holds the capture box that n opens on the work view, the
@@ -354,12 +353,12 @@ func (m Model) saveRecent(d destination) tea.Cmd {
 // to the user and gets its team's default status.
 func (m Model) addIssue(title string, to destination) tea.Cmd {
 	if to.local() {
-		dir := m.opts.LocalIssues
+		store := m.localStore()
 		return func() tea.Msg {
-			if dir == "" {
+			if store.Dir == "" {
 				return addedMsg{to: to, err: errors.New("no Local Tracker folder")}
 			}
-			is, err := localissues.Store{Dir: dir}.Create(title, "", "")
+			is, err := store.Create(title, "", "")
 			return addedMsg{id: is.ID(), to: to, err: err}
 		}
 	}
@@ -377,7 +376,7 @@ func (m Model) addIssue(title string, to destination) tea.Cmd {
 // then cancels the local Issue. It reads the file again, so an edit since
 // the last list goes to Linear.
 func (m Model) promote(id string, to destination) tea.Cmd {
-	store := localissues.Store{Dir: m.opts.LocalIssues}
+	store := m.localStore()
 	api := m.lin.api(linear.Workspace{ID: to.Workspace, Name: to.WorkspaceName})
 	return func() tea.Msg {
 		is, err := store.Get(id)

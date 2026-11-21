@@ -374,6 +374,8 @@ An entry with only a glob, such as `match = "~/code/*/*"` above, lists every che
 
 `trackers` locks the entry's Repos to those Trackers, for example `trackers = ["local"]`. The [Trackers spec](trackers.md#locked-repos) has the rules.
 
+`prefix` gives the entry's Repo its own IDs for Local Issues and ad hoc Tasks, for example `prefix = "hod"` gives `hod-1`. The [Trackers spec](trackers.md#repo-prefixes) has the rules.
+
 `[review_bot]` turns on the review bot gate. Put it in the `[[repos]]` entry for the Repos where the bot is installed, as `[repos.review_bot]` above, or in a Repo's `.lineup.toml`. The example gates each Repo below `~/code/acme`, and no other Repo.
 
 | Key | Value | Default |

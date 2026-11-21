@@ -132,7 +132,12 @@ type localRow struct {
 }
 
 func (m Model) localRow(r issueRow) rowTracker {
-	return localRow{is: *r.loc, store: localissues.Store{Dir: m.opts.LocalIssues}}
+	return localRow{is: *r.loc, store: m.localStore()}
+}
+
+// localStore is the Local Tracker folder, with the Repo prefixes of its Issues.
+func (m Model) localStore() localissues.Store {
+	return localissues.Store{Dir: m.opts.LocalIssues, Prefixes: m.opts.LocalPrefixes}
 }
 
 func (l localRow) path() string { return filepath.Join(l.store.Dir, l.is.ID()+".md") }

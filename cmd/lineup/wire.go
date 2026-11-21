@@ -333,13 +333,17 @@ type issueTracker interface {
 }
 
 // trackerMux is the Scheduler's Tracker port. It routes each call to the
-// Tracker that the Issue's Kind names.
-type trackerMux map[string]issueTracker
+// Tracker that the Issue's Kind names. prefixes are the Repo prefixes, so
+// that an ID such as hod-3 reads as a local Issue.
+type trackerMux struct {
+	kinds    map[string]issueTracker
+	prefixes []string
+}
 
 var trackerNames = map[string]string{scheduler.KindLinear: "Linear", scheduler.KindGitHub: "GitHub", scheduler.KindLocal: "local"}
 
 func (m trackerMux) of(kind string) (issueTracker, error) {
-	if t, ok := m[kind]; ok {
+	if t, ok := m.kinds[kind]; ok {
 		return t, nil
 	}
 	return nil, fmt.Errorf("no %s Tracker", kind)
@@ -347,7 +351,7 @@ func (m trackerMux) of(kind string) (issueTracker, error) {
 
 func (m trackerMux) Lookup(ctx context.Context, kind, identifier string) (scheduler.Issue, error) {
 	if kind == "" {
-		kind = scheduler.KindOf(identifier)
+		kind = scheduler.KindOf(identifier, m.prefixes)
 	}
 	t, err := m.of(kind)
 	if err != nil {
@@ -559,6 +563,11 @@ func (p configPort) RepoForIssue(is scheduler.Issue) (string, bool) {
 		}
 		return p.RepoForGitHub(slug)
 	case scheduler.KindLocal:
+		if prefix, _, ok := scheduler.SplitID(is.Identifier); ok {
+			if repo, ok := p.cfg.RepoForPrefix(prefix); ok {
+				return repo, true
+			}
+		}
 		if is.RepoHint == "" {
 			return "", false
 		}
@@ -577,6 +586,8 @@ func (p configPort) RepoForIssue(is scheduler.Issue) (string, bool) {
 }
 
 func (p configPort) RepoTrackers(repo string) []string { return p.cfg.RepoTrackers(repo) }
+
+func (p configPort) RepoPrefix(repo string) string { return p.cfg.RepoPrefix(repo) }
 
 // RepoForGitHub finds the checkout whose origin is the repository owner/name:
 // a [[repos]] path first, then a [[repos]] checkout with the repository's

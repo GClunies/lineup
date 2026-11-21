@@ -121,6 +121,22 @@ type repoEntry struct {
 	Teams []string `toml:"teams"`
 	// Trackers locks the Repo to these Kinds of Tracker. nil means every Tracker.
 	Trackers []string `toml:"trackers"`
+	// Prefix starts the ID of each Local Issue and ad hoc Task of the Repo,
+	// as in hod-3. "" keeps local-<n> and ah-<n>.
+	Prefix string `toml:"prefix"`
+}
+
+// ReservedPrefixes start the IDs that lineup gives without a Repo prefix:
+// local-<n> Local Issues, ah-<n> ad hoc Tasks, and pr-<n> review Tasks.
+var ReservedPrefixes = []string{"local", "ah", "pr"}
+
+var prefixForm = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// PrefixedRepo is a [[repos]] entry with a prefix. Repo is its checkout.
+type PrefixedRepo struct {
+	Match  string
+	Repo   string
+	Prefix string
 }
 
 // TrackerKinds are the names that a trackers list can hold, one for each
@@ -289,6 +305,9 @@ func Load(globalPath string) (*Global, error) {
 			return nil, fmt.Errorf("%s: repos[%d]: %w", globalPath, i, err)
 		}
 	}
+	if err := g.checkPrefixes(nil); err != nil {
+		return nil, fmt.Errorf("%s: %w", globalPath, err)
+	}
 	for ws, w := range g.file.Linear {
 		for team, events := range w.Status {
 			for ev := range events {
@@ -330,6 +349,48 @@ func (r repoEntry) checkTrackers() error {
 	}
 	return nil
 }
+
+// checkPrefixes refuses a prefix that is not a word of lowercase letters,
+// digits, and dashes, a prefix of a glob match, a prefix that two entries
+// share, a reserved prefix, and a prefix that equals a Linear team key in
+// any case. The team keys are those of every teams list, and teamKeys.
+func (g *Global) checkPrefixes(teamKeys []string) error {
+	teams := map[string]bool{}
+	for _, r := range g.file.Repos {
+		for _, t := range r.Teams {
+			teams[strings.ToLower(t)] = true
+		}
+	}
+	for _, t := range teamKeys {
+		teams[strings.ToLower(t)] = true
+	}
+	seen := map[string]int{}
+	for i, r := range g.file.Repos {
+		if r.Prefix == "" {
+			continue
+		}
+		where := fmt.Sprintf("repos[%d]: prefix %q", i, r.Prefix)
+		switch {
+		case !prefixForm.MatchString(r.Prefix):
+			return fmt.Errorf("%s must hold only lowercase letters, digits, and dashes, and must start and end with a letter or a digit", where)
+		case strings.ContainsAny(r.Match, "*?["):
+			return fmt.Errorf("%s needs a match that is the path of one Repo, not the glob %q", where, r.Match)
+		case slices.Contains(ReservedPrefixes, r.Prefix):
+			return fmt.Errorf("%s is reserved: lineup uses %s for IDs without a Repo prefix", where, strings.Join(ReservedPrefixes, ", "))
+		case teams[r.Prefix]:
+			return fmt.Errorf("%s equals a Linear team key, so its IDs would read as Linear IDs", where)
+		}
+		if j, ok := seen[r.Prefix]; ok {
+			return fmt.Errorf("%s is also the prefix of repos[%d]: each Repo needs its own prefix", where, j)
+		}
+		seen[r.Prefix] = i
+	}
+	return nil
+}
+
+// CheckPrefixTeams refuses a prefix that equals one of the team keys, in any
+// case. lineup restart passes the team keys of each Linear workspace.
+func (g *Global) CheckPrefixTeams(teamKeys []string) error { return g.checkPrefixes(teamKeys) }
 
 func validateReview(queues []queueFile, slots *int) error {
 	if slots != nil && *slots < 1 {
@@ -797,6 +858,47 @@ func (g *Global) RepoTrackers(repoPath string) []string {
 		}
 	}
 	return out
+}
+
+// PrefixedRepos lists the [[repos]] entries with a prefix, in config order.
+func (g *Global) PrefixedRepos() []PrefixedRepo {
+	var out []PrefixedRepo
+	for _, r := range g.file.Repos {
+		if r.Prefix != "" {
+			out = append(out, PrefixedRepo{Match: r.Match, Repo: filepath.Clean(g.expand(r.Match)), Prefix: r.Prefix})
+		}
+	}
+	return out
+}
+
+// Prefixes lists the prefix of each [[repos]] entry that has one.
+func (g *Global) Prefixes() []string {
+	var out []string
+	for _, r := range g.PrefixedRepos() {
+		out = append(out, r.Prefix)
+	}
+	return out
+}
+
+// RepoPrefix is the prefix of the Repo's [[repos]] entry, or "".
+func (g *Global) RepoPrefix(repoPath string) string {
+	repoPath = filepath.Clean(g.expand(repoPath))
+	for _, r := range g.PrefixedRepos() {
+		if r.Repo == repoPath {
+			return r.Prefix
+		}
+	}
+	return ""
+}
+
+// RepoForPrefix is the Repo whose [[repos]] entry has the prefix, in any case.
+func (g *Global) RepoForPrefix(prefix string) (string, bool) {
+	for _, r := range g.PrefixedRepos() {
+		if strings.EqualFold(r.Prefix, prefix) {
+			return r.Repo, true
+		}
+	}
+	return "", false
 }
 
 // LockedRepos lists the [[repos]] entries with a trackers list, in config order.

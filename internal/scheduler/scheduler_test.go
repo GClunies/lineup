@@ -596,6 +596,7 @@ func (fakeConfig) Policy(string, map[string]string) (lifecycle.Policy, error) { 
 func (fakeConfig) RepoForIssue(Issue) (string, bool)                          { return "/repos/acme/data", true }
 func (fakeConfig) ResolveRepo(name string) (string, error)                    { return "/repos/acme/" + name, nil }
 func (fakeConfig) RepoTrackers(string) []string                               { return nil }
+func (fakeConfig) RepoPrefix(string) string                                   { return "" }
 func (fakeConfig) RepoForGitHub(slug string) (string, bool) {
 	if strings.EqualFold(slug, "acme/data") {
 		return "/repos/acme/data", true
@@ -1381,10 +1382,15 @@ func TestKindOfReadsTheTrackerFromTheID(t *testing.T) {
 		"ENG-614":       KindLinear,
 		"LOCAL-7":       KindLocal, // a typed local- always means the Local Tracker
 		"local-7":       KindLocal,
+		"hod-3":         KindLocal, // a Repo prefix, though it has the form of a Linear ID
+		"HOD-3":         KindLocal,
+		"web-app-2":     KindLocal,
+		"dex-3":         KindLinear, // no Repo has the prefix dex
+		"hod-0":         KindLinear,
 		"owner/repo#12": KindGitHub,
 		"lineup#12":     KindLinear, // no owner: not a GitHub ID
 	} {
-		if got := KindOf(id); got != want {
+		if got := KindOf(id, []string{"hod", "web-app"}); got != want {
 			t.Errorf("KindOf(%q) = %q, want %q", id, got, want)
 		}
 	}
