@@ -818,16 +818,42 @@ func TestEachReviewWorkerTabOpensThePRInHunkBesideIt(t *testing.T) {
 	}
 }
 
-func TestABuildWorkerOpensNoHunkPane(t *testing.T) {
+// hunkDiff shows the worktree's changes since it left the default branch.
+var hunkDiff = []string{"sh", "-c", `b=$(git symbolic-ref -q --short refs/remotes/origin/HEAD) || b=origin/main; exec hunk diff --watch "$(git merge-base HEAD "$b")"`, "hunk"}
+
+func TestEachBuildWorkerTabOpensItsDiffInHunkBesideIt(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
-	h.waitTab("claude working")
-	eventually(t, "the Worker live", func() bool { return h.task("ENG-1").Live })
-	if ss := h.rex.allSplits(); len(ss) != 0 {
-		t.Fatalf("a build Worker opened panes %+v", ss)
+	worker := h.waitTab("claude working")
+	pane := h.waitSplit(1)
+	if pane.anchor != worker.BlockID || pane.window != worker.WindowID || pane.cwd != filepath.Join(h.wt.root, "eng-1-billing") || !slices.Equal(pane.argv, hunkDiff) {
+		t.Fatalf("hunk pane = %+v, want the worktree's diff beside block %s", pane, worker.BlockID)
 	}
+
+	h.rex.userCloses(worker)
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Flag == "tab closed" })
+	h.open("ENG-1")
+	resumed := h.waitTab("claude --resume")
+	if pane := h.waitSplit(2); pane.anchor != resumed.BlockID || !slices.Equal(pane.argv, hunkDiff) {
+		t.Fatalf("restore: hunk pane = %+v, want the diff beside %s", pane, resumed.BlockID)
+	}
+}
+
+// The hunk pane holds a tab open after its Worker's block closes.
+func TestAClosedBuildWorkerClosesItsHunkPane(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
+	worker := h.waitTab("claude working")
+	h.waitSplit(1)
+	eventually(t, "the Worker live", func() bool { return h.task("ENG-1").Live })
+
+	h.rex.blockCloses(worker)
+	eventually(t, "the hunk pane closed", func() bool { return h.rex.allSplits()[0].closed })
+	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Flag == "tab closed" })
 }
 
 // syncBuffer is a log that a test reads while lanes write to it.
