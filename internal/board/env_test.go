@@ -119,6 +119,8 @@ type workEnv struct {
 	wrote  map[string][]linear.Issue
 	remem  map[string]string
 	opened []string
+	// reposKinds is the Kind of each call to Repos.
+	reposKinds []string
 }
 
 func newWorkEnv(t *testing.T, workspaces ...linear.Workspace) *workEnv {
@@ -131,7 +133,10 @@ func newWorkEnv(t *testing.T, workspaces ...linear.Workspace) *workEnv {
 	e.m = New(scheduler.BoardView{Cap: 5}, Options{
 		Client: e.sched,
 		Open:   func(u string) error { e.opened = append(e.opened, u); return nil },
-		Repos:  func() []string { return []string{"/Users/g/repos/acme/data", "/Users/g/repos/acme/web"} },
+		Repos: func(kind string) []string {
+			e.reposKinds = append(e.reposKinds, kind)
+			return []string{"/Users/g/repos/acme/data", "/Users/g/repos/acme/web"}
+		},
 		Linear: Linear{
 			Workspaces: func() ([]linear.Workspace, error) { return workspaces, nil },
 			Client:     func(w linear.Workspace) LinearAPI { return wsLinear{e.api, w.ID} },

@@ -578,7 +578,7 @@ func (t *fakeTracker) Lookup(_ context.Context, kind, id string) (Issue, error) 
 	t.kinds = append(t.kinds, kind)
 	title := cmp.Or(t.title, "Add billing model")
 	t.mu.Unlock()
-	return Issue{Identifier: id, Title: title, BranchName: "ada/eng-1-billing", TeamKey: "ENG"}, nil
+	return Issue{Kind: kind, Identifier: id, Title: title, BranchName: "ada/eng-1-billing", TeamKey: "ENG"}, nil
 }
 func (t *fakeTracker) Begin(context.Context, Issue) error { return nil }
 func (t *fakeTracker) SetStatus(_ context.Context, _ Issue, event string) error {
@@ -595,6 +595,7 @@ var testPolicy = lifecycle.Policy{Budgets: lifecycle.Budgets{CIDebug: 3, Respond
 func (fakeConfig) Policy(string, map[string]string) (lifecycle.Policy, error) { return testPolicy, nil }
 func (fakeConfig) RepoForIssue(Issue) (string, bool)                          { return "/repos/acme/data", true }
 func (fakeConfig) ResolveRepo(name string) (string, error)                    { return "/repos/acme/" + name, nil }
+func (fakeConfig) RepoTrackers(string) []string                               { return nil }
 func (fakeConfig) RepoForGitHub(slug string) (string, bool) {
 	if strings.EqualFold(slug, "acme/data") {
 		return "/repos/acme/data", true
@@ -1405,6 +1406,43 @@ func TestAddPassesTheBrowsersKindToTheTracker(t *testing.T) {
 	h.do(Request{Op: "add", Issue: "ENG-2"})
 	if want := []string{KindLinear, ""}; !slices.Equal(h.tr.kinds, want) {
 		t.Fatalf("Lookup kinds = %q, want %q", h.tr.kinds, want)
+	}
+}
+
+// lockedConfig locks /repos/acme/data, the Repo of every mapping, to the Local Tracker.
+type lockedConfig struct{ fakeConfig }
+
+func (lockedConfig) RepoTrackers(repo string) []string {
+	if repo == "/repos/acme/data" {
+		return []string{KindLocal}
+	}
+	return nil
+}
+
+func TestAddRefusesAnIssueOfATrackerThatItsRepoIsNotLockedTo(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Config = lockedConfig{} })
+	for _, req := range []Request{
+		{Op: "add", Issue: "ENG-1"},
+		{Op: "add", Issue: "acme/data#3", Kind: KindGitHub},
+		{Op: "add", Issue: "ENG-2", Repo: "data"},
+	} {
+		_, err := h.s.Handle(context.Background(), req)
+		if !errors.Is(err, ErrLockedRepo) {
+			t.Fatalf("add %s: err = %v, want ErrLockedRepo", req.Issue, err)
+		}
+		for _, want := range []string{"/repos/acme/data", "trackers local", req.Issue} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("add %s: error %q does not name %q", req.Issue, err, want)
+			}
+		}
+	}
+	h.do(Request{Op: "add", Issue: "local-1", Kind: KindLocal})
+	h.do(Request{Op: "add", Issue: "ENG-3", Repo: "web"})
+	h.do(Request{Op: "add", Repo: "data", Text: "tidy the README"})
+	ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView))
+	slices.Sort(ids)
+	if want := []string{"ENG-3", "ah-1", "local-1"}; !slices.Equal(ids, want) {
+		t.Fatalf("Tasks = %v, want %v", ids, want)
 	}
 }
 

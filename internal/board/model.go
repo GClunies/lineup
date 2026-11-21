@@ -52,8 +52,9 @@ type Options struct {
 	Now    func() time.Time
 	// Linear holds the calls to Linear. Tests replace them.
 	Linear Linear
-	// Repos lists the checkouts that the Repo picker offers.
-	Repos func() []string
+	// Repos lists the checkouts that the Repo picker offers for an Issue of the
+	// Kind. It leaves out each Repo that is locked to other Trackers.
+	Repos func(kind string) []string
 	// LocalIssues is the Local Tracker folder that the work view reads,
 	// whatever local_tracker says. Empty reads no local Issues.
 	LocalIssues string
@@ -165,7 +166,7 @@ func New(v scheduler.BoardView, opts Options) Model {
 		opts.Open = func(u string) error { return exec.Command("open", u).Start() }
 	}
 	if opts.Repos == nil {
-		opts.Repos = func() []string { return nil }
+		opts.Repos = func(string) []string { return nil }
 	}
 	m := Model{opts: opts, client: opts.Client, width: 100, height: 30, vp: viewport.New(100, 28), md: markdown.New(true)}
 	m.lin = newLinearClients(opts.Linear)

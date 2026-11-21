@@ -161,6 +161,20 @@ func TestTheRepoPickerFiltersAndRemembersTheRepoOfTheProject(t *testing.T) {
 	}
 }
 
+// The Repo picker asks for the Repos of the row's Kind, so it offers no Repo
+// that is locked to other Trackers.
+func TestTheRepoPickerAsksForTheReposOfTheRowsKind(t *testing.T) {
+	e := startEnv(t)
+	e.sched.errs["add"] = errors.New(noMapping + " for ENG-9: pass a repo")
+	e.press("s", "enter")
+	if e.m.mode != modeRepo {
+		t.Fatalf("mode %d, status %q, want the Repo picker", e.m.mode, e.m.status)
+	}
+	if !slices.Equal(e.reposKinds, []string{scheduler.KindLinear}) {
+		t.Fatalf("Repos kinds = %q, want linear", e.reposKinds)
+	}
+}
+
 func TestTheSkillCarriesThroughTheRepoPicker(t *testing.T) {
 	e := startEnv(t, "kit:test-first")
 	e.sched.errs["add"] = errors.New(noMapping + " for ENG-9: pass a repo")

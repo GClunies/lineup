@@ -10,6 +10,10 @@ A board and an orchestrator agent that move agent work from a tracker issue to a
 A git repository that Tasks run in. A Repo maps to zero or one Tracker workspace and to one or more of its teams.
 _Avoid_: Project, codebase, area
 
+**Locked Repo**:
+A Repo whose `[[repos]]` entry has a `trackers` list. It takes Tasks only for the Issues of those Trackers. An ad hoc Task can still use it.
+_Avoid_: Pinned Repo, restricted Repo
+
 **Tracker**:
 The system that holds planned work. One Tracker is a Linear workspace, for example `acme`, the user's GitHub account, or the Local Tracker.
 _Avoid_: Issue source, provider, area

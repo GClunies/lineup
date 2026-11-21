@@ -106,7 +106,7 @@ Ask the user every question with the `AskUserQuestion` tool, never as plain text
 |---|---|
 | `lineup start` fails with `wip cap full` | **Start once over the cap**: `lineup start --over-cap <task>`. **Raise the cap to <n>**: `lineup cap <n>`, then `lineup start <task>`. `<n>` is `cap` from `lineup ls --json`, plus 1. |
 | An ad hoc request names no Repo, or more than one | One option for each Repo in `lineup ls --json`, up to 4: `lineup add --repo <repo> "<the user's words>"`. |
-| `lineup add` fails with `no Repo mapping` | One option for each Repo in `lineup ls --json`, up to 4: `lineup add --repo <repo> <ISSUE>`. |
+| `lineup add` fails with `no Repo mapping` | One option for each Repo in `lineup ls --json`, up to 4: `lineup add --repo <repo> <ISSUE>`. Leave out each Repo that the Locked Repos section locks to other Trackers. |
 
 ## Rules
 
