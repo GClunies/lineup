@@ -2,6 +2,8 @@
 
 [ADR 0030](0030-the-orchestrator-gets-no-alerts.md) removes `lineup watch`. The Board's alerts do not change.
 
+[ADR 0031](0031-the-orchestrator-learns-each-pr-that-is-ready-to-land.md) changes one part: a build Task that reaches Ready to land toasts too.
+
 The Board reports the build Tasks in Needs you as one Rex program status record. The record uses OSC 7501 and sits on the Board's pane. While a build Task is in Needs you, the record is `blocked`. Its message names the count, for example `2 Tasks need you`. When no build Task is in Needs you, the Board clears the record. The record replaces the Board's toast for a Task in Needs you. A Task that reaches Done and the free slot hint still toast. The Board reports at start. It reports again each time the set of those Tasks changes. A Task that changes its Stage or its flag counts as a change, so it sends a new report at the same count. We chose this because a toast shows once and then disappears. Rex keeps a record on the tab until the Board replaces or clears it. The protocol is at https://www.superlogical.com/rex/docs/build/program-status.
 
 ## Considered Options

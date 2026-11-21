@@ -33,6 +33,7 @@ const usage = `usage: lineup [command]
   lineup reviews pause | resume
                                stop or restart every review queue fill
   lineup ls [--json]           list the Tasks
+  lineup ready                 name each Task whose PR is ready to land
   lineup show [--json] <task>
   lineup decide [--json]       list the Tasks that need you, with your choices for each
   lineup decide <task> <choice> ["<text>"]

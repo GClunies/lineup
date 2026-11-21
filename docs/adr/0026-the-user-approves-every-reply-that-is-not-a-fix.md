@@ -1,5 +1,7 @@
 # The user approves every review reply that is not a fix
 
+[ADR 0032](0032-a-responding-round-takes-the-feedback-before-it.md) replaces the last consequence: the poll reads the comments outside threads, and this rule covers them.
+
 In a Responding round, a Worker posts a reply in a person's review thread only when the reply reports a fix. A fix is the change that the thread asks for, in a commit that the Worker pushed. For every other reply, the Worker writes a Draft reply and leaves the thread open. Other replies include a deferral to a follow-up ticket, a rebuttal, a disagreement, an answer to a question, and any reply that the Worker cannot sort. We chose this because a Worker posts as the user, so each reply carries the user's name to the people the user works with. A wrong pushback costs the user's reputation, and the user cannot take back a reply that a reviewer already read.
 
 The rule rests on three choices:

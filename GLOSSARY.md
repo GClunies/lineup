@@ -135,7 +135,7 @@ The Stage where a PR that meets its Landing bar waits for the user to merge it. 
 _Avoid_: Mergeable, approved
 
 **Landing bar**:
-What a PR must meet for its build Task to be in Ready to land: the required checks pass, the review bot's score meets the minimum, every review thread is done, and the required reviews approve. A Repo's `[landing_bar]` table can change each item. A Task keeps the Landing bar that it had at Intake.
+What a PR must meet for its build Task to be in Ready to land: the required checks pass, the review bot's score meets the minimum, every review thread is done, no Feedback is new, and the required reviews approve. A Repo's `[landing_bar]` table can change each item. A Task keeps the Landing bar that it had at Intake.
 _Avoid_: Definition of done, merge criteria, readiness
 
 **Standing**:
@@ -150,8 +150,12 @@ _Avoid_: Blocking check, mandatory check
 A thread of review comments on a line of a PR. Under the default Landing bar, a thread is done when it is resolved and the user replied in it. A thread that the user opened needs only the resolve.
 _Avoid_: Conversation, comment
 
+**Feedback**:
+A comment that a person other than the user wrote on a PR outside a Review thread: a comment in the PR conversation, or a review with a body or a request for changes. Feedback is new until a Responding round takes it.
+_Avoid_: General comment, review body
+
 **Draft reply**:
-A reply to a person's Review thread that a Worker wrote and that waits for the user to approve, edit, or turn into a fix. Every reply that does not report a fix starts as one.
+A reply to a person's Review thread or Feedback that a Worker wrote and that waits for the user to approve, edit, or turn into a fix. Every reply that does not report a fix starts as one.
 _Avoid_: Pending reply, proposed comment, suggestion
 
 **Loop budget**:

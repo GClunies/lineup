@@ -1259,15 +1259,19 @@ func TestTheViewShowsTheLandingBar(t *testing.T) {
 	if v.Note != "#42 ✓ approved · ready to land · optional failed: lint" || !slices.Equal(v.Optional, []string{"lint"}) {
 		t.Errorf("note %q optional %q", v.Note, v.Optional)
 	}
-	want := []string{"✓ required checks passed", "✓ Greptile 5/5", "✓ review threads done", "✓ required reviews approved", "! optional checks failed: lint"}
+	want := []string{"✓ required checks passed", "✓ Greptile 5/5", "✓ review threads done", "✓ comments answered", "✓ required reviews approved", "! optional checks failed: lint"}
 	if got := r.checklist(); !slices.Equal(got, want) {
 		t.Errorf("checklist %q, want %q", got, want)
 	}
 
 	r.Stage = lifecycle.InReview
 	r.Standing = bar.Measure(lifecycle.PRFacts{Head: testHead, Score: &five, Decision: lifecycle.DecisionRequired})
-	if v := r.view(); v.Note != "#42 ○ no review yet" || r.checklist()[3] != "✗ needs approval" {
+	if v := r.view(); v.Note != "#42 ○ no review yet" || r.checklist()[4] != "✗ needs approval" {
 		t.Errorf("In review: note %q checklist %q", v.Note, r.checklist())
+	}
+	r.Stage, r.Standing.Comments = lifecycle.CIRunning, 2
+	if v := r.view(); v.Note != "#42 ○ no review yet · 2 new comments" || r.checklist()[3] != "✗ 2 new comments" {
+		t.Errorf("new comments: note %q checklist %q", v.Note, r.checklist())
 	}
 	if got := (&Record{Task: lifecycle.Task{ID: "ENG-591", Stage: lifecycle.Working}}).checklist(); got != nil {
 		t.Errorf("a Task with no measured PR: checklist %q", got)

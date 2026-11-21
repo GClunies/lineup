@@ -654,11 +654,11 @@ func firstNonEmpty(ss ...string) string {
 }
 
 // toasts is the command that toasts v: one line for each Task that reached
-// Done, then the free slot hint. A Task in Needs you gets no toast, because the
-// status record reports it. The Alerts call still records its Attention, so the
-// Task toasts when it reaches Done.
+// Ready to land or Done, then the free slot hint. Any other Task in Needs you
+// gets no toast, because the status record reports it. The Alerts call still
+// records its Attention, so the Task toasts when it reaches Done.
 func (m Model) toasts(v scheduler.BoardView) tea.Cmd {
-	alerts := slices.DeleteFunc(scheduler.Alerts(m.alerted, v), inNeedsYou)
+	alerts := slices.DeleteFunc(scheduler.Alerts(m.alerted, v), func(t scheduler.TaskView) bool { return inNeedsYou(t) && !t.ReadyToLand() })
 	var texts []string
 	for _, t := range alerts {
 		texts = append(texts, t.AlertText())

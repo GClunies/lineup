@@ -75,8 +75,8 @@ func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 	if !strings.Contains(string(role), "`/Users/g/.config/lineup/config.toml`") || !strings.Contains(string(role), "`lineup restart`") {
 		t.Errorf("the role does not say how to change the review queues:\n%s", role)
 	}
-	if h := v.Hooks["UserPromptSubmit"]; len(h) != 1 || len(h[0].Hooks) != 1 || h[0].Hooks[0].Command != "'/Users/g/bin/lineup' trackers" {
-		t.Errorf("no prompt hook runs lineup trackers: %+v", v.Hooks)
+	if h := v.Hooks["UserPromptSubmit"]; len(h) != 1 || len(h[0].Hooks) != 2 || h[0].Hooks[0].Command != "'/Users/g/bin/lineup' trackers" || h[0].Hooks[1].Command != "'/Users/g/bin/lineup' ready" {
+		t.Errorf("no prompt hook runs lineup trackers and lineup ready: %+v", v.Hooks)
 	}
 	if got := trackersLine(trackersOn{linear: true, local: true}); !strings.HasPrefix(got, "Trackers on now: Linear, Local.") {
 		t.Errorf("trackersLine = %q", got)
@@ -104,7 +104,7 @@ func TestAgentRoleLeavesNeedsYouToThePalette(t *testing.T) {
 		t.Fatalf("the role has no Needs you section:\n%s", role)
 	}
 	needs, _, _ = strings.Cut(needs, "\n## ")
-	for _, want := range []string{"What Needs Me…", "`lineup decide`", "`lineup decide <task> <choice>`", "You get no alerts"} {
+	for _, want := range []string{"What Needs Me…", "`lineup decide`", "`lineup decide <task> <choice>`", "Ready to land: ENG-571, PR #4636", "These lines are your only alert."} {
 		if !strings.Contains(needs, want) {
 			t.Errorf("the Needs you section has no %s", want)
 		}

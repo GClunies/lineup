@@ -236,3 +236,27 @@ func TestDecideRefusesWhatTheTaskCannotDo(t *testing.T) {
 		}
 	}
 }
+
+// lineup ready names each build Task whose PR waits only for the merge, with
+// its PR, so the Orchestrator's prompt hook tells it on each turn.
+func TestReadyNamesEachPRThatIsReadyToLand(t *testing.T) {
+	ready := scheduler.TaskView{ID: "ENG-571", Kind: lifecycle.KindBuild, Title: "Rate limit login", StageKey: lifecycle.ReadyToLand.Key(),
+		PRNumber: 4636, PRURL: "https://github.com/acme/data/pull/4636"}
+	flagged := ready
+	flagged.ID, flagged.Flag = "ENG-572", "pr closed"
+	working := ready
+	working.ID, working.StageKey = "ENG-573", lifecycle.Responding.Key()
+	c, _ := fakeScheduler(t, map[string]scheduler.Response{"ls": dataReply(t, scheduler.BoardView{Tasks: []scheduler.TaskView{ready, flagged, working}})})
+	var out bytes.Buffer
+	if err := cmdReady(c, nil, &out); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Ready to land: ENG-571, PR #4636 https://github.com/acme/data/pull/4636, Rate limit login\n"; out.String() != want {
+		t.Errorf("lineup ready printed %q, want %q", out.String(), want)
+	}
+	c, _ = fakeScheduler(t, map[string]scheduler.Response{"ls": dataReply(t, scheduler.BoardView{Tasks: []scheduler.TaskView{working}})})
+	out.Reset()
+	if err := cmdReady(c, nil, &out); err != nil || out.Len() != 0 {
+		t.Errorf("with no PR ready to land: %q, %v, want nothing", out.String(), err)
+	}
+}

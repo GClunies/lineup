@@ -96,7 +96,10 @@ const agentSettings = `{
     "additionalDirectories": ["{{issues}}", "{{configDir}}"]
   },
   "hooks": {
-    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "'{{lineup}}' trackers"}]}]
+    "UserPromptSubmit": [{"hooks": [
+      {"type": "command", "command": "'{{lineup}}' trackers"},
+      {"type": "command", "command": "'{{lineup}}' ready"}
+    ]}]
   }
 }
 `

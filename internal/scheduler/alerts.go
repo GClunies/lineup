@@ -19,6 +19,12 @@ func (t TaskView) Attention() string {
 	return ""
 }
 
+// ReadyToLand reports whether the Task's PR waits only for the user's merge.
+// A flag means that the Task needs the user for another reason.
+func (t TaskView) ReadyToLand() bool {
+	return t.Kind == lifecycle.KindBuild && t.StageKey == lifecycle.ReadyToLand.Key() && t.Flag == ""
+}
+
 // AlertText is the one line that tells the user about the Task's Attention:
 // the ID, the first line of the note, and the title, in that order. The note
 // already names the Stage's state or how the Task ended. It comes before the

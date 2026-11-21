@@ -292,19 +292,43 @@ var intros = map[lifecycle.Stage]string{
 // draftRule holds back each reply to a person that is not a fix, by ADR 0026.
 // A Worker posts as the user, so the user approves each such reply first.
 // %[1]s is the Task's ID.
-const draftRule = "Post a reply in a thread that a person opened only when the reply reports a fix: the change that the thread asks for, in a commit that you push. " +
+const draftRule = "Post a reply to a person only when the reply reports a fix: the change that the person asks for, in a commit that you push. " +
+	"Reply in the thread that the person opened. For a comment outside a thread, reply in the PR conversation. " +
+	"A comment outside a thread that asks for nothing, for example thanks or a plain approval, needs no reply. " +
 	"Every other reply to a person is a Draft reply, for example a deferral to a follow-up ticket, a rebuttal, a disagreement, an answer to a question, or a reply that you cannot sort. " +
 	"If you have a Draft reply, push nothing and post nothing yet. Run `lineup ask --drafts <n> %[1]s`, where n counts the Draft replies. " +
-	"Then show each Draft reply in this tab: the reviewer, the file and line, the review's state, the comment, and your reply. Show the drafts for a request for changes first. " +
+	"Then show each Draft reply in this tab: the reviewer, the file and line or the comment's link, the review's state, the comment, and your reply. Show the drafts for a request for changes first. " +
 	"For a follow-up, also draft the ticket in the Task's Tracker with no Project, and let the user pick the Project. " +
 	"The user decides each draft: post it as you wrote it, post it with the user's edit, or make the fix instead. " +
 	"If a draft is still undecided when you would wait, run `lineup ask --drafts <n> %[1]s` again with the count that is left. " +
-	"When the user decided each draft, push, post each reply, and resolve each thread that you answered. This rule covers only the threads that people opened."
+	"When the user decided each draft, push, post each reply, and resolve each thread that you answered. " +
+	"This rule covers the threads that people opened and people's comments outside threads. It does not cover the threads that a review bot opened."
+
+// scopeRule makes a Worker ask before it pushes a change that the Task did
+// not ask for, because a Worker pushes in the user's name. It covers the
+// changes that a CI fix needs and the suggestions of people and review bots.
+// %[1]s is the Task's ID.
+const scopeRule = "Before you make a change, check it against the intent of the pull request and the scope of the Task. " +
+	"Check each change that a fix needs, and each suggestion from a person or a review bot before you apply or decline it. " +
+	"If a change goes against that intent, goes outside that scope, or you are not sure, the user decides it. " +
+	"Then push nothing yet, not even your other changes, and post nothing about that change. " +
+	"Run `lineup ask %[1]s \"<one question>\"`. In the question, name the change, who asked for it, and why it is outside the scope. " +
+	"Then stop, and wait for the user's answer in this tab. When the user decides, do what the user says, then push."
 
 // cycleIntro opens a Responding round that a low review bot score started.
 // %[1]s is the bot, %[2]d/%[3]d its score, and %[4]d the minimum.
 const cycleIntro = "%[1]s scored the pull request for this Task %[2]d/%[3]d, below the minimum of %[4]d. " +
 	"Address %[1]s's unresolved review comments and the suggestions in its summary comment. Resolve each review thread that you addressed."
+
+// newComments names people's new comments outside threads. They are the
+// newest ones, because a Responding round takes every comment before it.
+func newComments(n int) string {
+	what := "1 new comment"
+	if n > 1 {
+		what = fmt.Sprintf("%d new comments", n)
+	}
+	return "It has " + what + " from people outside review threads, in the PR conversation or in a review body. They are the newest such comments on the PR."
+}
 
 // intro opens the Stage prompt. It names what the latest poll saw, so that a
 // CI debug Worker leaves the optional checks alone.
@@ -328,10 +352,13 @@ func intro(stage lifecycle.Stage, task TaskInfo) string {
 		if s.Conflict {
 			text = append(text, "The pull request for this Task has a conflict with its base branch. Resolve it.")
 		}
-		if open := s.Threads.Open(); open || !s.Conflict {
+		if open := s.Threads.Open(); open || s.Comments > 0 || !s.Conflict {
 			text = append(text, intros[stage])
 			if open {
 				text = append(text, "It has "+s.Threads.String()+".")
+			}
+			if s.Comments > 0 {
+				text = append(text, newComments(s.Comments))
 			}
 			if task.ReviewCycle == nil {
 				text = append(text, fmt.Sprintf(draftRule, task.ID))
@@ -394,6 +421,9 @@ func Prompt(stage lifecycle.Stage, task TaskInfo, skill, extra string) string {
 		b.WriteString(task.Ask + "\n\n")
 	}
 	b.WriteString(intro(stage, task) + "\n\n")
+	if stage == lifecycle.CIDebug || stage == lifecycle.Responding {
+		b.WriteString(fmt.Sprintf(scopeRule, task.ID) + "\n\n")
+	}
 	tracker := cmp.Or(task.Tracker, "Linear")
 	if task.IssueID != "" {
 		fmt.Fprintf(&b, "%s Issue: %s %s\nURL: %s\n", tracker, task.IssueID, task.IssueTitle, task.IssueURL)
