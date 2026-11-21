@@ -52,6 +52,8 @@ type Options struct {
 	Now    func() time.Time
 	// Linear holds the calls to Linear. Tests replace them.
 	Linear Linear
+	// GitHub holds the calls to GitHub for the GitHub Issue rows.
+	GitHub GitHub
 	// Repos lists the checkouts that the Repo picker offers for an Issue of the
 	// Kind. It leaves out each Repo that is locked to other Trackers.
 	Repos func(kind string) []string
@@ -196,7 +198,7 @@ func (m *Model) setBoard(v scheduler.BoardView) {
 			}
 		}
 	}
-	m.issues = issueRows(m.mine.linearIssues(), m.mine.loc, v.Tasks)
+	m.issues = m.issueRows(v.Tasks)
 	slices.SortStableFunc(m.issues, func(a, b issueRow) int { return cmp.Compare(m.lay.rank(a.Group), m.lay.rank(b.Group)) })
 	if q := m.query(); q != "" {
 		m.tasks = matching(q, m.tasks, func(t scheduler.TaskView) string { return t.ID + "  " + t.Title })
@@ -711,7 +713,7 @@ func (m Model) slotHint(v scheduler.BoardView, alerts []scheduler.TaskView) stri
 	}) {
 		return ""
 	}
-	for _, r := range issueRows(m.mine.linearIssues(), m.mine.loc, v.Tasks) {
+	for _, r := range m.issueRows(v.Tasks) {
 		if r.Group != groupReady {
 			continue
 		}

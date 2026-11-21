@@ -28,7 +28,7 @@ The user can plan and start work from Linear, from GitHub Issues, or with no hos
 
 - `scheduler.Issue` gets a `Kind` field: `linear`, `github`, or `local`. A Record from before this field is `linear`.
 - A Tracker mux in `cmd/lineup/wire.go` implements the existing `scheduler.Tracker` port. It routes each call to the adapter that `Kind` names. The Scheduler does not change.
-- The Board reads the user's Linear Issues and the Local Tracker folder for its Issue rows. It reads no GitHub Issue. See [The Board](#the-board).
+- The Board reads the user's Linear Issues, the Local Tracker folder, and the user's own GitHub Issues for its Issue rows. See [The Board](#the-board).
 
 ## Sign-in
 
@@ -142,6 +142,8 @@ started = "in progress"
 in_review = "in review"
 ```
 
+The map can also hold `backlog`, the label that puts an Issue in Backlog on the Board. See [The Board](#the-board). `backlog` is not an event, so lineup never adds or removes it.
+
 lineup adds the label for an event and removes the labels of the other events, so an Issue carries at most one lifecycle label. If the map leaves out `started` or `in_review`, lineup writes nothing for that event. If it leaves out `merged` or `closed`, lineup removes the lifecycle labels, so a finished Issue does not keep `in progress`. If the label does not exist in the repository, lineup creates it.
 
 The Working Stage contract for a GitHub Issue adds one rule: the PR body must contain `Fixes <owner>/<repo>#<n>`.
@@ -177,7 +179,28 @@ The description, in Markdown.
 
 ## The Board
 
-The work view shows the user's own Linear Issues and the local Issues as Issue rows. It shows no GitHub Issue. A GitHub Issue starts with `lineup add owner/repo#12`, or through the Orchestrator. The GitHub Tracker then sets its labels, as [Lifecycle events](#lifecycle-events) says.
+The work view shows the user's own Linear Issues, the local Issues, and the user's own GitHub Issues as Issue rows. `docs/spec/one-board.md` describes the rows and their keys.
+
+The Board reads GitHub Issues only while the GitHub Tracker is on. It checks `github.json` at each load, so a `lineup login github` or `lineup logout github` shows within 60 s. An open GitHub Issue is the user's own when either rule is true:
+
+- The account in `github.json` is an assignee.
+- The Issue has no assignee, and that account opened it.
+
+A pull request is not an Issue and gets no row. The Board runs two `gh search issues` calls, one for each rule, with at most 200 Issues each. Then one GraphQL call reads the state of each blocker that the searches did not return.
+
+| Group | GitHub Issue |
+|---|---|
+| Ready | Open, without the backlog label |
+| Backlog | Open, with the backlog label |
+
+The backlog label is the `backlog` key of `[github.labels]`. Without the key, the label is `backlog`. An empty value puts every GitHub Issue in Ready. The label name matches without case, as GitHub matches label names.
+
+```toml
+[github.labels]
+backlog = "later"
+```
+
+A blocker is an Issue that a `Blocked by #<n>` line of the body names, the form that the Orchestrator writes. `Blocked by owner/repo#<n>` names an Issue in another repository, and one line can name more than one Issue. A blocker is open until GitHub reports the Issue closed, or the PR merged or closed. The `s` key on a GitHub row starts the Issue as `lineup add owner/repo#12` does. The GitHub Tracker then sets its labels, as [Lifecycle events](#lifecycle-events) says.
 
 ## Planning
 
@@ -196,10 +219,10 @@ The Orchestrator's instructions hold one section for each Tracker. Claude Code r
 |---|---|
 | `internal/scheduler` | `Issue.Kind`, and a `kind` field on the add request. A Record without `Kind` is `linear`. |
 | `cmd/lineup/wire.go` | The Tracker mux, and the GitHub and Local adapters for the port |
-| `internal/github` | Issue reads and writes through `gh`. It views an Issue, assigns it to the user, and sets the lifecycle labels. |
+| `internal/github` | Issue reads and writes through `gh`. It views an Issue, assigns it to the user, and sets the lifecycle labels. `OwnIssues` lists the user's own open Issues with the state of each blocker. |
 | `internal/localissues` (new) | The Markdown folder: parse, list, create, set status |
-| `internal/board` | The local Issue rows of the work view. See `docs/spec/one-board.md`. |
-| `internal/config` | `local_tracker`, `local_issues_dir`, `[github.labels]` |
+| `internal/board` | The local and GitHub Issue rows of the work view. See `docs/spec/one-board.md`. |
+| `internal/config` | `local_tracker`, `local_issues_dir`, `[github.labels]` with its `backlog` key |
 | `cmd/lineup` | `lineup login [linear [workspace] \| github]`, `lineup logout linear \| github`, `lineup trackers`, ID parsing for `lineup add` |
 | Orchestrator instructions | The tables above |
 
@@ -210,7 +233,8 @@ The Orchestrator's instructions hold one section for each Tracker. Claude Code r
 3. **IDs:** Table tests for the three forms. A Board start of a Linear row sends the Kind `linear`. An add of `LOCAL-1` with the Kind `linear` reaches the Linear adapter.
 4. **GitHub labels:** Against recorded `gh` output, each event adds its label and removes the others. An unmapped event writes nothing.
 5. **Local folder:** Property tests show that create never reuses an ID, and that parse after write gives back the same Issue. The list names a broken file and still lists the rest.
-6. **When each Tracker is on:** Table tests over Linear signed in or not, `github.json` present or not, and `local_tracker`.
-7. **Live:**
+6. **GitHub Issue rows:** Board tests with recorded `gh` output cover an assigned Issue, an unassigned Issue that the user opened, an unassigned Issue that someone else opened (no row), a PR (no row), the backlog label, `Blocked by` lines, an Issue that a Task holds, the Tracker turned off, and a failed `gh` call.
+7. **When each Tracker is on:** Table tests over Linear signed in or not, `github.json` present or not, and `local_tracker`.
+8. **Live:**
    - A local Issue goes from `todo` to `done` through a merged PR in a sandbox repository.
    - A GitHub Issue in that repository goes from open, through `in progress`, to closed by the PR.

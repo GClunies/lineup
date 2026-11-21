@@ -75,12 +75,12 @@ func TestEachStateLandsInItsGroupOrInNone(t *testing.T) {
 		return rows[0].Group
 	}
 	for typ, want := range linearCases {
-		if got := group(issueRows([]linear.Issue{mineIssue("ENG-1", typ, 0)}, nil, nil)); got != want {
+		if got := group(issueRows([]linear.Issue{mineIssue("ENG-1", typ, 0)}, nil, nil, "", nil)); got != want {
 			t.Errorf("Linear state type %q: group %q, want %q", typ, got, want)
 		}
 	}
 	for st, want := range localCases {
-		if got := group(issueRows(nil, []localissues.Issue{localIssue(1, st)}, nil)); got != want {
+		if got := group(issueRows(nil, []localissues.Issue{localIssue(1, st)}, nil, "", nil)); got != want {
 			t.Errorf("local status %q: group %q, want %q", st, got, want)
 		}
 	}
@@ -141,7 +141,7 @@ func TestIssueRowsSortUnblockedThenPriorityThenLevelThenID(t *testing.T) {
 			[]string{"ENG-1", "ENG-2", "local-1", "local-2", "ENG-3"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if got := rowIDs(issueRows(c.lin, c.loc, nil)); !slices.Equal(got, c.want) {
+			if got := rowIDs(issueRows(c.lin, c.loc, nil, "", nil)); !slices.Equal(got, c.want) {
 				t.Fatalf("order %v, want %v", got, c.want)
 			}
 		})
@@ -197,8 +197,8 @@ func shuffled[T any](t *rapid.T, xs []T, label string) []T {
 func TestIssueRowOrderIsTotalAndStable(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		lin, loc := genMine(t)
-		want := issueRows(lin, loc, nil)
-		got := issueRows(shuffled(t, lin, "lin"), shuffled(t, loc, "loc"), nil)
+		want := issueRows(lin, loc, nil, "", nil)
+		got := issueRows(shuffled(t, lin, "lin"), shuffled(t, loc, "loc"), nil, "", nil)
 		if !slices.Equal(rowKeys(got), rowKeys(want)) {
 			t.Fatalf("the input order changed the rows: %v, want %v", rowKeys(got), rowKeys(want))
 		}
@@ -237,7 +237,7 @@ func TestUnblockedNeedsEveryBlockerDoneOrCanceled(t *testing.T) {
 		{"a Linear blocker", []string{"ENG-5"}, "blocked by ENG-5"},
 	} {
 		t.Run("local "+c.name, func(t *testing.T) {
-			rows := issueRows(nil, append([]localissues.Issue{localIssue(7, localissues.Todo, c.blockedBy...)}, others...), nil)
+			rows := issueRows(nil, append([]localissues.Issue{localIssue(7, localissues.Todo, c.blockedBy...)}, others...), nil, "", nil)
 			if len(rows) != 1 || rows[0].note() != c.want {
 				t.Fatalf("rows %+v, want local-7 with note %q", rows, c.want)
 			}
@@ -255,7 +255,7 @@ func TestUnblockedNeedsEveryBlockerDoneOrCanceled(t *testing.T) {
 		{"no relations", mineIssue("ENG-1", "unstarted", 0), ""},
 	} {
 		t.Run("Linear "+c.name, func(t *testing.T) {
-			rows := issueRows([]linear.Issue{c.is}, nil, nil)
+			rows := issueRows([]linear.Issue{c.is}, nil, nil, "", nil)
 			if len(rows) != 1 || rows[0].note() != c.want {
 				t.Fatalf("rows %+v, want ENG-1 with note %q", rows, c.want)
 			}
@@ -390,7 +390,7 @@ func TestIssueRowsPaintFromTheCacheThenLive(t *testing.T) {
 	if got := rowIDs(m.issues); !slices.Equal(got, []string{"ENG-2"}) {
 		t.Fatalf("rows after the live list %v, want ENG-2", got)
 	}
-	if !slices.Equal(rowIDs(issueRows(e.wrote["w1/my"], nil, nil)), []string{"ENG-2"}) {
+	if !slices.Equal(rowIDs(issueRows(e.wrote["w1/my"], nil, nil, "", nil)), []string{"ENG-2"}) {
 		t.Fatalf("cache written %v, want the live list", e.wrote["w1/my"])
 	}
 }
@@ -452,7 +452,7 @@ func TestAPrefixedLocalIssueBlocksByItsOwnID(t *testing.T) {
 	hod2 := localIssue(2, localissues.Todo, "HOD-1")
 	hod2.Prefix = "hod"
 	waits := localIssue(5, localissues.Todo, "local-1", "hod-1")
-	rows := issueRows(nil, []localissues.Issue{localIssue(1, localissues.Started), hod1, hod2, waits}, nil)
+	rows := issueRows(nil, []localissues.Issue{localIssue(1, localissues.Started), hod1, hod2, waits}, nil, "", nil)
 	notes := map[string]string{}
 	for _, r := range rows {
 		notes[r.ID] = r.note()
