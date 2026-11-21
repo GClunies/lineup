@@ -202,8 +202,8 @@ If the PR's head moves after Review ready, the Task gets the note `head moved`. 
 | Prompt | `/pr-review <PR URL>`, the review worktree, then the review contract |
 | Harness, model, effort | `[stage.reviewing]`, else `[stage.default]`. The Worker gets `--add-dir <review worktree>`, so it reads the PR's code with no permission prompt. |
 | Conversation | The first Reviewing Worker starts a Claude conversation with `--session-id <uuid>`, and the Task's Record keeps the ID. A rerun of Reviewing types the review prompt into the same Worker and keeps the conversation. `lineup open` resumes it. If the conversation file is gone, the Worker starts a new conversation. |
-| Restored Worker | `claude --resume <uuid>` with no prompt, the Reviewing model and effort, and `--add-dir <review worktree>`. Setup runs again first. If the Task has no conversation ID, the restore runs the review again in Reviewing. A Task from before conversation IDs is one example. A Worker that exited and left its tab open for the hunk pane has that tab closed first. So the Task's window is the new tab. |
-| Hunk pane | `hunk gh pr <PR URL>` in the review worktree, to the right of the Worker in its tab, with half of the tab. A build Task's Worker gets a pane too. See **The hunk pane** below. |
+| Restored Worker | `claude --resume <uuid>` with no prompt, the Reviewing model and effort, and `--add-dir <review worktree>`. Setup runs again first. If the Task has no conversation ID, the restore runs the review again in Reviewing. A Task from before conversation IDs is one example. A Worker that exited and left its tab open for the side pane has that tab closed first. So the Task's window is the new tab. |
+| Side pane | `hunk gh pr <PR URL>` in the review worktree, to the right of the Worker in its tab, with half of the tab. A build Task's Worker gets a pane too. See **The side pane** below. |
 
 If no `[[repos]]` checkout has the PR's repository as its `origin`, the add fails and names the repository.
 
@@ -215,9 +215,9 @@ If no `[[repos]]` checkout has the PR's repository as its `origin`, the add fail
 
 The lock keeps two starts from fetching into one checkout at once. A fetch from outside lineup, for example the user's editor, can still hold a ref lock in that checkout. If git reports `cannot lock ref`, lineup tries the fetch again after 0.5 s, 1 s, and 2 s. A failed step gives the flag `setup failed`.
 
-**Cleanup.** A review Task that ends loses its tab, its hunk pane, and its review worktree at once, at each end in the Transitions table. lineup closes the tab and fetches. It removes the review worktree if the worktree holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
+**Cleanup.** A review Task that ends loses its tab, its side pane, and its review worktree at once, at each end in the Transitions table. lineup closes the tab and fetches. It removes the review worktree if the worktree holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
 
-**The hunk pane.** Each Worker gets a diff beside it, so the user reads the diff next to the Worker. This holds for review Tasks and build Tasks. lineup splits the Worker's tab when it opens the tab. That happens on the first start and on each restore. A rerun types into the same tab, so it keeps its pane. The Worker keeps the focus. The pane runs in the Task's worktree.
+**The side pane.** Each Worker gets a diff beside it, so the user reads the diff next to the Worker. This holds for review Tasks and build Tasks. lineup splits the Worker's tab when it opens the tab. That happens on the first start and on each restore. A rerun types into the same tab, so it keeps its pane. The Worker keeps the focus. The pane runs in the Task's worktree.
 
 A review Task's pane shows the PR's diff with this command:
 
@@ -234,11 +234,11 @@ sh -c 'b=$(git symbolic-ref -q --short refs/remotes/origin/HEAD) || b=origin/mai
 - `hunk` needs a token for a private repository. It reads `GH_TOKEN`.
 - The shell in a review pane gets the token from `gh`. The token is in no command line that `ps` shows.
 - A build pane compares the worktree with the merge base of `HEAD` and `origin/HEAD`. If the clone has no `origin/HEAD`, the pane uses `origin/main`. The diff holds the Task's commits, its uncommitted changes, and its untracked files.
-- The pane's block has the label `hunk`. lineup keeps its ID, and the Worker's block stays the block of the Task.
+- The pane's block has the label `side`. lineup keeps its ID, and the Worker's block stays the block of the Task.
 - When the Scheduler starts, it opens the pane again beside each live Worker whose pane is gone.
 - The events of the pane never change the Task. Closing the pane alone leaves the Task as it is.
 - The pane holds the tab open after the Worker's block closes. lineup then closes the tab. Recovery does the same.
-- When the user closes the Worker's pane of a Done Task, lineup closes the hunk pane's tab and removes the Task's worktree.
+- When the user closes the Worker's pane of a Done Task, lineup closes the side pane's tab and removes the Task's worktree.
 - If the split fails, lineup logs a warning. The Worker runs without the pane.
 
 The review contract:
@@ -321,7 +321,7 @@ The Orchestrator in the `lineup` tab adds, steers, reruns, and closes review Tas
 5. **Fill.** A skipped PR is never added, at any head, also after a restart of the Scheduler. A skip ends the open review Task in one loop call, and an unskip lets the next fill add the PR at the same head. A skip writes nothing to GitHub. Two fills in the same state start the same Tasks once. A paused queue starts nothing. Table tests for the shared slots: an earlier queue's PR is added above an older later-queue PR, a PR that two queues match is added once in the first queue, the shared count caps the started reviews of all queues, and a full queue leaves a new PR of the first queue waiting until a slot frees.
 6. **Review poll.** Against recorded responses, `pr-reviewed`, `pr-merged`, and `pr-closed` fire as the table says. `pr-reviewed` waits while the Worker works and fires on the next poll after the Worker stops. `pr-merged` and `pr-closed` fire while the Worker works. A pending review does not fire `pr-reviewed`.
 7. **Setup and cleanup.** Two review starts in one Repo fetch one after the other. Cleanup removes a clean review worktree and keeps one with an unpushed commit. A review Task never calls `wt remove`.
-8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then restores the Worker in the same conversation. A closed tab in Reviewing flags the Task `tab closed` and opens no tab, and `lineup open` or `lineup review` then resumes the Worker. Recovery with no tab in Review ready leaves the Task as it is, and in Reviewing it sets the flag. The events of the hunk pane leave the Task as it is. A closed Worker block closes the hunk pane with its tab.
+8. **Lost tabs.** A closed tab in Review ready leaves the Task in Review ready, and a fill starts no review in its slot. `lineup review` then restores the Worker in the same conversation. A closed tab in Reviewing flags the Task `tab closed` and opens no tab, and `lineup open` or `lineup review` then resumes the Worker. Recovery with no tab in Review ready leaves the Task as it is, and in Reviewing it sets the flag. The events of the side pane leave the Task as it is. A closed Worker block closes the side pane with its tab.
 9. **Config.** Load and validation: an unknown key, an empty filter list, a bad team or repository form, a duplicate name, a bad regex, an unknown `state`, a queue on closed PRs or drafts, each old key name, a `[[review.views]]` table, and `slots` below 1 each fail at load.
 10. **Board.** The Board lists no review Task. A review Task gives no toast, and the Board's status record does not count it. Its header counts the review Tasks that need the user, and shows `reviews paused` while the queues are paused.
 11. **Live.**

@@ -288,10 +288,10 @@ func hunkArgv(url string) []string {
 	return []string{"sh", "-c", `GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"`, "hunk", url}
 }
 
-// hunkCommand is the program of the hunk pane beside the Task's Worker. A
+// sideCommand is the program of the side pane beside the Task's Worker. A
 // build Task shows its worktree's changes since the worktree left the default
 // branch, or origin/main if the clone names no default branch.
-func (r *Record) hunkCommand() []string {
+func (r *Record) sideCommand() []string {
 	if r.Review != nil {
 		return hunkArgv(r.Review.URL)
 	}

@@ -54,9 +54,10 @@ type Record struct {
 	WindowID  string `json:"window_id,omitempty"`
 	BlockID   string `json:"block_id,omitempty"`
 	Job       Job    `json:"job,omitempty"`
-	// HunkBlockID is the hunk pane beside the Task's Worker. No event of it
-	// reaches the Task.
-	HunkBlockID string          `json:"hunk_block_id,omitempty"`
+	// SideBlockID is the side pane beside the Task's Worker. No event of it
+	// reaches the Task. The JSON key keeps its old name: a stored record holds
+	// it, and recovery opens a second pane beside a Worker whose key it lost.
+	SideBlockID string          `json:"hunk_block_id,omitempty"`
 	WorkerStage lifecycle.Stage `json:"worker_stage"`
 	// Pending is the Stage whose prompt the Worker has not received yet. It is
 	// nil or the Task's Stage.

@@ -165,7 +165,7 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 			s.d.Log.Warn("close the setup block", "task", r.ID, "err", err)
 		}
 	}
-	s.openHunk(ctx, r.ID, w.SessionID, w.BlockID, r.Worktree, r.hunkCommand())
+	s.openSide(ctx, r.ID, w.SessionID, w.BlockID, r.Worktree, r.sideCommand())
 	return true
 }
 

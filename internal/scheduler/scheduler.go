@@ -451,17 +451,17 @@ func (s *Scheduler) replay(id string) (replaced bool, steers []string) {
 	return replaced, steers
 }
 
-// openHunk runs argv in a hunk pane beside the Worker. A failed split leaves
+// openSide runs argv in a side pane beside the Worker. A failed split leaves
 // the Worker running.
-func (s *Scheduler) openHunk(ctx context.Context, id, session, block, worktree string, argv []string) {
-	hunk, err := s.d.Rex.Split(ctx, session, block, worktree, argv)
+func (s *Scheduler) openSide(ctx context.Context, id, session, block, worktree string, argv []string) {
+	side, err := s.d.Rex.Split(ctx, session, block, worktree, argv)
 	if err != nil {
-		s.d.Log.Warn("hunk pane", "task", id, "err", err)
+		s.d.Log.Warn("side pane", "task", id, "err", err)
 		return
 	}
 	s.update(id, func(r *Record) {
 		if r.BlockID == block {
-			r.HunkBlockID = hunk
+			r.SideBlockID = side
 		}
 	})
 }
@@ -487,7 +487,7 @@ func (s *Scheduler) closeTab(ctx context.Context, r Record) {
 	}
 	s.update(r.ID, func(rec *Record) {
 		if rec.WindowID == r.WindowID {
-			rec.WindowID, rec.BlockID, rec.HunkBlockID, rec.Job = "", "", "", JobNone
+			rec.WindowID, rec.BlockID, rec.SideBlockID, rec.Job = "", "", "", JobNone
 		}
 	})
 	if err := s.d.Rex.CloseWindow(ctx, r.SessionID, r.WindowID); err != nil {
@@ -656,11 +656,11 @@ func (s *Scheduler) tabClosedByUser(r *Record, detail string) {
 	s.apply(r, lifecycle.TabClosed{}, detail)
 }
 
-// forgetTab drops the Task's tab after its block is gone. The hunk pane
+// forgetTab drops the Task's tab after its block is gone. The side pane
 // holds the tab open, so the Scheduler closes the tab.
 func (s *Scheduler) forgetTab(r *Record) {
 	id, session, window := r.ID, r.SessionID, r.WindowID
-	r.WindowID, r.BlockID, r.HunkBlockID, r.Job = "", "", "", JobNone
+	r.WindowID, r.BlockID, r.SideBlockID, r.Job = "", "", "", JobNone
 	if window == "" {
 		return
 	}
@@ -897,9 +897,9 @@ func (s *Scheduler) recover(ctx context.Context) {
 				if st, err := s.d.Rex.ProgramStatus(ctx, r.SessionID, r.BlockID); err == nil && st.State != "" {
 					s.onRex(RexEvent{Kind: EvStatus, BlockID: r.BlockID, Status: st})
 				}
-				if !blocks[r.HunkBlockID] {
-					id, session, block, worktree, argv := r.ID, r.SessionID, r.BlockID, r.Worktree, r.hunkCommand()
-					s.enqueue(id, func(ctx context.Context) { s.openHunk(ctx, id, session, block, worktree, argv) })
+				if !blocks[r.SideBlockID] {
+					id, session, block, worktree, argv := r.ID, r.SessionID, r.BlockID, r.Worktree, r.sideCommand()
+					s.enqueue(id, func(ctx context.Context) { s.openSide(ctx, id, session, block, worktree, argv) })
 				}
 			}
 			continue

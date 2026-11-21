@@ -2755,15 +2755,15 @@ func TestTheWorkerStartsInTheSetupTab(t *testing.T) {
 	}
 }
 
-// The hunk pane splits the Worker's block after the setup block closes, so
+// The side pane splits the Worker's block after the setup block closes, so
 // the Worker and its pane share the tab.
-func TestTheHunkPaneOpensAfterTheSetupBlockCloses(t *testing.T) {
+func TestTheSidePaneOpensAfterTheSetupBlockCloses(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 	if pane := h.waitSplit(1); pane.anchor != worker.BlockID || len(pane.beside) != 0 {
-		t.Fatalf("hunk pane = %+v, want it beside the Worker's block %s alone", pane, worker.BlockID)
+		t.Fatalf("side pane = %+v, want it beside the Worker's block %s alone", pane, worker.BlockID)
 	}
 }

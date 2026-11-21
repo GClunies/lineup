@@ -164,11 +164,11 @@ func withEnv(env map[string]string, argv []string) []string {
 	return append(out, argv...)
 }
 
-// Split opens argv in a new block labeled hunk to the right of block, with
+// Split opens argv in a new block labeled side to the right of block, with
 // half of the tab, and keeps the focus where it is. It returns the new
 // block's ID.
 func (c *Client) Split(ctx context.Context, session, block, cwd string, argv []string) (string, error) {
-	return c.split(ctx, session, block, cwd, "hunk", nil, argv)
+	return c.split(ctx, session, block, cwd, "side", nil, argv)
 }
 
 // NewBlock opens argv in a new block of block's tab, as Split does. The new
