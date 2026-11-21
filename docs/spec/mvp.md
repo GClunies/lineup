@@ -303,8 +303,7 @@ This sequence runs in the background. The Board shows only the Task as it change
    - The adapter takes Claude's own lock, the folder `.claude.json.lock`, and replaces the file with one rename. A lock folder older than 10 s is abandoned.
    - The Worker command sets `CLAUDE_CONFIG_DIR` itself, because Rex starts it through a login shell that runs no direnv.
 7. The Scheduler starts the Worker in the setup tab, from the absolute path of the Harness, with the Stage's model, effort, prompt, and contract.
-   - The Worker command passes `--name <tab label> --remote-control <tab label>`. The tab label starts with the Task ID, so the user finds each Worker by its Task ID on claude.ai and on their phone. Each Hub agent gets the same flags, with the name `lineup-<tab>`: `lineup-work`, `lineup-plan`, and `lineup-review`.
-   - `--remote-control` takes an optional value, so the command always gives it the name. Without a value, it takes the prompt as the name.
+   - The Worker command passes `--name <tab label>`. The tab label starts with the Task ID, so the prompt box and the resume picker show each Worker's Task ID. Each Hub agent gets the same flag, with the name `lineup-<tab>`: `lineup-work`, `lineup-plan`, and `lineup-review`.
 8. The Scheduler closes the setup block. Then it opens a side pane to the right of the Worker, in the worktree, with this command:
 
    ```
@@ -664,7 +663,7 @@ These facts come from probes on this machine: throwaway Rex sessions, and `gh ap
 | A running Claude keeps a project entry that another process added under the lock | A live `claude` with a throwaway profile exited and rewrote the file. The added entry stayed. |
 | `direnv exec <dir>` unloads the caller's own `.envrc` values and keeps exported values | `printenv CLAUDE_CONFIG_DIR` through `direnv exec` for two Repos |
 | Claude has no flag that skips the trust dialog in an interactive session | `claude --help`: only `-p` skips it |
-| A conversation that `--continue` resumes keeps its claude.ai title. `--name` and `--remote-control` set only the name in the prompt box. `/rename` sets the claude.ai title, and the title stays through later resumes | A probe session titled `old-title`, resumed with `--name new-title --remote-control new-title`, then `/rename new-title`, then resumed again, read on claude.ai after each step |
+| `--name` sets the session's name in the prompt box, the `/resume` picker, and the terminal title | `claude --help` |
 | Greptile keeps one summary comment on a PR. The comment holds `<!-- greptile_confidence_score:N -->` and `Last reviewed commit: …/commit/<sha>`. | `gh api repos/better-auth/better-auth/issues/12303/comments`: the `greptile-apps[bot]` comment holds score 4 and the head commit. `internal/github/testdata/review_bot.json` is a trimmed copy. |
 | GraphQL names Greptile's author `greptile-apps`, with no `[bot]` suffix | `Client.Snapshot` against better-auth/better-auth#12303 |
 | The `Greptile Review` check run passes at a score below 5 | `gh api repos/better-auth/better-auth/commits/eb6b436/check-runs`: conclusion `success` at score 4/5 |
