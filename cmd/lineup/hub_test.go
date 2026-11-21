@@ -227,7 +227,6 @@ func TestBoardOptionsReadTheGitHubTracker(t *testing.T) {
 	if _, on, err := gh.Login(); on || err != nil {
 		t.Fatalf("on %v err %v before the login", on, err)
 	}
-	// The Board asks at each load, so a login after the start counts.
 	if err := github.SaveTracker(state, "octo"); err != nil {
 		t.Fatal(err)
 	}

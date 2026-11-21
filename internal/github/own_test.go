@@ -57,12 +57,17 @@ func TestOwnIssuesKeepsTheUsersOwnOpenIssues(t *testing.T) {
 	for _, is := range own {
 		ids = append(ids, is.ID())
 	}
-	// #13 is a PR, and hubot opened #15 with no assignee.
 	want := []string{"octo/sandbox#10", "octo/sandbox#11", "octo/sandbox#14", "octo/sandbox#12", "octo/sandbox#16"}
 	if !reflect.DeepEqual(ids, want) {
 		t.Fatalf("IDs %v, want %v", ids, want)
 	}
 	by := ownByID(own)
+	if _, ok := by["octo/sandbox#13"]; ok {
+		t.Error("the PR #13 is an Issue")
+	}
+	if _, ok := by["octo/sandbox#15"]; ok {
+		t.Error("#15, which hubot opened with no assignee, is the user's own")
+	}
 	if got := by["octo/sandbox#11"]; !reflect.DeepEqual(got.Assignees, []string{"octo", "hubot"}) || got.Repo != "octo/sandbox" ||
 		got.URL != "https://github.com/octo/sandbox/issues/11" || got.State != "OPEN" || !strings.Contains(got.Body, "Drop the old API keys") {
 		t.Fatalf("#11 %#v", got)
@@ -70,9 +75,15 @@ func TestOwnIssuesKeepsTheUsersOwnOpenIssues(t *testing.T) {
 	if got := by["octo/sandbox#10"].Labels; !reflect.DeepEqual(got, []string{"Backlog"}) {
 		t.Fatalf("#10 labels %v", got)
 	}
-	// #7 is closed in the GraphQL reply. #12 came back open from a search.
-	if got := by["octo/sandbox#11"].Blockers; !reflect.DeepEqual(got, []Blocker{{"octo/sandbox#7", false}, {"octo/sandbox#12", true}}) {
-		t.Fatalf("#11 blockers %v", got)
+	blockers := by["octo/sandbox#11"].Blockers
+	if len(blockers) != 2 {
+		t.Fatalf("#11 blockers %v", blockers)
+	}
+	if closedInGraphQL := blockers[0]; closedInGraphQL != (Blocker{"octo/sandbox#7", false}) {
+		t.Errorf("blocker closed in the GraphQL reply: %v", closedInGraphQL)
+	}
+	if openFromSearch := blockers[1]; openFromSearch != (Blocker{"octo/sandbox#12", true}) {
+		t.Errorf("blocker open in a search: %v", openFromSearch)
 	}
 	calls, _ := os.ReadFile(log)
 	lines := strings.Split(strings.TrimSpace(string(calls)), "\n")
