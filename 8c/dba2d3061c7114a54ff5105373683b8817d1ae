@@ -1,0 +1,26 @@
+internal/lifecycle/board_test.go
+  s_851aa8f8ea07d3::t_94b0d47a34708f 615-635
+internal/lifecycle/bar.go
+  s_851aa8f8ea07d3::t_958c74f076ae44 222,224
+internal/lifecycle/board.go
+  s_851aa8f8ea07d3::t_b6337492fb296f 254-255,257,392,504-506,510-512,523-525,543
+  s_851aa8f8ea07d3::t_093b1fd30c7d71 256
+internal/harness/claude/claude.go
+  s_851aa8f8ea07d3::t_ceeec7709d9dae 308
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8cdba2d3061c7114a54ff5105373683b8817d1ae",
+  "prompts": {},
+  "sessions": {
+    "s_851aa8f8ea07d3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d245f64a-498c-466b-b14c-07ea4bf1e1f7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
