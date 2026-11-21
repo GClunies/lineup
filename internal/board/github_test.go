@@ -57,9 +57,9 @@ func (g fakeGH) failing(t *testing.T, on bool) {
 	}
 }
 
-// githubEnv is mineEnv with the GitHub Tracker on for octo, and the Board
-// view v. A Task in v holds octo/sandbox#16. *on turns the Tracker off.
-func githubEnv(t *testing.T, v scheduler.BoardView) (*workEnv, fakeGH, *bool) {
+// githubEnv is mineEnv with the GitHub Tracker on for octo, and a queued
+// Task that holds octo/sandbox#16. *on turns the Tracker off.
+func githubEnv(t *testing.T) (*workEnv, fakeGH, *bool) {
 	t.Helper()
 	e, _ := mineEnv(t)
 	g, on := newFakeGH(t), true
@@ -68,18 +68,12 @@ func githubEnv(t *testing.T, v scheduler.BoardView) (*workEnv, fakeGH, *bool) {
 		Client:  &github.Client{Bin: g.bin},
 		Backlog: "backlog",
 	}
-	e.m = feed(e.m, boardMsg(v))
+	e.m = feed(e.m, boardMsg(scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{
+		tv("octo/sandbox#16", lifecycle.Queued, "sandbox", "Add a GREETING.md", "", 0),
+	}}))
 	e.m = openAll(drain(e.m, e.m.loadMine()))
 	e.m.width = 200
 	return e, g, &on
-}
-
-func heldView() scheduler.BoardView {
-	return scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{
-		tv("octo/sandbox#16", lifecycle.Queued, "sandbox", "Add a GREETING.md", "", 0),
-		// The match is exact, so this Task holds no Issue row.
-		tv("Octo/Sandbox#12", lifecycle.Queued, "sandbox", "Split billing ingest", "", 0),
-	}}
 }
 
 func githubRows(m Model) map[string]issueRow {
@@ -93,31 +87,37 @@ func githubRows(m Model) map[string]issueRow {
 }
 
 func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
-	e, _, _ := githubEnv(t, heldView())
+	e, _, _ := githubEnv(t)
 	rows := githubRows(e.m)
-	// #13 is a PR, hubot opened #15 with no assignee, and a Task holds #16.
-	var ids []string
-	for id := range rows {
-		ids = append(ids, id)
+	for _, c := range []struct{ name, id string }{
+		{"a PR", "octo/sandbox#13"},
+		{"opened by someone else, with no assignee", "octo/sandbox#15"},
+		{"held by a Task", "octo/sandbox#16"},
+	} {
+		t.Run("no row: "+c.name, func(t *testing.T) {
+			if _, ok := rows[c.id]; ok {
+				t.Fatalf("%s has a row", c.id)
+			}
+		})
 	}
-	slices.Sort(ids)
-	if want := []string{"octo/sandbox#10", "octo/sandbox#11", "octo/sandbox#12", "octo/sandbox#14"}; !slices.Equal(ids, want) {
-		t.Fatalf("GitHub rows %v, want %v", ids, want)
-	}
-	cases := []struct {
-		id, group, note string
-		level           int
+	for _, c := range []struct {
+		name, id, group, note string
+		level                 int
 	}{
-		{"octo/sandbox#10", groupBacklog, "", 0},             // assigned, with the Backlog label
-		{"octo/sandbox#11", groupReady, "blocked by #12", 1}, // #7 is closed, #12 is open
-		{"octo/sandbox#12", groupReady, "", 0},               // unassigned, opened by the user
-		{"octo/sandbox#14", groupReady, "unblocked", 0},      // its only blocker, #7, is closed
-	}
-	for _, c := range cases {
-		r := rows[c.id]
-		if r.Group != c.group || r.note() != c.note || r.Level != c.level || r.Repo != "sandbox" || r.priorityText() != "" {
-			t.Errorf("%s: group %q note %q level %d repo %q priority %q, want %q %q %d", c.id, r.Group, r.note(), r.Level, r.Repo, r.priorityText(), c.group, c.note, c.level)
-		}
+		{"assigned, with the backlog label", "octo/sandbox#10", groupBacklog, "", 0},
+		{"blocked by an open Issue, its other blocker closed", "octo/sandbox#11", groupReady, "blocked by #12", 1},
+		{"opened by the user, with no assignee", "octo/sandbox#12", groupReady, "", 0},
+		{"its only blocker closed", "octo/sandbox#14", groupReady, "unblocked", 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r, ok := rows[c.id]
+			if !ok {
+				t.Fatalf("%s has no row", c.id)
+			}
+			if r.Group != c.group || r.note() != c.note || r.Level != c.level || r.Repo != "sandbox" || r.priorityText() != "" {
+				t.Errorf("%s: group %q note %q level %d repo %q priority %q, want %q %q %d", c.id, r.Group, r.note(), r.Level, r.Repo, r.priorityText(), c.group, c.note, c.level)
+			}
+		})
 	}
 	out := screen(e.m)
 	inOrder(t, out, "BACKLOG", "octo/sandbox#10", "READY", "octo/sandbox#12", "octo/sandbox#14", "octo/sandbox#11", "QUEUED", "octo/sandbox#16")
@@ -128,8 +128,18 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 	}
 }
 
+func TestATaskHoldsAGitHubRowOnlyByTheExactID(t *testing.T) {
+	e, _, _ := githubEnv(t)
+	v := e.m.board
+	v.Tasks = append(v.Tasks, tv("Octo/Sandbox#12", lifecycle.Queued, "sandbox", "Split billing ingest", "", 0))
+	e.m = feed(e.m, boardMsg(v))
+	if _, ok := githubRows(e.m)["octo/sandbox#12"]; !ok {
+		t.Fatal("a Task with another case of the ID hid octo/sandbox#12")
+	}
+}
+
 func TestAnEmptyBacklogLabelPutsEveryGitHubIssueInReady(t *testing.T) {
-	e, _, _ := githubEnv(t, heldView())
+	e, _, _ := githubEnv(t)
 	e.m.opts.GitHub.Backlog = ""
 	e.m.setBoard(e.m.board)
 	if g := githubRows(e.m)["octo/sandbox#10"].Group; g != groupReady {
@@ -138,7 +148,7 @@ func TestAnEmptyBacklogLabelPutsEveryGitHubIssueInReady(t *testing.T) {
 }
 
 func TestSOnAGitHubRowAddsAndStartsTheIssue(t *testing.T) {
-	e, _, _ := githubEnv(t, heldView())
+	e, _, _ := githubEnv(t)
 	e.m.sel = "octo/sandbox#12"
 	e.press("s", "enter")
 	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "start"}) {
@@ -150,7 +160,7 @@ func TestSOnAGitHubRowAddsAndStartsTheIssue(t *testing.T) {
 }
 
 func TestFOnAGitHubRowShowsTheRenderedBody(t *testing.T) {
-	e, _, _ := githubEnv(t, heldView())
+	e, _, _ := githubEnv(t)
 	e.m.sel = "octo/sandbox#11"
 	e.press("f")
 	out := ansi.Strip(e.m.vp.View())
@@ -165,7 +175,7 @@ func TestFOnAGitHubRowShowsTheRenderedBody(t *testing.T) {
 }
 
 func TestOOnAGitHubRowOpensTheIssueAndCDoesNothing(t *testing.T) {
-	e, _, _ := githubEnv(t, heldView())
+	e, _, _ := githubEnv(t)
 	e.m.sel = "octo/sandbox#14"
 	e.press("c")
 	if e.m.mode != modeNormal {
@@ -178,7 +188,7 @@ func TestOOnAGitHubRowOpensTheIssueAndCDoesNothing(t *testing.T) {
 }
 
 func TestGitHubRowsShowOnlyWhileTheTrackerIsOn(t *testing.T) {
-	e, _, on := githubEnv(t, heldView())
+	e, _, on := githubEnv(t)
 	if len(githubRows(e.m)) == 0 {
 		t.Fatal("no GitHub rows while the Tracker is on")
 	}
@@ -193,7 +203,7 @@ func TestGitHubRowsShowOnlyWhileTheTrackerIsOn(t *testing.T) {
 }
 
 func TestAFailedGitHubReadShowsAStatusAndKeepsTheRows(t *testing.T) {
-	e, g, _ := githubEnv(t, heldView())
+	e, g, _ := githubEnv(t)
 	g.failing(t, true)
 	e.m = drain(e.m, e.m.loadMine())
 	if !e.m.statusE || !strings.Contains(e.m.status, "GitHub Issues: ") || !strings.Contains(e.m.status, "Bad credentials") {

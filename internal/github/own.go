@@ -136,7 +136,7 @@ func BlockedBy(repo, body string) []string {
 // name a PR. An ID that GitHub does not return is absent.
 func (c *Client) closedIssues(ctx context.Context, ids []string) (map[string]bool, error) {
 	var decl, body strings.Builder
-	args := []string{"api", "graphql"}
+	var vars []string
 	for i, id := range ids {
 		repo, n, err := ParseIssueID(id)
 		if err != nil {
@@ -145,10 +145,10 @@ func (c *Client) closedIssues(ctx context.Context, ids []string) (map[string]boo
 		owner, name, _ := strings.Cut(repo, "/")
 		fmt.Fprintf(&decl, "$o%[1]d: String!, $n%[1]d: String!, $p%[1]d: Int!, ", i)
 		fmt.Fprintf(&body, "i%[1]d: repository(owner: $o%[1]d, name: $n%[1]d) { issueOrPullRequest(number: $p%[1]d) { ... on Issue { state } ... on PullRequest { state } } }\n", i)
-		args = append(args, "-f", fmt.Sprintf("o%d=%s", i, owner), "-f", fmt.Sprintf("n%d=%s", i, name), "-F", fmt.Sprintf("p%d=%d", i, n))
+		vars = append(vars, "-f", fmt.Sprintf("o%d=%s", i, owner), "-f", fmt.Sprintf("n%d=%s", i, name), "-F", fmt.Sprintf("p%d=%d", i, n))
 	}
 	query := "query(" + strings.TrimSuffix(decl.String(), ", ") + ") {\n" + body.String() + "}"
-	args = slices.Insert(args, 2, "-f", "query="+query)
+	args := append([]string{"api", "graphql", "-f", "query=" + query}, vars...)
 	// gh exits with an error when one repository is missing, and still prints the others.
 	out, err := c.run(ctx, args...)
 	if err != nil && !json.Valid(out) {

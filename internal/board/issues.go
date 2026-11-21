@@ -343,7 +343,6 @@ func (m Model) mineMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 				return m, nil, true
 			}
 		} else if m.statusE && strings.HasPrefix(m.status, prefix) {
-			// A good read, or the Tracker off, ends the GitHub error.
 			m.setStatus("", false)
 		}
 		m.mine.gh = msg.issues

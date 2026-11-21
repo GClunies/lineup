@@ -363,9 +363,11 @@ func TestGitHubBacklogLabel(t *testing.T) {
 	if g.GitHubBacklogLabel() != "later" {
 		t.Errorf("backlog %q", g.GitHubBacklogLabel())
 	}
-	// The lifecycle labels leave backlog out, so no event removes it.
-	if got := g.GitHubLabels(); len(got) != 1 || got["started"] != "in progress" {
+	if got := g.GitHubLabels(); got["started"] != "in progress" {
 		t.Errorf("lifecycle labels %v", got)
+	}
+	if _, ok := g.GitHubLabels()["backlog"]; ok {
+		t.Error("backlog is a lifecycle label, so an event would remove it")
 	}
 	if l := load(t, "wip_cap = 3\n").GitHubBacklogLabel(); l != "backlog" {
 		t.Errorf("default backlog %q", l)

@@ -41,7 +41,6 @@ var issueKinds = map[string]issueKind{
 		keys:    []hint{{"s", "start"}, {"f", "details"}, {"c", "status"}, {"o", "edit the Issue"}, {"P", "promote to Linear"}},
 		tracker: Model.localRow,
 	},
-	// A GitHub Issue has no status, so its row takes no c.
 	scheduler.KindGitHub: {
 		keys:    []hint{{"s", "start"}, {"f", "details"}, {"o", "open the Issue"}},
 		tracker: Model.githubRow,
@@ -132,8 +131,8 @@ func (l linearRow) setStatus(ctx context.Context, name string) error {
 	return l.api.SetStatusByName(ctx, l.is, name)
 }
 
-// githubRow is a GitHub Issue row. The search that made the row read the
-// whole Issue, so the row asks GitHub for nothing more.
+// githubRow is a GitHub Issue row. The search returns the whole Issue, so
+// the row asks GitHub for nothing more.
 type githubRow struct {
 	is      github.OwnIssue
 	openURL func(string) error
