@@ -38,9 +38,10 @@ type tab struct {
 }
 
 // split is a block that Split opened beside the anchor block of a tab.
+// beside lists the other open blocks of the tab when the split opened.
 type split struct {
 	BlockID, anchor, cwd, window string
-	argv                         []string
+	argv, beside                 []string
 	closed                       bool
 }
 
@@ -146,8 +147,14 @@ func (f *fakeRex) Split(_ context.Context, _, block, cwd string, argv []string) 
 	}
 	for _, t := range f.tabs {
 		if t.BlockID == block {
+			var beside []string
+			for _, o := range f.tabs {
+				if o.WindowID == t.WindowID && o.BlockID != block && !o.closed {
+					beside = append(beside, o.BlockID)
+				}
+			}
 			f.n++
-			f.splits = append(f.splits, &split{BlockID: fmt.Sprintf("split:%d", f.n), anchor: block, cwd: cwd, window: t.WindowID, argv: argv})
+			f.splits = append(f.splits, &split{BlockID: fmt.Sprintf("split:%d", f.n), anchor: block, cwd: cwd, window: t.WindowID, argv: argv, beside: beside})
 			return f.splits[len(f.splits)-1].BlockID, nil
 		}
 	}
@@ -2745,5 +2752,18 @@ func TestTheWorkerStartsInTheSetupTab(t *testing.T) {
 	}
 	if got := h.events("ENG-1"); slices.Contains(got, "tab-closed") {
 		t.Fatalf("events = %q, want no tab-closed", got)
+	}
+}
+
+// The hunk pane splits the Worker's block after the setup block closes, so
+// the Worker and its pane share the tab.
+func TestTheHunkPaneOpensAfterTheSetupBlockCloses(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.do(Request{Op: "start", Task: "ENG-1"})
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
+	worker := h.waitTab("claude working")
+	if pane := h.waitSplit(1); pane.anchor != worker.BlockID || len(pane.beside) != 0 {
+		t.Fatalf("hunk pane = %+v, want it beside the Worker's block %s alone", pane, worker.BlockID)
 	}
 }
