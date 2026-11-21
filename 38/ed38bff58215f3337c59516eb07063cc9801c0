@@ -1,0 +1,65 @@
+internal/github/own.go
+  s_39907265254010::t_2be8b025628f79 4,125
+  s_39907265254010::t_bffd076e46ff93 1-3,5-32,34-124,126-174
+  s_39907265254010::t_1a90e55bfbebfa 33
+internal/board/model.go
+  s_39907265254010::t_c49a88fc4d0078 55-56,198,713
+internal/config/config_test.go
+  s_39907265254010::t_72ae3ed0e5069c 361-377
+internal/github/testdata/own_assigned.json
+  s_39907265254010::t_1a90e55bfbebfa 1-4
+internal/board/issues.go
+  s_39907265254010::t_0e8bd1392efa2a 234,340,345-347,349
+  s_39907265254010::t_218400111d1283 14,30-31,47,75-77,117-131,149-167,197,235-239,243-245,258-260,338-339,341-344,348
+  s_39907265254010::t_eb8d676d319e90 350
+internal/board/issues_test.go
+  s_39907265254010::t_901eab2c682ef8 200,239
+  s_39907265254010::t_c49a88fc4d0078 77,82,143,199,257,392
+docs/spec/one-board.md
+  s_39907265254010::t_915f0c458e2cf5 14-16,57-58,68,71-74,81,91,95-102,227,231,265
+internal/github/testdata/own_blockers.json
+  s_39907265254010::t_d079e5f5018614 1
+internal/config/config.go
+  s_39907265254010::t_72ae3ed0e5069c 201-204,206-220,305
+internal/board/issuekind.go
+  s_39907265254010::t_fbb0afac075c4e 5,16,44-48,62-63,135-174
+  s_39907265254010::t_47c94b4de4ce0f 175
+cmd/lineup/hub.go
+  s_39907265254010::t_aa9f9370299be4 534-537
+internal/board/github.go
+  s_39907265254010::t_c49a88fc4d0078 1-32,34-48
+  s_39907265254010::t_0e8bd1392efa2a 33
+internal/github/testdata/own_authored.json
+  s_39907265254010::t_1a90e55bfbebfa 1-3
+GLOSSARY.md
+  s_39907265254010::t_915f0c458e2cf5 46,50
+cmd/lineup/hub_test.go
+  s_39907265254010::t_2afbe01133b2cd 13-14
+  s_39907265254010::t_f3a26e7e022ff0 214-234
+  s_39907265254010::t_d07ef037adc943 235-236
+internal/github/own_test.go
+  s_39907265254010::t_e93a4c502b0e44 1-26,29-117
+  s_39907265254010::t_2929e8330f04c6 27-28
+internal/board/github_test.go
+  s_39907265254010::t_9ea83c1e5b5c49 1-12,14-78,80,82-110,115-221
+  s_39907265254010::t_68b1f325f9db86 13,79,81
+  s_39907265254010::t_32b1bdc67a3904 111-114
+docs/spec/trackers.md
+  s_39907265254010::t_915f0c458e2cf5 31,94-95,131-152,171,173-174,185-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "38ed38bff58215f3337c59516eb07063cc9801c0",
+  "prompts": {},
+  "sessions": {
+    "s_39907265254010": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "29827990-67b8-42a9-a03a-8586c553a27f",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
