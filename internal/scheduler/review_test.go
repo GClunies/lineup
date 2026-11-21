@@ -827,6 +827,7 @@ func TestEachBuildWorkerTabOpensItsDiffInHunkBesideIt(t *testing.T) {
 	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
+	conversation := h.lastSpec().Conversation
 	pane := h.waitSplit(1)
 	if pane.anchor != worker.BlockID || pane.window != worker.WindowID || pane.cwd != filepath.Join(h.wt.root, "eng-1-billing") || !slices.Equal(pane.argv, hunkDiff) {
 		t.Fatalf("hunk pane = %+v, want the worktree's diff beside block %s", pane, worker.BlockID)
@@ -835,7 +836,7 @@ func TestEachBuildWorkerTabOpensItsDiffInHunkBesideIt(t *testing.T) {
 	h.rex.userCloses(worker)
 	eventually(t, "the tab closed flag", func() bool { return h.task("ENG-1").Flag == "tab closed" })
 	h.open("ENG-1")
-	resumed := h.waitTab("claude --resume")
+	resumed := h.waitTab("claude --resume " + conversation)
 	if pane := h.waitSplit(2); pane.anchor != resumed.BlockID || !slices.Equal(pane.argv, hunkDiff) {
 		t.Fatalf("restore: hunk pane = %+v, want the diff beside %s", pane, resumed.BlockID)
 	}
