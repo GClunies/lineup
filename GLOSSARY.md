@@ -47,11 +47,11 @@ A Task with no Issue, made from the user's own words. Its ID has the form `ah-<n
 _Avoid_: Text Task, one-off
 
 **Ready**:
-The Board group of the user's own Issues that have no Task and that the user chose to do next: a Linear Issue assigned to the user in an unstarted state, or a local Issue with `status: todo`.
+The Board group of the user's own Issues that have no Task and that the user chose to do next: a Linear Issue assigned to the user in an unstarted state, a local Issue with `status: todo`, or one of the user's own open GitHub Issues without the backlog label.
 _Avoid_: Todo, next up
 
 **Backlog**:
-The Board group of the user's own Issues that have no Task and that wait for the user to choose them: a Linear Issue assigned to the user in a backlog or triage state, or a local Issue with `status: backlog`.
+The Board group of the user's own Issues that have no Task and that wait for the user to choose them: a Linear Issue assigned to the user in a backlog or triage state, a local Issue with `status: backlog`, or one of the user's own open GitHub Issues with the backlog label.
 _Avoid_: Ideas, inbox
 
 **Destination**:

@@ -358,6 +358,23 @@ func TestTrackerKeys(t *testing.T) {
 	}
 }
 
+func TestGitHubBacklogLabel(t *testing.T) {
+	g := load(t, "[github.labels]\nstarted = \"in progress\"\nbacklog = \"later\"\n")
+	if g.GitHubBacklogLabel() != "later" {
+		t.Errorf("backlog %q", g.GitHubBacklogLabel())
+	}
+	// The lifecycle labels leave backlog out, so no event removes it.
+	if got := g.GitHubLabels(); len(got) != 1 || got["started"] != "in progress" {
+		t.Errorf("lifecycle labels %v", got)
+	}
+	if l := load(t, "wip_cap = 3\n").GitHubBacklogLabel(); l != "backlog" {
+		t.Errorf("default backlog %q", l)
+	}
+	if l := load(t, "[github.labels]\nbacklog = \"\"\n").GitHubBacklogLabel(); l != "" {
+		t.Errorf("empty backlog %q", l)
+	}
+}
+
 func TestLocalTrackerOn(t *testing.T) {
 	for _, c := range []struct {
 		forced, linear, github, want bool

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/gclunies/lineup/internal/config"
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
@@ -209,6 +210,29 @@ func TestBoardOptionsCarryTheConfigProblem(t *testing.T) {
 		if (c.want == "") != (got == "") || !strings.HasPrefix(got, c.want) {
 			t.Errorf("%s: ConfigErr %q, want %q", c.name, got, c.want)
 		}
+	}
+}
+
+func TestBoardOptionsReadTheGitHubTracker(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("LINEUP_STATE_DIR", state)
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[github.labels]\nbacklog = \"later\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gh := boardOptions(path).GitHub
+	if gh.Backlog != "later" {
+		t.Errorf("backlog %q", gh.Backlog)
+	}
+	if _, on, err := gh.Login(); on || err != nil {
+		t.Fatalf("on %v err %v before the login", on, err)
+	}
+	// The Board asks at each load, so a login after the start counts.
+	if err := github.SaveTracker(state, "octo"); err != nil {
+		t.Fatal(err)
+	}
+	if login, on, err := gh.Login(); !on || login != "octo" || err != nil {
+		t.Fatalf("login %q on %v err %v", login, on, err)
 	}
 }
 

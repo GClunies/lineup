@@ -550,6 +550,10 @@ func boardOptions(path string) board.Options {
 	opts.StartSkills = g.StartSkills()
 	opts.Repos = g.CheckoutsFor
 	opts.LocalIssues = g.LocalIssuesDir()
+	opts.GitHub = board.GitHub{
+		Login:   func() (string, bool, error) { return github.TrackerLogin(stateDir()) },
+		Backlog: g.GitHubBacklogLabel(),
+	}
 	var berr error
 	if opts.Board, berr = g.Board(); berr != nil {
 		opts.ConfigErr = "config: " + berr.Error() + " (default layout)"

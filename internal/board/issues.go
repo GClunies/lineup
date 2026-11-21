@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/linear"
 	"github.com/gclunies/lineup/internal/localissues"
 	"github.com/gclunies/lineup/internal/scheduler"
@@ -26,7 +27,8 @@ const (
 )
 
 // issueGroup puts an Issue in Ready or Backlog by its Kind and its Linear
-// state type or local status. Any other state is in no group.
+// state type or local status. Any other state is in no group. A GitHub
+// Issue has no status: githubGroup places it by its labels.
 var issueGroup = map[string]map[string]string{
 	scheduler.KindLinear: {"unstarted": groupReady, "backlog": groupBacklog, "triage": groupBacklog},
 	scheduler.KindLocal:  {string(localissues.Todo): groupReady, string(localissues.Backlog): groupBacklog},
@@ -42,6 +44,7 @@ type issueRow struct {
 	Unblocked                         bool
 	lin                               *linear.Issue
 	loc                               *localissues.Issue
+	gh                                *github.OwnIssue
 }
 
 func (r issueRow) note() string {
@@ -69,8 +72,9 @@ func (r issueRow) priorityText() string {
 
 // issueRows makes the Issue rows: the Issues in Ready or Backlog that no Task
 // on the Board holds. An ID matches a Task's ID exactly, so LOCAL-5 in Linear
-// and local-5 in the Local Tracker are two Issues.
-func issueRows(lin []linear.Issue, loc []localissues.Issue, tasks []scheduler.TaskView) []issueRow {
+// and local-5 in the Local Tracker are two Issues. backlog is the label that
+// puts a GitHub Issue in Backlog.
+func issueRows(lin []linear.Issue, loc []localissues.Issue, gh []github.OwnIssue, backlog string, tasks []scheduler.TaskView) []issueRow {
 	held := map[string]bool{}
 	for _, t := range tasks {
 		held[t.ID] = true
@@ -110,6 +114,21 @@ func issueRows(lin []linear.Issue, loc []localissues.Issue, tasks []scheduler.Ta
 		rows = append(rows, issueRow{ID: is.ID(), Kind: scheduler.KindLocal, Group: issueGroup[scheduler.KindLocal][string(is.Status)],
 			Title: is.Title, Repo: repo, Blockers: open, Unblocked: len(is.BlockedBy) > 0 && len(open) == 0, loc: is})
 	}
+	for i := range gh {
+		is := &gh[i]
+		node := linear.Issue{ID: is.ID(), Identifier: is.ID()}
+		var open []string
+		for _, b := range is.Blockers {
+			if b.Open {
+				open = append(open, shortRef(is.Repo, b.ID))
+				node.Blockers = append(node.Blockers, linear.Ref{ID: b.ID})
+			}
+		}
+		graph = append(graph, node)
+		_, name, _ := strings.Cut(is.Repo, "/")
+		rows = append(rows, issueRow{ID: is.ID(), Kind: scheduler.KindGitHub, Group: githubGroup(is.Labels, backlog),
+			Title: is.Title, Repo: name, URL: is.URL, Blockers: open, Unblocked: len(is.Blockers) > 0 && len(open) == 0, gh: is})
+	}
 	levels := linear.Levels(graph)
 	out := rows[:0]
 	for _, r := range rows {
@@ -125,6 +144,25 @@ func issueRows(lin []linear.Issue, loc []localissues.Issue, tasks []scheduler.Ta
 	}
 	slices.SortStableFunc(out, cmpIssueRows)
 	return out
+}
+
+// githubGroup puts a GitHub Issue in Backlog when it carries the backlog
+// label, and in Ready when it does not. GitHub matches label names without
+// case, and so does the Board.
+func githubGroup(labels []string, backlog string) string {
+	if backlog != "" && slices.ContainsFunc(labels, func(l string) bool { return strings.EqualFold(l, backlog) }) {
+		return groupBacklog
+	}
+	return groupReady
+}
+
+// shortRef names a blocker in the note: #12 in the Issue's own repository,
+// owner/name#12 in another.
+func shortRef(repo, id string) string {
+	if rest, ok := strings.CutPrefix(id, repo+"#"); ok {
+		return "#" + rest
+	}
+	return id
 }
 
 // cmpIssueRows orders rows with no open blocker first, then by priority,
@@ -156,6 +194,7 @@ type mine struct {
 	wss   map[string]linear.Workspace // the workspaces in lin, by ID
 	fresh map[string]bool             // the workspaces whose live list came back
 	loc   []localissues.Issue
+	gh    []github.OwnIssue // the user's own GitHub Issues, while the GitHub Tracker is on
 }
 
 // workspaceOf is the workspace whose My Issues hold is.
@@ -192,11 +231,18 @@ type (
 		issues []localissues.Issue
 		err    error
 	}
+	// mineGitHubMsg is the user's own GitHub Issues, and none while the
+	// GitHub Tracker is off. A failed read can still hold Issues.
+	mineGitHubMsg struct {
+		issues []github.OwnIssue
+		err    error
+	}
 	mineTick struct{}
 )
 
-// loadMine reads the signed-in workspaces and the Local Tracker folder. The
-// workspaces come back first, so that Update makes each workspace's client.
+// loadMine reads the signed-in workspaces, the Local Tracker folder, and the
+// user's own GitHub Issues. The workspaces come back first, so that Update
+// makes each workspace's client.
 func (m Model) loadMine() tea.Cmd {
 	wss := m.lin.Workspaces
 	cmds := []tea.Cmd{func() tea.Msg {
@@ -208,6 +254,9 @@ func (m Model) loadMine() tea.Cmd {
 			is, _, err := localissues.Store{Dir: dir}.List()
 			return mineLocalMsg{issues: is, err: err}
 		})
+	}
+	if gh := m.opts.GitHub; gh.Login != nil {
+		cmds = append(cmds, gh.load)
 	}
 	return tea.Batch(cmds...)
 }
@@ -285,6 +334,19 @@ func (m Model) mineMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		}
 		m.mine.lin[msg.ws.ID] = msg.issues
 		m.mine.wss[msg.ws.ID] = msg.ws
+		m.setBoard(m.board)
+	case mineGitHubMsg:
+		const prefix = "GitHub Issues: "
+		if msg.err != nil {
+			m.setStatus(prefix+msg.err.Error(), true)
+			if msg.issues == nil {
+				return m, nil, true
+			}
+		} else if m.statusE && strings.HasPrefix(m.status, prefix) {
+			// A good read, or the Tracker off, ends the GitHub error.
+			m.setStatus("", false)
+		}
+		m.mine.gh = msg.issues
 		m.setBoard(m.board)
 	case mineLocalMsg:
 		if msg.err != nil {

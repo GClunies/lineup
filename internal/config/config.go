@@ -210,8 +210,26 @@ func (g *Global) LinearClientID(workspace string) string {
 	return g.file.LinearClientID
 }
 
+// backlogKey is the key of [github.labels] that names the label of a
+// Backlog Issue. It is not a lifecycle event, so lineup never writes it.
+const backlogKey = "backlog"
+
 // GitHubLabels maps a lifecycle event to the label it sets on a GitHub Issue.
-func (g *Global) GitHubLabels() map[string]string { return g.file.GitHub.Labels }
+func (g *Global) GitHubLabels() map[string]string {
+	labels := maps.Clone(g.file.GitHub.Labels)
+	delete(labels, backlogKey)
+	return labels
+}
+
+// GitHubBacklogLabel is the label that puts a GitHub Issue in Backlog on the
+// Board: "backlog" unless [github.labels] sets backlog. An empty value puts
+// every GitHub Issue in Ready.
+func (g *Global) GitHubBacklogLabel() string {
+	if l, ok := g.file.GitHub.Labels[backlogKey]; ok {
+		return l
+	}
+	return backlogKey
+}
 
 // ReviewSlots is how many review Tasks of all queues together can be started
 // at one time, or 0 when review.slots is not set.
@@ -299,7 +317,7 @@ func Load(globalPath string) (*Global, error) {
 		}
 	}
 	for ev := range g.file.GitHub.Labels {
-		if !trackerEvents[ev] {
+		if !trackerEvents[ev] && ev != backlogKey {
 			return nil, fmt.Errorf("%s: github.labels: unknown event %q", globalPath, ev)
 		}
 	}
