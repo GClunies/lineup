@@ -161,11 +161,10 @@ func lock(dir string) (func(), error) {
 	}
 }
 
-// SessionFlags name the session and turn on Remote Control, so that the user
-// finds it by name on claude.ai and on their phone. --remote-control takes an
-// optional value, so it always gets the name: alone, it would take the prompt.
+// SessionFlags name the session, so that the prompt box, the /resume picker,
+// and the terminal title show the name.
 func SessionFlags(name string) []string {
-	return []string{"--name", name, "--remote-control", name}
+	return []string{"--name", name}
 }
 
 // NoConversation is what `claude --resume` prints, and exits 1, when the

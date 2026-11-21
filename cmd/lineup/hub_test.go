@@ -28,10 +28,10 @@ func TestAgentTabsAreDistinct(t *testing.T) {
 }
 
 func TestAgentArgvUnsetsAnEmptyConfigDir(t *testing.T) {
-	if got := strings.Join(agentArgv("", "/bin/claude", "lineup-plan"), " "); got != "env -u CLAUDE_CONFIG_DIR /bin/claude --name lineup-plan --remote-control lineup-plan" {
+	if got := strings.Join(agentArgv("", "/bin/claude", "lineup-plan"), " "); got != "env -u CLAUDE_CONFIG_DIR /bin/claude --name lineup-plan" {
 		t.Errorf("default profile: %s", got)
 	}
-	if got := strings.Join(agentArgv("/p/work", "/bin/claude", "lineup-work"), " "); got != "env CLAUDE_CONFIG_DIR=/p/work /bin/claude --name lineup-work --remote-control lineup-work" {
+	if got := strings.Join(agentArgv("/p/work", "/bin/claude", "lineup-work"), " "); got != "env CLAUDE_CONFIG_DIR=/p/work /bin/claude --name lineup-work" {
 		t.Errorf("named profile: %s", got)
 	}
 }
