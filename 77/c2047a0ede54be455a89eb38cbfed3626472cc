@@ -1,0 +1,101 @@
+cmd/lineup/hub.go
+  s_65a8d03459a8e3::t_c3858433fa0bea 573
+  s_65a8d03459a8e3::t_4841633e0bbf6a 258,280-301
+cmd/lineup/serve.go
+  s_65a8d03459a8e3::t_79401d612fba02 105-106,109-110,115
+GLOSSARY.md
+  s_65a8d03459a8e3::t_5d22cbc752619d 46,49-51
+  s_65a8d03459a8e3::t_4336aff9664348 52
+internal/board/capture.go
+  s_65a8d03459a8e3::t_c3858433fa0bea 379
+  s_65a8d03459a8e3::t_fc4fddc6590ba1 356,358,361
+cmd/lineup/wire_test.go
+  s_65a8d03459a8e3::t_af90bfeecb48dd 50,52,56,74
+  s_65a8d03459a8e3::t_b36769e60a3ba2 253-286
+internal/config/config_test.go
+  s_65a8d03459a8e3::t_7b8ee458891a64 710-774
+cmd/lineup/login_test.go
+  s_65a8d03459a8e3::t_af90bfeecb48dd 54-55,57
+cmd/lineup/main.go
+  s_65a8d03459a8e3::t_5d22cbc752619d 28,30
+docs/spec/mvp.md
+  s_65a8d03459a8e3::t_5d22cbc752619d 377-378
+internal/scheduler/scheduler_test.go
+  s_65a8d03459a8e3::t_af90bfeecb48dd 599,1385-1389,1393
+internal/config/config.go
+  s_65a8d03459a8e3::t_546a9bff028482 124-139,308-310,353-394,863-902
+  s_65a8d03459a8e3::t_20602022cc1de3 903
+cmd/lineup/service.go
+  s_65a8d03459a8e3::t_6ccce65d311c77 5,19,127-129,141,211-215,225-259
+  s_65a8d03459a8e3::t_8a6d3d61248d0c 260
+cmd/lineup/agent/CLAUDE.md
+  s_65a8d03459a8e3::t_4841633e0bbf6a 64
+internal/board/issues.go
+  s_65a8d03459a8e3::t_c3858433fa0bea 78-80,82,98-100,104-105,211
+internal/localissues/localissues.go
+  s_65a8d03459a8e3::t_98cb0284375a9e 110
+  s_65a8d03459a8e3::t_3973353f8a0ee7 8,109,133
+  s_65a8d03459a8e3::t_043cf2922cbf0e 2-3,34-36,38-39,48-55,59,77-84,86-91,93-94,97,99-107,122-123,126,138,142,145-146,152-154,158-160,171,175-176,193-195,197-199,205,209,232,236,259,263
+internal/scheduler/ports.go
+  s_65a8d03459a8e3::t_a9e3d72b56d898 7,191
+  s_65a8d03459a8e3::t_f23e457e4609e7 175,190,192-197,199-200
+  s_65a8d03459a8e3::t_f94d9a4988e3ad 184
+  s_65a8d03459a8e3::t_1235b4149750df 8,173-174,176-177,179,181,185-186,198,201,249-257
+  s_65a8d03459a8e3::t_e94f014b6cdec3 9
+  s_65a8d03459a8e3::t_f130c50504c802 202
+internal/localissues/localissues_test.go
+  s_65a8d03459a8e3::t_af90bfeecb48dd 48,141,168-179,182-183,188-233
+  s_65a8d03459a8e3::t_c1bea0d71d2493 234
+cmd/lineup/hub_test.go
+  s_65a8d03459a8e3::t_4841633e0bbf6a 43,86,469,488,507,525
+  s_65a8d03459a8e3::t_124e26fcaf78fb 496-506,508-524,526-532
+internal/board/issuekind.go
+  s_65a8d03459a8e3::t_c3858433fa0bea 135-140
+internal/scheduler/prefix_test.go
+  s_65a8d03459a8e3::t_895a1f501af6b3 1-97
+cmd/lineup/wire.go
+  s_65a8d03459a8e3::t_79401d612fba02 336-341,346,354,566-570,590
+  s_65a8d03459a8e3::t_0f9280257d8538 591
+internal/board/model.go
+  s_65a8d03459a8e3::t_c3858433fa0bea 61-62
+docs/spec/trackers.md
+  s_65a8d03459a8e3::t_5d22cbc752619d 62,64,72,91-124,153,173,175,189
+cmd/lineup/cli.go
+  s_65a8d03459a8e3::t_96ec7c364e5996 79-109,114
+  s_65a8d03459a8e3::t_e4db4941c8c161 15,24,66
+internal/scheduler/scheduler.go
+  s_65a8d03459a8e3::t_e94f014b6cdec3 27-32,34
+  s_65a8d03459a8e3::t_0ff88020c630f4 33
+cmd/lineup/agent/local.md
+  s_65a8d03459a8e3::t_4841633e0bbf6a 35
+  s_65a8d03459a8e3::t_0171eb1fa11495 17
+  s_65a8d03459a8e3::t_e4c2b7c91003fd 18
+internal/board/issues_test.go
+  s_65a8d03459a8e3::t_ae9f516064673c 6,446-459,461-462
+  s_65a8d03459a8e3::t_12e9b72a1fa81b 460
+  s_65a8d03459a8e3::t_89bf0cd2a29e73 463
+internal/scheduler/api.go
+  s_65a8d03459a8e3::t_f94d9a4988e3ad 417
+  s_65a8d03459a8e3::t_0ff88020c630f4 5,144-145
+  s_65a8d03459a8e3::t_e2d35e24023ccc 404-416,418-443
+  s_65a8d03459a8e3::t_0567d399440263 354-363,366-368
+cmd/lineup/service_test.go
+  s_65a8d03459a8e3::t_db725a09feed95 4
+  s_65a8d03459a8e3::t_3271f278b0e126 269-306
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "77c2047a0ede54be455a89eb38cbfed3626472cc",
+  "prompts": {},
+  "sessions": {
+    "s_65a8d03459a8e3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "939f4248-cfd2-4c85-bb37-a073562c9669",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
