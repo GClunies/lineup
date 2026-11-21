@@ -612,6 +612,27 @@ func TestARoundThatAReviewStartedTakesThePollsComments(t *testing.T) {
 	}
 }
 
+// A rerun of Responding is a round for people, so it takes the comments that
+// the budget left new. CI debug takes none.
+func TestARerunOfRespondingTakesTheNewComments(t *testing.T) {
+	b, task := userTaskIn(CIRunning)
+	task.Left.Responding = 0
+	b.Apply("T", comments(1))
+	if task.Flag != ReasonBudgetSpent {
+		t.Fatalf("flag %q, want budget spent", task.Flag)
+	}
+	b.Apply("T", Rerun{Stage: CIDebug})
+	if task.Take {
+		t.Fatal("a rerun of CI debug takes the comments")
+	}
+	b.Apply("T", Rerun{Stage: Responding})
+	b.Apply("T", comments(1))
+	b.Apply("T", Pushed{})
+	if effects, _ := b.Apply("T", comments(1)); task.Stage != ReadyToLand || effects != nil {
+		t.Fatalf("after the rerun: stage %s effects %v, want Ready to land", task.Stage, effects)
+	}
+}
+
 // A Worker can answer a comment with no change, for example a thanks needs none.
 func TestARoundThatAnswersEveryCommentNeedsNoPush(t *testing.T) {
 	b, task := userTaskIn(CIRunning)

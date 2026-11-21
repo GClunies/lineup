@@ -152,7 +152,6 @@ type Standing struct {
 	ScoreLow bool        `json:"score_low,omitempty"`
 	Threads  OpenThreads `json:"threads,omitzero"`
 	// Comments counts the Feedback that no Responding round has taken yet.
-	// The Task fills it in, because the Task keeps what its rounds took.
 	Comments int `json:"comments,omitempty"`
 	// Unapproved is true when the reviews that the bar asks for have not
 	// approved. Review keeps GitHub's decision for the text.
@@ -220,9 +219,9 @@ func (b LandingBar) Measure(f PRFacts) Standing {
 	return s
 }
 
-// NewFeedback counts the Feedback that came after taken. With
+// newFeedback counts the Feedback that came after taken. With
 // IgnoredThreads, people's comments gate no more than their threads do.
-func (b LandingBar) NewFeedback(f PRFacts, taken time.Time) int {
+func (b LandingBar) newFeedback(f PRFacts, taken time.Time) int {
 	if b.Threads == IgnoredThreads {
 		return 0
 	}
