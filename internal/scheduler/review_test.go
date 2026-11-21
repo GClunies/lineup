@@ -751,7 +751,7 @@ func TestFindingsForANewerHeadMeetTheContract(t *testing.T) {
 	}
 }
 
-var hunkPR7 = []string{"sh", "-c", `GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"`, "hunk", prURL7}
+var sidePR7 = []string{"sh", "-c", `for a in "$HOME/Applications/RexWeb.app" /Applications/RexWeb.app; do p=$a/Contents/Resources/rexweb-pane; [ -x "$p" ] && exec "$p" "$1"; done; GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"`, "side", prURL7}
 
 // waitSplit waits until Split has opened n blocks in all, and returns the last.
 func (h *harness) waitSplit(n int) split {
@@ -772,15 +772,15 @@ func (h *harness) waitNewTab(cmd, old string) tab {
 	return tabs[0]
 }
 
-func TestEachReviewWorkerTabOpensThePRInHunkBesideIt(t *testing.T) {
+func TestEachReviewWorkerTabOpensThePRBesideIt(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
 	started := h.waitTab("claude reviewing")
 	conversation := h.lastSpec().Conversation
 	pane := h.waitSplit(1)
-	if pane.anchor != started.BlockID || pane.window != started.WindowID || pane.cwd != "/repos/acme/data.review-pr-7" || !slices.Equal(pane.argv, hunkPR7) {
-		t.Fatalf("side pane = %+v, want hunk on %s beside block %s in the review worktree", pane, prURL7, started.BlockID)
+	if pane.anchor != started.BlockID || pane.window != started.WindowID || pane.cwd != "/repos/acme/data.review-pr-7" || !slices.Equal(pane.argv, sidePR7) {
+		t.Fatalf("side pane = %+v, want the PR %s beside block %s in the review worktree", pane, prURL7, started.BlockID)
 	}
 
 	h.rex.userCloses(started)
@@ -809,8 +809,8 @@ func TestEachReviewWorkerTabOpensThePRInHunkBesideIt(t *testing.T) {
 	eventually(t, "the Worker gone", func() bool { return !h.task("pr-7").Live })
 	h.review(prURL7)
 	reopened := h.waitNewTab("claude --resume "+conversation, resumed.BlockID)
-	if pane := h.waitSplit(3); pane.anchor != reopened.BlockID || !slices.Equal(pane.argv, hunkPR7) {
-		t.Fatalf("reopen: side pane = %+v, want hunk beside %s", pane, reopened.BlockID)
+	if pane := h.waitSplit(3); pane.anchor != reopened.BlockID || !slices.Equal(pane.argv, sidePR7) {
+		t.Fatalf("reopen: side pane = %+v, want the PR beside %s", pane, reopened.BlockID)
 	}
 	h.still("pr-7", lifecycle.ReviewReady)
 	if n := len(h.rex.allSplits()); n != 3 {
@@ -1037,7 +1037,7 @@ func TestRecoveryOpensAMissingSidePaneBesideALiveReviewWorker(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReviewTab(lifecycle.ReviewReady, "window:live", "block:live", "split:9"), func(d *Deps) { d.Rex = rex })
 	eventually(t, "a new side pane", func() bool { return len(rex.allSplits()) == 2 })
 	got := rex.allSplits()[1]
-	if got.anchor != "block:live" || got.cwd != "/repos/acme/data.review-pr-7" || !slices.Equal(got.argv, hunkArgv(prURL7)) {
+	if got.anchor != "block:live" || got.cwd != "/repos/acme/data.review-pr-7" || !slices.Equal(got.argv, sidePR7) {
 		t.Fatalf("split = %+v", got)
 	}
 	h.still("R-3", lifecycle.ReviewReady)
