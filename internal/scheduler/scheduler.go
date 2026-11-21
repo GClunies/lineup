@@ -33,8 +33,6 @@ type Deps struct {
 	Store        *store.Store
 	DefaultCap   int
 	PollInterval time.Duration
-	// AdHocSession is the Rex session for Tasks with no Issue.
-	AdHocSession string
 	// Queues are the review queues that each full poll fills, in the order
 	// that they pick PRs.
 	Queues []Queue

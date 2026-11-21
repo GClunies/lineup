@@ -633,7 +633,7 @@ func newHarness(t *testing.T, dbPath string, seed func(*store.Store), opts ...fu
 	}
 	d := Deps{
 		Rex: h.rex, GitHub: h.gh, Worktrees: h.wt, Harness: h.hn, Tracker: h.tr, Config: fakeConfig{},
-		Store: st, DefaultCap: 5, PollInterval: 20 * time.Millisecond, AdHocSession: "ad hoc", StateHome: h.stateHome,
+		Store: st, DefaultCap: 5, PollInterval: 20 * time.Millisecond, StateHome: h.stateHome,
 	}
 	for _, o := range opts {
 		o(&d)
@@ -1341,7 +1341,7 @@ func TestTaskWithNoIssueGetsAnAhID(t *testing.T) {
 	}
 }
 
-func TestTaskWithNoIssueOpensInTheAdHocSession(t *testing.T) {
+func TestTaskWithNoIssueOpensInItsRepoSession(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})
 	h.do(Request{Op: "add", Issue: "ENG-1"})
@@ -1357,8 +1357,8 @@ func TestTaskWithNoIssueOpensInTheAdHocSession(t *testing.T) {
 		}
 		return len(sessions) == 2
 	})
-	if s := sessions["ah-1 Fix map tooltip"]; s != "session:ad hoc" {
-		t.Errorf("text Task session = %q, want session:ad hoc (all: %v)", s, sessions)
+	if s := sessions["ah-1 Fix map tooltip"]; s != "session:web" {
+		t.Errorf("text Task session = %q, want session:web (all: %v)", s, sessions)
 	}
 	if s := sessions["ENG-1 Add billing model"]; s != "session:data" {
 		t.Errorf("Issue Task session = %q, want session:data", s)

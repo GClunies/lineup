@@ -43,15 +43,6 @@ func configPath() string {
 	return filepath.Join(home, ".config", "lineup", "config.toml")
 }
 
-// adHocSession refuses the Hub's name: the Scheduler removes a session after
-// its last Task, and that would take the Board and both agents with it.
-func adHocSession(name string) (string, error) {
-	if name == hubSession {
-		return "", fmt.Errorf("ad_hoc_session can't be %q, the Hub's session", hubSession)
-	}
-	return name, nil
-}
-
 // requireTools checks the hard dependencies before the Scheduler starts.
 func requireTools() (wtBin string, err error) {
 	if wtBin, err = worktree.Require(); err != nil {
@@ -85,10 +76,6 @@ func serve() error {
 		return err
 	}
 	cfg, err := config.Load(configPath())
-	if err != nil {
-		return err
-	}
-	adHoc, err := adHocSession(cfg.AdHocSession())
 	if err != nil {
 		return err
 	}
@@ -127,7 +114,6 @@ func serve() error {
 		Store:        st,
 		DefaultCap:   defaults.WIPCap,
 		PollInterval: defaults.PollInterval,
-		AdHocSession: adHoc,
 		Queues:       reviewQueues(cfg),
 		Slots:        cfg.ReviewSlots(),
 		StateHome:    xdgStateHome(),

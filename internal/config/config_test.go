@@ -97,12 +97,10 @@ func TestStartSkills(t *testing.T) {
 	}
 }
 
-func TestAdHocSession(t *testing.T) {
-	if got := load(t, "wip_cap = 3\n").AdHocSession(); got != "ad hoc" {
-		t.Errorf("default = %q", got)
-	}
-	if got := load(t, "ad_hoc_session = \"scratch\"\n").AdHocSession(); got != "scratch" {
-		t.Errorf("ad_hoc_session = %q", got)
+func TestAnAdHocSessionIsAnUnknownKey(t *testing.T) {
+	_, err := Load(write(t, filepath.Join(t.TempDir(), "c.toml"), "ad_hoc_session = \"scratch\"\n"))
+	if err == nil || !strings.Contains(err.Error(), "unknown keys: ad_hoc_session. An ad hoc Task opens in its Repo's session") {
+		t.Fatalf("err = %v, want unknown keys: ad_hoc_session with the hint", err)
 	}
 }
 

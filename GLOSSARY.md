@@ -39,7 +39,7 @@ One unit of work on the Board, in exactly one Repo, done by one Worker in one is
 _Avoid_: Job, thread, card, item
 
 **Ad hoc Task**:
-A Task with no Issue, made from the user's own words. Its ID has the form `ah-<n>`, and its tab opens in the ad hoc session instead of its Repo's session.
+A Task with no Issue, made from the user's own words. Its ID has the form `ah-<n>`, and its tab opens in its Repo's session.
 _Avoid_: Text Task, one-off
 
 **Ready**:
