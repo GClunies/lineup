@@ -288,6 +288,16 @@ func hunkArgv(url string) []string {
 	return []string{"sh", "-c", `GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"`, "hunk", url}
 }
 
+// hunkCommand is the program of the hunk pane beside the Task's Worker. A
+// build Task shows its worktree's changes since the worktree left the default
+// branch, or origin/main if the clone names no default branch.
+func (r *Record) hunkCommand() []string {
+	if r.Review != nil {
+		return hunkArgv(r.Review.URL)
+	}
+	return []string{"sh", "-c", `b=$(git symbolic-ref -q --short refs/remotes/origin/HEAD) || b=origin/main; exec hunk diff --watch "$(git merge-base HEAD "$b")"`, "hunk"}
+}
+
 // removeReviewWorktree never runs worktrunk: the review worktree is not
 // worktrunk's.
 func (s *Scheduler) removeReviewWorktree(ctx context.Context, r Record) {

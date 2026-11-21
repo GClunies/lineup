@@ -227,7 +227,8 @@ The rules for this layout:
 - After a Rex server restart, each pane of the `lineup` tab holds an idle shell. If the `BOARD` or `LINEUP` pane is an idle shell, `lineup` closes the tab and opens it again, and the agent continues its conversation. A pane that the user added does not count. If `lineup` runs in that tab, it stops with an error, because the close would end it. Run `lineup` in another tab.
 - The Hub session is named `my-lineup`. A Repo session is named after its folder, and the Scheduler removes it after its last Task. A Repo whose folder is named `my-lineup` gets the session `<parent>-my-lineup`, so no Repo session takes the Hub's name.
 - The Scheduler creates each Task tab with `rex window new -s <session> <label> --focus=false -- <command>`. The user stays on the Hub.
-- The setup tab also gets `--keep-open`, so it stays after worktrunk exits. The Task's first Worker opens in it with `rex split -b <setup block> --focus=false`. Then the Scheduler closes the setup block with `rex block close`, and the tab holds only the Worker. So the Task's tab appears once. If the user closed the setup tab, the Worker opens in a new tab.
+- The setup tab also gets `--keep-open`, so it stays after worktrunk exits. The Task's first Worker opens in it with `rex split -b <setup block> --focus=false`. Then the Scheduler closes the setup block with `rex block close`. So the Task's tab appears once. If the user closed the setup tab, the Worker opens in a new tab.
+- Each Worker tab holds a hunk pane to the right of the Worker, with half of the tab. The Scheduler opens it with `rex split -b <Worker block> --focus=false` after it closes the setup block. A build Task's pane shows the worktree's changes since it left the default branch. A review Task's pane shows the PR. The commands and rules are in **The hunk pane** in `docs/spec/reviews.md`.
 - A failed setup keeps its tab, so the user can read worktrunk's error. `lineup close` closes that tab. A rerun closes it before it opens a new setup tab.
 - The label is the Task ID, or the Issue identifier, and the title. Rex refuses a label longer than 128 characters, so a longer label stops at 127 characters and ends in `…`.
 - Each Task tab names its command. A tab without a command reports exit code 0 when its shell exits, whatever the real code is.
@@ -305,6 +306,13 @@ This sequence runs in the background. The Board shows only the Task as it change
 7. The Scheduler starts the Worker in the setup tab, from the absolute path of the Harness, with the Stage's model, effort, prompt, and contract.
    - The Worker command passes `--name <tab label> --remote-control <tab label>`. The tab label starts with the Task ID, so the user finds each Worker by its Task ID on claude.ai and on their phone. Each Hub agent gets the same flags, with the name `lineup-<tab>`: `lineup-work`, `lineup-plan`, and `lineup-review`.
    - `--remote-control` takes an optional value, so the command always gives it the name. Without a value, it takes the prompt as the name.
+8. The Scheduler closes the setup block. Then it opens a hunk pane to the right of the Worker, in the worktree, with this command:
+
+   ```
+   sh -c 'b=$(git symbolic-ref -q --short refs/remotes/origin/HEAD) || b=origin/main; exec hunk diff --watch "$(git merge-base HEAD "$b")"' hunk
+   ```
+
+   The pane shows the worktree's changes since it left the default branch, and updates as they change.
 
 Each Task keeps one Worker for its whole life. The Worker starts with `--session-id <conversation>`, and the Record keeps that conversation ID. Each agent Stage after Working types its prompt into the same Worker, in the same tab and worktree:
 
@@ -312,10 +320,10 @@ Each Task keeps one Worker for its whole life. The Worker starts with `--session
 - The Scheduler does not check the Stage contract while a prompt waits, because a `done` then belongs to the Stage before it.
 - A Worker whose tab is gone leaves the Task flagged `tab closed`. A prompt that is due then stays pending, and the flag names its Stage. Nothing opens a tab.
 - Only a Task's first Worker opens a tab with no ask from the user. A Task that has had a Worker never gets a tab from a prompt, whether or not it holds a conversation.
-- `lineup open <task>` restores the Worker. A live tab comes to the front. A Task with no tab gets a new tab in the Worker's folder that runs `claude --resume <conversation>`, and the flag clears. A prompt that waited arrives at the restored Worker's first `idle`. The restore types nothing else, because the Stage prompt reached the Worker before the tab closed.
+- `lineup open <task>` restores the Worker. A live tab comes to the front. A Task with no tab gets a new tab in the Worker's folder that runs `claude --resume <conversation>`, with a new hunk pane, and the flag clears. A prompt that waited arrives at the restored Worker's first `idle`. The restore types nothing else, because the Stage prompt reached the Worker before the tab closed.
 - A Task with no conversation, or whose conversation file is gone, gets a fresh Worker with the Stage prompt. The prompt says that this is a restart, and it quotes every steer that the user sent to the Task, in order.
 - `open` refuses a Queued Task, with `<task> has not started`. It refuses a Done Task that has no tab, with `<task> is Done and its worktree is gone`. It refuses a Task in a Stage that waits for others when no conversation is left to resume.
-- A Worker that exited and left its tab open, as for a review's hunk pane, has no live Worker. `open` closes that tab and opens the new one in its place, so the Task's window is the live tab.
+- A Worker that exited and left its tab open, as for a hunk pane, has no live Worker. `open` closes that tab and opens the new one in its place, so the Task's window is the live tab.
 - The Worker keeps the model and effort of Working. `skill` and `command` apply to each Stage, because the prompt carries them.
 
 ## Configuration
