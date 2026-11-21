@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 var policy = Policy{Budgets: Budgets{CIDebug: 3, Responding: 3}}
@@ -561,6 +562,116 @@ func TestARoundThatAnswersEveryThreadNeedsNoPush(t *testing.T) {
 	b.Apply("T", WorkerDone{ContractMet: false})
 	if task.Flag != ReasonStopped {
 		t.Fatalf("the zero bar: flag %q, want stopped", task.Flag)
+	}
+}
+
+// comments is an approved PR with passing checks and people's comments
+// outside threads, at the given minutes past noon.
+func comments(minutes ...int) PRSeen {
+	f := PRFacts{Head: "h", Decision: DecisionApproved}
+	for _, m := range minutes {
+		f.Feedback = append(f.Feedback, time.Date(2026, 11, 21, 12, m, 0, 0, time.UTC))
+	}
+	return PRSeen{f}
+}
+
+// A comment outside a thread starts one Responding round, in each Stage that
+// waits on the PR. The round takes the comment, so the next poll lands.
+func TestANewCommentStartsOneRespondingRound(t *testing.T) {
+	for _, from := range []Stage{CIRunning, InReview, ReadyToLand} {
+		b, task := userTaskIn(from)
+		effects, _ := b.Apply("T", comments(1))
+		if task.Stage != Responding || !reflect.DeepEqual(effects, []Effect{PromptWorker{Responding}}) || task.Left.Responding != 2 {
+			t.Fatalf("from %s: stage %s effects %v left %+v, want a Responding round", from, task.Stage, effects, task.Left)
+		}
+		if task.Take || task.Standing.Comments != 0 {
+			t.Fatalf("from %s: take %v comments %d, want the round to take the comment", from, task.Take, task.Standing.Comments)
+		}
+		b.Apply("T", Pushed{})
+		if effects, _ := b.Apply("T", comments(1)); task.Stage != ReadyToLand || effects != nil {
+			t.Fatalf("from %s: after the round: stage %s effects %v, want Ready to land", from, task.Stage, effects)
+		}
+		if effects, _ := b.Apply("T", comments(1, 2)); task.Stage != Responding || len(effects) != 1 || task.Left.Responding != 2 {
+			t.Fatalf("from %s: a second comment: stage %s effects %v left %+v, want a new round", from, task.Stage, effects, task.Left)
+		}
+	}
+}
+
+// A review edge starts its round before the poll's pr-seen, so the round
+// takes the comments that the same poll's pr-seen holds.
+func TestARoundThatAReviewStartedTakesThePollsComments(t *testing.T) {
+	b, task := userTaskIn(InReview)
+	b.Apply("T", ReviewCommented{})
+	if !task.Take {
+		t.Fatal("a round started with no take")
+	}
+	b.Apply("T", comments(1))
+	b.Apply("T", Pushed{})
+	if effects, _ := b.Apply("T", comments(1)); task.Stage != ReadyToLand || effects != nil {
+		t.Fatalf("stage %s effects %v, want Ready to land after one round", task.Stage, effects)
+	}
+}
+
+// A Worker can answer a comment with no change, for example a thanks needs none.
+func TestARoundThatAnswersEveryCommentNeedsNoPush(t *testing.T) {
+	b, task := userTaskIn(CIRunning)
+	b.Apply("T", comments(1))
+	b.Apply("T", comments(1))
+	b.Apply("T", WorkerDone{ContractMet: false})
+	if task.Stage != CIRunning || task.Flag != "" {
+		t.Fatalf("stage %s flag %q, want CI running", task.Stage, task.Flag)
+	}
+}
+
+// A review cycle's prompt names only the bot's review, so a person's comment
+// waits for a round of its own.
+func TestAReviewCycleLeavesPeoplesCommentsNew(t *testing.T) {
+	four, five := 4, 5
+	p := userPolicy
+	p.Bar.Bot = greptile(5)
+	b := NewBoard(5)
+	task := b.Add("T", p)
+	task.Stage = CIRunning
+	low := comments(1)
+	low.Facts.Score = &four
+	b.Apply("T", low)
+	if task.ReviewCycle() == nil || task.Standing.Comments != 1 {
+		t.Fatalf("cycle %+v comments %d, want a review cycle and the comment still new", task.ReviewCycle(), task.Standing.Comments)
+	}
+	b.Apply("T", Pushed{})
+	passed := comments(1)
+	passed.Facts.Score = &five
+	if b.Apply("T", passed); task.Stage != Responding || task.ReviewCycle() != nil || task.Left.Responding != 2 {
+		t.Fatalf("stage %s cycle %+v left %+v, want a Responding round for the comment", task.Stage, task.ReviewCycle(), task.Left)
+	}
+}
+
+// Comments on the PR of a Task stored before lineup read them are not news.
+// With IgnoredThreads, comments do not gate, as threads do not.
+func TestOldCommentsAndIgnoredThreadsStartNoRound(t *testing.T) {
+	b, task := userTaskIn(CIRunning)
+	task.Taken = nil
+	if b.Apply("T", comments(1, 2)); task.Stage != ReadyToLand {
+		t.Fatalf("a stored Task: stage %s, want Ready to land", task.Stage)
+	}
+	if b.Apply("T", comments(1, 2, 3)); task.Stage != Responding {
+		t.Fatalf("a stored Task's new comment: stage %s, want Responding", task.Stage)
+	}
+
+	b, task = taskIn(CIRunning)
+	if b.Apply("T", comments(1)); task.Stage != ReadyToLand {
+		t.Fatalf("the zero bar: stage %s, want Ready to land", task.Stage)
+	}
+}
+
+// A new comment past the Responding budget names itself in the flag, and the
+// flag clears when the user answers it by hand.
+func TestASpentRespondingBudgetNamesTheNewComments(t *testing.T) {
+	b, task := userTaskIn(CIRunning)
+	task.Left.Responding = 0
+	b.Apply("T", comments(1))
+	if task.Flag != ReasonBudgetSpent || task.FlagDetail != "1 new comment after 3 rounds" {
+		t.Fatalf("flag %q %q", task.Flag, task.FlagDetail)
 	}
 }
 

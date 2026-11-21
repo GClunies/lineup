@@ -407,6 +407,14 @@ func TestTheIntroNamesWhatThePollSaw(t *testing.T) {
 	if p := Prompt(lifecycle.Responding, info, "", ""); !strings.Contains(p, "Reviewers left feedback on the pull request for this Task. Respond to it. It has 2 open threads (1 bot).") {
 		t.Errorf("Responding with threads:\n%s", p)
 	}
+	info.Standing = lifecycle.Standing{Comments: 2}
+	if p := Prompt(lifecycle.Responding, info, "", ""); !strings.Contains(p, "Respond to it. It has 2 new comments from people outside review threads, in the PR conversation or in a review body.") || !strings.Contains(p, "--drafts") {
+		t.Errorf("Responding with comments:\n%s", p)
+	}
+	info.Standing = lifecycle.Standing{Conflict: true, Comments: 1}
+	if p := Prompt(lifecycle.Responding, info, "", ""); !strings.Contains(p, "Resolve it. Reviewers left feedback") || !strings.Contains(p, "It has 1 new comment from people") {
+		t.Errorf("Responding for a conflict and a comment:\n%s", p)
+	}
 	info.Standing = lifecycle.Standing{Conflict: true}
 	p = Prompt(lifecycle.Responding, info, "", "")
 	if !strings.Contains(p, "has a conflict with its base branch. Resolve it.") || strings.Contains(p, "Reviewers left feedback") {
@@ -500,7 +508,9 @@ func TestHasConversationFindsTheFileInAnyProjectFolder(t *testing.T) {
 func TestARespondingRoundForPeopleDraftsEachReplyThatIsNotAFix(t *testing.T) {
 	p := Prompt(lifecycle.Responding, task, "", "")
 	for _, want := range []string{
-		"Post a reply in a thread that a person opened only when the reply reports a fix",
+		"Post a reply to a person only when the reply reports a fix",
+		"For a comment outside a thread, reply in the PR conversation.",
+		"This rule covers the threads that people opened and people's comments outside threads.",
 		"push nothing and post nothing yet. Run `lineup ask --drafts <n> APP-1`",
 		"post it as you wrote it, post it with the user's edit, or make the fix instead",
 		"run `lineup ask --drafts <n> APP-1` again with the count that is left",
@@ -527,5 +537,37 @@ func TestARespondingRoundForPeopleDraftsEachReplyThatIsNotAFix(t *testing.T) {
 	conflict.Standing = lifecycle.Standing{Conflict: true}
 	if p := Prompt(lifecycle.Responding, conflict, "", ""); strings.Contains(p, "--drafts") {
 		t.Errorf("a round for a conflict alone drafts its replies:\n%s", p)
+	}
+}
+
+// A Worker pushes in the user's name, so it asks before a change that goes
+// past the Task: in CI debug, in a round for people, and in a review cycle.
+func TestEachFixingPromptAsksBeforeAChangeOutsideTheScope(t *testing.T) {
+	cycle := task
+	cycle.ReviewCycle = &lifecycle.ReviewCycle{ReviewGate: lifecycle.ReviewGate{Bot: "greptile", Title: "Greptile", MinScore: 5, TopScore: 5}, Score: 3}
+	failed := task
+	failed.Standing = lifecycle.Standing{Failed: []string{"test"}}
+	for name, p := range map[string]string{
+		"CI debug":            Prompt(lifecycle.CIDebug, task, "", ""),
+		"CI debug with names": Prompt(lifecycle.CIDebug, failed, "", ""),
+		"people":              Prompt(lifecycle.Responding, task, "", ""),
+		"review cycle":        Prompt(lifecycle.Responding, cycle, "", ""),
+	} {
+		for _, want := range []string{
+			"Before you make a change, check it against the intent of the pull request and the scope of the Task.",
+			"each suggestion from a person or a review bot before you apply or decline it",
+			"push nothing yet, not even your other changes",
+			"Run `lineup ask APP-1 \"<one question>\"`. In the question, name the change, who asked for it, and why it is outside the scope.",
+			"wait for the user's answer in this tab",
+		} {
+			if !strings.Contains(p, want) {
+				t.Errorf("%s: missing %q in\n%s", name, want, p)
+			}
+		}
+	}
+	for _, stage := range []lifecycle.Stage{lifecycle.Working, lifecycle.Reviewing} {
+		if p := Prompt(stage, task, "", ""); strings.Contains(p, "scope of the Task") {
+			t.Errorf("%s holds the scope rule:\n%s", stage, p)
+		}
 	}
 }

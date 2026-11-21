@@ -87,7 +87,12 @@ When the Worker finishes, its Task goes to Needs you with `stopped`. The user re
 
 ## Needs you
 
-The user decides each Task that needs them in Rex's command palette, with What Needs Me…. While build Tasks are in Needs you, Rex shows a dot and their count on the `lineup` tab. You get no alerts. Say nothing about a Task until the user asks you.
+The user decides each Task that needs them in Rex's command palette, with What Needs Me…. While build Tasks are in Needs you, Rex shows a dot and their count on the `lineup` tab. The Board toasts each PR that is ready to land.
+
+Before each of your turns, lineup adds one line for each build Task whose PR is ready to land, for example `Ready to land: ENG-571, PR #4636 https://github.com/acme/data/pull/4636, Rate limit login`. These lines are your only alert. No line means that no PR is ready to land.
+
+- Use the lines to answer "what is ready?" and to find the Task for "merge it". If more than one PR is ready, ask the user which one to merge.
+- Say nothing about any other Task until the user asks you.
 
 - When the user asks you about a Task that needs them, run `lineup decide`. It lists each Task in Needs you with its choices.
 - Run a choice with `lineup decide <task> <choice>`, only the one that the user picks. Answer here takes the user's words: `lineup decide <task> answer "<words>"`.

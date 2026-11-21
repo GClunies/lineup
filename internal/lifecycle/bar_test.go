@@ -249,7 +249,7 @@ func TestEachApprovalRule(t *testing.T) {
 func TestTheGapsComeInOrder(t *testing.T) {
 	low := 3
 	all := Standing{Conflict: true, Failed: []string{"test"}, Pending: 2, Draft: true, ScoreLow: true, Score: &low,
-		Threads: OpenThreads{Bot: 1, People: 1}, Unapproved: true, Review: DecisionChanges}
+		Threads: OpenThreads{Bot: 1, People: 1}, Comments: 2, Unapproved: true, Review: DecisionChanges}
 	b := userBar
 	b.Bot = greptile(5)
 	want := []struct {
@@ -262,6 +262,7 @@ func TestTheGapsComeInOrder(t *testing.T) {
 		{GapDraft, "draft"},
 		{GapScoreLow, "Greptile 3/5"},
 		{GapThreads, "2 open threads (1 bot)"},
+		{GapComments, "2 new comments"},
 		{GapApproval, "changes requested"},
 	}
 	clear := map[Gap]func(*Standing){
@@ -271,6 +272,7 @@ func TestTheGapsComeInOrder(t *testing.T) {
 		GapDraft:    func(s *Standing) { s.Draft = false },
 		GapScoreLow: func(s *Standing) { s.ScoreLow = false },
 		GapThreads:  func(s *Standing) { s.Threads = OpenThreads{} },
+		GapComments: func(s *Standing) { s.Comments = 0 },
 		GapApproval: func(s *Standing) { s.Unapproved = false },
 	}
 	s := all
@@ -300,10 +302,15 @@ func TestTheChecklistShowsWhatTheBarHolds(t *testing.T) {
 		{NoGap, "required checks passed"},
 		{NoGap, "Greptile 5/5"},
 		{GapThreads, "1 open thread (1 bot)"},
+		{NoGap, "comments answered"},
 		{NoGap, "required reviews approved"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("checklist %+v, want %+v", got, want)
+	}
+	s.Comments = 1
+	if got := b.Checklist(s)[3]; got != (Item{GapComments, "1 new comment"}) {
+		t.Errorf("a new comment's checklist line %+v", got)
 	}
 	if got := (LandingBar{}).Checklist(Standing{Conflict: true}); !reflect.DeepEqual(got, []Item{{GapConflict, "conflict"}, {NoGap, "checks passed"}, {NoGap, "no review required"}}) {
 		t.Errorf("the zero bar's checklist %+v", got)

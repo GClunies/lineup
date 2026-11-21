@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
 )
@@ -186,5 +187,58 @@ func TestReviewFactsCountOnlyPeopleOtherThanTheUser(t *testing.T) {
 		if f.Reviewed != c.reviewed || f.ChangesRequested != c.changes {
 			t.Errorf("%s as %s: reviewed %v changes %v, want %v %v", c.fixture, c.viewer, f.Reviewed, f.ChangesRequested, c.reviewed, c.changes)
 		}
+	}
+}
+
+func at(stamp string) time.Time {
+	t, err := time.Parse(time.RFC3339, stamp)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
+// feedback.json is cli/cli#12942, trimmed. maxbeizer wrote the PR, and
+// BagToad and maxbeizer wrote 4 comments in its conversation. Of its 8
+// reviews, Copilot's 2 come from a bot, 5 hold only thread replies with no
+// body, and 1 is maxbeizer's with a body.
+func TestFeedbackIsPeoplesCommentsOutsideThreads(t *testing.T) {
+	pr := load(t, "feedback")
+	if len(pr.Remarks) != 7 {
+		t.Fatalf("remarks %+v, want the 4 comments and the 3 reviews with a body", pr.Remarks)
+	}
+	if got, want := pr.Facts("maxbeizer").Feedback, []time.Time{at("2026-03-25T18:01:25Z"), at("2026-07-02T19:51:20Z")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("feedback to maxbeizer %v, want BagToad's 2 comments", got)
+	}
+	if got := pr.Facts("BagToad").Feedback; len(got) != 3 || !got[2].Equal(at("2026-05-06T19:42:25Z")) {
+		t.Errorf("feedback to BagToad %v, want maxbeizer's 2 comments and review body", got)
+	}
+}
+
+// A hidden comment asks for nothing. A request for changes asks for a change
+// with no body. A pending or a dismissed review asks for nothing.
+func TestFeedbackSkipsHiddenCommentsAndKeepsRequestsForChanges(t *testing.T) {
+	pr := loadWith(t, "feedback", func(pr map[string]any) {
+		for _, n := range pr["remarks"].(map[string]any)["nodes"].([]any) {
+			n.(map[string]any)["isMinimized"] = true
+		}
+		reviews := pr["reviews"].(map[string]any)["nodes"].([]any)
+		reviews[1].(map[string]any)["state"] = "CHANGES_REQUESTED"
+		reviews[6].(map[string]any)["state"] = "DISMISSED"
+		reviews[2].(map[string]any)["state"] = "PENDING"
+		reviews[2].(map[string]any)["body"] = "draft text"
+	})
+	if got, want := pr.Facts("BagToad").Feedback, []time.Time{at("2026-05-01T18:34:29Z")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("feedback %v, want only the request for changes", got)
+	}
+}
+
+// A gated bot's comments are its own review, which the gate counts.
+func TestAGatedBotWritesNoFeedback(t *testing.T) {
+	pr := load(t, "feedback")
+	pr.Remarks = append(pr.Remarks, Remark{Author: "greptile-apps", At: at("2026-11-01T00:00:00Z")})
+	pr.Bot = "greptile"
+	if got := pr.Facts("maxbeizer").Feedback; len(got) != 2 {
+		t.Errorf("feedback %v, want BagToad's 2 comments only", got)
 	}
 }

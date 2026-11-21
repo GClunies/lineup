@@ -24,6 +24,7 @@ var clientCommands = map[string]func(c scheduler.Client, args []string, out io.W
 	"review":  cmdReview,
 	"reviews": cmdReviews,
 	"ls":      cmdLs,
+	"ready":   cmdReady,
 	"show":    cmdShow,
 	"decide":  cmdDecide,
 	"steer":   cmdSteer,
@@ -273,6 +274,25 @@ func cmdLs(c scheduler.Client, args []string, out io.Writer) error {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.Group, t.Stage, t.Repo, t.Title, t.Note)
 	}
 	return tw.Flush()
+}
+
+// cmdReady names each build Task whose PR waits only for the user's merge,
+// one line each, and prints nothing when there is none. The Orchestrator's
+// prompt hook runs it, so the Orchestrator knows these Tasks on each turn.
+func cmdReady(c scheduler.Client, args []string, out io.Writer) error {
+	if _, err := parse("ready", "", args, nil); err != nil {
+		return err
+	}
+	var v scheduler.BoardView
+	if err := c.Do(scheduler.Request{Op: "ls"}, &v); err != nil {
+		return err
+	}
+	for _, t := range v.Tasks {
+		if t.ReadyToLand() {
+			fmt.Fprintf(out, "Ready to land: %s, PR #%d %s, %s\n", t.ID, t.PRNumber, t.PRURL, t.Title)
+		}
+	}
+	return nil
 }
 
 func cmdShow(c scheduler.Client, args []string, out io.Writer) error {

@@ -1,5 +1,7 @@
 # The Orchestrator gets no alerts
 
+[ADR 0031](0031-the-orchestrator-learns-each-pr-that-is-ready-to-land.md) changes one part: the Orchestrator learns each PR that is ready to land, before each of its turns, and the Board toasts it.
+
 The Orchestrator no longer watches for alerts or asks the user about them. `lineup watch` is gone, and the Hub starts the Orchestrator with no first message. The user decides each Task in Needs you with What Needs Me… in Rex's command palette, as [ADR 0028](0028-rex-asks-the-needs-you-choices.md) and [ADR 0029](0029-the-palette-runs-everyday-lineup-commands.md) describe. We chose this because each alert question cost an agent turn, and the user had to go to the `lineup` tab to answer it. The palette asks the same choices from any tab, on any device, with no agent turn.
 
 ## Considered Options

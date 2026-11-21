@@ -75,11 +75,16 @@ lineup has no planning Stage. If the work needs a plan or the user's approval fi
 | Responding, `threads = "resolved"` | Resolve each open review thread after you address it. Push the changes that the threads ask for. If the PR has a conflict, push a merge of the base branch that resolves it. |
 | Responding, `threads = "ignored"` | Push the changes and reply to each open review thread. If the PR has a conflict, push a merge of the base branch that resolves it. |
 
-The `threads` key of the [Landing bar](#landing-bar) picks the Responding contract. The CI debug prompt names the gating checks that failed and the optional checks that failed. It tells the Worker to leave the optional checks.
+The `threads` key of the [Landing bar](#landing-bar) picks the Responding contract. The CI debug prompt names the gating checks that failed and the optional checks that failed. It tells the Worker to leave the optional checks. The Responding prompt counts the open review threads and the new [Feedback](#feedback).
+
+A Worker pushes and posts in the user's name, so the CI debug and Responding prompts hold two rules:
+
+- **The reply rule** ([ADR 0026](../adr/0026-the-user-approves-every-reply-that-is-not-a-fix.md)). A Worker posts a reply to a person only when the reply reports a fix. It replies in the person's thread, or in the PR conversation for Feedback. Feedback that asks for nothing, for example thanks, needs no reply. Every other reply to a person is a Draft reply. A review cycle has no reply rule, because a reply to a bot speaks to no colleague.
+- **The scope rule.** Before a Worker makes a change, it checks the change against the intent of the PR and the scope of the Task. The rule covers each change that a CI fix needs, and each suggestion from a person or a review bot that the Worker would apply or decline. If a change goes against that intent or outside that scope, or the Worker is not sure, the user decides. The Worker pushes nothing yet, not even its other changes, and posts nothing about that change. It runs `lineup ask <task> "<question>"`, which names the change, who asked for it, and why it is outside the scope. The Task then shows `question` in Needs you. When the user answers in the Worker's tab, the Worker does what the user says, then pushes.
 
 If a Worker reports `done` and the contract output is missing, the Task gets the Needs you flag with the reason `stopped`. A Worker often stops to show the user a plan or to ask a question. The flag clears when the Worker starts working again, for example after the user replies. The Scheduler does not retry the Stage.
 
-A Responding round that pushes nothing meets its contract when the latest poll saw every review thread done, no conflict, and no review bot score below the minimum. Then the Task goes to CI running, and the poll settles it on its Landing bar. For example, a Worker can reply "won't fix" and resolve each thread. This rule needs a bar that holds threads. With `threads = "ignored"`, a round with no push gets `stopped`.
+A Responding round that pushes nothing meets its contract when the latest poll saw every review thread done, no new Feedback, no conflict, and no review bot score below the minimum. Then the Task goes to CI running, and the poll settles it on its Landing bar. For example, a Worker can reply "won't fix" and resolve each thread. This rule needs a bar that holds threads. With `threads = "ignored"`, a round with no push gets `stopped`.
 
 ### Transitions
 
@@ -120,7 +125,8 @@ The reducer takes the first gap in this order. The order is one table in `intern
 | 5 | The review bot has not scored the head commit | `waiting for Greptile` | CI running |
 | 6 | The review bot's score is below the minimum | `Greptile 4/5` | Responding, for one review cycle |
 | 7 | A review thread is not done | `2 open threads (1 bot)` | Responding. If only bots opened the open threads and the review bot's score passes, the round is a review cycle. Otherwise it is a Responding round. |
-| 8 | The reviews that the bar asks for have not approved | `needs approval`, `changes requested` | In review |
+| 8 | A person's [Feedback](#feedback) is new | `2 new comments` | Responding, for one Responding round |
+| 9 | The reviews that the bar asks for have not approved | `needs approval`, `changes requested` | In review |
 | | No gap | | Ready to land |
 
 The rules for each item:
@@ -133,6 +139,7 @@ The rules for each item:
 - The poll reads the first 50 review threads. A PR with more threads does not meet the bar while the bar holds threads. The Board shows "more threads than lineup reads", and the unread threads start a Responding round, because people can have opened them.
 - With `approvals = "required"`, GitHub's `reviewDecision` must not be `REVIEW_REQUIRED` or `CHANGES_REQUESTED`. With `approvals = "requested"`, the PR also must have no open review request, unless the decision is `APPROVED`.
 - The review bot items apply only to a Task with a [review bot gate](#review-bot-gate).
+- The Feedback item follows the `threads` key. With `threads = "ignored"`, Feedback never gates.
 
 The detail pane and `lineup show` print the bar as a checklist, for example:
 
@@ -140,11 +147,24 @@ The detail pane and `lineup show` print the bar as a checklist, for example:
 Landing bar
   ✓ required checks passed
   ✗ 1 open thread (1 bot)
+  ✓ comments answered
   ✓ required reviews approved
   ! optional checks failed: govulncheck
 ```
 
 A Task keeps the Landing bar that it had at Intake. A Task stored before the Landing bar keeps the rules that lineup had then: every check gates, threads never gate, and every requested reviewer must approve.
+
+### Feedback
+
+Feedback is a comment that a person other than the user wrote on a PR outside a review thread. See [ADR 0032](../adr/0032-a-responding-round-takes-the-feedback-before-it.md).
+
+- Feedback is a comment in the PR conversation, or a review with a body or with a request for changes.
+- A comment that a bot account wrote is not Feedback. A hidden comment is not Feedback. A review with no body and no request for changes holds only thread comments, which the threads item counts. A pending or a dismissed review is not Feedback.
+- The poll reads the last 30 PR comments and the last 30 reviews.
+- Each Responding round for people takes the Feedback that the first poll after the round's start sees. Feedback after that is new. A review edge starts a round before the poll's `pr-seen`, so that `pr-seen` is the poll that the round takes.
+- A review cycle takes no Feedback, because its prompt names only the bot's review. Then the new Feedback starts its own round.
+- A Task stored before lineup read Feedback takes the Feedback of its first poll, so the old comments on its PR are not new.
+- With the Responding budget spent, new Feedback keeps the `budget spent` flag. A comment has no resolve, so the user runs the Stage again, hides the comment, or closes the Task.
 
 ### Review bot gate
 
@@ -154,7 +174,7 @@ A Repo can have a review bot gate, which adds the review bot's score to the Land
 - Only a comment by Greptile's GitHub App counts. The PR body and comments by other authors never give a score.
 - Greptile's check run passes at a low score too, so the score is an item of the Landing bar and not a check.
 - A PR whose gating checks passed stays in CI running until the bot scores its head commit.
-- A score below the minimum starts a Responding round, which spends one review cycle. The Worker prompt names the score and the minimum. It tells the Worker to address Greptile's unresolved review comments and the suggestions in its summary, and to resolve each thread that it addressed.
+- A score below the minimum starts a Responding round, which spends one review cycle. The Worker prompt names the score and the minimum. It tells the Worker to address Greptile's unresolved review comments and the suggestions in its summary, and to resolve each thread that it addressed. The scope rule applies to each suggestion: the Worker asks the user before it applies or declines one that goes outside the Task's scope.
 - If only bots opened the open threads and the score passes, the Responding round is a review cycle too. Then the bot's threads do not spend the Responding rounds that people's reviews need.
 - With no review cycle left, the Task gets the flag `budget spent`, with a detail such as `Greptile 4/5 after 5 cycles` or `1 open thread (1 bot) after 3 cycles`.
 - Greptile's own PR reviews do not send `review-commented`. The Landing bar decides each round.
@@ -195,6 +215,7 @@ These spend the Responding rounds:
 
 - people's reviews
 - open threads, when a person opened one of them
+- new Feedback
 - a merge conflict
 
 A low review bot score spends a review cycle. Open threads that only bots opened, on a score that passes, spend a review cycle too. A PR with no review bot gate has no score, so its bot threads spend Responding rounds.
@@ -276,6 +297,7 @@ The GraphQL query reads these fields of each PR:
 - `reviewDecision`, `latestReviews`, `reviewRequests`, `commits`, `mergeStateStatus`, and `isDraft`
 - the base branch's `refUpdateRule.requiredStatusCheckContexts` and its `rules`
 - the first 50 `reviewThreads`, with the author of each thread's first comment and of its last 5 comments
+- the last 30 PR comments, with each author, time, and `isMinimized`, and the last 30 `reviews`, with each author, state, body, and time. lineup reads Feedback from them.
 
 For a Task with a review bot gate, it also reads the author and body of the first 20 PR comments.
 
@@ -545,6 +567,7 @@ The Orchestrator has four jobs:
 |---|---|---|
 | Intake | "start ENG-123", "fix the flaky test in data" | `lineup add ENG-123`, `lineup add --repo data "<text>"` |
 | Status | "what needs me?" | `lineup decide` |
+| Status | "what is ready?" | The ready lines that its hook adds, from `lineup ready` |
 | Steer | "tell ENG-592 to use approach B" | `lineup steer <task> "<text>"` |
 | Override | "raise the cap to 6", "re-run CI debug" | `lineup cap 6`, `lineup rerun <task> ci_debug` |
 | Restore | "bring back ENG-592's tab" | `lineup open <task>` |
@@ -559,11 +582,13 @@ A Task alerts when it enters the Needs you group or Done. It alerts again only a
 
 | Part | What it does |
 |---|---|
-| The Board | It prints an OSC 777 notification for each alert of a build Task that reaches Done. Rex shows it as a desktop toast for the Board's pane. A click on the toast opens that pane. A build Task that enters Needs you gets no toast, because the status record reports it. The view that the Board opens on makes no toast. |
+| The Board | It prints an OSC 777 notification for each alert of a build Task that reaches Ready to land or Done. Rex shows it as a desktop toast for the Board's pane. A click on the toast opens that pane. The toast names the Task and the PR, for example `ENG-571 #4636 ✓ approved · ready to land \| Rate limit login`. A build Task that enters Needs you for a flag gets no toast, because the status record reports it. A Task in Ready to land with a flag gets no toast either. The view that the Board opens on makes no toast. |
 | The status record | While a build Task is in Needs you, the Board keeps one Rex program status record (OSC 7501) on its pane. The record has `state=blocked` and `kind=question`. Its message names the count, for example `2 Tasks need you`. The count is the one that the header shows. Rex shows a dot and the message on the `lineup` tab. The Board sends the record at start, and again each time the set of those Tasks changes. A Task changes the set when it joins or leaves Needs you, or when its Stage or its flag changes. A review Task does not count. When no build Task is in Needs you, the Board clears the record. Rex drops the record when the Board quits. |
 | The free slot toast | When a build Task alerts for Done and the started build Tasks are fewer than the WIP cap, the Board sends one more toast that names the first Ready row, for example `1 slot free, next ENG-611: Move the retry job`. A Board view sends at most one such toast. With no Ready row, it sends none. The Board does not start the Issue. |
 
-The Orchestrator gets no alert, and it asks the user nothing about a Task. The user decides each Task in Needs you with What Needs Me… in Rex's palette. For a Done Task with a tab, the user picks Close a Task… or Archive Done Tasks…. When the user asks the Orchestrator about a Task that needs them, it runs `lineup decide`, and then the choice that the user picks.
+The Orchestrator's one alert is each PR that is ready to land. Its `UserPromptSubmit` hook runs `lineup ready` before each turn. The command prints one line for each build Task in Ready to land with no flag, for example `Ready to land: ENG-571, PR #4636 https://github.com/acme/data/pull/4636, Rate limit login`. It prints nothing when no PR is ready. The hook costs no agent turn, so the Orchestrator learns a ready PR at the user's next message. See [ADR 0031](../adr/0031-the-orchestrator-learns-each-pr-that-is-ready-to-land.md).
+
+The Orchestrator asks the user nothing about a Task on its own. It uses the ready lines to answer "what is ready?" and to find the Task for "merge it". The user decides each Task in Needs you with What Needs Me… in Rex's palette. For a Done Task with a tab, the user picks Close a Task… or Archive Done Tasks…. When the user asks the Orchestrator about a Task that needs them, it runs `lineup decide`, and then the choice that the user picks.
 
 ### Choices in Rex's palette
 
@@ -672,3 +697,4 @@ These facts come from probes on this machine: throwaway Rex sessions, and `gh ap
 | A viewer with read access can read the required checks of classic branch protection in `refUpdateRule` | The poll's GraphQL query against cli/cli#13013: `requiredStatusCheckContexts` names the three `build (…)` checks. `internal/github/testdata/classic_protection.json` is a trimmed copy. |
 | `refUpdateRule` does not show a ruleset's required checks. `rules` does, by branch name, with no PR number. | The poll's GraphQL query against GClunies/lineup#9: `refUpdateRule` is `null`, and an `ACTIVE` `REQUIRED_STATUS_CHECKS` rule names `test`. `internal/github/testdata/ruleset.json`. |
 | A review thread's first comment tells a bot from a person: its author's `__typename` is `Bot` or `User` | The poll's GraphQL query against cli/cli#12942: 7 threads that bots opened and 4 that users opened. `internal/github/testdata/threads.json`. |
+| A reply in a review thread makes a `COMMENTED` review with an empty body. A review bot's review has a body and the author `__typename` `Bot`. | The poll's GraphQL query against cli/cli#12942: of 8 reviews, 5 had an empty body, and Copilot's 2 had `Bot` authors. `internal/github/testdata/feedback.json` is a trimmed copy. |

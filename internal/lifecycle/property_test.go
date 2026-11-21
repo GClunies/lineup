@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+	"time"
 
 	"pgregory.net/rapid"
 )
@@ -96,6 +97,9 @@ var gapsOn = []func(*PRFacts){
 	func(f *PRFacts) { f.Threads = append(f.Threads, Thread{Bot: true}) },
 	func(f *PRFacts) { f.Threads = append(f.Threads, Thread{}) },
 	func(f *PRFacts) { f.Decision = DecisionRequired },
+	func(f *PRFacts) {
+		f.Feedback = append(slices.Clone(f.Feedback), time.Date(2026, 11, 21, 12, len(f.Feedback), 0, 0, time.UTC))
+	},
 }
 
 func withGap(f PRFacts, add func(*PRFacts)) PRFacts {

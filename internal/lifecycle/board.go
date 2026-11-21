@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 )
 
 var (
@@ -97,6 +98,15 @@ type Task struct {
 	// pr-seen clears such a flag once its gap closes. A budget spent on a
 	// review edge stays until the user acts.
 	BarFlag bool `json:"bar_flag,omitempty"`
+	// Taken is the time of the newest Feedback that a Responding round for
+	// people took. Feedback after it is new. It is nil in a Task stored
+	// before lineup read Feedback, and its first poll sets it, so that the
+	// comments of an older PR do not count as new.
+	Taken *time.Time `json:"taken,omitempty"`
+	// Take is true when a Responding round for people started, and the next
+	// poll has not set Taken yet. A review edge starts a round before the
+	// poll's pr-seen, so the facts of that pr-seen are the ones the round takes.
+	Take bool `json:"take,omitempty"`
 }
 
 // ReviewCycle is the review cycle that the Task is in, or nil.
@@ -132,9 +142,10 @@ func NewBoard(cap int) *Board {
 	return &Board{Cap: cap, Slots: map[string]int{}, Tasks: map[string]*Task{}}
 }
 
-// Add puts a Queued build Task on the Board.
+// Add puts a Queued build Task on the Board. Its PR has no Feedback yet, so
+// each comment counts as new.
 func (b *Board) Add(id string, p Policy) *Task {
-	t := &Task{ID: id, Stage: Queued, Policy: p, Left: p.Budgets}
+	t := &Task{ID: id, Stage: Queued, Policy: p, Left: p.Budgets, Taken: &time.Time{}}
 	b.Tasks[id] = t
 	return t
 }
@@ -317,10 +328,15 @@ func (t *Task) observe(s Signal) []Effect {
 		if t.Flag == ReasonPRClosed {
 			t.flag("", "")
 		}
-		t.Standing = t.Policy.Bar.Measure(s.Facts)
-		if t.settles() {
-			return t.settle()
+		t.measure(s.Facts)
+		if !t.settles() {
+			return nil
 		}
+		effects := t.settle()
+		if t.Take {
+			t.measure(s.Facts)
+		}
+		return effects
 
 	case ReviewAdditionalAuthors:
 		if t.Stage == InReview {
@@ -360,6 +376,17 @@ func (t *Task) observe(s Signal) []Effect {
 		}
 	}
 	return nil
+}
+
+// measure keeps the PR's Standing. A round that started takes the Feedback
+// that the facts hold.
+func (t *Task) measure(f PRFacts) {
+	t.Standing = t.Policy.Bar.Measure(f)
+	if t.Taken == nil || t.Take {
+		taken := latest(f)
+		t.Taken, t.Take = &taken, false
+	}
+	t.Standing.Comments = t.Policy.Bar.NewFeedback(f, *t.Taken)
 }
 
 // lostTab flags a Task in an agent Stage whose Worker has no tab. A flag that
@@ -407,6 +434,7 @@ var routes = [...]func(*Task) []Effect{
 	GapScoreDue: func(t *Task) []Effect { return t.hold(ReasonNoBotReview) },
 	GapScoreLow: (*Task).reviewCycle,
 	GapThreads:  (*Task).answer,
+	GapComments: func(t *Task) []Effect { return t.spend(respondingLoop, t.why()) },
 	GapApproval: (*Task).await,
 }
 
@@ -456,13 +484,13 @@ func (t *Task) land() []Effect {
 }
 
 // answered reports whether a Responding round that pushed nothing did its
-// work: a poll saw the PR, the bar holds threads, and no thread, conflict, or
-// low score is open. The zero bar ignores threads, so its Tasks keep the
-// stopped flag.
+// work: a poll saw the PR, the bar holds threads, no thread, conflict, or low
+// score is open, and no comment is new. The zero bar ignores threads, so its
+// Tasks keep the stopped flag.
 func (t *Task) answered() bool {
 	s := t.Standing
 	return t.Stage == Responding && s.Head != "" && t.Policy.Bar.Threads != IgnoredThreads &&
-		!s.Threads.Open() && !s.Conflict && !s.ScoreLow
+		!s.Threads.Open() && !s.Conflict && !s.ScoreLow && s.Comments == 0
 }
 
 // loop is a Loop budget and the agent Stage that spends it.
@@ -504,12 +532,17 @@ func (t *Task) spend(l loop, why string) []Effect {
 func (t *Task) reviewCycle() []Effect {
 	effects := t.spend(reviewCycleLoop, t.why())
 	score := *t.Standing.Score
-	t.BotScore = &score
+	// The cycle's prompt names the bot's review, so people's comments wait
+	// for a round of their own.
+	t.BotScore, t.Take = &score, false
 	return effects
 }
 
+// startAgent enters stage and prompts the Worker. A Responding round takes
+// people's Feedback, so the next poll marks it as taken.
 func (t *Task) startAgent(stage Stage) []Effect {
 	t.enter(stage)
+	t.Take = stage == Responding && t.Kind == KindBuild
 	return []Effect{PromptWorker{stage}}
 }
 

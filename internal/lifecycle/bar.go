@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 // LandingBar is what a build Task's PR must meet for the Task to be in Ready
@@ -89,6 +90,10 @@ type PRFacts struct {
 	// ThreadsOver is true when the PR has more review threads than the poll
 	// reads.
 	ThreadsOver bool
+	// Feedback holds the time of each comment that a person other than the
+	// user wrote outside a review thread: a comment in the PR conversation,
+	// or a review with a body or a request for changes.
+	Feedback []time.Time
 	// Decision is GitHub's reviewDecision. It counts only the reviews that
 	// the base branch requires.
 	Decision Decision
@@ -146,6 +151,9 @@ type Standing struct {
 	Score    *int        `json:"score,omitempty"`
 	ScoreLow bool        `json:"score_low,omitempty"`
 	Threads  OpenThreads `json:"threads,omitzero"`
+	// Comments counts the Feedback that no Responding round has taken yet.
+	// The Task fills it in, because the Task keeps what its rounds took.
+	Comments int `json:"comments,omitempty"`
 	// Unapproved is true when the reviews that the bar asks for have not
 	// approved. Review keeps GitHub's decision for the text.
 	Unapproved bool     `json:"unapproved,omitempty"`
@@ -212,6 +220,32 @@ func (b LandingBar) Measure(f PRFacts) Standing {
 	return s
 }
 
+// NewFeedback counts the Feedback that came after taken. With
+// IgnoredThreads, people's comments gate no more than their threads do.
+func (b LandingBar) NewFeedback(f PRFacts, taken time.Time) int {
+	if b.Threads == IgnoredThreads {
+		return 0
+	}
+	n := 0
+	for _, at := range f.Feedback {
+		if at.After(taken) {
+			n++
+		}
+	}
+	return n
+}
+
+// latest is the time of the newest Feedback, or the zero time.
+func latest(f PRFacts) time.Time {
+	var out time.Time
+	for _, at := range f.Feedback {
+		if at.After(out) {
+			out = at
+		}
+	}
+	return out
+}
+
 // reviewStates lists where a PR can stand with its reviewers, strongest first.
 // The first row that holds decides the text on the board.
 var reviewStates = []struct {
@@ -254,6 +288,7 @@ const (
 	GapScoreDue
 	GapScoreLow
 	GapThreads
+	GapComments
 	GapApproval
 )
 
@@ -272,6 +307,7 @@ var gaps = []struct {
 	{GapScoreDue, func(s Standing) bool { return s.ScoreDue }, func(b LandingBar, _ Standing) string { return "waiting for " + b.Bot.Title }},
 	{GapScoreLow, func(s Standing) bool { return s.ScoreLow }, func(b LandingBar, s Standing) string { return b.Bot.ScoreText(*s.Score) }},
 	{GapThreads, func(s Standing) bool { return s.Threads.Open() }, func(_ LandingBar, s Standing) string { return s.Threads.String() }},
+	{GapComments, func(s Standing) bool { return s.Comments > 0 }, func(_ LandingBar, s Standing) string { return count(s.Comments, "new comment") }},
 	{GapApproval, func(s Standing) bool { return s.Unapproved }, func(_ LandingBar, s Standing) string {
 		if s.Review == DecisionChanges {
 			return "changes requested"
@@ -370,6 +406,7 @@ func (b LandingBar) Checklist(s Standing) []Item {
 	}
 	if b.Threads != IgnoredThreads {
 		item("review threads done", GapThreads)
+		item("comments answered", GapComments)
 	}
 	approved := map[ApprovalRule]string{RequestedApprovals: "reviews approved", RequiredApprovals: "required reviews approved"}[b.Approvals]
 	if s.Review == DecisionNone {

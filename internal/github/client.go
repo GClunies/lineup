@@ -63,6 +63,18 @@ type PR struct {
 	Threads   []Thread
 	// ThreadsOver is true when the PR has more review threads than the poll reads.
 	ThreadsOver bool
+	// Remarks are the newest comments outside review threads that can ask
+	// for a change, by anyone: each PR conversation comment that is not
+	// hidden, and each review with a body or a request for changes.
+	Remarks []Remark
+}
+
+// Remark is one comment outside a review thread. Bot is true when a bot
+// account wrote it.
+type Remark struct {
+	Author string
+	Bot    bool
+	At     time.Time
 }
 
 // Client runs the gh CLI. Bin is the path to gh, and "gh" when empty.
@@ -115,6 +127,8 @@ fragment F on PullRequest {
     opener: comments(first: 1) { nodes { author { __typename login } } }
     recent: comments(last: 5) { nodes { author { login } } }
   } }
+  remarks: comments(last: 30) { nodes { author { __typename login } createdAt isMinimized } }
+  reviews(last: 30) { nodes { author { __typename login } state body submittedAt } }
 }`
 
 // botComments reads the comments that hold a review bot's summary. The bot
@@ -270,6 +284,55 @@ type gqlPR struct {
 	Comments struct {
 		Nodes []gqlComment `json:"nodes"`
 	} `json:"comments"`
+	Remarks struct {
+		Nodes []struct {
+			Author      *gqlAuthor `json:"author"`
+			CreatedAt   time.Time  `json:"createdAt"`
+			IsMinimized bool       `json:"isMinimized"`
+		} `json:"nodes"`
+	} `json:"remarks"`
+	Reviews struct {
+		Nodes []struct {
+			Author      *gqlAuthor `json:"author"`
+			State       string     `json:"state"`
+			Body        string     `json:"body"`
+			SubmittedAt time.Time  `json:"submittedAt"`
+		} `json:"nodes"`
+	} `json:"reviews"`
+}
+
+type gqlAuthor struct {
+	Typename string `json:"__typename"`
+	Login    string `json:"login"`
+}
+
+// remark is a comment's author and time. A deleted account has no author.
+func remark(a *gqlAuthor, at time.Time) Remark {
+	r := Remark{At: at}
+	if a != nil {
+		r.Author, r.Bot = a.Login, a.Typename == "Bot"
+	}
+	return r
+}
+
+// remarks keeps the comments that can ask for a change. A hidden comment asks
+// for nothing. A review with no body and no request for changes holds only
+// thread comments, which the threads count. A pending review is not posted.
+func (g gqlPR) remarks() []Remark {
+	var out []Remark
+	for _, c := range g.Remarks.Nodes {
+		if !c.IsMinimized {
+			out = append(out, remark(c.Author, c.CreatedAt))
+		}
+	}
+	for _, r := range g.Reviews.Nodes {
+		switch {
+		case r.State == "PENDING" || r.State == "DISMISSED":
+		case strings.TrimSpace(r.Body) != "" || r.State == "CHANGES_REQUESTED":
+			out = append(out, remark(r.Author, r.SubmittedAt))
+		}
+	}
+	return out
 }
 
 // gqlContext is one check on a commit: a CheckRun or a StatusContext.
@@ -338,6 +401,7 @@ func (g gqlPR) toPR() *PR {
 	pr.ChecksDue = len(pr.CheckRuns) == 0 && g.BaseRef != nil && g.BaseRef.Target.StatusCheckRollup != nil
 	pr.Threads = g.threads()
 	pr.ThreadsOver = g.ReviewThreads.TotalCount > len(g.ReviewThreads.Nodes)
+	pr.Remarks = g.remarks()
 	return pr
 }
 
