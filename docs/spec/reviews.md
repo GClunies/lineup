@@ -203,7 +203,7 @@ If the PR's head moves after Review ready, the Task gets the note `head moved`. 
 | Harness, model, effort | `[stage.reviewing]`, else `[stage.default]`. The Worker gets `--add-dir <review worktree>`, so it reads the PR's code with no permission prompt. |
 | Conversation | The first Reviewing Worker starts a Claude conversation with `--session-id <uuid>`, and the Task's Record keeps the ID. A rerun of Reviewing types the review prompt into the same Worker and keeps the conversation. `lineup open` resumes it. If the conversation file is gone, the Worker starts a new conversation. |
 | Restored Worker | `claude --resume <uuid>` with no prompt, the Reviewing model and effort, and `--add-dir <review worktree>`. Setup runs again first. If the Task has no conversation ID, the restore runs the review again in Reviewing. A Task from before conversation IDs is one example. A Worker that exited and left its tab open for the hunk pane has that tab closed first. So the Task's window is the new tab. |
-| Hunk pane | `hunk gh pr <PR URL>` in the review worktree, to the right of the Worker in its tab, with half of the tab. See **The hunk pane** below. |
+| Hunk pane | `hunk gh pr <PR URL>` in the review worktree, to the right of the Worker in its tab, with half of the tab. A build Task's Worker gets a pane too. See **The hunk pane** below. |
 
 If no `[[repos]]` checkout has the PR's repository as its `origin`, the add fails and names the repository.
 
@@ -217,19 +217,28 @@ The lock keeps two starts from fetching into one checkout at once. A fetch from 
 
 **Cleanup.** A review Task that ends loses its tab, its hunk pane, and its review worktree at once, at each end in the Transitions table. lineup closes the tab and fetches. It removes the review worktree if the worktree holds no uncommitted change and no commit that exists on no remote. Otherwise it keeps the worktree and puts its path in the Task's note. lineup never runs `wt remove` for a review Task.
 
-**The hunk pane.** Each review Worker gets the PR's diff beside it, so the user reads the diff next to the review. lineup splits the Worker's tab when it opens the tab. That happens on the first start and on each restore. A rerun types into the same tab, so it keeps its pane. The Worker keeps the focus. The pane runs this command:
+**The hunk pane.** Each Worker gets a diff beside it, so the user reads the diff next to the Worker. This holds for review Tasks and build Tasks. lineup splits the Worker's tab when it opens the tab. That happens on the first start and on each restore. A rerun types into the same tab, so it keeps its pane. The Worker keeps the focus. The pane runs in the Task's worktree.
+
+A review Task's pane shows the PR's diff with this command:
 
 ```
 sh -c 'GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"' hunk <PR URL>
 ```
 
+A build Task's pane shows the worktree's changes since it left the default branch, and updates as they change. It runs this command:
+
+```
+sh -c 'b=$(git symbolic-ref -q --short refs/remotes/origin/HEAD) || b=origin/main; exec hunk diff --watch "$(git merge-base HEAD "$b")"' hunk
+```
+
 - `hunk` needs a token for a private repository. It reads `GH_TOKEN`.
-- The shell in the pane gets the token from `gh`. The token is in no command line that `ps` shows.
+- The shell in a review pane gets the token from `gh`. The token is in no command line that `ps` shows.
+- A build pane compares the worktree with the merge base of `HEAD` and `origin/HEAD`. If the clone has no `origin/HEAD`, the pane uses `origin/main`. The diff holds the Task's commits, its uncommitted changes, and its untracked files.
 - The pane's block has the label `hunk`. lineup keeps its ID, and the Worker's block stays the block of the Task.
-- When the Scheduler starts, it opens the pane again beside each live review Worker whose pane is gone.
-- The events of the pane never change the Task. Closing the pane alone leaves the review as it is.
+- When the Scheduler starts, it opens the pane again beside each live Worker whose pane is gone.
+- The events of the pane never change the Task. Closing the pane alone leaves the Task as it is.
 - The pane holds the tab open after the Worker's block closes. lineup then closes the tab. Recovery does the same.
-- When the user closes the Worker's pane of a Done review, lineup closes the hunk pane's tab and removes the review worktree.
+- When the user closes the Worker's pane of a Done Task, lineup closes the hunk pane's tab and removes the Task's worktree.
 - If the split fails, lineup logs a warning. The Worker runs without the pane.
 
 The review contract:
