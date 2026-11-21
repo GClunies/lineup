@@ -1,0 +1,84 @@
+docs/adr/0027-the-board-reports-needs-you-to-rex.md
+  s_851aa8f8ea07d3::t_453327e3c1df01 5-6
+docs/spec/mvp.md
+  s_851aa8f8ea07d3::t_a59ed794733a65 78-83,87,128-129,142,150,157-168,177,218,300,569,584,588-590,699
+internal/lifecycle/bar.go
+  s_851aa8f8ea07d3::t_13a6805f911d2e 7,93-96,154-156,223-248,291,310,409
+docs/adr/0031-the-orchestrator-learns-each-pr-that-is-ready-to-land.md
+  s_851aa8f8ea07d3::t_dd5e7ff750bbe7 1-19
+GLOSSARY.md
+  s_851aa8f8ea07d3::t_8d6594b98c6806 151
+  s_851aa8f8ea07d3::t_b46ca15299dcab 134,149-150,152,154
+internal/lifecycle/board.go
+  s_851aa8f8ea07d3::t_ac84561e853cfa 487-489
+  s_851aa8f8ea07d3::t_eedafb994f5737 7,101-109,145-146,148,331-337,339,381-391,437,493,535-537,541-542,545
+internal/github/facts_test.go
+  s_851aa8f8ea07d3::t_189e4fa86d3398 10,192-244
+internal/scheduler/scheduler_test.go
+  s_851aa8f8ea07d3::t_54fefccdfab506 1261,1268,1271-1273
+  s_851aa8f8ea07d3::t_f50d35f5e75395 1274
+internal/board/model.go
+  s_851aa8f8ea07d3::t_b977d92887d776 654-656,658
+cmd/lineup/hub.go
+  s_851aa8f8ea07d3::t_b599ebf46d2280 99-102
+cmd/lineup/main.go
+  s_851aa8f8ea07d3::t_b599ebf46d2280 36
+cmd/lineup/agent/CLAUDE.md
+  s_851aa8f8ea07d3::t_5c6a3943269d35 90-95
+docs/adr/0032-a-responding-round-takes-the-feedback-before-it.md
+  s_851aa8f8ea07d3::t_35457bc1e3555a 1-19,21
+  s_851aa8f8ea07d3::t_453327e3c1df01 20
+internal/lifecycle/bar_test.go
+  s_851aa8f8ea07d3::t_6872d94b8bf146 252,265,275,305,311-313
+  s_851aa8f8ea07d3::t_7bf1d017a48fc7 314
+internal/github/client.go
+  s_851aa8f8ea07d3::t_764d76ed96cf4e 66-77,130-131,287-335,404
+internal/github/testdata/feedback.json
+  s_851aa8f8ea07d3::t_ce00b0f6644bfd 1
+internal/harness/claude/claude_test.go
+  s_851aa8f8ea07d3::t_b4548fefcc64b2 410-417,511-513,542-572
+  s_851aa8f8ea07d3::t_5bdabd3b702cd4 573
+cmd/lineup/cli.go
+  s_851aa8f8ea07d3::t_b599ebf46d2280 27,279-295
+  s_851aa8f8ea07d3::t_236744889be378 296-297
+cmd/lineup/decide_test.go
+  s_851aa8f8ea07d3::t_b599ebf46d2280 239-262
+cmd/lineup/hub_test.go
+  s_851aa8f8ea07d3::t_5c6a3943269d35 103
+  s_851aa8f8ea07d3::t_b599ebf46d2280 74-75
+internal/board/board_test.go
+  s_851aa8f8ea07d3::t_068f10686668b1 391-393,412-413,830-831,834,844-853,855
+internal/lifecycle/property_test.go
+  s_851aa8f8ea07d3::t_d305bdb08b5180 100-102
+  s_851aa8f8ea07d3::t_342a9d69928f25 10
+docs/adr/0030-the-orchestrator-gets-no-alerts.md
+  s_851aa8f8ea07d3::t_453327e3c1df01 3-4
+internal/harness/claude/claude.go
+  s_851aa8f8ea07d3::t_37b2762a0d1d83 296-298,301,305-317,324-333,356,361-363,425-427
+internal/lifecycle/board_test.go
+  s_851aa8f8ea07d3::t_f9b43fa53c21a2 9,568-609,612-676
+  s_851aa8f8ea07d3::t_8c5a529117d36a 610-611
+  s_851aa8f8ea07d3::t_d4ffd7aa7fa719 677
+internal/scheduler/alerts.go
+  s_851aa8f8ea07d3::t_b977d92887d776 22-27
+internal/github/facts.go
+  s_851aa8f8ea07d3::t_764d76ed96cf4e 43-48
+docs/adr/0026-the-user-approves-every-reply-that-is-not-a-fix.md
+  s_851aa8f8ea07d3::t_453327e3c1df01 3-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ae1452830955770012be0b08290da0b2bce3921",
+  "prompts": {},
+  "sessions": {
+    "s_851aa8f8ea07d3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d245f64a-498c-466b-b14c-07ea4bf1e1f7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
