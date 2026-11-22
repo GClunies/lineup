@@ -257,3 +257,20 @@ func TestMigrateChangesNothingInANewFile(t *testing.T) {
 		t.Error("a migration that changed nothing wrote a .bak file")
 	}
 }
+
+func TestMigrateKeepsABackupThatExists(t *testing.T) {
+	home := fixtureHome(t)
+	old := "[[repos]]\nmatch = \"~/repos/*/*\"\n"
+	path := write(t, filepath.Join(home, ".config", "lineup", "config.toml"), old)
+	write(t, path+".bak", "an older backup\n")
+	_, err := Migrate(path)
+	if want := path + ".bak already exists. Move it away, then run lineup config migrate again"; err == nil || err.Error() != want {
+		t.Fatalf("err = %v, want %q", err, want)
+	}
+	if got, _ := os.ReadFile(path + ".bak"); string(got) != "an older backup\n" {
+		t.Errorf("the backup changed:\n%s", got)
+	}
+	if got, _ := os.ReadFile(path); string(got) != old {
+		t.Errorf("the file changed:\n%s", got)
+	}
+}

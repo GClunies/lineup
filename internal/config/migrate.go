@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -41,7 +42,19 @@ func Migrate(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(path+".bak", old, info.Mode().Perm()); err != nil {
+	// O_EXCL keeps a backup that the user made before.
+	bak, err := os.OpenFile(path+".bak", os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
+	if errors.Is(err, fs.ErrExist) {
+		return "", fmt.Errorf("%s.bak already exists. Move it away, then run lineup config migrate again", path)
+	}
+	if err != nil {
+		return "", err
+	}
+	if _, err := bak.Write(old); err != nil {
+		bak.Close()
+		return "", err
+	}
+	if err := bak.Close(); err != nil {
 		return "", err
 	}
 	if err := writeAtomic(path, []byte(text), info.Mode().Perm()); err != nil {

@@ -414,7 +414,7 @@ A file from before this model holds `[[repos]]` tables with a `match` glob, and 
 - The roots find each checkout that the old `match` globs found. If a checkout is more than two folders below the roots, the command fails and names it.
 - The layer keys at the top level move into `[defaults]`.
 
-The command keeps the comments. It writes `config.toml.bak` first. Then it loads the new file, and it puts the old file back if the load fails. A file in the new form stays as it is. Run `lineup restart` after the migration.
+The command keeps the comments. It writes `config.toml.bak` first. If `config.toml.bak` already exists, the command stops and changes nothing, so an older backup stays. Then it loads the new file, and it puts the old file back if the load fails. A file in the new form stays as it is. Run `lineup restart` after the migration.
 
 ### Repo settings
 
