@@ -348,57 +348,81 @@ Each Task keeps one Worker for its whole life. The Worker starts with `--session
 
 ## Configuration
 
+lineup reads all of its configuration from one file, `~/.config/lineup/config.toml`. No file in a Repo configures lineup.
+
 The precedence is, from lowest to highest:
 
-1. The global file, `~/.config/lineup/config.toml`
-2. A `[[repos]]` entry whose `match` glob matches the Repo path. The most specific glob wins.
-3. The Repo file, `.lineup.toml`, checked in to the Repo
-4. A `[stage.<name>]` section
-5. A Task override, for example "do this with pi"
+1. `[defaults]`
+2. `[repos."<owner>/*"]`, the table for each Repo of one owner
+3. `[repos."<owner>/<repo>"]`, the table for one Repo
+4. A Task override, for example `lineup set <task> model=claude-opus-5-5`
+
+Each key layers on its own, as in `[budgets]`. A table at each level can hold `[stage.<name>]`, `[budgets]`, `[review_bot]`, and `[landing_bar]`. A `[stage.<name>]` section at any level beats `[stage.default]` at every level.
 
 ```toml
 # ~/.config/lineup/config.toml
+roots = ["~/repos"]
+start_skills = ["pstack:poteto-mode"]
+
+[defaults]
 wip_cap = 5
-poll_interval = "30s"
-start_skills = ["kit:tdd"]
+stage.default = { model = "claude-opus-5-5", effort = "high", skill = "pstack:poteto-mode" }
 
-[budgets]
-ci_debug = 3
-responding = 3
+[repos."crexi/*"]
+review_bot = { name = "greptile", min_review_score = 5, max_review_cycles = 5 }
 
-[stage.default]
-model = "claude-opus-5-5"
-effort = "high"
+[repos."crexi/data"]
+teams = ["PD"]
 
-[[repos]]
-match = "~/code/*/*"
-
-[[repos]]
-match = "~/code/acme/*"
-
-[repos.review_bot]
-name = "greptile"
-min_review_score = 5
-max_review_cycles = 5
-
-[[repos]]
-match = "~/code/acme/data"
-teams = ["APP", "ENG"]
+[repos."GClunies/hod"]
+trackers = ["local"]
+prefix = "hod"
 ```
 
-A `[[repos]]` `match` is a path or a glob. It sets keys for the Repos that it matches, and it tells lineup where the checkouts are. lineup uses each git checkout that a `match` names:
+The top level holds the keys that apply once: `roots`, `start_skills`, `linear_client_id`, `[linear.*]`, `[github.labels]`, `local_tracker`, `local_issues_dir`, `[review]`, and `[board]`.
 
-- `lineup add --repo <name>` and a Local Issue's `repo:` take the folder name of one such checkout. If two checkouts have the name, pass a path.
-- A GitHub Issue goes to the checkout with the repository's name whose `origin` is that repository.
-- The Repo picker lists these checkouts.
+`[defaults]` holds each key that a Repo can override: `wip_cap`, `poll_interval`, `[budgets]`, `[review_bot]`, `[landing_bar]`, and `[stage.*]`. A layer key at the top level stops the load, for example with `wip_cap belongs in [defaults]. Run lineup config migrate to move it`.
 
-An entry with only a glob, such as `match = "~/code/*/*"` above, lists every checkout two folders below `~/code`.
+`[repos."<key>"]` holds the keys of `[defaults]`, and `teams`, `trackers`, and `prefix`. `teams` and `prefix` need an `<owner>/<repo>` key. `trackers` can go in both forms.
 
-`trackers` locks the entry's Repos to those Trackers, for example `trackers = ["local"]`. The [Trackers spec](trackers.md#locked-repos) has the rules.
+### Repo keys and checkouts
 
-`prefix` gives the entry's Repo its own IDs for Local Issues and ad hoc Tasks, for example `prefix = "hod"` gives `hod-1`. The [Trackers spec](trackers.md#repo-prefixes) has the rules.
+`roots` lists the folders that hold the checkouts. It has no default. lineup looks at each root, at each folder in it, and at each folder in those. A folder with a `.git` entry is a checkout, and lineup does not look inside a checkout. lineup skips each folder whose name starts with a dot. lineup walks the roots each time that it needs the checkouts, so a new clone shows up without a restart.
 
-`[review_bot]` turns on the review bot gate. Put it in the `[[repos]]` entry for the Repos where the bot is installed, as `[repos.review_bot]` above, or in a Repo's `.lineup.toml`. The example gates each Repo below `~/code/acme`, and no other Repo.
+lineup names each checkout by its `origin` remote. This name is the Repo key:
+
+- A GitHub origin gives `<owner>/<repo>`, for example `crexi/data`.
+- A checkout with no origin, or with an origin outside GitHub, gives `local/<folder name>`, for example `local/brain`.
+
+A key in the file is `<owner>/<repo>` for one Repo, or `<owner>/*` for each Repo of one owner. No other glob form exists. Keys ignore case, as GitHub names do. Two keys that differ only in case stop the load.
+
+Several checkouts can have one key, for example a Repo and its git worktrees. Each of them takes the settings of the key.
+
+- `lineup add --repo <name>` and a Local Issue's `repo:` take a folder name, an `<owner>/<repo>` key, or a path. A path starts with `/`, `~/`, or `.`.
+- If two checkouts have the folder name, the error lists their keys, for example `2 checkouts named de-interview-exercise: pass crexi-dev/de-interview-exercise or crexi/de-interview-exercise`.
+- A key names its one checkout. Of several checkouts with the key, it names the checkout whose folder name is the repo part of the key, for example `~/repos/crexi/data` for `crexi/data`.
+- A GitHub Issue goes to the checkout of its repository's key.
+- The Repo picker lists the checkouts below the roots.
+
+### Migration
+
+A file from before this model holds `[[repos]]` tables with a `match` glob, and layer keys at the top level. Such a file stops the load with an error that names `lineup config migrate`. The command rewrites the file once:
+
+- A `[[repos]]` table whose `match` is a path becomes `[repos."<owner>/<repo>"]`, with the key of that checkout.
+- A `[[repos]]` table whose `match` is a `<folder>/*` glob becomes `[repos."<owner>/*"]`, if each checkout that the glob matches has that owner. Otherwise the command fails and names the glob.
+- A `[[repos]]` table with only `match` goes away. Its folder becomes a `roots` entry, for example `~/repos` for `~/repos/*/*`.
+- The roots find each checkout that the old `match` globs found. If a checkout is more than two folders below the roots, the command fails and names it.
+- The layer keys at the top level move into `[defaults]`.
+
+The command keeps the comments. It writes `config.toml.bak` first. Then it loads the new file, and it puts the old file back if the load fails. A file in the new form stays as it is. Run `lineup restart` after the migration.
+
+### Repo settings
+
+`trackers` locks the table's Repos to those Trackers, for example `trackers = ["local"]`. The [Trackers spec](trackers.md#locked-repos) has the rules.
+
+`prefix` gives the table's Repo its own IDs for Local Issues and ad hoc Tasks, for example `prefix = "hod"` gives `hod-1`. The [Trackers spec](trackers.md#repo-prefixes) has the rules.
+
+`[review_bot]` turns on the review bot gate. Put it in the table of the Repos where the bot is installed, as in `[repos."crexi/*"]` above. The example gates each Repo of `crexi`, and no other Repo.
 
 | Key | Value | Default |
 |---|---|---|
@@ -406,9 +430,9 @@ An entry with only a glob, such as `match = "~/code/*/*"` above, lists every che
 | `min_review_score` | The lowest score that passes, from 1 to 5 | 5 |
 | `max_review_cycles` | The review cycle budget | 3 |
 
-A higher layer can set one key and keep the others from a lower layer, as in `[budgets]`. lineup checks each `[review_bot]` table when it loads the configuration. A Task keeps the gate that it had at Intake.
+A higher level can set one key and keep the others from a lower level, as in `[budgets]`. lineup checks each `[review_bot]` table when it loads the configuration. A Task keeps the gate that it had at Intake.
 
-`[landing_bar]` sets the [Landing bar](#landing-bar) of build Tasks. It can go in each layer: the global file, a `[[repos]]` entry as `[repos.landing_bar]`, and a Repo's `.lineup.toml`. With no `[landing_bar]` table, each key has its default.
+`[landing_bar]` sets the [Landing bar](#landing-bar) of build Tasks. It can go in `[defaults]` and in each `[repos."<key>"]` table. With no `[landing_bar]` table, each key has its default.
 
 | Key | Values | Default |
 |---|---|---|
@@ -417,17 +441,17 @@ A higher layer can set one key and keep the others from a lower layer, as in `[b
 | `approvals` | `required`: the reviews that the base branch requires approve. `requested`: also every open review request, unless the decision is `APPROVED`. | `required` |
 
 ```toml
-# .lineup.toml in a Repo where every requested reviewer must approve
-[landing_bar]
+# A Repo where every requested reviewer must approve
+[repos."crexi/data".landing_bar]
 approvals = "requested"
 checks = "all"
 ```
 
 Each key layers on its own, as in `[budgets]`. A value that is not in the table stops the load with an error that names the key, for example `landing_bar.threads: "any" is not one of ignored, resolved, replied`. A Task keeps the Landing bar that it had at Intake.
 
-`start_skills` is a top-level key in the global file. It lists the skills that the skill picker offers when the user starts a Task from an Issue row. A chosen skill is stored as the Task override `skill`.
+`start_skills` is a top-level key. It lists the skills that the skill picker offers when the user starts a Task from an Issue row. A chosen skill is stored as the Task override `skill`.
 
-`[board]` is a table in the global file. It sets the layout of the Board's groups:
+`[board]` is a top-level table. It sets the layout of the Board's groups:
 
 ```toml
 [board]
@@ -438,7 +462,7 @@ hidden = ["done"]
 
 `order` lists the groups, first to last. A group that it leaves out follows the listed ones, in the default order: `needs_you`, `backlog`, `ready`, `queued`, `working`, `waiting`, `done`. `collapsed` lists the groups that start closed. Its default is `backlog` and `done`. `hidden` lists the groups that the Board does not show. Its default is none. A key that is absent takes its default, and an empty list means none. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors, but they do not fail the load. The Scheduler starts, and the Board uses the default layout. The Board shows the error on its own line until it quits, for example `config: board.hidden: unknown section "dun" (default layout)`. If the load fails for any other reason, the Board runs with defaults and shows `config: <error>` the same way.
 
-`linear_client_id` is a top-level key in the global file. Put it above the first `[table]`, or TOML reads it as part of that table. Leave it out to sign in through lineup's own Linear OAuth app, which any workspace can use. To use your own app, register an OAuth app in Linear with the redirect URI `http://localhost:47821/callback` and no client credentials. Then set its client ID here.
+`linear_client_id` is a top-level key. Put it above the first `[table]`, or TOML reads it as part of that table. Leave it out to sign in through lineup's own Linear OAuth app, which any workspace can use. To use your own app, register an OAuth app in Linear with the redirect URI `http://localhost:47821/callback` and no client credentials. Then set its client ID here.
 
 Some workspaces let members use only apps that an admin approved. For such a workspace, register an app in that workspace and set its client ID as `client_id` under `[linear.<url key>]`. Then run `lineup login <url key>`. lineup refuses the sign-in if you pick another workspace on Linear's consent screen. Each workspace's tokens keep the app that issued them, so a new client ID takes effect at the next `lineup login`.
 
@@ -447,11 +471,11 @@ lineup merges a PR only when the user asks, with `m` on the Board or with `lineu
 The Task override `pr=false` is for work that ends without a pull request. Its Working contract is "Do not push a branch or open a pull request. Say what you produced, then stop." The Task then gets the flag `stopped`, and the user closes it.
 
 ```toml
-# .lineup.toml in a Repo
-[stage.ci_debug]
+# The settings of one Repo
+[repos."crexi/data".stage.ci_debug]
 skill = "diagnosing-bugs"
 
-[review_bot]
+[repos."crexi/data".review_bot]
 min_review_score = 4
 ```
 

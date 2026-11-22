@@ -68,16 +68,15 @@ lineup always needs `gh` for PRs, so a signed-in `gh` does not make GitHub a Tra
 | Tracker | How lineup picks the Repo | If nothing matches |
 |---|---|---|
 | Linear | The team or Project mapping, as in the MVP | The fuzzy picker, as in the MVP |
-| GitHub | The `[[repos]]` entry whose `origin` remote is the Issue's repository, else a `[[repos]]` checkout with the repository's name when its `origin` matches | `lineup add` fails and names the repository. The user adds it to `[[repos]]`. |
+| GitHub | The checkout below the roots whose Repo key is the Issue's repository. Of several such checkouts, the one whose folder name is the repository's name. | `lineup add` fails and names the repository. The user clones it below a root, or adds its folder to `roots`. |
 | Local | The Repo whose prefix starts the ID, else the Issue's `repo:` field, resolved as `lineup add --repo` resolves a name | The fuzzy picker. lineup writes the choice back to `repo:`. |
 
 ### Locked Repos
 
-A `[[repos]]` entry with a `trackers` key locks its Repos to those Trackers. The key holds `linear`, `github`, `local`, or more than one of them. A Repo with no `trackers` key takes the Issues of every Tracker.
+A `[repos."<key>"]` table with a `trackers` key locks its Repos to those Trackers. The key holds `linear`, `github`, `local`, or more than one of them. A Repo with no `trackers` key takes the Issues of every Tracker.
 
 ```toml
-[[repos]]
-match = "~/repos/gclunies/hod"
+[repos."GClunies/hod"]
 trackers = ["local"]
 ```
 
@@ -85,16 +84,15 @@ trackers = ["local"]
 - The fuzzy picker offers a locked Repo only for an Issue of one of its Trackers.
 - An ad hoc Task, from `lineup add --repo <repo> "<text>"`, can use a locked Repo.
 - The Orchestrator's CLAUDE.md names each locked Repo and its Trackers. The Orchestrator plans the Issues of a locked Repo only in those Trackers.
-- If more than one entry with `trackers` matches a Repo, the entry with the most specific `match` decides.
-- lineup refuses to load a config with an unknown tracker name, an empty `trackers` list, or `teams` on an entry whose `trackers` has no `linear`. `lineup restart` prints that error and leaves the Scheduler on the old config.
+- The `trackers` key of the Repo's `[repos."<owner>/<repo>"]` table decides. Without one, the `trackers` key of its `[repos."<owner>/*"]` table decides.
+- lineup refuses to load a config with an unknown tracker name, an empty `trackers` list, or `teams` on a Repo whose `trackers` has no `linear`. `lineup restart` prints that error and leaves the Scheduler on the old config.
 
 ### Repo prefixes
 
-A `[[repos]]` entry with a `prefix` key gives its Repo its own IDs. Its Local Issues and its ad hoc Tasks take the form `<prefix>-<n>`. A Repo with no `prefix` keeps `local-<n>` and `ah-<n>`.
+A `[repos."<owner>/<repo>"]` table with a `prefix` key gives its Repo its own IDs. Its Local Issues and its ad hoc Tasks take the form `<prefix>-<n>`. A Repo with no `prefix` keeps `local-<n>` and `ah-<n>`.
 
 ```toml
-[[repos]]
-match = "~/repos/gclunies/hod"
+[repos."GClunies/hod"]
 trackers = ["local"]
 prefix = "hod"
 ```
@@ -115,8 +113,8 @@ prefix = "hod"
 lineup refuses to load a config with one of these prefixes. The error names the prefix.
 
 - A prefix with a character that is not a lowercase letter, a digit, or a dash, or that starts or ends with a dash.
-- A prefix on an entry whose `match` is a glob.
-- A prefix that two entries share.
+- A prefix in a `[repos."<owner>/*"]` table.
+- A prefix that two tables share.
 - A prefix that equals a team key of a `teams` list, in any case. `lineup restart` also reads the team keys of each signed-in Linear workspace. If Linear does not answer, restart prints a warning and checks only the `teams` lists.
 - The prefixes `local`, `ah`, and `pr`. lineup uses them for the IDs without a Repo prefix.
 
