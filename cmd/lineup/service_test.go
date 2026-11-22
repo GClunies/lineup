@@ -253,7 +253,7 @@ func TestRestartRefusesABadConfigAndKeepsTheScheduler(t *testing.T) {
 func TestRestartRefusesAnUnknownTrackerInTheTrackersKey(t *testing.T) {
 	m, calls := testManager(t)
 	m.config = filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(m.config, []byte("[[repos]]\nmatch = \"~/repos/gclunies/hod\"\ntrackers = [\"local\", \"jira\"]\n"), 0o600); err != nil {
+	if err := os.WriteFile(m.config, []byte("[repos.\"GClunies/hod\"]\ntrackers = [\"local\", \"jira\"]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	m.ensure()
@@ -270,7 +270,7 @@ func TestRestartRefusesAnUnknownTrackerInTheTrackersKey(t *testing.T) {
 func TestRestartRefusesAPrefixThatEqualsALinearTeamKey(t *testing.T) {
 	m, calls := testManager(t)
 	m.config = filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(m.config, []byte("[[repos]]\nmatch = \"~/repos/gclunies/hod\"\nprefix = \"hod\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(m.config, []byte("[repos.\"GClunies/hod\"]\nprefix = \"hod\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	m.teamKeys = func(context.Context) ([]string, error) { return []string{"ENG", "HOD"}, nil }
@@ -292,7 +292,7 @@ func TestRestartRefusesAPrefixThatEqualsALinearTeamKey(t *testing.T) {
 func TestRestartRefusesABadPrefix(t *testing.T) {
 	m, calls := testManager(t)
 	m.config = filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(m.config, []byte("[[repos]]\nmatch = \"~/repos/gclunies/hod\"\nprefix = \"ah\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(m.config, []byte("[repos.\"GClunies/hod\"]\nprefix = \"ah\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	m.ensure()

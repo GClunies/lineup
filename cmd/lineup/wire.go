@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -589,69 +587,9 @@ func (p configPort) RepoTrackers(repo string) []string { return p.cfg.RepoTracke
 
 func (p configPort) RepoPrefix(repo string) string { return p.cfg.RepoPrefix(repo) }
 
-// RepoForGitHub finds the checkout whose origin is the repository owner/name:
-// a [[repos]] path first, then a [[repos]] checkout with the repository's
-// name. The name ignores case, as GitHub names do.
-func (p configPort) RepoForGitHub(slug string) (string, bool) {
-	_, name, _ := strings.Cut(slug, "/")
-	paths := p.cfg.RepoPaths()
-	for _, c := range p.cfg.Checkouts() {
-		if strings.EqualFold(filepath.Base(c), name) {
-			paths = append(paths, c)
-		}
-	}
-	for _, path := range paths {
-		if strings.EqualFold(originSlug(path), slug) {
-			return path, true
-		}
-	}
-	return "", false
-}
+func (p configPort) RepoForGitHub(slug string) (string, bool) { return p.cfg.CheckoutFor(slug) }
 
-var githubRemote = regexp.MustCompile(`github\.com[:/]([^/]+/[^/]+?)(\.git)?/?$`)
-
-// originSlug is owner/name from the checkout's origin remote, or "".
-func originSlug(path string) string {
-	out, err := exec.Command("git", "-C", path, "remote", "get-url", "origin").Output()
-	if err != nil {
-		return ""
-	}
-	if m := githubRemote.FindStringSubmatch(strings.TrimSpace(string(out))); m != nil {
-		return m[1]
-	}
-	return ""
-}
-
-// ResolveRepo accepts a path, or the folder name of one [[repos]] checkout.
-func (p configPort) ResolveRepo(name string) (string, error) {
-	if strings.HasPrefix(name, "~/") {
-		home, _ := os.UserHomeDir()
-		name = filepath.Join(home, name[2:])
-	}
-	if strings.Contains(name, "/") {
-		abs, err := filepath.Abs(name)
-		if err != nil {
-			return "", err
-		}
-		if _, err := os.Stat(filepath.Join(abs, ".git")); err != nil {
-			return "", fmt.Errorf("%s is not a git checkout", abs)
-		}
-		return abs, nil
-	}
-	var matches []string
-	for _, c := range p.cfg.Checkouts() {
-		if filepath.Base(c) == name {
-			matches = append(matches, c)
-		}
-	}
-	switch len(matches) {
-	case 0:
-		return "", fmt.Errorf("no [[repos]] checkout named %s: add a [[repos]] match or pass a path", name)
-	case 1:
-		return matches[0], nil
-	}
-	return "", fmt.Errorf("%d [[repos]] checkouts named %s: pass a path", len(matches), name)
-}
+func (p configPort) ResolveRepo(name string) (string, error) { return p.cfg.FindCheckout(name) }
 
 // reviewQueues are the config's queues, as the Scheduler fills them.
 func reviewQueues(g *config.Global) []scheduler.Queue {

@@ -10,7 +10,7 @@ A review queue fills itself. Agents start the reviews of the PRs that need the u
 
 | In this cut | Later |
 |---|---|
-| Queues in the global config | Queues that a `[[repos]]` entry or `.lineup.toml` scopes |
+| Queues in the config file | Queues that a `[repos."<key>"]` table scopes |
 | Review Tasks: a Task Kind with its own Stages | GitLab and other forges |
 | Review slots for each queue and for all queues together, apart from the WIP cap | A queue that runs a skill other than `pr-review` |
 | `lineup review <url>` | |
@@ -197,7 +197,7 @@ If the PR's head moves after Review ready, the Task gets the note `head moved`. 
 |---|---|
 | Rex session | `reviews` |
 | Tab label | `data#4955 <title>`, the Task's title. It names the PR, so it leaves out the Task ID. |
-| Main checkout | The `[[repos]]` checkout whose `origin` is the PR's repository. It is the Worker's folder and the trusted checkout of `pr-review` Step 1. The PR's code never becomes the Worker's folder, because a folder's `.claude` settings and hooks would run. |
+| Main checkout | The checkout below the roots whose Repo key is the PR's repository. It is the Worker's folder and the trusted checkout of `pr-review` Step 1. The PR's code never becomes the Worker's folder, because a folder's `.claude` settings and hooks would run. |
 | Review worktree | `<main checkout's parent>/<repo>.review-pr-<number>`, detached at the PR's head. lineup makes it and removes it. |
 | Prompt | `/pr-review <PR URL>`, the review worktree, then the review contract |
 | Harness, model, effort | `[stage.reviewing]`, else `[stage.default]`. The Worker gets `--add-dir <review worktree>`, so it reads the PR's code with no permission prompt. |
@@ -205,7 +205,7 @@ If the PR's head moves after Review ready, the Task gets the note `head moved`. 
 | Restored Worker | `claude --resume <uuid>` with no prompt, the Reviewing model and effort, and `--add-dir <review worktree>`. Setup runs again first. If the Task has no conversation ID, the restore runs the review again in Reviewing. A Task from before conversation IDs is one example. A Worker that exited and left its tab open for the side pane has that tab closed first. So the Task's window is the new tab. |
 | Side pane | The PR's GitHub page in rexweb, or `hunk gh pr <PR URL>` if RexWeb.app is missing. The pane runs in the review worktree, to the right of the Worker in its tab, with half of the tab. A build Task's Worker gets a pane too. See **The side pane** below. |
 
-If no `[[repos]]` checkout has the PR's repository as its `origin`, the add fails and names the repository.
+If no checkout below the roots has the PR's repository as its `origin`, the add fails and names the repository.
 
 **Setup.** Before the first Worker starts, the Task's lane does this, holding a lock for the Repo:
 

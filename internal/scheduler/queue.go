@@ -351,7 +351,7 @@ type fillInput struct {
 	// Found is each queue's search rows, by queue name.
 	Found map[string][]github.PullRequest
 	// Repos maps each GitHub repository, owner/name in lower case, to its
-	// Repo. A repository with no [[repos]] checkout is absent.
+	// Repo. A repository with no checkout is absent.
 	Repos map[string]queueRepo
 }
 

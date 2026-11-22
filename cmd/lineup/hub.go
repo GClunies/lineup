@@ -269,10 +269,11 @@ func lockedReposSection(locked []config.LockedRepo) []byte {
 		b.WriteString("No Repo is locked. Each Repo takes Tasks for the Issues of every Tracker.\n")
 		return []byte(b.String())
 	}
-	b.WriteString("A locked Repo takes Tasks only for the Issues of its Trackers. The `trackers` key of its `[[repos]]` entry in `{{config}}` sets the lock.\n\n")
+	b.WriteString("A locked Repo takes Tasks only for the Issues of its Trackers. The `trackers` key of its `[repos.\"<owner>/<repo>\"]` table in `{{config}}` sets the lock. " +
+		"The `trackers` key of a `[repos.\"<owner>/*\"]` table locks each Repo of the owner whose own table has no `trackers` key.\n\n")
 	b.WriteString("| Repo | Trackers |\n|---|---|\n")
 	for _, r := range locked {
-		fmt.Fprintf(&b, "| `%s` | `%s` |\n", r.Match, strings.Join(r.Trackers, "`, `"))
+		fmt.Fprintf(&b, "| `%s` | `%s` |\n", r.Key, strings.Join(r.Trackers, "`, `"))
 	}
 	b.WriteString("\n- Plan the Issues of a locked Repo only in its Trackers. Never write an Issue for it in another Tracker.\n" +
 		"- `lineup add` refuses an Issue of another Tracker for a locked Repo. Never pass a locked Repo with `--repo` for such an Issue.\n" +
@@ -289,10 +290,10 @@ func prefixesSection(prefixed []config.PrefixedRepo) []byte {
 		b.WriteString("No Repo has a prefix. Each Local Issue ID has the form `local-<n>`, and each ad hoc Task ID has the form `ah-<n>`.\n")
 		return []byte(b.String())
 	}
-	b.WriteString("A Repo with a prefix numbers its own Local Issues and ad hoc Tasks, for example `hod-3`. The `prefix` key of its `[[repos]]` entry in `{{config}}` sets the prefix.\n\n")
+	b.WriteString("A Repo with a prefix numbers its own Local Issues and ad hoc Tasks, for example `hod-3`. The `prefix` key of its `[repos.\"<owner>/<repo>\"]` table in `{{config}}` sets the prefix.\n\n")
 	b.WriteString("| Repo | Prefix | New Local Issue file |\n|---|---|---|\n")
 	for _, r := range prefixed {
-		fmt.Fprintf(&b, "| `%s` | `%s` | `{{issues}}/%s-<n>.md` |\n", r.Match, r.Prefix, r.Prefix)
+		fmt.Fprintf(&b, "| `%s` | `%s` | `{{issues}}/%s-<n>.md` |\n", r.Key, r.Prefix, r.Prefix)
 	}
 	b.WriteString("\n- Name a new Local Issue file for a Repo with a prefix `<prefix>-<n>.md`. Never write a `local-<n>.md` file for that Repo.\n" +
 		"- A `<prefix>-<n>` ID is a Local Issue ID, even though it has the form of a Linear ID.\n" +

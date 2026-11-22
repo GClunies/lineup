@@ -1,4 +1,4 @@
-// Package config loads lineup's layered TOML configuration and resolves it for
+// Package config loads lineup's TOML configuration file and resolves it for
 // one Repo and one Task. Parsing and validation happen here, once, at the boundary.
 package config
 
@@ -16,7 +16,9 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
+	"unicode"
 
 	"github.com/BurntSushi/toml"
 	"github.com/gclunies/lineup/internal/github"
@@ -28,7 +30,6 @@ const (
 	defaultPollInterval = 30 * time.Second
 	defaultModel        = "claude-opus-5-5"
 	defaultEffort       = "high"
-	repoFileName        = ".lineup.toml"
 	defaultReviewCycles = 3
 )
 
@@ -105,7 +106,7 @@ type stageFile struct {
 	Command *string `toml:"command"`
 }
 
-// layer holds the keys that the global file, a [[repos]] entry, and .lineup.toml share.
+// layer holds the keys that [defaults] and each [repos."<key>"] table share.
 type layer struct {
 	WIPCap       *int                 `toml:"wip_cap"`
 	PollInterval *string              `toml:"poll_interval"`
@@ -115,9 +116,13 @@ type layer struct {
 	Stage        map[string]stageFile `toml:"stage"`
 }
 
-type repoEntry struct {
+// layerKeys are the keys of a layer.
+var layerKeys = []string{"wip_cap", "poll_interval", "budgets", "review_bot", "landing_bar", "stage"}
+
+// repoTable is a [repos."<key>"] table. Its key is owner/repo for one Repo,
+// or owner/* for every Repo of one owner.
+type repoTable struct {
 	layer
-	Match string   `toml:"match"`
 	Teams []string `toml:"teams"`
 	// Trackers locks the Repo to these Kinds of Tracker. nil means every Tracker.
 	Trackers []string `toml:"trackers"`
@@ -132,10 +137,9 @@ var ReservedPrefixes = []string{"local", "ah", "pr"}
 
 var prefixForm = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-// PrefixedRepo is a [[repos]] entry with a prefix. Repo is its checkout.
+// PrefixedRepo is a [repos."owner/repo"] table with a prefix.
 type PrefixedRepo struct {
-	Match  string
-	Repo   string
+	Key    string
 	Prefix string
 }
 
@@ -143,9 +147,9 @@ type PrefixedRepo struct {
 // Kind of Tracker.
 var TrackerKinds = []string{"linear", "github", "local"}
 
-// LockedRepo is a [[repos]] entry with a trackers list.
+// LockedRepo is a [repos."<key>"] table with a trackers list.
 type LockedRepo struct {
-	Match    string
+	Key      string
 	Trackers []string
 }
 
@@ -155,10 +159,12 @@ type linearWorkspace struct {
 }
 
 type globalFile struct {
-	layer
+	// Roots are the folders that hold the checkouts.
+	Roots          []string                   `toml:"roots"`
+	Defaults       layer                      `toml:"defaults"`
+	Repos          map[string]repoTable       `toml:"repos"`
 	StartSkills    []string                   `toml:"start_skills"`
 	LinearClientID string                     `toml:"linear_client_id"`
-	Repos          []repoEntry                `toml:"repos"`
 	Linear         map[string]linearWorkspace `toml:"linear"`
 	GitHub         struct {
 		Labels map[string]string `toml:"labels"`
@@ -212,6 +218,11 @@ type Global struct {
 	boardErr error
 	home     string
 	lookPath func(string) (string, error)
+
+	// keys caches the Repo key of each checkout path. The Scheduler asks for
+	// keys from several goroutines.
+	mu   sync.Mutex
+	keys map[string]string
 }
 
 // StartSkills lists the skills that the Linear browser offers when it starts a Task.
@@ -273,7 +284,7 @@ func (g *Global) ReviewQueues() []ReviewQueue {
 // LocalIssuesDir is the Local Tracker's folder.
 func (g *Global) LocalIssuesDir() string {
 	if d := strings.TrimSpace(g.file.LocalIssuesDir); d != "" {
-		return g.expand(d)
+		return expand(g.home, d)
 	}
 	return filepath.Join(g.home, ".local", "share", "lineup", "issues")
 }
@@ -290,7 +301,7 @@ func Load(globalPath string) (*Global, error) {
 	if err != nil {
 		return nil, fmt.Errorf("find home folder: %w", err)
 	}
-	g := &Global{home: home, lookPath: exec.LookPath, board: DefaultBoard()}
+	g := &Global{home: home, lookPath: exec.LookPath, board: DefaultBoard(), keys: map[string]string{}}
 	data, err := os.ReadFile(globalPath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -298,10 +309,17 @@ func Load(globalPath string) (*Global, error) {
 	case err != nil:
 		return nil, err
 	}
+	why, err := oldForm(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", globalPath, err)
+	}
+	if why != "" {
+		return nil, fmt.Errorf("%s: %s", globalPath, why)
+	}
 	if err := decodeStrict(string(data), &g.file); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
-	if err := g.validate(&g.file.layer, "global"); err != nil {
+	if err := g.validate(&g.file.Defaults, "defaults"); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	for i, sk := range g.file.StartSkills {
@@ -309,19 +327,13 @@ func Load(globalPath string) (*Global, error) {
 			return nil, fmt.Errorf("%s: start_skills[%d] is empty", globalPath, i)
 		}
 	}
-	for i, r := range g.file.Repos {
-		if r.Match == "" {
-			return nil, fmt.Errorf("%s: repos[%d]: match is required", globalPath, i)
+	for i, r := range g.file.Roots {
+		if strings.TrimSpace(r) == "" {
+			return nil, fmt.Errorf("%s: roots[%d] is empty", globalPath, i)
 		}
-		if _, err := filepath.Match(g.expand(r.Match), ""); err != nil {
-			return nil, fmt.Errorf("%s: repos[%d]: bad match %q: %w", globalPath, i, r.Match, err)
-		}
-		if err := g.validate(&r.layer, fmt.Sprintf("repos[%d]", i)); err != nil {
-			return nil, fmt.Errorf("%s: %w", globalPath, err)
-		}
-		if err := r.checkTrackers(); err != nil {
-			return nil, fmt.Errorf("%s: repos[%d]: %w", globalPath, i, err)
-		}
+	}
+	if err := g.checkRepos(); err != nil {
+		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	if err := g.checkPrefixes(nil); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
@@ -349,27 +361,87 @@ func Load(globalPath string) (*Global, error) {
 	return g, nil
 }
 
-func (r repoEntry) checkTrackers() error {
-	if r.Trackers == nil {
+// oldForm says why the text needs lineup config migrate: its [[repos]]
+// tables, or the first layer key at the top level. "" means neither.
+func oldForm(text string) (string, error) {
+	var raw map[string]any
+	md, err := toml.Decode(text, &raw)
+	if err != nil {
+		return "", err
+	}
+	if _, ok := raw["repos"].([]map[string]any); ok {
+		return `[[repos]] tables are gone. Run lineup config migrate to rewrite the file with roots and [repos."owner/repo"] tables`, nil
+	}
+	for _, k := range md.Keys() {
+		if slices.Contains(layerKeys, k[0]) {
+			return k[0] + " belongs in [defaults]. Run lineup config migrate to move it", nil
+		}
+	}
+	return "", nil
+}
+
+// splitKey splits a Repo key into its owner and its repo, which is * for
+// every Repo of the owner. ok is false for any other form.
+func splitKey(key string) (owner, repo string, ok bool) {
+	owner, repo, found := strings.Cut(key, "/")
+	part := func(s string) bool {
+		return s != "" && !strings.ContainsAny(s, "/*?[") && !strings.ContainsFunc(s, unicode.IsSpace)
+	}
+	return owner, repo, found && part(owner) && (repo == "*" || part(repo))
+}
+
+// checkRepos checks the key of each [repos."<key>"] table, and its layer,
+// teams, and trackers keys.
+func (g *Global) checkRepos() error {
+	seen := map[string]string{}
+	for _, key := range slices.Sorted(maps.Keys(g.file.Repos)) {
+		t := g.file.Repos[key]
+		where := fmt.Sprintf("repos.%q", key)
+		_, repo, ok := splitKey(key)
+		if !ok {
+			return fmt.Errorf("%s: a Repo key is owner/repo or owner/*", where)
+		}
+		if other, ok := seen[strings.ToLower(key)]; ok {
+			return fmt.Errorf("%s: repos.%q names the same Repo, as GitHub names ignore case", where, other)
+		}
+		seen[strings.ToLower(key)] = key
+		if err := g.validate(&t.layer, where); err != nil {
+			return err
+		}
+		if err := checkTrackers(t.Trackers); err != nil {
+			return fmt.Errorf("%s: %w", where, err)
+		}
+		if len(t.Teams) == 0 {
+			continue
+		}
+		if repo == "*" {
+			return fmt.Errorf("%s: teams maps Linear teams to one Repo, so it needs an owner/repo key", where)
+		}
+		if ts := g.trackers(key); ts != nil && !slices.Contains(ts, "linear") {
+			return fmt.Errorf("%s: teams maps Linear teams to the Repo, so trackers must hold linear", where)
+		}
+	}
+	return nil
+}
+
+func checkTrackers(trackers []string) error {
+	if trackers == nil {
 		return nil
 	}
 	kinds := strings.Join(TrackerKinds, ", ")
-	if len(r.Trackers) == 0 {
+	if len(trackers) == 0 {
 		return fmt.Errorf("trackers must name at least one of %s", kinds)
 	}
-	for j, t := range r.Trackers {
+	for j, t := range trackers {
 		if !slices.Contains(TrackerKinds, t) {
 			return fmt.Errorf("trackers[%d] %q is not a Tracker: use %s", j, t, kinds)
 		}
-	}
-	if len(r.Teams) > 0 && !slices.Contains(r.Trackers, "linear") {
-		return errors.New("teams maps Linear teams to the Repo, so trackers must hold linear")
 	}
 	return nil
 }
 
 // checkPrefixes refuses a prefix that is not a word of lowercase letters,
-// digits, and dashes, a prefix of a glob match, a prefix that two entries
+// digits, and dashes, a prefix of an owner/* table, a prefix that two tables
 // share, a reserved prefix, and a prefix that equals a Linear team key in
 // any case. The team keys are those of every teams list, and teamKeys.
 func (g *Global) checkPrefixes(teamKeys []string) error {
@@ -382,26 +454,27 @@ func (g *Global) checkPrefixes(teamKeys []string) error {
 	for _, t := range teamKeys {
 		teams[strings.ToLower(t)] = true
 	}
-	seen := map[string]int{}
-	for i, r := range g.file.Repos {
-		if r.Prefix == "" {
+	seen := map[string]string{}
+	for _, key := range slices.Sorted(maps.Keys(g.file.Repos)) {
+		p := g.file.Repos[key].Prefix
+		if p == "" {
 			continue
 		}
-		where := fmt.Sprintf("repos[%d]: prefix %q", i, r.Prefix)
+		where := fmt.Sprintf("repos.%q: prefix %q", key, p)
 		switch {
-		case !prefixForm.MatchString(r.Prefix):
+		case !prefixForm.MatchString(p):
 			return fmt.Errorf("%s must hold only lowercase letters, digits, and dashes, and must start and end with a letter or a digit", where)
-		case strings.ContainsAny(r.Match, "*?["):
-			return fmt.Errorf("%s needs a match that is the path of one Repo, not the glob %q", where, r.Match)
-		case slices.Contains(ReservedPrefixes, r.Prefix):
+		case strings.HasSuffix(key, "/*"):
+			return fmt.Errorf("%s needs an owner/repo key, the key of one Repo", where)
+		case slices.Contains(ReservedPrefixes, p):
 			return fmt.Errorf("%s is reserved: lineup uses %s for IDs without a Repo prefix", where, strings.Join(ReservedPrefixes, ", "))
-		case teams[r.Prefix]:
+		case teams[p]:
 			return fmt.Errorf("%s equals a Linear team key, so its IDs would read as Linear IDs", where)
 		}
-		if j, ok := seen[r.Prefix]; ok {
-			return fmt.Errorf("%s is also the prefix of repos[%d]: each Repo needs its own prefix", where, j)
+		if other, ok := seen[p]; ok {
+			return fmt.Errorf("%s is also the prefix of repos.%q: each Repo needs its own prefix", where, other)
 		}
-		seen[r.Prefix] = i
+		seen[p] = key
 	}
 	return nil
 }
@@ -531,7 +604,7 @@ func decodeStrict(text string, v any) error {
 			names[i] = k.String()
 		}
 		msg := "unknown keys: " + strings.Join(names, ", ")
-		if slices.Contains(names, "budgets.restarts") {
+		if slices.ContainsFunc(names, func(n string) bool { return strings.HasSuffix(n, "budgets.restarts") }) {
 			msg += restartsHint
 		}
 		if slices.Contains(names, "ad_hoc_session") {
@@ -655,65 +728,30 @@ func parseInterval(s string) (time.Duration, error) {
 	return d, nil
 }
 
-func (g *Global) expand(p string) string {
+// expand replaces a leading ~ with the home folder.
+func expand(home, p string) string {
 	if p == "~" {
-		return g.home
+		return home
 	}
 	if rest, ok := strings.CutPrefix(p, "~/"); ok {
-		return filepath.Join(g.home, rest)
+		return filepath.Join(home, rest)
 	}
 	return p
 }
 
-func (g *Global) matches(r repoEntry, repoPath string) bool {
-	ok, _ := filepath.Match(g.expand(r.Match), repoPath)
-	return ok
-}
-
-// specificity counts the characters in a glob that are not wildcards.
-func specificity(pattern string) int {
-	return len(pattern) - strings.Count(pattern, "*") - strings.Count(pattern, "?") - strings.Count(pattern, "[")
-}
-
-// Resolve applies the layers for one Repo and the Task overrides, lowest first.
+// Resolve applies the layers for one Repo and the Task overrides, lowest
+// first: [defaults], the Repo's owner/* table, the Repo's owner/repo table.
 func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved, error) {
-	repoPath = filepath.Clean(g.expand(repoPath))
-
-	var matched []repoEntry
-	for _, r := range g.file.Repos {
-		if g.matches(r, repoPath) {
-			matched = append(matched, r)
-		}
+	layers := []layer{g.file.Defaults}
+	for _, t := range g.tables(g.keyOf(repoPath)) {
+		layers = append(layers, t.layer)
 	}
-	sort.SliceStable(matched, func(i, j int) bool {
-		return specificity(g.expand(matched[i].Match)) < specificity(g.expand(matched[j].Match))
-	})
-
-	var repoFile layer
-	data, err := os.ReadFile(filepath.Join(repoPath, repoFileName))
-	switch {
-	case err == nil:
-		if err := decodeStrict(string(data), &repoFile); err != nil {
-			return Resolved{}, fmt.Errorf("%s: %w", filepath.Join(repoPath, repoFileName), err)
-		}
-		if err := g.validate(&repoFile, repoFileName); err != nil {
-			return Resolved{}, fmt.Errorf("%s: %w", filepath.Join(repoPath, repoFileName), err)
-		}
-	case !errors.Is(err, fs.ErrNotExist):
-		return Resolved{}, err
-	}
-
-	layers := []layer{g.file.layer}
 	res := Resolved{
 		WIPCap:       defaultWIPCap,
 		PR:           true,
 		PollInterval: defaultPollInterval,
 		Budgets:      lifecycle.Budgets{CIDebug: 3, Responding: 3},
 	}
-	for _, r := range matched {
-		layers = append(layers, r.layer)
-	}
-	layers = append(layers, repoFile)
 
 	var bot reviewBotFile
 	res.Bar = defaultBar
@@ -744,6 +782,7 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 		}
 	}
 
+	var err error
 	if res.Bar.Bot, res.Budgets.ReviewCycles, err = bot.gate(); err != nil {
 		return Resolved{}, err
 	}
@@ -845,51 +884,68 @@ func (g *Global) LinearStatus(workspace, team, event string) (string, bool) {
 	return s, ok
 }
 
-// RepoForTeam returns the Repo that a [[repos]] entry maps the team to. Only an
-// entry whose match is a plain path can name a Repo.
-func (g *Global) RepoForTeam(teamKey string) (string, bool) {
-	for _, r := range g.file.Repos {
-		if strings.ContainsAny(r.Match, "*?[") {
-			continue
+// table is the [repos."<key>"] table whose key equals key ignoring case.
+func (g *Global) table(key string) (repoTable, bool) {
+	for k, t := range g.file.Repos {
+		if strings.EqualFold(k, key) {
+			return t, true
 		}
-		for _, t := range r.Teams {
-			if t == teamKey {
-				return filepath.Clean(g.expand(r.Match)), true
-			}
+	}
+	return repoTable{}, false
+}
+
+// tables are the owner/* table and the owner/repo table of the Repo key,
+// lowest first. A table that the file does not have is absent.
+func (g *Global) tables(key string) []repoTable {
+	owner, _, _ := strings.Cut(key, "/")
+	var out []repoTable
+	for _, k := range []string{owner + "/*", key} {
+		if t, ok := g.table(k); ok {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// trackers is the trackers list of the Repo key's own table, else of its
+// owner/* table. nil means every Tracker.
+func (g *Global) trackers(key string) []string {
+	var out []string
+	for _, t := range g.tables(key) {
+		if t.Trackers != nil {
+			out = t.Trackers
+		}
+	}
+	return slices.Clone(out)
+}
+
+// RepoForTeam is the checkout of the [repos."owner/repo"] table whose teams
+// list holds the team.
+func (g *Global) RepoForTeam(teamKey string) (string, bool) {
+	for _, key := range slices.Sorted(maps.Keys(g.file.Repos)) {
+		if slices.Contains(g.file.Repos[key].Teams, teamKey) {
+			return g.CheckoutFor(key)
 		}
 	}
 	return "", false
 }
 
-// RepoTrackers is the trackers list of the most specific [[repos]] entry that
-// matches the Repo and has one. nil means that the Repo takes every Tracker.
-func (g *Global) RepoTrackers(repoPath string) []string {
-	repoPath = filepath.Clean(g.expand(repoPath))
-	var out []string
-	best := -1
-	for _, r := range g.file.Repos {
-		if r.Trackers == nil || !g.matches(r, repoPath) {
-			continue
-		}
-		if n := specificity(g.expand(r.Match)); n > best {
-			out, best = slices.Clone(r.Trackers), n
-		}
-	}
-	return out
-}
+// RepoTrackers is the trackers list of the Repo's own table, else of its
+// owner/* table. nil means that the Repo takes every Tracker.
+func (g *Global) RepoTrackers(repoPath string) []string { return g.trackers(g.keyOf(repoPath)) }
 
-// PrefixedRepos lists the [[repos]] entries with a prefix, in config order.
+// PrefixedRepos lists the tables with a prefix, sorted by key.
 func (g *Global) PrefixedRepos() []PrefixedRepo {
 	var out []PrefixedRepo
-	for _, r := range g.file.Repos {
-		if r.Prefix != "" {
-			out = append(out, PrefixedRepo{Match: r.Match, Repo: filepath.Clean(g.expand(r.Match)), Prefix: r.Prefix})
+	for _, key := range slices.Sorted(maps.Keys(g.file.Repos)) {
+		if p := g.file.Repos[key].Prefix; p != "" {
+			out = append(out, PrefixedRepo{Key: key, Prefix: p})
 		}
 	}
 	return out
 }
 
-// Prefixes lists the prefix of each [[repos]] entry that has one.
+// Prefixes lists the prefix of each table that has one.
 func (g *Global) Prefixes() []string {
 	var out []string
 	for _, r := range g.PrefixedRepos() {
@@ -898,73 +954,40 @@ func (g *Global) Prefixes() []string {
 	return out
 }
 
-// RepoPrefix is the prefix of the Repo's [[repos]] entry, or "".
+// RepoPrefix is the prefix of the Repo's own table, or "".
 func (g *Global) RepoPrefix(repoPath string) string {
-	repoPath = filepath.Clean(g.expand(repoPath))
-	for _, r := range g.PrefixedRepos() {
-		if r.Repo == repoPath {
-			return r.Prefix
-		}
-	}
-	return ""
+	t, _ := g.table(g.keyOf(repoPath))
+	return t.Prefix
 }
 
-// RepoForPrefix is the Repo whose [[repos]] entry has the prefix.
+// RepoForPrefix is the checkout of the table with the prefix.
 func (g *Global) RepoForPrefix(prefix string) (string, bool) {
 	for _, r := range g.PrefixedRepos() {
 		if r.Prefix == prefix {
-			return r.Repo, true
+			return g.CheckoutFor(r.Key)
 		}
 	}
 	return "", false
 }
 
-// LockedRepos lists the [[repos]] entries with a trackers list, in config order.
+// LockedRepos lists the tables with a trackers list, sorted by key.
 func (g *Global) LockedRepos() []LockedRepo {
 	var out []LockedRepo
-	for _, r := range g.file.Repos {
-		if r.Trackers != nil {
-			out = append(out, LockedRepo{Match: r.Match, Trackers: slices.Clone(r.Trackers)})
+	for _, key := range slices.Sorted(maps.Keys(g.file.Repos)) {
+		if ts := g.file.Repos[key].Trackers; ts != nil {
+			out = append(out, LockedRepo{Key: key, Trackers: slices.Clone(ts)})
 		}
 	}
 	return out
 }
 
-// CheckoutsFor lists the Checkouts that take Tasks for Issues of the kind.
+// CheckoutsFor lists the checkouts that take Tasks for Issues of the kind.
 func (g *Global) CheckoutsFor(kind string) []string {
 	var out []string
 	for _, c := range g.Checkouts() {
-		if ts := g.RepoTrackers(c); ts == nil || slices.Contains(ts, kind) {
-			out = append(out, c)
+		if ts := g.trackers(c.Key); ts == nil || slices.Contains(ts, kind) {
+			out = append(out, c.Path)
 		}
 	}
-	return out
-}
-
-// RepoPaths lists the [[repos]] entries whose match is a plain path.
-func (g *Global) RepoPaths() []string {
-	var out []string
-	for _, r := range g.file.Repos {
-		if !strings.ContainsAny(r.Match, "*?[") {
-			out = append(out, filepath.Clean(g.expand(r.Match)))
-		}
-	}
-	return out
-}
-
-// Checkouts lists the git checkouts that a [[repos]] match names, as a plain
-// path or as a glob such as ~/code/*/*. These are the Repos that lineup can
-// find by folder name.
-func (g *Global) Checkouts() []string {
-	var out []string
-	for _, r := range g.file.Repos {
-		dirs, _ := filepath.Glob(filepath.Clean(g.expand(r.Match)))
-		for _, d := range dirs {
-			if _, err := os.Stat(filepath.Join(d, ".git")); err == nil && !slices.Contains(out, d) {
-				out = append(out, d)
-			}
-		}
-	}
-	sort.Strings(out)
 	return out
 }

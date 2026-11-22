@@ -24,6 +24,8 @@ const usage = `usage: lineup [command]
                                sign out of Linear; --local only forgets the tokens here
   lineup logout github         stop using GitHub Issues as a Tracker
   lineup trackers              name the Trackers that are on
+  lineup config migrate        rewrite the config file from [[repos]] tables to roots
+                               and [repos."owner/repo"] tables
 
   lineup add <ISSUE>           put an Issue on the Board: ENG-614, owner/repo#12, local-7, or hod-3
   lineup add --repo <repo> "<text>"
@@ -86,6 +88,8 @@ func run(args []string) error {
 		return login(args[1:], os.Stdin, os.Stdout)
 	case "logout":
 		return logout(args[1:], os.Stdout, linear.Logout)
+	case "config":
+		return cmdConfig(args[1:], os.Stdout)
 	case "trackers":
 		on, err := currentTrackers()
 		if err != nil {

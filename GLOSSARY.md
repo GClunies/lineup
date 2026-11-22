@@ -10,8 +10,16 @@ A board and an orchestrator agent that move agent work from a tracker issue to a
 A git repository that Tasks run in. A Repo maps to zero or one Tracker workspace and to one or more of its teams.
 _Avoid_: Project, codebase, area
 
+**Repo key**:
+The name of a Repo in the config file: `<owner>/<repo>` from its checkout's GitHub `origin`, or `local/<folder name>` for a checkout with no GitHub origin. A `[repos."<owner>/<repo>"]` table sets one Repo, and a `[repos."<owner>/*"]` table sets each Repo of the owner. Keys ignore case.
+_Avoid_: Repo name, slug, match
+
+**Roots**:
+The folders that the `roots` key of the config file lists. lineup finds each git checkout in a root and up to two folders below it, and names it by its Repo key.
+_Avoid_: Repo glob, search path
+
 **Locked Repo**:
-A Repo whose `[[repos]]` entry has a `trackers` list. It takes Tasks only for the Issues of those Trackers. An ad hoc Task can still use it.
+A Repo whose `[repos."<key>"]` table, or its owner's `[repos."<owner>/*"]` table, has a `trackers` list. It takes Tasks only for the Issues of those Trackers. An ad hoc Task can still use it.
 _Avoid_: Pinned Repo, restricted Repo
 
 **Tracker**:
@@ -47,8 +55,8 @@ A Task with no Issue, made from the user's own words. Its ID has the form `ah-<n
 _Avoid_: Text Task, one-off
 
 **Repo prefix**:
-The `prefix` key of a Repo's `[[repos]]` entry, for example `hod`. The Repo's Local Issues and ad hoc Tasks take IDs of the form `<prefix>-<n>`, numbered on their own.
-_Avoid_: Repo key, team key
+The `prefix` key of a Repo's `[repos."<owner>/<repo>"]` table, for example `hod`. The Repo's Local Issues and ad hoc Tasks take IDs of the form `<prefix>-<n>`, numbered on their own.
+_Avoid_: team key
 
 **Ready**:
 The Board group of the user's own Issues that have no Task and that the user chose to do next: a Linear Issue assigned to the user in an unstarted state, a local Issue with `status: todo`, or one of the user's own open GitHub Issues without the backlog label.

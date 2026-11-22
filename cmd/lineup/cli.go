@@ -54,7 +54,7 @@ func parse(name, usage string, args []string, setup func(*flag.FlagSet)) (*flag.
 func cmdAdd(c scheduler.Client, args []string, out io.Writer) error {
 	var repo string
 	fs, err := parse("add", "<ISSUE> | --repo <repo> \"<text>\"", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&repo, "repo", "", "the Repo, as a name such as data or a path")
+		fs.StringVar(&repo, "repo", "", "the Repo: a folder name such as data, an owner/repo key, or a path")
 	})
 	if err != nil {
 		return err
@@ -91,6 +91,19 @@ func cmdNextID(c scheduler.Client, args []string, out io.Writer) error {
 		return err
 	}
 	fmt.Fprintln(out, id)
+	return nil
+}
+
+// cmdConfig rewrites the config file in its current form.
+func cmdConfig(args []string, out io.Writer) error {
+	if len(args) != 1 || args[0] != "migrate" {
+		return fmt.Errorf("%w: lineup config migrate", errUsage)
+	}
+	msg, err := config.Migrate(configPath())
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, msg)
 	return nil
 }
 
