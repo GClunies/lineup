@@ -1,0 +1,23 @@
+internal/config/testdata/migrate/config.toml
+  s_2573e906f3ed45::t_1b6c31807832db 1-67
+internal/config/migrate_test.go
+  s_2573e906f3ed45::t_6e9c44dcb8af5f 1-97
+internal/config/testdata/migrate/before.json
+  s_2573e906f3ed45::t_159f773d43f6f5 1-399
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "02be9cedf96afe71ca0d03395ab140d672c3cd00",
+  "prompts": {},
+  "sessions": {
+    "s_2573e906f3ed45": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c805a93-f9a6-47ca-bb67-bf7d36292936",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
