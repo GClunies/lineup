@@ -1,0 +1,58 @@
+cmd/lineup/hub_test.go
+  s_2573e906f3ed45::t_8281cc66c590d7 455-456,458,483,497,517,535
+cmd/lineup/service_test.go
+  s_2573e906f3ed45::t_8281cc66c590d7 256,273,295
+internal/config/config_test.go
+  s_2573e906f3ed45::t_c468471deec56d 9,15,18-19,48-81,112-117,119,126,133,139,146,159-164,167,171-173,177-179,183-188,191,193,196,198-199,202-224,226-227,229,232,243-318,324,326,331-332,334,345,373-374,395-396,402,407,451,454,470,496-548,550-585,587-602,630,677,716,722-723,729,743-744,746,750-752,754,762,765-766,769,777-782,784,793-794,797-798,815-816,819,822-833,839-844,846,853,860-862,864,866,870-874,880,884-897,902-907,909,913-914,918-920,923,927-930,936,942-944,951,953,957-958,962,964,971
+cmd/lineup/cli.go
+  s_2573e906f3ed45::t_aa5a369ec52bfa 57
+cmd/lineup/wire_test.go
+  s_2573e906f3ed45::t_8281cc66c590d7 114,116,129,134,136-140,142-143,145-146,248
+internal/scheduler/review.go
+  s_2573e906f3ed45::t_da1b5920b5622e 161
+internal/config/config.go
+  s_2573e906f3ed45::t_aa5a369ec52bfa 304
+  s_2573e906f3ed45::t_15696b3a6771f6 1,19,109,119-124,140,142,150,152,162-165,221-225,287,312-318,322,330-332,335-337,364-413,418,421-428,432,435,444,457-460,463,465,467-469,471,474-475,477,607,731-732,734,737,742-743,745-747,785,887-891,893-904,907,910-912,914-916,918-927,930,933-937,940-942,948,957,959-960,963,967,973,976-978,984,988-989
+  s_2573e906f3ed45::t_da1b5920b5622e 414-417,419-420
+  s_2573e906f3ed45::t_3aabd30f91c760 21
+internal/scheduler/ports.go
+  s_2573e906f3ed45::t_da1b5920b5622e 241-242,247-248
+cmd/lineup/hub.go
+  s_2573e906f3ed45::t_da1b5920b5622e 272-273,276,293,296
+internal/config/checkouts.go
+  s_2573e906f3ed45::t_072b81201e8ac8 1-166
+cmd/lineup/review_test.go
+  s_2573e906f3ed45::t_da1b5920b5622e 331
+  s_2573e906f3ed45::t_073933c4c05aa9 110,131
+  s_2573e906f3ed45::t_8281cc66c590d7 82
+internal/scheduler/queue.go
+  s_2573e906f3ed45::t_da1b5920b5622e 354
+internal/scheduler/queue_test.go
+  s_2573e906f3ed45::t_da1b5920b5622e 94
+internal/board/start.go
+  s_2573e906f3ed45::t_da1b5920b5622e 218
+cmd/lineup/wire.go
+  s_2573e906f3ed45::t_da1b5920b5622e 590,592
+internal/board/main_test.go
+  s_2573e906f3ed45::t_e58c405b71a493 1-10
+internal/harness/claude/main_test.go
+  s_2573e906f3ed45::t_3a7d7ac794cefc 1-10
+internal/scheduler/main_test.go
+  s_2573e906f3ed45::t_984b1865373110 1-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "07ede34f4258496c19fb99606c676c42e1aa0a66",
+  "prompts": {},
+  "sessions": {
+    "s_2573e906f3ed45": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c805a93-f9a6-47ca-bb67-bf7d36292936",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
