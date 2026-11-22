@@ -47,13 +47,13 @@ func (s spyTracker) Description(_ context.Context, is scheduler.Issue) (string, 
 
 func TestTheMuxSendsEachCallOnlyToItsIssuesTracker(t *testing.T) {
 	var calls []string
-	mux := trackerMux{}
+	mux := trackerMux{kinds: map[string]issueTracker{}, prefixes: []string{"hod"}}
 	for _, k := range []string{scheduler.KindLinear, scheduler.KindGitHub, scheduler.KindLocal} {
-		mux[k] = spyTracker{name: k, calls: &calls}
+		mux.kinds[k] = spyTracker{name: k, calls: &calls}
 	}
 	ctx := context.Background()
 	for _, add := range []struct{ kind, id string }{
-		{"", "ENG-614"}, {"", "o/r#12"}, {"", "local-7"},
+		{"", "ENG-614"}, {"", "o/r#12"}, {"", "local-7"}, {"", "hod-3"},
 		{scheduler.KindLinear, "LOCAL-7"}, // a Linear team keyed LOCAL has Issues such as LOCAL-7
 	} {
 		is, err := mux.Lookup(ctx, add.kind, add.id)
@@ -71,6 +71,7 @@ func TestTheMuxSendsEachCallOnlyToItsIssuesTracker(t *testing.T) {
 		"linear lookup ENG-614", "linear begin ENG-614", "linear status:started ENG-614", "linear describe ENG-614",
 		"github lookup o/r#12", "github begin o/r#12", "github status:started o/r#12", "github describe o/r#12",
 		"local lookup local-7", "local begin local-7", "local status:started local-7", "local describe local-7",
+		"local lookup hod-3", "local begin hod-3", "local status:started hod-3", "local describe hod-3",
 		"linear lookup LOCAL-7", "linear begin LOCAL-7", "linear status:started LOCAL-7", "linear describe LOCAL-7",
 		"linear status:merged ENG-1",
 	}
@@ -247,5 +248,39 @@ func TestBlocksReportsEveryOtherFailureAsAnError(t *testing.T) {
 		if live, err := p.Blocks(context.Background(), "session:1"); err == nil {
 			t.Errorf("%s: Blocks = %v, nil, want an error", name, live)
 		}
+	}
+}
+
+func TestAPrefixedLocalIssueMapsToItsPrefixesRepo(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	hod := gitCheckout(t, filepath.Join(home, "repos", "gclunies", "hod"), "git@github.com:gclunies/hod.git")
+	cfg := loadConfig(t, "[[repos]]\nmatch = \"~/repos/*/*\"\n[[repos]]\nmatch = \"~/repos/gclunies/hod\"\ntrackers = [\"local\"]\nprefix = \"hod\"\n")
+	l := localTracker{s: localissues.Store{Dir: t.TempDir(), Prefixes: cfg.Prefixes()}}
+	if err := os.WriteFile(filepath.Join(l.s.Dir, "hod-3.md"), []byte("---\ntitle: Block Linear writes\nstatus: todo\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mux := trackerMux{kinds: map[string]issueTracker{scheduler.KindLocal: l}, prefixes: cfg.Prefixes()}
+	is, err := mux.Lookup(context.Background(), "", "HOD-3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if is.Kind != scheduler.KindLocal || is.Identifier != "hod-3" || is.BranchName != "hod-3-block-linear-writes" ||
+		is.URL != "file://"+filepath.Join(l.s.Dir, "hod-3.md") {
+		t.Fatalf("lookup %+v", is)
+	}
+	p := configPort{cfg: cfg}
+	if repo, ok := p.RepoForIssue(is); !ok || repo != hod {
+		t.Fatalf("repo %q %v, want %s from the prefix, as the file names no repo", repo, ok, hod)
+	}
+	if got := p.RepoPrefix(hod); got != "hod" {
+		t.Fatalf("RepoPrefix = %q", got)
+	}
+	is.RepoHint = "data"
+	if repo, _ := p.RepoForIssue(is); repo != hod {
+		t.Fatalf("repo %q, want %s: the prefix names the Repo before the repo field", repo, hod)
+	}
+	if repo, ok := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindLocal, Identifier: "local-1"}); ok {
+		t.Fatalf("local-1 with no repo field mapped to %q", repo)
 	}
 }

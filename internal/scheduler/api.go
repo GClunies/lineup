@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -140,6 +141,8 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 		return s.show(req.Task)
 	case "add":
 		return s.add(ctx, req)
+	case "next-id":
+		return s.nextIssueID(req.Repo)
 	case "review":
 		return s.review(ctx, req.URL)
 	case "reviews":
@@ -344,14 +347,25 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 	var v TaskView
 	err = s.withLoop(func() error {
 		if r.ID == "" {
-			r.ID = s.nextID("ah")
 			slug := strings.Trim(notSlug.ReplaceAllString(strings.ToLower(r.Title), "-"), "-")
 			if len(slug) > 40 {
 				slug = strings.Trim(slug[:40], "-")
 			}
-			r.Branch = "lineup/" + strings.ToLower(r.ID) + "-" + slug
+			if prefix := s.d.Config.RepoPrefix(r.Repo); prefix != "" {
+				id, err := s.nextLocalID(prefix)
+				if err != nil {
+					return err
+				}
+				r.ID, r.Branch = id, strings.TrimSuffix(id+"-"+slug, "-")
+			} else {
+				r.ID = s.nextID("ah")
+				r.Branch = "lineup/" + strings.ToLower(r.ID) + "-" + slug
+			}
 		}
 		if old, ok := s.recs[r.ID]; ok {
+			if r.Issue != nil && (old.Issue == nil || old.Issue.Tracker() != r.Issue.Tracker()) {
+				return fmt.Errorf("%s is already the ID of another Task: give the %s Issue another ID", r.ID, r.Issue.Tracker())
+			}
 			if old.keepsTab() {
 				return fmt.Errorf("%s is Done and keeps its tab: close its tab first with lineup close %s", r.ID, r.ID)
 			}
@@ -385,6 +399,46 @@ func (s *Scheduler) nextID(prefix string) string {
 	}
 	s.d.Store.SetSetting("next_id", strconv.Itoa(n+1))
 	return fmt.Sprintf("%s-%d", prefix, n)
+}
+
+// nextLocalID is <prefix>-<n>, with n one more than the highest n of the
+// prefix among the Local Issues and every Task in the store. Only the loop
+// calls it.
+func (s *Scheduler) nextLocalID(prefix string) (string, error) {
+	hi := 0
+	if s.d.LocalIssues != nil {
+		var err error
+		if hi, err = s.d.LocalIssues.Highest(prefix); err != nil {
+			return "", fmt.Errorf("read the Local Issues: %w", err)
+		}
+	}
+	for id := range s.recs {
+		if p, n, ok := SplitID(id); ok && p == prefix {
+			hi = max(hi, n)
+		}
+	}
+	return fmt.Sprintf("%s-%d", prefix, hi+1), nil
+}
+
+// nextIssueID is the ID that the next Local Issue of the named Repo takes:
+// <prefix>-<n> for a Repo with a prefix, and local-<n> for any other Repo
+// or no name.
+func (s *Scheduler) nextIssueID(name string) (string, error) {
+	prefix := KindLocal
+	if name != "" {
+		repo, err := s.d.Config.ResolveRepo(name)
+		if err != nil {
+			return "", err
+		}
+		prefix = cmp.Or(s.d.Config.RepoPrefix(repo), prefix)
+	}
+	var id string
+	err := s.withLoop(func() error {
+		var err error
+		id, err = s.nextLocalID(prefix)
+		return err
+	})
+	return id, err
 }
 
 // repos lists the Repo of every Task. Only the loop calls it.

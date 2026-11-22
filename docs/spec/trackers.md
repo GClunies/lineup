@@ -59,9 +59,9 @@ lineup always needs `gh` for PRs, so a signed-in `gh` does not make GitHub a Tra
 |---|---|---|
 | Linear | `<TEAM>-<n>` | `ENG-614` |
 | GitHub | `<owner>/<repo>#<n>` | `owner/repo#12` |
-| Local | `local-<n>` | `local-7` |
+| Local | `local-<n>`, or `<prefix>-<n>` for a Repo with a [Repo prefix](#repo-prefixes) | `local-7`, `hod-3` |
 
-`lineup add` takes any of these forms. An ID that starts with `local-` always names a local Issue, so a typed ID names exactly one Tracker. The Board sends each Issue row's Kind with its add request, so it can still start an Issue from a Linear team keyed `LOCAL`.
+`lineup add` takes any of these forms. An ID that starts with `local-` always names a local Issue, so a typed ID names exactly one Tracker. An ID `<prefix>-<n>` names a local Issue too, though it has the form of a Linear ID. lineup refuses a prefix that equals a Linear team key, so the two forms never meet. The Board sends each Issue row's Kind with its add request, so it can still start an Issue from a Linear team keyed `LOCAL`.
 
 ## Repo for each Issue
 
@@ -69,7 +69,7 @@ lineup always needs `gh` for PRs, so a signed-in `gh` does not make GitHub a Tra
 |---|---|---|
 | Linear | The team or Project mapping, as in the MVP | The fuzzy picker, as in the MVP |
 | GitHub | The `[[repos]]` entry whose `origin` remote is the Issue's repository, else a `[[repos]]` checkout with the repository's name when its `origin` matches | `lineup add` fails and names the repository. The user adds it to `[[repos]]`. |
-| Local | The Issue's `repo:` field, resolved as `lineup add --repo` resolves a name | The fuzzy picker. lineup writes the choice back to `repo:`. |
+| Local | The Repo whose prefix starts the ID, else the Issue's `repo:` field, resolved as `lineup add --repo` resolves a name | The fuzzy picker. lineup writes the choice back to `repo:`. |
 
 ### Locked Repos
 
@@ -87,6 +87,40 @@ trackers = ["local"]
 - The Orchestrator's CLAUDE.md names each locked Repo and its Trackers. The Orchestrator plans the Issues of a locked Repo only in those Trackers.
 - If more than one entry with `trackers` matches a Repo, the entry with the most specific `match` decides.
 - lineup refuses to load a config with an unknown tracker name, an empty `trackers` list, or `teams` on an entry whose `trackers` has no `linear`. `lineup restart` prints that error and leaves the Scheduler on the old config.
+
+### Repo prefixes
+
+A `[[repos]]` entry with a `prefix` key gives its Repo its own IDs. Its Local Issues and its ad hoc Tasks take the form `<prefix>-<n>`. A Repo with no `prefix` keeps `local-<n>` and `ah-<n>`.
+
+```toml
+[[repos]]
+match = "~/repos/gclunies/hod"
+trackers = ["local"]
+prefix = "hod"
+```
+
+| Item | No prefix | Prefix `hod` |
+|---|---|---|
+| Local Issue file | `local-7.md` | `hod-3.md` |
+| Ad hoc Task ID | `ah-63` | `hod-4` |
+| Ad hoc branch | `lineup/ah-63-<title slug>` | `hod-4-<title slug>` |
+| Tab label | `ah-63 <title>` | `hod-4 <title>` |
+
+- Each prefix numbers on its own. The next n is one more than the highest n of the prefix among the Local Issue files and every Task in the store, archived Tasks too.
+- `lineup next-id <repo>` prints the next free ID of the Repo, for example `hod-5`. The Orchestrator names a new Local Issue file with it.
+- `lineup add` refuses a Local Issue whose ID another Task in the store already holds.
+- The ad hoc Task's tab opens in its Repo's session, for example `hod`.
+- The Orchestrator's CLAUDE.md names each prefix and the file name of a new Local Issue of its Repo.
+
+lineup refuses to load a config with one of these prefixes. The error names the prefix.
+
+- A prefix with a character that is not a lowercase letter, a digit, or a dash, or that starts or ends with a dash.
+- A prefix on an entry whose `match` is a glob.
+- A prefix that two entries share.
+- A prefix that equals a team key of a `teams` list, in any case. `lineup restart` also reads the team keys of each signed-in Linear workspace. If Linear does not answer, restart prints a warning and checks only the `teams` lists.
+- The prefixes `local`, `ah`, and `pr`. lineup uses them for the IDs without a Repo prefix.
+
+`lineup restart` prints the error and leaves the Scheduler on the old config.
 
 ## Lifecycle events
 
@@ -118,7 +152,7 @@ The Working Stage contract for a GitHub Issue adds one rule: the PR body must co
 
 The Local Tracker is one folder, `~/.local/share/lineup/issues/`. The global config key `local_issues_dir` moves it. The folder is outside every Repo, so planning files never enter a Repo's git history.
 
-Each Issue is one file, `local-<n>.md`:
+Each Issue is one file, `local-<n>.md`, or `<prefix>-<n>.md` for a Repo with a [Repo prefix](#repo-prefixes):
 
 ```markdown
 ---
@@ -138,9 +172,9 @@ The description, in Markdown.
 | `status` | `backlog`, `todo`, `started`, `in review`, `done`, `canceled` | Yes |
 | `blocked_by` | Local Issue IDs | No |
 
-- The next ID is one more than the highest ID in the folder. The adapter creates the file with `O_EXCL`, so two writers cannot take one ID.
+- The next ID is one more than the highest n of its prefix in the folder. The adapter creates the file with `O_EXCL`, so two writers cannot take one ID.
 - A new Issue gets `status: backlog`. The Board shows a `backlog` Issue in Backlog and a `todo` Issue in Ready.
-- The branch name is `local-<n>-<title slug>`, for example `local-7-retry-failed-loads-before-alerting`. A GitHub Issue's branch is `gh-<n>-<title slug>`.
+- The branch name is `<ID>-<title slug>`, for example `local-7-retry-failed-loads-before-alerting` or `hod-3-block-linear-writes`. A GitHub Issue's branch is `gh-<n>-<title slug>`.
 - The adapter reads files that the Orchestrator or the user wrote. The work view leaves out a file that the adapter cannot parse.
 
 ## The Board
@@ -175,7 +209,7 @@ The Orchestrator's instructions hold one section for each Tracker. Claude Code r
 | Job | Linear | GitHub | Local |
 |---|---|---|---|
 | Read | `linear issue view` | `gh issue view` | Read `local-<n>.md` |
-| Split | `linear issue create` | `gh issue create` | Write new `local-<n>.md` files. It takes the next free ID. |
+| Split | `linear issue create` | `gh issue create` | Write new `<ID>.md` files. `lineup next-id <repo>` prints the next free ID. |
 | Criteria | `linear issue update` | `gh issue edit --body-file` | Edit the description |
 | Order | `linear issue relation add` | A `Blocked by #<n>` line in the body | `blocked_by` |
 

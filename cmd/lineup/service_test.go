@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net"
 	"os"
@@ -263,5 +264,43 @@ func TestRestartRefusesAnUnknownTrackerInTheTrackersKey(t *testing.T) {
 	}
 	if len(*calls) != 0 {
 		t.Fatalf("restart with an unknown tracker ran %q", *calls)
+	}
+}
+
+func TestRestartRefusesAPrefixThatEqualsALinearTeamKey(t *testing.T) {
+	m, calls := testManager(t)
+	m.config = filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(m.config, []byte("[[repos]]\nmatch = \"~/repos/gclunies/hod\"\nprefix = \"hod\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m.teamKeys = func(context.Context) ([]string, error) { return []string{"ENG", "HOD"}, nil }
+	m.ensure()
+	*calls = nil
+	err := m.restart()
+	if err == nil || !strings.Contains(err.Error(), `prefix "hod" equals a Linear team key`) || !strings.Contains(err.Error(), "keeps running on the old config") {
+		t.Fatalf("restart: %v, want a refusal that names hod", err)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("restart with a team key prefix ran %q", *calls)
+	}
+	m.teamKeys = func(context.Context) ([]string, error) { return []string{"ENG"}, errors.New("offline") }
+	if err := m.restart(); err != nil {
+		t.Fatalf("restart with other team keys and an offline workspace: %v", err)
+	}
+}
+
+func TestRestartRefusesABadPrefix(t *testing.T) {
+	m, calls := testManager(t)
+	m.config = filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(m.config, []byte("[[repos]]\nmatch = \"~/repos/gclunies/hod\"\nprefix = \"ah\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m.ensure()
+	*calls = nil
+	if err := m.restart(); err == nil || !strings.Contains(err.Error(), `prefix "ah" is reserved`) {
+		t.Fatalf("restart: %v, want a refusal that names ah", err)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("restart with a reserved prefix ran %q", *calls)
 	}
 }

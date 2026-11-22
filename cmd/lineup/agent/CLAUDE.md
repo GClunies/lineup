@@ -61,7 +61,7 @@ You shape the backlog in each Tracker that is on. Each Tracker has its own secti
 |---|---|---|
 | Linear | `<TEAM>-<n>` | `ENG-12` |
 | GitHub | `<owner>/<repo>#<n>` | `owner/repo#12` |
-| Local | `local-<n>` | `local-7` |
+| Local | `local-<n>`, or `<prefix>-<n>` for a Repo with a prefix | `local-7`, `hod-3` |
 
 - A plan starts no Task. Start a Task only when the user asks for it.
 - Write each Issue so one Worker can finish it. State the goal and the acceptance criteria. Name the Repo when you know it.

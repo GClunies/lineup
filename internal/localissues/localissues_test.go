@@ -45,7 +45,7 @@ func TestCreateNeverReusesAnID(t *testing.T) {
 		defer os.RemoveAll(s.Dir)
 		os.MkdirAll(s.Dir, 0o755)
 		for _, n := range rapid.SliceOfNDistinct(rapid.IntRange(1, 50), 0, 5, rapid.ID[int]).Draw(t, "existing") {
-			os.WriteFile(s.path(n), Issue{Title: "old", Status: Todo}.Marshal(), 0o644)
+			os.WriteFile(s.path(DefaultPrefix, n), Issue{Title: "old", Status: Todo}.Marshal(), 0o644)
 		}
 		writers := rapid.IntRange(1, 8).Draw(t, "writers")
 		ids := make(chan string, writers)
@@ -138,7 +138,7 @@ func TestPromoteCancelsTheIssueAndEndsTheBodyWithTheLinearID(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		want := genIssue(t)
 		want.N = 7
-		os.WriteFile(s.path(7), want.Marshal(), 0o644)
+		os.WriteFile(s.path(DefaultPrefix, 7), want.Marshal(), 0o644)
 		if err := s.Promote("local-7", "ENG-612"); err != nil {
 			t.Fatal(err)
 		}
@@ -165,14 +165,70 @@ func TestBranchAndParseID(t *testing.T) {
 	if got := is.Branch(); got != "local-7-retry-failed-loads-before-alerting" {
 		t.Errorf("branch = %q", got)
 	}
-	for id, want := range map[string]int{"local-7": 7, "LOCAL-12": 12} {
-		if n, err := ParseID(id); err != nil || n != want {
-			t.Errorf("ParseID(%q) = %d, %v", id, n, err)
+	if got := (Issue{Prefix: "hod", N: 3, Title: "Block Linear writes"}).Branch(); got != "hod-3-block-linear-writes" {
+		t.Errorf("prefixed branch = %q", got)
+	}
+	s := Store{Prefixes: []string{"hod", "web-2"}}
+	for id, want := range map[string]struct {
+		prefix string
+		n      int
+	}{
+		"local-7": {"local", 7}, "LOCAL-12": {"local", 12}, "hod-3": {"hod", 3}, "HOD-3": {"hod", 3}, "web-2-9": {"web-2", 9},
+	} {
+		if p, n, err := s.ParseID(id); err != nil || p != want.prefix || n != want.n {
+			t.Errorf("ParseID(%q) = %q, %d, %v", id, p, n, err)
 		}
 	}
-	for _, id := range []string{"local-0", "local-x", "ENG-7", "local-07"} {
-		if _, err := ParseID(id); err == nil {
+	for _, id := range []string{"local-0", "local-x", "ENG-7", "local-07", "hod-0", "web-9", "hod", "dex-3"} {
+		if _, _, err := s.ParseID(id); err == nil {
 			t.Errorf("ParseID(%q) passed", id)
 		}
+	}
+}
+
+func TestAPrefixedIssueLivesInItsOwnFileAndNumbersOnItsOwn(t *testing.T) {
+	s := Store{Dir: t.TempDir(), Prefixes: []string{"hod", "web"}}
+	for name, is := range map[string]Issue{
+		"local-1.md": {Title: "a", Status: Todo},
+		"hod-1.md":   {Title: "b", Repo: "hod", Status: Todo},
+		"hod-4.md":   {Title: "c", Status: Backlog},
+		"web-2.md":   {Title: "d", Status: Todo},
+		"dex-9.md":   {Title: "no such prefix", Status: Todo},
+		"HOD-7.md":   {Title: "upper case", Status: Todo},
+	} {
+		os.WriteFile(filepath.Join(s.Dir, name), is.Marshal(), 0o644)
+	}
+	list, broken, err := s.List()
+	if err != nil || len(broken) > 0 {
+		t.Fatalf("list: %v %v", broken, err)
+	}
+	var ids []string
+	for _, is := range list {
+		ids = append(ids, is.ID())
+	}
+	if want := []string{"local-1", "hod-1", "hod-4", "web-2"}; !reflect.DeepEqual(ids, want) {
+		t.Fatalf("List IDs = %q, want %q", ids, want)
+	}
+	for prefix, want := range map[string]int{"local": 1, "hod": 4, "web": 2, "dex": 0} {
+		if got, err := s.Highest(prefix); err != nil || got != want {
+			t.Errorf("Highest(%s) = %d, %v, want %d", prefix, got, err, want)
+		}
+	}
+	got, err := s.Get("HOD-4")
+	if err != nil || got.ID() != "hod-4" || got.Title != "c" {
+		t.Fatalf("Get(HOD-4) = %+v, %v", got, err)
+	}
+	if err := s.SetStatus("hod-4", Started); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Get("hod-4"); got.Status != Started {
+		t.Fatalf("hod-4 status %q after SetStatus", got.Status)
+	}
+	made, err := s.Create("e", "", "")
+	if err != nil || made.ID() != "local-2" {
+		t.Fatalf("Create = %q, %v, want local-2", made.ID(), err)
+	}
+	if n, _ := (Store{Dir: filepath.Join(s.Dir, "none")}).Highest("hod"); n != 0 {
+		t.Fatalf("a missing folder has Highest %d", n)
 	}
 }

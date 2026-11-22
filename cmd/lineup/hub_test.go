@@ -41,7 +41,7 @@ func TestAgentArgvUnsetsAnEmptyConfigDir(t *testing.T) {
 }
 
 func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
-	role, settings, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup", nil)
+	role, settings, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 }
 
 func TestAgentRoleLeavesNeedsYouToThePalette(t *testing.T) {
-	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup", nil)
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -489,7 +489,7 @@ func TestTheRoleNamesEachLockedRepoAndItsTrackers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", cfg.LockedRepos())
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", cfg.LockedRepos(), cfg.PrefixedRepos())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -508,11 +508,48 @@ func TestTheRoleNamesEachLockedRepoAndItsTrackers(t *testing.T) {
 		t.Errorf("the no Repo mapping row offers locked Repos:\n%s", questions)
 	}
 
-	open, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", nil)
+	open, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(open), "No Repo is locked.") {
 		t.Errorf("a config with no lock gives no plain Locked Repos section")
+	}
+}
+
+func TestTheRoleNamesEachRepoPrefixAndItsFileRule(t *testing.T) {
+	path, hod, _ := lockedConfig(t)
+	body, _ := os.ReadFile(path)
+	if err := os.WriteFile(path, append(body, "prefix = \"hod\"\n"...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", cfg.LockedRepos(), cfg.PrefixedRepos())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, section, ok := strings.Cut(string(raw), "\n## Repo prefixes\n")
+	if !ok {
+		t.Fatalf("the role has no Repo prefixes section:\n%s", raw)
+	}
+	section, _, _ = strings.Cut(section, "\n## ")
+	for _, want := range []string{"| `" + hod + "` | `hod` | `/Users/g/issues/hod-<n>.md` |", "Name a new Local Issue file for a Repo with a prefix `<prefix>-<n>.md`", "`prefix` key", path} {
+		if !strings.Contains(section, want) {
+			t.Errorf("the Repo prefixes section has no %q:\n%s", want, section)
+		}
+	}
+	_, local, _ := strings.Cut(string(raw), "\n## Local\n")
+	if !strings.Contains(local, "run `lineup next-id <repo>`") {
+		t.Errorf("the Local section does not name lineup next-id:\n%s", local)
+	}
+	open, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(open), "No Repo has a prefix.") {
+		t.Errorf("a config with no prefix gives no plain Repo prefixes section")
 	}
 }

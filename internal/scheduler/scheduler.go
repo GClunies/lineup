@@ -24,12 +24,14 @@ import (
 )
 
 type Deps struct {
-	Rex          Rex
-	GitHub       GitHub
-	Worktrees    Worktrees
-	Harness      Harness
-	Tracker      Tracker
-	Config       Config
+	Rex       Rex
+	GitHub    GitHub
+	Worktrees Worktrees
+	Harness   Harness
+	Tracker   Tracker
+	Config    Config
+	// LocalIssues is the Local Tracker's folder. nil holds no Issues.
+	LocalIssues  LocalIssues
 	Store        *store.Store
 	DefaultCap   int
 	PollInterval time.Duration

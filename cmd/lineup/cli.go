@@ -12,6 +12,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/gclunies/lineup/internal/config"
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/localissues"
 	"github.com/gclunies/lineup/internal/scheduler"
@@ -20,6 +21,7 @@ import (
 // clientCommands are the commands that call the Scheduler. The Orchestrator uses them.
 var clientCommands = map[string]func(c scheduler.Client, args []string, out io.Writer) error{
 	"add":     cmdAdd,
+	"next-id": cmdNextID,
 	"start":   cmdStart,
 	"review":  cmdReview,
 	"reviews": cmdReviews,
@@ -62,7 +64,7 @@ func cmdAdd(c scheduler.Client, args []string, out io.Writer) error {
 		return errUsage
 	}
 	req := scheduler.Request{Op: "add", Repo: repo}
-	if repo != "" && !looksLikeIssue(fs.Arg(0)) {
+	if repo != "" && !looksLikeIssue(fs.Arg(0), repoPrefixes()) {
 		req.Text = fs.Arg(0)
 	} else {
 		req.Issue = fs.Arg(0)
@@ -75,14 +77,42 @@ func cmdAdd(c scheduler.Client, args []string, out io.Writer) error {
 	return nil
 }
 
-// looksLikeIssue matches an Issue ID: ENG-123, owner/repo#12, or local-7.
-func looksLikeIssue(s string) bool {
-	switch scheduler.KindOf(s) {
+// cmdNextID prints the ID that the next Local Issue of the Repo takes.
+func cmdNextID(c scheduler.Client, args []string, out io.Writer) error {
+	if len(args) > 1 {
+		return fmt.Errorf("%w: lineup next-id [<repo>]", errUsage)
+	}
+	req := scheduler.Request{Op: "next-id"}
+	if len(args) == 1 {
+		req.Repo = args[0]
+	}
+	var id string
+	if err := c.Do(req, &id); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, id)
+	return nil
+}
+
+// repoPrefixes reads the Repo prefixes from the config file. A file that
+// does not load names none.
+func repoPrefixes() []string {
+	g, err := config.Load(configPath())
+	if err != nil {
+		return nil
+	}
+	return g.Prefixes()
+}
+
+// looksLikeIssue matches an Issue ID: ENG-123, owner/repo#12, local-7, or
+// <prefix>-<n> for one of the Repo prefixes, such as hod-3.
+func looksLikeIssue(s string, prefixes []string) bool {
+	switch scheduler.KindOf(s, prefixes) {
 	case scheduler.KindGitHub:
 		_, _, err := github.ParseIssueID(s)
 		return err == nil
 	case scheduler.KindLocal:
-		_, err := localissues.ParseID(s)
+		_, _, err := localissues.Store{Prefixes: prefixes}.ParseID(s)
 		return err == nil
 	}
 	team, num, ok := strings.Cut(s, "-")

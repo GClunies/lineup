@@ -102,15 +102,17 @@ func serve() error {
 	if err != nil {
 		return fmt.Errorf("rex: %w", err)
 	}
-	tracker := trackerMux{
+	local := localissues.Store{Dir: cfg.LocalIssuesDir(), Prefixes: cfg.Prefixes()}
+	tracker := trackerMux{kinds: map[string]issueTracker{
 		scheduler.KindLinear: &trackerPort{cfg: cfg},
 		scheduler.KindGitHub: githubTracker{c: gh.c, labels: cfg.GitHubLabels()},
-		scheduler.KindLocal:  localTracker{s: localissues.Store{Dir: cfg.LocalIssuesDir()}},
-	}
+		scheduler.KindLocal:  localTracker{s: local},
+	}, prefixes: cfg.Prefixes()}
 	s, err := scheduler.New(scheduler.Deps{
 		Rex: rexPort{rc}, GitHub: gh, Worktrees: worktreePort{wtBin},
 		Harness: harnessPort{cfg: cfg, tracker: tracker}, Tracker: tracker,
 		Config:       configPort{cfg: cfg, choices: config.NewRepoChoices(choicesPath)},
+		LocalIssues:  local,
 		Store:        st,
 		DefaultCap:   defaults.WIPCap,
 		PollInterval: defaults.PollInterval,

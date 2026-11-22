@@ -14,6 +14,8 @@ blocked_by: [local-3]
 The description, in Markdown.
 ```
 
+A Repo with a prefix names its Issues `<prefix>-<n>`, so the file `hod-3.md` holds the Issue `hod-3`. The Repo prefixes section names each prefix.
+
 | Field | Values | Required |
 |---|---|---|
 | `title` | Text | Yes |
@@ -30,6 +32,6 @@ The description, in Markdown.
 | Order | "local-8 needs local-7 first" | Add `local-7` to `blocked_by` in `local-8.md` |
 | Drop | "drop local-7" | Set `status: canceled` |
 
-- To name a new file, list `{{issues}}` and take one more than the highest number. Never write over a file that exists.
+- To name a new file, run `lineup next-id <repo>`. It prints the next free ID of the Repo, for example `hod-4`, or `local-8` for a Repo with no prefix. Name the file `<ID>.md`. Never write over a file that exists.
 - Keep each field on one line. Write `title` as plain text. If it contains a colon or a `#`, put it in double quotes.
 - Set `status` only to `backlog`, `todo`, or `canceled`.

@@ -258,7 +258,7 @@ func composeAgent(role []byte, settings string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	return agentFiles(role, settings, cfg.LocalIssuesDir(), configPath(), self, cfg.LockedRepos())
+	return agentFiles(role, settings, cfg.LocalIssuesDir(), configPath(), self, cfg.LockedRepos(), cfg.PrefixedRepos())
 }
 
 // lockedReposSection names each locked Repo and its Trackers.
@@ -280,8 +280,28 @@ func lockedReposSection(locked []config.LockedRepo) []byte {
 	return []byte(b.String())
 }
 
-func agentFiles(role []byte, settings, issuesDir, configFile, self string, locked []config.LockedRepo) ([]byte, string, error) {
-	out := slices.Concat(role, linearSection, githubSection, localSection, lockedReposSection(locked))
+// prefixesSection names each Repo prefix, and the file name of a new Local
+// Issue of its Repo.
+func prefixesSection(prefixed []config.PrefixedRepo) []byte {
+	var b strings.Builder
+	b.WriteString("\n## Repo prefixes\n\n")
+	if len(prefixed) == 0 {
+		b.WriteString("No Repo has a prefix. Each Local Issue ID has the form `local-<n>`, and each ad hoc Task ID has the form `ah-<n>`.\n")
+		return []byte(b.String())
+	}
+	b.WriteString("A Repo with a prefix numbers its own Local Issues and ad hoc Tasks, for example `hod-3`. The `prefix` key of its `[[repos]]` entry in `{{config}}` sets the prefix.\n\n")
+	b.WriteString("| Repo | Prefix | New Local Issue file |\n|---|---|---|\n")
+	for _, r := range prefixed {
+		fmt.Fprintf(&b, "| `%s` | `%s` | `{{issues}}/%s-<n>.md` |\n", r.Match, r.Prefix, r.Prefix)
+	}
+	b.WriteString("\n- Name a new Local Issue file for a Repo with a prefix `<prefix>-<n>.md`. Never write a `local-<n>.md` file for that Repo.\n" +
+		"- A `<prefix>-<n>` ID is a Local Issue ID, even though it has the form of a Linear ID.\n" +
+		"- Each other Repo keeps `local-<n>` Local Issues and `ah-<n>` ad hoc Tasks.\n")
+	return []byte(b.String())
+}
+
+func agentFiles(role []byte, settings, issuesDir, configFile, self string, locked []config.LockedRepo, prefixed []config.PrefixedRepo) ([]byte, string, error) {
+	out := slices.Concat(role, linearSection, githubSection, localSection, lockedReposSection(locked), prefixesSection(prefixed))
 	out = bytes.ReplaceAll(out, []byte("{{issues}}"), []byte(issuesDir))
 	out = bytes.ReplaceAll(out, []byte("{{config}}"), []byte(configFile))
 	// The rules write /{{issues}}, as a rule path that starts with // is
@@ -553,6 +573,7 @@ func boardOptions(path string) board.Options {
 	opts.StartSkills = g.StartSkills()
 	opts.Repos = g.CheckoutsFor
 	opts.LocalIssues = g.LocalIssuesDir()
+	opts.LocalPrefixes = g.Prefixes()
 	opts.GitHub = board.GitHub{
 		Login:   func() (string, bool, error) { return github.TrackerLogin(stateDir()) },
 		Backlog: g.GitHubBacklogLabel(),

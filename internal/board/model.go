@@ -60,6 +60,8 @@ type Options struct {
 	// LocalIssues is the Local Tracker folder that the work view reads,
 	// whatever local_tracker says. Empty reads no local Issues.
 	LocalIssues string
+	// LocalPrefixes are the Repo prefixes of the Local Issues, besides local.
+	LocalPrefixes []string
 	// Destinations is destinations.json in the state folder. It keeps the
 	// last Destinations that the user picked. Empty keeps them for this run.
 	Destinations string

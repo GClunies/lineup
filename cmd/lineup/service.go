@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gclunies/lineup/internal/config"
+	"github.com/gclunies/lineup/internal/linear"
 )
 
 const serviceLabel = "com.github.gclunies.lineup.scheduler"
@@ -122,6 +124,9 @@ type manager struct {
 	uid      int
 	ctl      launchctl
 	sleep    func(time.Duration)
+	// teamKeys reads the team keys of each signed-in Linear workspace, so
+	// that restart refuses a Repo prefix that equals one. nil reads none.
+	teamKeys func(context.Context) ([]string, error)
 }
 
 func newManager() (manager, error) {
@@ -133,7 +138,7 @@ func newManager() (manager, error) {
 	if err != nil {
 		return manager{}, err
 	}
-	return manager{svc: svc, config: configPath(), plistDir: filepath.Join(home, "Library", "LaunchAgents"), uid: os.Getuid(), ctl: realLaunchctl, sleep: time.Sleep}, nil
+	return manager{svc: svc, config: configPath(), plistDir: filepath.Join(home, "Library", "LaunchAgents"), uid: os.Getuid(), ctl: realLaunchctl, sleep: time.Sleep, teamKeys: linearTeamKeys}, nil
 }
 
 func (m manager) domain() string { return fmt.Sprintf("gui/%d", m.uid) }
@@ -203,7 +208,11 @@ func (m manager) start() error {
 // restart loads the config first, so that a bad edit leaves the running
 // Scheduler as it is.
 func (m manager) restart() error {
-	if _, err := config.Load(m.config); err != nil {
+	cfg, err := config.Load(m.config)
+	if err == nil {
+		err = m.checkPrefixTeams(cfg)
+	}
+	if err != nil {
 		return fmt.Errorf("the Scheduler keeps running on the old config: %w", err)
 	}
 	started, err := m.ensure()
@@ -211,6 +220,42 @@ func (m manager) restart() error {
 		return err
 	}
 	return m.ctl("kickstart", "-k", m.target())
+}
+
+// checkPrefixTeams refuses a Repo prefix that equals the key of a team in a
+// signed-in Linear workspace. If Linear does not answer, restart goes on and
+// says so, because config.Load already checked the keys of each teams list.
+func (m manager) checkPrefixTeams(cfg *config.Global) error {
+	if m.teamKeys == nil || len(cfg.Prefixes()) == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	keys, err := m.teamKeys(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "lineup: the Linear team keys did not load, so restart checked the prefixes only against the teams lists: %v\n", err)
+	}
+	return cfg.CheckPrefixTeams(keys)
+}
+
+// linearTeamKeys reads the team keys of each signed-in Linear workspace.
+func linearTeamKeys(ctx context.Context) ([]string, error) {
+	wss, err := linear.Workspaces()
+	if err != nil {
+		return nil, err
+	}
+	var keys []string
+	var errs []error
+	for _, ws := range wss {
+		teams, err := linear.NewClient(ws).Teams(ctx)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", ws.Name, err))
+		}
+		for _, t := range teams {
+			keys = append(keys, t.Key)
+		}
+	}
+	return keys, errors.Join(errs...)
 }
 
 // stop unloads the agent. It reports false when the agent was not loaded.

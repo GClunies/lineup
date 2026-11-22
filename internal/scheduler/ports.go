@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -167,16 +170,34 @@ const (
 	KindLocal  = "local"
 )
 
-// KindOf reads the Tracker from a typed Issue ID: local-7 is local,
-// owner/repo#12 is GitHub, and anything else, such as ENG-614, is Linear.
-func KindOf(identifier string) string {
+// KindOf reads the Tracker from a typed Issue ID: local-7, and <prefix>-<n>
+// for each Repo prefix, such as hod-3, are local, owner/repo#12 is GitHub,
+// and anything else, such as ENG-614, is Linear. The checks ignore case.
+func KindOf(identifier string, prefixes []string) string {
+	id := strings.ToLower(identifier)
 	switch {
-	case strings.HasPrefix(strings.ToLower(identifier), "local-"):
+	case strings.HasPrefix(id, "local-"):
 		return KindLocal
-	case strings.Contains(identifier, "/") && strings.Contains(identifier, "#"):
+	case strings.Contains(id, "/") && strings.Contains(id, "#"):
 		return KindGitHub
 	}
+	if p, _, ok := SplitID(id); ok && slices.Contains(prefixes, p) {
+		return KindLocal
+	}
 	return KindLinear
+}
+
+var prefixedID = regexp.MustCompile(`^(.+)-([1-9][0-9]*)$`)
+
+// SplitID reads the prefix, in lower case, and n from the ID <prefix>-<n>.
+// ok is false for an ID of another form.
+func SplitID(id string) (prefix string, n int, ok bool) {
+	m := prefixedID.FindStringSubmatch(strings.ToLower(id))
+	if m == nil {
+		return "", 0, false
+	}
+	n, err := strconv.Atoi(m[2])
+	return m[1], n, err == nil
 }
 
 type Issue struct {
@@ -225,4 +246,13 @@ type Config interface {
 	// RepoForGitHub picks the [[repos]] checkout whose origin is the GitHub
 	// repository owner/name. ok is false when none is.
 	RepoForGitHub(slug string) (repo string, ok bool)
+	// RepoPrefix is the prefix of the Repo's Local Issue and ad hoc Task IDs,
+	// such as hod, or "" for local-<n> and ah-<n>.
+	RepoPrefix(repo string) string
+}
+
+// LocalIssues is the Local Tracker's folder, as the ad hoc Task IDs need it.
+type LocalIssues interface {
+	// Highest is the highest n of the Local Issues <prefix>-<n>, or 0.
+	Highest(prefix string) (int, error)
 }

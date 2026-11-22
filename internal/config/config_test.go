@@ -726,3 +726,68 @@ func TestTheTrackersKeyTakesOnlyKnownTrackers(t *testing.T) {
 	}
 	load(t, "[[repos]]\nmatch = \"~/repos/acme/data\"\nteams = [\"ENG\"]\ntrackers = [\"linear\", \"local\"]\n")
 }
+
+func TestThePrefixKeyNamesARepo(t *testing.T) {
+	g := load(t, `
+[[repos]]
+match = "~/repos/*/*"
+[[repos]]
+match = "~/repos/gclunies/hod"
+trackers = ["local"]
+prefix = "hod"
+[[repos]]
+match = "~/repos/acme/web-app"
+prefix = "web-2"
+`)
+	for repo, want := range map[string]string{
+		"~/repos/gclunies/hod":       "hod",
+		"/home/u/repos/gclunies/hod": "hod",
+		"~/repos/acme/web-app":       "web-2",
+		"~/repos/acme/data":          "",
+	} {
+		if got := g.RepoPrefix(repo); got != want {
+			t.Errorf("RepoPrefix(%s) = %q, want %q", repo, got, want)
+		}
+	}
+	if repo, ok := g.RepoForPrefix("hod"); !ok || repo != "/home/u/repos/gclunies/hod" {
+		t.Errorf("RepoForPrefix(hod) = %q, %v", repo, ok)
+	}
+	if _, ok := g.RepoForPrefix("data"); ok {
+		t.Error("RepoForPrefix(data) found a Repo with no prefix")
+	}
+	if got, want := g.Prefixes(), []string{"hod", "web-2"}; !slices.Equal(got, want) {
+		t.Errorf("Prefixes = %q, want %q", got, want)
+	}
+}
+
+func TestThePrefixKeyRefusesABadPrefix(t *testing.T) {
+	hod := "[[repos]]\nmatch = \"~/repos/gclunies/hod\"\n"
+	for _, c := range []struct{ body, want string }{
+		{hod + `prefix = "Hod"`, `repos[0]: prefix "Hod" must hold only lowercase letters, digits, and dashes`},
+		{hod + `prefix = "hod_1"`, `prefix "hod_1" must hold only lowercase letters, digits, and dashes`},
+		{hod + `prefix = "hod.x"`, `prefix "hod.x" must hold only`},
+		{hod + `prefix = "-hod"`, `prefix "-hod" must hold only`},
+		{hod + "prefix = \"hod\"\n[[repos]]\nmatch = \"~/repos/acme/data\"\nprefix = \"hod\"", `repos[1]: prefix "hod" is also the prefix of repos[0]`},
+		{hod + "prefix = \"eng\"\n[[repos]]\nmatch = \"~/repos/acme/data\"\nteams = [\"ENG\"]", `repos[0]: prefix "eng" equals a Linear team key`},
+		{hod + `prefix = "local"`, `prefix "local" is reserved`},
+		{hod + `prefix = "ah"`, `prefix "ah" is reserved`},
+		{hod + `prefix = "pr"`, `prefix "pr" is reserved`},
+		{"[[repos]]\nmatch = \"~/repos/gclunies/*\"\nprefix = \"gc\"", `prefix "gc" needs a match that is the path of one Repo`},
+	} {
+		path := write(t, filepath.Join(t.TempDir(), "config.toml"), c.body+"\n")
+		if _, err := Load(path); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: err = %v, want %q", c.body, err, c.want)
+		}
+	}
+}
+
+func TestCheckPrefixTeamsRefusesAPrefixThatEqualsATeamKeyInAnyCase(t *testing.T) {
+	g := load(t, "[[repos]]\nmatch = \"~/repos/gclunies/hod\"\nprefix = \"hod\"\n")
+	if err := g.CheckPrefixTeams([]string{"ENG", "PD"}); err != nil {
+		t.Fatalf("other team keys: %v", err)
+	}
+	err := g.CheckPrefixTeams([]string{"ENG", "HOD"})
+	if err == nil || !strings.Contains(err.Error(), `prefix "hod" equals a Linear team key`) {
+		t.Fatalf("err = %v, want a refusal that names hod", err)
+	}
+}
