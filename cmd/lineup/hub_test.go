@@ -549,3 +549,24 @@ func TestTheRoleNamesEachRepoPrefixAndItsFileRule(t *testing.T) {
 		t.Errorf("a config with no prefix gives no plain Repo prefixes section")
 	}
 }
+
+func TestConfigMigrateRewritesTheConfigFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("LINEUP_CONFIG", path)
+	if err := os.WriteFile(path, []byte("[budgets]\nci_debug = 2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := cmdConfig([]string{"migrate"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Rewrote " + path + ". The old file is " + path + ".bak."; !strings.HasPrefix(out.String(), want) {
+		t.Errorf("output %q, want %q", out.String(), want)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "[defaults.budgets]\nci_debug = 2\n" {
+		t.Errorf("config file:\n%s", got)
+	}
+	if err := cmdConfig(nil, &out); !errors.Is(err, errUsage) {
+		t.Errorf("lineup config with no sub-command: %v, want a usage error", err)
+	}
+}

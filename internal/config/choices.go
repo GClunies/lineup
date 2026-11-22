@@ -65,8 +65,13 @@ func WriteJSON(path string, x any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+	return writeAtomic(path, data, 0o644)
+}
+
+// writeAtomic replaces the file at path in one rename, so a reader never sees half a file.
+func writeAtomic(path string, data []byte, perm fs.FileMode) error {
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, perm); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
