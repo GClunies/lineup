@@ -158,7 +158,7 @@ func (s *Scheduler) review(ctx context.Context, url string) (ReviewResult, error
 func (s *Scheduler) reviewRepo(slug string) (string, lifecycle.Policy, error) {
 	repo, ok := s.d.Config.RepoForGitHub(slug)
 	if !ok {
-		return "", lifecycle.Policy{}, fmt.Errorf("%w for %s: no [[repos]] checkout has it as its origin", ErrNoRepo, slug)
+		return "", lifecycle.Policy{}, fmt.Errorf("%w for %s: no checkout below the roots has it as its origin", ErrNoRepo, slug)
 	}
 	policy, err := s.d.Config.Policy(repo, nil)
 	return repo, policy, err

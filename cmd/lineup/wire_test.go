@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/gclunies/lineup/internal/config"
@@ -112,9 +111,9 @@ func TestAGitHubIssueMapsToTheCheckoutWhoseOriginIsItsRepository(t *testing.T) {
 	t.Setenv("HOME", home)
 	checkout := gitCheckout(t, filepath.Join(home, "code", "octo", "sandbox"), "git@github.com:octo/sandbox.git")
 	gitCheckout(t, filepath.Join(home, "repos", "octo", "unlisted"), "git@github.com:octo/unlisted.git")
-	p := configPort{cfg: loadConfig(t, "[[repos]]\nmatch = \"~/code/*/*\"\n")}
+	p := configPort{cfg: loadConfig(t, "roots = [\"~/code\"]\n")}
 	if _, ok := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "octo/unlisted#2"}); ok {
-		t.Fatal("a checkout that no [[repos]] match names mapped to a Repo")
+		t.Fatal("a checkout below no root mapped to a Repo")
 	}
 	if repo, ok := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "octo/sandbox#2"}); !ok || repo != checkout {
 		t.Fatalf("repo %q %v, want %s", repo, ok, checkout)
@@ -125,35 +124,26 @@ func TestAGitHubIssueMapsToTheCheckoutWhoseOriginIsItsRepository(t *testing.T) {
 	if _, ok := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "octo/elsewhere#2"}); ok {
 		t.Fatal("an Issue with no checkout mapped to a Repo")
 	}
-	for url, want := range map[string]string{
-		"https://github.com/o/r.git": "o/r", "https://github.com/o/r": "o/r", "git@github.com:o/r.git": "o/r", "https://gitlab.com/o/r": "",
-	} {
-		exec.Command("git", "-C", checkout, "remote", "set-url", "origin", url).Run()
-		if got := originSlug(checkout); got != want {
-			t.Errorf("originSlug(%s) = %q, want %q", url, got, want)
-		}
-	}
 }
 
-func TestARepoNameIsTheFolderNameOfOneReposCheckout(t *testing.T) {
+func TestARepoNameIsAFolderNameAKeyOrAPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	app := gitCheckout(t, filepath.Join(home, "code", "acme", "app"), "git@github.com:acme/app.git")
 	gitCheckout(t, filepath.Join(home, "code", "acme", "api"), "git@github.com:acme/api.git")
-	gitCheckout(t, filepath.Join(home, "code", "globex", "api"), "git@github.com:globex/api.git")
+	globex := gitCheckout(t, filepath.Join(home, "code", "globex", "api"), "git@github.com:globex/api.git")
 	gitCheckout(t, filepath.Join(home, "repos", "acme", "web"), "git@github.com:acme/web.git")
-	p := configPort{cfg: loadConfig(t, "[[repos]]\nmatch = \"~/code/*/*\"\n")}
-	if repo, err := p.ResolveRepo("app"); err != nil || repo != app {
-		t.Fatalf("app: %q %v, want %s", repo, err, app)
+	p := configPort{cfg: loadConfig(t, "roots = [\"~/code\"]\n")}
+	for name, want := range map[string]string{"app": app, "~/code/acme/app": app, "globex/api": globex} {
+		if repo, err := p.ResolveRepo(name); err != nil || repo != want {
+			t.Errorf("%s: %q %v, want %s", name, repo, err, want)
+		}
 	}
-	if repo, err := p.ResolveRepo("~/code/acme/app"); err != nil || repo != app {
-		t.Fatalf("a path: %q %v, want %s", repo, err, app)
+	if _, err := p.ResolveRepo("api"); err == nil || err.Error() != "2 checkouts named api: pass acme/api or globex/api" {
+		t.Errorf("two checkouts named api: %v", err)
 	}
-	if _, err := p.ResolveRepo("api"); err == nil || !strings.Contains(err.Error(), "2 [[repos]] checkouts") {
-		t.Fatalf("two checkouts named api: %v", err)
-	}
-	if _, err := p.ResolveRepo("web"); err == nil {
-		t.Fatal("a checkout that no [[repos]] match names resolved")
+	if _, err := p.ResolveRepo("web"); err == nil || err.Error() != "no checkout named web below roots ~/code: add its parent folder to roots or pass a path" {
+		t.Errorf("a checkout below no root: %v", err)
 	}
 }
 
@@ -255,7 +245,7 @@ func TestAPrefixedLocalIssueMapsToItsPrefixesRepo(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	hod := gitCheckout(t, filepath.Join(home, "repos", "gclunies", "hod"), "git@github.com:gclunies/hod.git")
-	cfg := loadConfig(t, "[[repos]]\nmatch = \"~/repos/*/*\"\n[[repos]]\nmatch = \"~/repos/gclunies/hod\"\ntrackers = [\"local\"]\nprefix = \"hod\"\n")
+	cfg := loadConfig(t, "roots = [\"~/repos\"]\n[repos.\"gclunies/hod\"]\ntrackers = [\"local\"]\nprefix = \"hod\"\n")
 	l := localTracker{s: localissues.Store{Dir: t.TempDir(), Prefixes: cfg.Prefixes()}}
 	if err := os.WriteFile(filepath.Join(l.s.Dir, "hod-3.md"), []byte("---\ntitle: Block Linear writes\nstatus: todo\n---\n"), 0o644); err != nil {
 		t.Fatal(err)

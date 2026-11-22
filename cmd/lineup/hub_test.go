@@ -452,14 +452,10 @@ func TestOpenHubRefusesToCloseTheTabThatItRunsIn(t *testing.T) {
 func lockedConfig(t *testing.T) (path, hod, data string) {
 	t.Helper()
 	root := t.TempDir()
-	hod, data = filepath.Join(root, "hod"), filepath.Join(root, "data")
-	for _, d := range []string{hod, data} {
-		if err := os.MkdirAll(filepath.Join(d, ".git"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
+	hod = gitCheckout(t, filepath.Join(root, "hod"), "git@github.com:GClunies/hod.git")
+	data = gitCheckout(t, filepath.Join(root, "data"), "git@github.com:crexi/data.git")
 	path = filepath.Join(root, "config.toml")
-	body := "[[repos]]\nmatch = \"" + root + "/*\"\n\n[[repos]]\nmatch = \"" + hod + "\"\ntrackers = [\"local\"]\n"
+	body := "roots = [\"" + root + "\"]\n\n[repos.\"GClunies/hod\"]\ntrackers = [\"local\"]\n"
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -484,7 +480,7 @@ func TestTheRepoPickerOffersALockedRepoOnlyForItsTrackers(t *testing.T) {
 }
 
 func TestTheRoleNamesEachLockedRepoAndItsTrackers(t *testing.T) {
-	path, hod, _ := lockedConfig(t)
+	path, _, _ := lockedConfig(t)
 	cfg, err := config.Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -498,7 +494,7 @@ func TestTheRoleNamesEachLockedRepoAndItsTrackers(t *testing.T) {
 		t.Fatalf("the role has no Locked Repos section:\n%s", raw)
 	}
 	locked, _, _ = strings.Cut(locked, "\n## ")
-	for _, want := range []string{"| `" + hod + "` | `local` |", "Plan the Issues of a locked Repo only in its Trackers", "`trackers` key", path} {
+	for _, want := range []string{"| `GClunies/hod` | `local` |", "Plan the Issues of a locked Repo only in its Trackers", "`trackers` key of its `[repos.\"<owner>/<repo>\"]` table", path} {
 		if !strings.Contains(locked, want) {
 			t.Errorf("the Locked Repos section has no %q:\n%s", want, locked)
 		}
@@ -518,7 +514,7 @@ func TestTheRoleNamesEachLockedRepoAndItsTrackers(t *testing.T) {
 }
 
 func TestTheRoleNamesEachRepoPrefixAndItsFileRule(t *testing.T) {
-	path, hod, _ := lockedConfig(t)
+	path, _, _ := lockedConfig(t)
 	body, _ := os.ReadFile(path)
 	if err := os.WriteFile(path, append(body, "prefix = \"hod\"\n"...), 0o600); err != nil {
 		t.Fatal(err)
@@ -536,7 +532,7 @@ func TestTheRoleNamesEachRepoPrefixAndItsFileRule(t *testing.T) {
 		t.Fatalf("the role has no Repo prefixes section:\n%s", raw)
 	}
 	section, _, _ = strings.Cut(section, "\n## ")
-	for _, want := range []string{"| `" + hod + "` | `hod` | `/Users/g/issues/hod-<n>.md` |", "Name a new Local Issue file for a Repo with a prefix `<prefix>-<n>.md`", "`prefix` key", path} {
+	for _, want := range []string{"| `GClunies/hod` | `hod` | `/Users/g/issues/hod-<n>.md` |", "Name a new Local Issue file for a Repo with a prefix `<prefix>-<n>.md`", "`prefix` key of its `[repos.\"<owner>/<repo>\"]` table", path} {
 		if !strings.Contains(section, want) {
 			t.Errorf("the Repo prefixes section has no %q:\n%s", want, section)
 		}

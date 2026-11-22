@@ -91,7 +91,7 @@ func TestPlanFill(t *testing.T) {
 			fillInput{Queues: q(1), Records: []*Record{reviewRec("R-1", "old", "/repos/b", lifecycle.Queued, b3), reviewRec("R-2", "old", "/repos/c", lifecycle.Reviewing, c4)},
 				Found: map[string][]github.PullRequest{"q": {a1}, "old": {a2}}},
 			nil, []string{"q acme/a#1 in /repos/a"}},
-		{"a PR with no [[repos]] checkout is left out",
+		{"a PR with no checkout is left out",
 			fillInput{Queues: q(1), Found: map[string][]github.PullRequest{"q": {x9, a1}}},
 			nil, []string{"q acme/a#1 in /repos/a"}},
 		{"two queues that find one PR add it once",

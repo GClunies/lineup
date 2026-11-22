@@ -215,7 +215,7 @@ func (m Model) repoPicker() string {
 		lines = append(lines, m.row(i == st.repoCur, labels[v]))
 	}
 	if len(st.repos) == 0 {
-		lines = append(lines, dim.Render(" no git checkouts: add a [[repos]] match to the config"))
+		lines = append(lines, dim.Render(" no git checkouts: add the folder that holds them to roots in the config"))
 	}
 	return strings.Join(lines, "\n")
 }

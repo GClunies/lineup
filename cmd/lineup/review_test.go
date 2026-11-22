@@ -79,7 +79,7 @@ func TestAReviewedPRMapsToTheCheckoutWhoseOriginIsItsRepository(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	checkout := gitCheckout(t, filepath.Join(home, "code", "umbrella", "data"), "git@github.com:umbrella/data.git")
-	p := configPort{cfg: loadConfig(t, "[[repos]]\nmatch = \"~/code/*/*\"\n")}
+	p := configPort{cfg: loadConfig(t, "roots = [\"~/code\"]\n")}
 	if repo, ok := p.RepoForGitHub("umbrella/data"); !ok || repo != checkout {
 		t.Fatalf("repo %q %v, want %s", repo, ok, checkout)
 	}
@@ -107,7 +107,7 @@ func TestACIDebugWorkerSeesWhichChecksGate(t *testing.T) {
 
 func TestABuildWorkerKeepsTheModelOfWorking(t *testing.T) {
 	claudeOnPath(t)
-	p := harnessPort{cfg: loadConfig(t, "[stage.default]\nmodel = \"d\"\n[stage.working]\nmodel = \"w\"\neffort = \"max\"\n[stage.ci_debug]\nskill = \"diagnosing-bugs\"\n")}
+	p := harnessPort{cfg: loadConfig(t, "[defaults.stage.default]\nmodel = \"d\"\n[defaults.stage.working]\nmodel = \"w\"\neffort = \"max\"\n[defaults.stage.ci_debug]\nskill = \"diagnosing-bugs\"\n")}
 	spec := scheduler.WorkerSpec{Task: "ENG-1", Stage: lifecycle.CIDebug, Repo: t.TempDir(), Branch: "ada/eng-1",
 		Name: "ENG-1 Fix the tooltip", Conversation: "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20"}
 	prompt, err := p.Prompt(context.Background(), spec)
@@ -128,7 +128,7 @@ func TestABuildWorkerKeepsTheModelOfWorking(t *testing.T) {
 
 func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 	claudeBin := claudeOnPath(t)
-	cfg := loadConfig(t, "[stage.reviewing]\neffort = \"max\"\n")
+	cfg := loadConfig(t, "[defaults.stage.reviewing]\neffort = \"max\"\n")
 	p := harnessPort{cfg: cfg}
 	spec := scheduler.WorkerSpec{
 		Stage: lifecycle.Reviewing, Repo: t.TempDir(), Worktree: "/repos/umbrella/data.review-pr-4955",
@@ -328,7 +328,7 @@ func TestLineupReviewsListsEachQueue(t *testing.T) {
 			},
 		}},
 		Skips:    []github.Skip{{URL: "https://github.com/umbrella/data/pull/4945", Title: "Write the usage logs again", At: time.Date(2026, 11, 9, 17, 0, 0, 0, time.UTC)}},
-		Unmapped: []string{"no Repo mapping for umbrella/infra: no [[repos]] checkout has it as its origin"},
+		Unmapped: []string{"no Repo mapping for umbrella/infra: no checkout below the roots has it as its origin"},
 	}
 	c, got := fakeScheduler(t, map[string]scheduler.Response{"reviews": reviewsReply(t, view)})
 	var out bytes.Buffer

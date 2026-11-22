@@ -238,13 +238,14 @@ type Config interface {
 	Policy(repo string, overrides map[string]string) (lifecycle.Policy, error)
 	// RepoForIssue picks the Repo that the Issue maps to. ok is false when no mapping exists.
 	RepoForIssue(is Issue) (repo string, ok bool)
-	// ResolveRepo turns a name such as "data" or a path into a Repo's main checkout.
+	// ResolveRepo turns a name such as "data", an owner/repo key, or a path
+	// into a Repo's main checkout.
 	ResolveRepo(name string) (string, error)
 	// RepoTrackers lists the Kinds of Tracker that the Repo is locked to. nil
 	// means that the Repo takes Issues of every Tracker.
 	RepoTrackers(repo string) []string
-	// RepoForGitHub picks the [[repos]] checkout whose origin is the GitHub
-	// repository owner/name. ok is false when none is.
+	// RepoForGitHub picks the checkout below the roots whose origin is the
+	// GitHub repository owner/name. ok is false when none is.
 	RepoForGitHub(slug string) (repo string, ok bool)
 	// RepoPrefix is the prefix of the Repo's Local Issue and ad hoc Task IDs,
 	// such as hod, or "" for local-<n> and ah-<n>.
