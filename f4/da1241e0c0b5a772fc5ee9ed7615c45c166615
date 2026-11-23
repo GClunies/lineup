@@ -1,0 +1,30 @@
+internal/github/detect_test.go
+  s_dae4353c4a0fc0::t_647021d4b4c84f 1-46,48-86
+  s_dae4353c4a0fc0::t_ba1c7e5ed443d8 47
+internal/github/testdata/repo_facts_classic_greptile.json
+  s_dae4353c4a0fc0::t_cda731429100a4 1
+internal/github/testdata/repo_facts_admin.json
+  s_dae4353c4a0fc0::t_ae391f196d9cd7 1
+internal/github/testdata/repo_facts_none.json
+  s_dae4353c4a0fc0::t_fa888a17672f1d 1
+internal/github/detect.go
+  s_dae4353c4a0fc0::t_0fd6e8b8a1aed1 1-105
+internal/github/testdata/repo_facts_ruleset_greptile.json
+  s_dae4353c4a0fc0::t_3004261bf5f16d 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f4da1241e0c0b5a772fc5ee9ed7615c45c166615",
+  "prompts": {},
+  "sessions": {
+    "s_dae4353c4a0fc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a7909f97-d7e4-4e97-b846-f43f4021cdf8",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}

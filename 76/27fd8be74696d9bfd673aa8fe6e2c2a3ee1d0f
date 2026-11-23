@@ -1,0 +1,30 @@
+cmd/lineup/main.go
+  s_dae4353c4a0fc0::t_75880507204b37 102-103
+  s_dae4353c4a0fc0::t_c3dad7bba10e55 5
+  s_dae4353c4a0fc0::t_9e0340c8d4c171 31-37
+cmd/lineup/repo.go
+  s_dae4353c4a0fc0::t_be6dd4d107cb32 113,221
+  s_dae4353c4a0fc0::t_9b8815e2a4de13 1-90,93-108,114-220,222-227,228,231-275
+  s_dae4353c4a0fc0::t_6f67fbfb3b6760 109-112
+cmd/lineup/service.go
+  s_dae4353c4a0fc0::t_5a2d95292e2c3e 281-292,300
+cmd/lineup/repo_test.go
+  s_dae4353c4a0fc0::t_6815b635b4d1e8 1-20,22-48,50-104,106-121,123-235
+  s_dae4353c4a0fc0::t_e7b3349451f295 21,49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7627fd8be74696d9bfd673aa8fe6e2c2a3ee1d0f",
+  "prompts": {},
+  "sessions": {
+    "s_dae4353c4a0fc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a7909f97-d7e4-4e97-b846-f43f4021cdf8",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}

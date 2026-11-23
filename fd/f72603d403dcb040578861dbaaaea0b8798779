@@ -1,0 +1,24 @@
+internal/github/facts.go
+  s_dae4353c4a0fc0::t_5f765dbec8064f 77
+  s_dae4353c4a0fc0::t_7fb940c75f0690 66-67,72-76,79,82
+internal/github/client.go
+  s_dae4353c4a0fc0::t_9ccefdd6288917 121
+  s_dae4353c4a0fc0::t_8070f8581f4894 243
+  s_dae4353c4a0fc0::t_74ebfaa441fbcc 287-312
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fdf72603d403dcb040578861dbaaaea0b8798779",
+  "prompts": {},
+  "sessions": {
+    "s_dae4353c4a0fc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a7909f97-d7e4-4e97-b846-f43f4021cdf8",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
