@@ -87,7 +87,7 @@ func (s *Scheduler) spec(r Record, stage lifecycle.Stage) WorkerSpec {
 	replaced, steers := s.replay(r.ID)
 	spec := WorkerSpec{
 		Restart: replaced, Steers: steers,
-		Task: r.ID, Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
+		Task: r.ID, Kind: r.Kind, Stage: stage, Repo: r.Repo, Worktree: r.Worktree, Branch: r.Branch,
 		Issue: r.Issue, Text: r.Text, PRURL: prURL(r.PR), Overrides: r.Overrides,
 		Conversation: r.Conversation, Name: r.tabLabel(), ReviewCycle: r.ReviewCycle(),
 		Bar: r.Policy.Bar, Standing: r.Standing,

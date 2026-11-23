@@ -126,12 +126,35 @@ func TestABuildWorkerKeepsTheModelOfWorking(t *testing.T) {
 	}
 }
 
+// Done is a Stage of both Kinds, so the spec's Kind picks the settings of a
+// Done build Task's Worker.
+func TestADoneBuildWorkerResumesWithTheSettingsOfWorking(t *testing.T) {
+	claudeOnPath(t)
+	p := harnessPort{cfg: loadConfig(t, "[defaults.stage.working]\nmodel = \"w\"\n[defaults.stage.reviewing]\nmodel = \"r\"\n")}
+	spec := scheduler.WorkerSpec{Task: "ENG-1", Kind: lifecycle.KindBuild, Stage: lifecycle.Done, Repo: t.TempDir(),
+		Worktree: "/worktrees/eng-1", Name: "ENG-1 Fix the tooltip", Conversation: "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20"}
+	argv, _, err := p.Command(context.Background(), spec, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.Index(argv, "--model"); i < 0 || argv[i+1] != "w" {
+		t.Fatalf("argv = %q, want the model of Working", argv)
+	}
+	if slices.ContainsFunc(argv, func(a string) bool { return strings.HasPrefix(a, "--add-dir") }) {
+		t.Fatalf("argv = %q, want no review worktree", argv)
+	}
+	spec.ReadOnly = true
+	if argv, _, err = p.Command(context.Background(), spec, ""); err != nil || !slices.Contains(argv, "--disallowedTools=Bash,Edit,Write,NotebookEdit,EnterWorktree") {
+		t.Fatalf("read-only argv = %q, err %v, want the tools that write files denied", argv, err)
+	}
+}
+
 func TestAReviewWorkerReadsTheReviewWorktreeFromTheMainCheckout(t *testing.T) {
 	claudeBin := claudeOnPath(t)
 	cfg := loadConfig(t, "[defaults.stage.reviewing]\neffort = \"max\"\n")
 	p := harnessPort{cfg: cfg}
 	spec := scheduler.WorkerSpec{
-		Stage: lifecycle.Reviewing, Repo: t.TempDir(), Worktree: "/repos/umbrella/data.review-pr-4955",
+		Kind: lifecycle.KindReview, Stage: lifecycle.Reviewing, Repo: t.TempDir(), Worktree: "/repos/umbrella/data.review-pr-4955",
 		PRURL: "https://github.com/umbrella/data/pull/4955", Overrides: map[string]string{"pr": "true"},
 		Conversation: "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20", Name: "R-1 data#4955 Fix the tooltip",
 	}

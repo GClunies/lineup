@@ -271,7 +271,7 @@ func (p harnessPort) Prompt(ctx context.Context, w scheduler.WorkerSpec) (string
 	st := res.Stages[w.Stage]
 	info := claude.TaskInfo{ID: w.Task, Ask: w.Text, PRURL: w.PRURL, Branch: w.Branch, Repo: w.Repo, PR: res.PR,
 		ReviewCycle: w.ReviewCycle, Bar: w.Bar, Standing: w.Standing, Restart: w.Restart, Steers: w.Steers}
-	if lifecycle.KindReview.Has(w.Stage) {
+	if w.Kind == lifecycle.KindReview {
 		info.ReviewWorktree = w.Worktree
 	}
 	if w.Issue != nil {
@@ -296,10 +296,9 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec, prompt
 	if err != nil {
 		return nil, nil, err
 	}
-	kind := lifecycle.KindBuild
 	var addDirs []string
-	if lifecycle.KindReview.Has(w.Stage) {
-		kind, addDirs = lifecycle.KindReview, []string{w.Worktree}
+	if w.Kind == lifecycle.KindReview {
+		addDirs = []string{w.Worktree}
 	}
 	if prompt == "" && w.Conversation == "" {
 		return nil, nil, fmt.Errorf("%s has no prompt and no conversation to resume", w.Stage)
@@ -308,7 +307,7 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec, prompt
 	if err != nil {
 		return nil, nil, err
 	}
-	argv, env := claude.Command(res.Claude, dir, res.Stages[kind.FirstStage()], w.Conversation, w.Name, prompt, w.ReadOnly, addDirs...)
+	argv, env := claude.Command(res.Claude, dir, res.Stages[w.Kind.FirstStage()], w.Conversation, w.Name, prompt, w.ReadOnly, addDirs...)
 	return argv, env, nil
 }
 

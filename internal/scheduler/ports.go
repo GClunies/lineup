@@ -121,7 +121,10 @@ type Worktrees interface {
 
 // WorkerSpec is what a Harness needs to start a Worker.
 type WorkerSpec struct {
-	Task      string
+	Task string
+	// Kind is the Task's Kind. Done is a Stage of both Kinds, so the Stage
+	// alone does not tell it.
+	Kind      lifecycle.Kind
 	Stage     lifecycle.Stage
 	Repo      string
 	Worktree  string
