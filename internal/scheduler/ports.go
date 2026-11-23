@@ -22,6 +22,10 @@ type Window struct{ SessionID, WindowID, BlockID string }
 
 type Status struct{ State, Kind, Msg string }
 
+// Pane is one block of a tab: its label and the name of the program in its
+// foreground, such as hunk.
+type Pane struct{ BlockID, Label, Program string }
+
 type Rex interface {
 	EnsureSession(ctx context.Context, label string) (string, error)
 	// RenameSession gives the session the label, unless another session has
@@ -40,6 +44,9 @@ type Rex interface {
 	DestroySession(ctx context.Context, session string) error
 	// Blocks returns the IDs of the live blocks in a session. A missing session has none.
 	Blocks(ctx context.Context, session string) (map[string]bool, error)
+	// Panes returns the blocks of a tab. A block whose process Rex cannot
+	// read has no Program.
+	Panes(ctx context.Context, session, window string) ([]Pane, error)
 	// IdleShell reports whether a block holds only a plain tab's shell, with
 	// nothing in its foreground. Rex restores every block that way after a
 	// restart, so lineup's program in it is gone.
@@ -112,6 +119,9 @@ type GitHub interface {
 // because the worktree holds uncommitted changes.
 var ErrUncommitted = errors.New("the worktree has uncommitted changes")
 
+// ErrNoWorktree is the error of a read in a worktree whose folder is gone.
+var ErrNoWorktree = errors.New("the worktree is gone")
+
 type Worktrees interface {
 	// CreateArgv is the command that creates and sets up the worktree in the Task tab.
 	CreateArgv(repo, branch string) []string
@@ -119,6 +129,9 @@ type Worktrees interface {
 	// Remove removes the branch's worktree. The error wraps ErrUncommitted
 	// when the worktree holds uncommitted changes, and the worktree stays.
 	Remove(ctx context.Context, repo, branch string) error
+	// DiffBase is the merge-base of the worktree's HEAD with the default
+	// branch. The error wraps ErrNoWorktree when the worktree's folder is gone.
+	DiffBase(ctx context.Context, worktree string) (string, error)
 	// AddReview fetches the PR into the Repo's main checkout, then adds the
 	// review worktree, detached at the PR's head, if it is missing. It
 	// returns the worktree's path.

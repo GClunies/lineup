@@ -649,6 +649,9 @@ func seedReviewTab(stage lifecycle.Stage, window, block, side string) func(*stor
 			Review:   &ReviewPR{Repo: "acme/data", Number: 7, URL: prURL7, Head: "h1", Base: "main"},
 			Worktree: "/repos/acme/data.review-pr-7", SessionID: "session:reviews", WindowID: window, BlockID: block, SideBlockID: side, Job: JobWorker,
 		}
+		if side != "" {
+			r.Side = &sidePane{Dir: r.Worktree, Argv: sidePR7}
+		}
 		data, _ := json.Marshal(r)
 		st.Save(r.ID, data, nil)
 	}
@@ -792,7 +795,8 @@ func TestEachReviewWorkerTabOpensThePRBesideIt(t *testing.T) {
 	}
 }
 
-var hunkDiff = []string{"sh", "-c", `b=$(git symbolic-ref -q --short refs/remotes/origin/HEAD) || b=origin/main; exec hunk diff --watch "$(git merge-base HEAD "$b")"`, "hunk"}
+// hunkDiff is the side pane of a build Task whose worktree has the DiffBase base1.
+var hunkDiff = []string{"hunk", "diff", "--watch", "base1"}
 
 func TestEachBuildWorkerTabOpensItsDiffInHunkBesideIt(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
@@ -863,12 +867,18 @@ func TestSidePaneEventsLeaveTheBuildTaskAsItWas(t *testing.T) {
 	h.waitTab("claude --resume " + conversation)
 }
 
-func seedBuildTab(side string) func(*store.Store) {
+// seedBuildTab seeds a build Task with a live Worker whose Record names the
+// side pane side, which runs the Task's diff. Each edit then changes the Record.
+func seedBuildTab(side string, edits ...func(*Record)) func(*store.Store) {
 	return func(st *store.Store) {
 		r := Record{
 			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Policy: testPolicy, Left: testPolicy.Budgets},
 			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data", Branch: "ada/eng-7", Worktree: "/wt/eng-7",
 			Conversation: "conv-7", SessionID: "session:data", WindowID: "window:live", BlockID: "block:live", SideBlockID: side, Job: JobWorker,
+			Side: &sidePane{Dir: "/wt/eng-7", Argv: hunkDiff},
+		}
+		for _, e := range edits {
+			e(&r)
 		}
 		data, _ := json.Marshal(r)
 		st.Save(r.ID, data, nil)
@@ -892,16 +902,113 @@ func TestRecoveryOpensAMissingSidePaneBesideALiveBuildWorker(t *testing.T) {
 // The kept pane is the Task's, so it closes with its Worker.
 func TestRecoveryKeepsALiveSidePaneBesideABuildWorker(t *testing.T) {
 	live := &tab{Window: Window{"session:data", "window:live", "block:live"}, argv: []string{"claude", "working"}}
-	rex := &fakeRex{tabs: []*tab{live}, splits: []*split{{BlockID: "split:9", window: "window:live"}}}
+	rex := &fakeRex{tabs: []*tab{live}, splits: []*split{sideAt("split:9", "window:live")}}
 	// The Scheduler reads the events of the harness's Rex.
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedBuildTab("split:9"), func(d *Deps) { rex.events = d.Rex.(*fakeRex).events; d.Rex = rex })
 	h.still("ENG-7", lifecycle.Working)
-	if n := len(rex.allSplits()); n != 1 {
-		t.Fatalf("%d side panes, want the live one only", n)
+	if got := rex.allSplits(); len(got) != 1 || got[0].closed {
+		t.Fatalf("side panes %+v, want the live one only, open", got)
 	}
 
 	rex.blockCloses(*live)
 	eventually(t, "the side pane closed", func() bool { return rex.allSplits()[0].closed })
+}
+
+// The user can split a plain shell in the tab and type hunk in it. Recovery
+// closes that pane, and the user's other shell stays.
+func TestRecoveryClosesEachSidePaneThatTheRecordDoesNotName(t *testing.T) {
+	live := &tab{Window: Window{"session:data", "window:live", "block:live"}, argv: []string{"claude", "working"}}
+	typed := &split{BlockID: "split:8", window: "window:live", label: "shell", program: "hunk"}
+	shell := &split{BlockID: "split:7", window: "window:live", label: "shell", program: "zsh"}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{sideAt("split:9", "window:live"), typed, shell}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedBuildTab("split:9"), func(d *Deps) { d.Rex = rex })
+	eventually(t, "the typed hunk closed", func() bool { return rex.allSplits()[1].closed })
+	h.still("ENG-7", lifecycle.Working)
+	if got := rex.allSplits(); len(got) != 3 || got[0].closed || got[2].closed {
+		t.Fatalf("panes %+v, want the named pane and the user's shell open, and no new pane", got)
+	}
+	if v := h.task("ENG-7"); !v.Live || v.Flag != "" {
+		t.Fatalf("task = %+v, want its Worker kept", v)
+	}
+}
+
+// A Record from before the side pane's command cannot tell what its pane
+// shows, so the tab ends with one new pane that shows the current base.
+func TestRecoveryReplacesTheSidePanesOfARecordThatKeepsNoCommand(t *testing.T) {
+	live := &tab{Window: Window{"session:data", "window:live", "block:live"}, argv: []string{"claude", "working"}}
+	typed := &split{BlockID: "split:8", window: "window:live", label: "shell", program: "hunk"}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{sideAt("split:9", "window:live"), typed}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedBuildTab("split:9", func(r *Record) { r.Side = nil }), func(d *Deps) { d.Rex = rex })
+	eventually(t, "a new side pane", func() bool { return len(rex.allSplits()) == 3 })
+	eventually(t, "the old panes closed", func() bool { got := rex.allSplits(); return got[0].closed && got[1].closed })
+	if got := rex.allSplits()[2]; got.anchor != "split:9" || got.cwd != "/wt/eng-7" || !slices.Equal(got.argv, hunkDiff) || got.closed {
+		t.Fatalf("new pane = %+v, want the diff in the place of split:9", got)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := len(rex.allSplits()); n != 3 {
+		t.Fatalf("%d panes, want no pane after the new one", n)
+	}
+	h.still("ENG-7", lifecycle.Working)
+}
+
+func TestRecoveryReplacesASidePaneThatShowsAnotherWorktree(t *testing.T) {
+	live := &tab{Window: Window{"session:data", "window:live", "block:live"}, argv: []string{"claude", "working"}}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{sideAt("split:9", "window:live")}}
+	old := func(r *Record) { r.Side = &sidePane{Dir: "/wt/eng-7-old", Argv: hunkDiff} }
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedBuildTab("split:9", old), func(d *Deps) { d.Rex = rex })
+	eventually(t, "a new side pane", func() bool { return len(rex.allSplits()) == 2 })
+	eventually(t, "the old pane closed", func() bool { return rex.allSplits()[0].closed })
+	if got := rex.allSplits()[1]; got.anchor != "split:9" || got.cwd != "/wt/eng-7" || !slices.Equal(got.argv, hunkDiff) {
+		t.Fatalf("new pane = %+v, want the diff of /wt/eng-7 in the place of split:9", got)
+	}
+	h.still("ENG-7", lifecycle.Working)
+}
+
+// A rebase or a merge of the default branch moves the merge-base. The next
+// poll replaces the pane in its place, with the new base.
+func TestARebaseReplacesTheSidePaneWithinOnePoll(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
+	h.waitTab("claude working")
+	first := h.waitSplit(1)
+	eventually(t, "the Worker live", func() bool { return h.task("ENG-1").Live })
+
+	h.wt.rebase("base2")
+	pane := h.waitSplit(2)
+	if pane.anchor != first.BlockID || pane.cwd != filepath.Join(h.wt.root, "eng-1-billing") || !slices.Equal(pane.argv, []string{"hunk", "diff", "--watch", "base2"}) {
+		t.Fatalf("new pane = %+v, want the diff since base2 in the place of %s", pane, first.BlockID)
+	}
+	eventually(t, "the old pane closed", func() bool { return h.rex.allSplits()[0].closed })
+	time.Sleep(100 * time.Millisecond)
+	if n := len(h.rex.allSplits()); n != 2 {
+		t.Fatalf("%d panes after more polls, want 2", n)
+	}
+	h.still("ENG-1", lifecycle.Working)
+}
+
+func TestARemovedWorktreeClosesItsSidePane(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
+	worker := h.waitTab("claude working")
+	h.waitSplit(1)
+	eventually(t, "the Worker live", func() bool { return h.task("ENG-1").Live })
+	before := h.task("ENG-1")
+
+	h.wt.lose(filepath.Join(h.wt.root, "eng-1-billing"))
+	eventually(t, "the side pane closed", func() bool { return h.rex.allSplits()[0].closed })
+	time.Sleep(100 * time.Millisecond)
+	if n := len(h.rex.allSplits()); n != 1 {
+		t.Fatalf("%d panes, want no new pane for a worktree that is gone", n)
+	}
+	h.still("ENG-1", lifecycle.Working)
+	if v := h.task("ENG-1"); !reflect.DeepEqual(v, before) {
+		t.Fatalf("task = %+v, want it as it was: %+v", v, before)
+	}
+	if tabs := h.rex.open("claude working"); len(tabs) != 1 || tabs[0].BlockID != worker.BlockID {
+		t.Fatalf("Worker tabs %+v, want the Worker kept", tabs)
+	}
 }
 
 // syncBuffer is a log that a test reads while lanes write to it.
@@ -1019,11 +1126,28 @@ func TestRecoveryOpensAMissingSidePaneBesideALiveReviewWorker(t *testing.T) {
 
 func TestRecoveryKeepsALiveSidePane(t *testing.T) {
 	live := &tab{Window: Window{"session:reviews", "window:live", "block:live"}, argv: []string{"claude", "reviewing"}}
-	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{{BlockID: "split:9", window: "window:live"}}}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{sideAt("split:9", "window:live")}}
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReviewTab(lifecycle.ReviewReady, "window:live", "block:live", "split:9"), func(d *Deps) { d.Rex = rex })
 	h.still("R-3", lifecycle.ReviewReady)
-	if n := len(rex.allSplits()); n != 1 {
-		t.Fatalf("%d side panes, want the live one only", n)
+	if got := rex.allSplits(); len(got) != 1 || got[0].closed {
+		t.Fatalf("side panes %+v, want the live one only, open", got)
+	}
+}
+
+// A review Worker's tab keeps one side pane too. rexweb-pane shows the PR in
+// a plain split where the user started it.
+func TestRecoveryClosesASecondSidePaneOfAReviewWorker(t *testing.T) {
+	live := &tab{Window: Window{"session:reviews", "window:live", "block:live"}, argv: []string{"claude", "reviewing"}}
+	typed := &split{BlockID: "split:8", window: "window:live", label: "shell", program: "rexweb-pane"}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{sideAt("split:9", "window:live"), typed}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReviewTab(lifecycle.ReviewReady, "window:live", "block:live", "split:9"), func(d *Deps) { d.Rex = rex })
+	eventually(t, "the second pane closed", func() bool { return rex.allSplits()[1].closed })
+	h.still("R-3", lifecycle.ReviewReady)
+	if got := rex.allSplits(); len(got) != 2 || got[0].closed {
+		t.Fatalf("side panes %+v, want the named pane open and no new pane", got)
+	}
+	if v := h.task("R-3"); !v.Live || v.Flag != "" {
+		t.Fatalf("task = %+v, want its Worker kept", v)
 	}
 }
 

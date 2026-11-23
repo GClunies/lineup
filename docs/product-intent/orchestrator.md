@@ -4,7 +4,7 @@ This document states the current intended experience for the one agent that the 
 
 ## PROD-ORCH-001: One agent takes every request in the Hub
 
-The Orchestrator is the one agent that the user talks to. It runs in the `LINEUP` pane of the `lineup` tab, beside the Board. It plans Issues, takes build Tasks and review Tasks, and answers about both Kinds. The Hub starts it with no first message.
+The Orchestrator is the one agent that the user talks to. It runs in the `LINEUP` pane of the `my-lineup` tab, beside the Board. It plans Issues, takes build Tasks and review Tasks, and answers about both Kinds. The Hub starts it with no first message.
 
 ## PROD-ORCH-002: The Orchestrator maps each request to a lineup command
 

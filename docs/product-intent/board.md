@@ -4,7 +4,7 @@ This document states the current intended experience for what the Board shows an
 
 ## PROD-BOARD-001: The Board is one view of the user's build Tasks and Issues
 
-The Board is one view at the top of the `lineup` tab. It lists the user's build Tasks, the user's own Issues that have no Task, and the unassigned Issues of the user's teams. So the user sees all of their own work on one Board, from a captured idea to a merged PR. The Board lists no review Task. It has no other view, so the header names no view, and `1`, `2`, and `3` do nothing.
+The Board is one view at the top of the `my-lineup` tab. It lists the user's build Tasks, the user's own Issues that have no Task, and the unassigned Issues of the user's teams. So the user sees all of their own work on one Board, from a captured idea to a merged PR. The Board lists no review Task. It has no other view, so the header names no view, and `1`, `2`, and `3` do nothing.
 
 ## PROD-BOARD-002: The groups and their default order
 
@@ -70,9 +70,9 @@ The Board works by mouse and touch, for example from Rex on a phone. A tap on a 
 
 The Board paints its first screen from the cache in under 100 ms, and it renders each keypress in under 16 ms. It makes no network call before it draws, and it refreshes its data in the background. A new Task tab opens in under 2 s, without hook time. A Rex event reaches the Board in under 100 ms, and a GitHub change reaches it in under 35 s.
 
-## PROD-BOARD-018: The lineup tab shows how many Tasks need the user
+## PROD-BOARD-018: The my-lineup tab shows how many Tasks need the user
 
-While one or more build Tasks are in Needs you, Rex shows a dot and a message on the `lineup` tab, for example `2 Tasks need you`. The count leaves out review Tasks and Follow-up rows. The Board sends the mark at start, and again each time a build Task joins or leaves Needs you or changes its Stage or its flag. When no build Task needs the user, the mark clears. The mark also clears when the Board quits. The Dock badge counts the `lineup` tab once, whatever the number of Tasks.
+While one or more build Tasks are in Needs you, Rex shows a dot and a message on the `my-lineup` tab, for example `2 Tasks need you`. The count leaves out review Tasks and Follow-up rows. The Board sends the mark at start, and again each time a build Task joins or leaves Needs you or changes its Stage or its flag. When no build Task needs the user, the mark clears. The mark also clears when the Board quits. The Dock badge counts the `my-lineup` tab once, whatever the number of Tasks.
 
 ## PROD-BOARD-019: The Board toasts Ready to land and Done
 

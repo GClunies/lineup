@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// AgentSide is the side of the Hub's lineup tab that the LINEUP pane takes.
+// AgentSide is the side of the Hub's my-lineup tab that the LINEUP pane takes.
 // The Board takes the other side.
 type AgentSide string
 
@@ -24,7 +24,7 @@ var agentSides = []AgentSide{AgentLeft, AgentRight, AgentTop, AgentBottom}
 // The bounds of layout.agent_size, a percent of the tab.
 const minAgentSize, maxAgentSize = 10, 90
 
-// Layout is the split of the Hub's lineup tab. AgentSize is the LINEUP
+// Layout is the split of the Hub's my-lineup tab. AgentSize is the LINEUP
 // pane's percent of the tab's width for left or right, or of its height for
 // top or bottom. The Board takes the rest.
 type Layout struct {
@@ -62,7 +62,7 @@ func (f layoutFile) resolve() (Layout, error) {
 	return l, nil
 }
 
-// Layout is the split of the Hub's lineup tab. Load refuses a bad [layout]
+// Layout is the split of the Hub's my-lineup tab. Load refuses a bad [layout]
 // table.
 func (g *Global) Layout() Layout {
 	l, _ := g.file.Layout.resolve()

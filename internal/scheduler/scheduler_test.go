@@ -41,11 +41,19 @@ type tab struct {
 }
 
 // split is a block that Split opened beside the anchor block of a tab.
-// beside lists the other open blocks of the tab when the split opened.
+// beside lists the other open blocks of the tab when the split opened. label
+// and program are what Panes reads: side and hunk for each split that Split
+// opens. A test seeds other blocks of a tab with any label and program.
 type split struct {
 	BlockID, anchor, cwd, window string
 	argv, beside                 []string
+	label, program               string
 	closed                       bool
+}
+
+// sideAt is a live side pane that an earlier Scheduler opened in window.
+func sideAt(block, window string) *split {
+	return &split{BlockID: block, window: window, label: "side", program: "hunk"}
 }
 
 type fakeRex struct {
@@ -144,6 +152,11 @@ func (f *fakeRex) CloseBlock(_ context.Context, _, block string) error {
 			t.closed, closed = true, true
 		}
 	}
+	for _, s := range f.splits {
+		if s.BlockID == block && !s.closed {
+			s.closed, closed = true, true
+		}
+	}
 	f.mu.Unlock()
 	if closed {
 		f.events <- RexEvent{Kind: EvClosed, BlockID: block}
@@ -157,20 +170,53 @@ func (f *fakeRex) Split(_ context.Context, _, block, cwd string, argv []string) 
 	if f.splitErr != nil {
 		return "", f.splitErr
 	}
+	window := ""
 	for _, t := range f.tabs {
 		if t.BlockID == block {
-			var beside []string
-			for _, o := range f.tabs {
-				if o.WindowID == t.WindowID && o.BlockID != block && !o.closed {
-					beside = append(beside, o.BlockID)
-				}
-			}
-			f.n++
-			f.splits = append(f.splits, &split{BlockID: fmt.Sprintf("split:%d", f.n), anchor: block, cwd: cwd, window: t.WindowID, argv: argv, beside: beside})
-			return f.splits[len(f.splits)-1].BlockID, nil
+			window = t.WindowID
 		}
 	}
-	return "", fmt.Errorf("block %s not found", block)
+	for _, s := range f.splits {
+		if s.BlockID == block && !s.closed {
+			window = s.window
+		}
+	}
+	if window == "" {
+		return "", fmt.Errorf("block %s not found", block)
+	}
+	var beside []string
+	for _, o := range f.tabs {
+		if o.WindowID == window && o.BlockID != block && !o.closed {
+			beside = append(beside, o.BlockID)
+		}
+	}
+	f.n++
+	f.splits = append(f.splits, &split{BlockID: fmt.Sprintf("split:%d", f.n), anchor: block, cwd: cwd, window: window, argv: argv, beside: beside,
+		label: "side", program: "hunk"})
+	return f.splits[len(f.splits)-1].BlockID, nil
+}
+
+// Panes gives each tab block the label of a plain tab's block and the first
+// word of its command as its program.
+func (f *fakeRex) Panes(_ context.Context, _, window string) ([]Pane, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []Pane
+	for _, t := range f.tabs {
+		if t.WindowID == window && !t.closed {
+			p := Pane{BlockID: t.BlockID, Label: "shell"}
+			if len(t.argv) > 0 {
+				p.Program = t.argv[0]
+			}
+			out = append(out, p)
+		}
+	}
+	for _, s := range f.splits {
+		if s.window == window && !s.closed {
+			out = append(out, Pane{BlockID: s.BlockID, Label: s.label, Program: s.program})
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeRex) CloseWindow(_ context.Context, _, window string) error {
@@ -509,6 +555,33 @@ type fakeWorktrees struct {
 	dirty bool
 	// addErr fails the next AddReview call.
 	addErr error
+	// base is the DiffBase of every worktree, or base1 when it is empty. gone
+	// lists the worktrees whose folder is gone.
+	base string
+	gone []string
+}
+
+func (w *fakeWorktrees) DiffBase(_ context.Context, worktree string) (string, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if slices.Contains(w.gone, worktree) {
+		return "", fmt.Errorf("%w: %s", ErrNoWorktree, worktree)
+	}
+	return cmp.Or(w.base, "base1"), nil
+}
+
+// rebase moves the DiffBase of every worktree to base.
+func (w *fakeWorktrees) rebase(base string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.base = base
+}
+
+// lose removes the worktree's folder, as the user's wt remove does.
+func (w *fakeWorktrees) lose(worktree string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.gone = append(w.gone, worktree)
 }
 
 func (w *fakeWorktrees) AddReview(_ context.Context, repo string, pr ReviewPR) (string, error) {
