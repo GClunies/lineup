@@ -1,0 +1,164 @@
+internal/board/capture_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 64,69,76,80,111
+cmd/lineup/wire.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 241-245,278,304-305,314
+internal/worktree/worktree_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 5,90-116
+  s_1818a5989cfcac::t_a3873ffd36e618 117
+internal/board/view.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 4,9,14,27,89-91,93,95,98-115,119,122-136,183-184,186,194-258,329,370-371,373-375,381,389-394,399,401,404-432,434-441,443-462,471,478,485,490-492,494-495,500,505,507,510-512,514,516,519,522,524-571,589,603
+  s_1818a5989cfcac::t_5c53ca862fc30a 503
+cmd/lineup/serve.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 114-125
+internal/board/view_test.go
+  s_1818a5989cfcac::t_ba83d8920ec58e 183
+  s_1818a5989cfcac::t_20bebde3dc69fe 67
+  s_1818a5989cfcac::t_6960e2d1c3876f 1-66,68-182,184-347
+docs/spec/mvp.md
+  s_1818a5989cfcac::t_6960e2d1c3876f 15,107,109-110,317-319,357,359-362,399,502-529,562,564-566,569-570,572-573,575,577-580,585-587,619,623,636,694,777-782
+  s_1818a5989cfcac::t_d8295e04b9f906 358,481,609,690
+cmd/lineup/rex/lineup.lua
+  s_1818a5989cfcac::t_6960e2d1c3876f 83-89,208
+cmd/lineup/ls_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 1-27
+internal/board/issuekind_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 123
+internal/board/model.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 197-202,321-323,326,517
+internal/config/board_test.go
+  s_1818a5989cfcac::t_50479004eee907 93
+  s_1818a5989cfcac::t_90ebae25faf22e 13,35,80
+  s_1818a5989cfcac::t_559c9cb2885d48 58
+  s_1818a5989cfcac::t_6960e2d1c3876f 86-88,90-92,94-95
+  s_1818a5989cfcac::t_74d7a0107defff 89
+  s_fe8d4c1691a132::t_2308b825da2fc7 96-97
+internal/scheduler/open.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 64,71,76-79
+internal/worktree/worktree.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 18-21,74-76,82-88
+internal/board/status_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 95-96,181-183
+internal/scheduler/api_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 188-202,204-209
+  s_1818a5989cfcac::t_d10facc68b2b1f 203
+docs/spec/reviews.md
+  s_1818a5989cfcac::t_6960e2d1c3876f 30
+cmd/lineup/review_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 129-151,157
+docs/spec/one-board.md
+  s_1818a5989cfcac::t_751d80de102f23 72
+  s_1818a5989cfcac::t_fa843909f6fc1d 117,273
+  s_1818a5989cfcac::t_6960e2d1c3876f 31-46,48-50,53,64-71,73-101,112,114,134-149,176-179,236-254,256,258,260,277,331-336,342-345,354-359
+internal/board/filter_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 21,44,52,65-66,71-73
+  s_1818a5989cfcac::t_8d3aab76d9fe34 74-75
+internal/board/issues.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 60-70,233-252
+  s_1818a5989cfcac::t_cf00cc6b0904b3 253
+internal/board/mouse.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 10-11,70,72
+internal/github/testdata/own_assigned.json
+  s_1818a5989cfcac::t_6960e2d1c3876f 4-5
+internal/board/board_test.go
+  s_1818a5989cfcac::t_94dc96c3ffb00c 354
+  s_1818a5989cfcac::t_31813c9e8a4ab6 376
+  s_1818a5989cfcac::t_6960e2d1c3876f 321,338,385-386,557,560-567,606-615,617-623,662,672,680,685,692,694-695,698-699,716-722,726,728-730,737,847,852,857-934,1058-1086,1095-1138
+internal/board/groups_test.go
+  s_1818a5989cfcac::t_bc73105048fae6 304
+  s_1818a5989cfcac::t_6960e2d1c3876f 5,7,18,65-84,86-96,110,118,122,125,136,153,175,223-229,249,296,311,341,362-363,378,383,385,392,396,400,421
+  s_1818a5989cfcac::t_7f68cf1d495cf9 85
+  s_1818a5989cfcac::t_b5c534c22969d0 58,100,299,312,323
+internal/config/config_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 1017-1042
+internal/board/github_test.go
+  s_1818a5989cfcac::t_da470bbb7366b5 62,127
+  s_1818a5989cfcac::t_6960e2d1c3876f 12,61,63,69-72,99,128-146,148-160
+internal/scheduler/api.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 190,337,372-373
+  s_1818a5989cfcac::t_704e4c7d3f3e4a 374
+internal/board/mouse_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 93,95,97,99
+internal/scheduler/record.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 79-81,83-88,133-185,225-227,239-242,267-303,311,393-394,403-414
+  s_1818a5989cfcac::t_c5182610872584 415
+internal/scheduler/scheduler_test.go
+  s_1818a5989cfcac::t_87601831ea45f1 1889
+  s_1818a5989cfcac::t_6960e2d1c3876f 35-36,250-257,498-500,537-539,543-548,1387-1403,1405-1426,1436-1448,1893-1904
+  s_1818a5989cfcac::t_acde11cb4366d1 1404
+  s_fe8d4c1691a132::t_bf2e4b4bb0dc7a 1449-1450
+internal/config/config.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 34-38,183-208,315-324,399-401
+internal/scheduler/scheduler.go
+  s_1818a5989cfcac::t_e755597f70cd8c 1091
+  s_1818a5989cfcac::t_6960e2d1c3876f 56-60,190,245-247,277-291,526-527,542-543,545-547,555,557-583,915-916,937-938,943-956,983,1009-1049,1080-1081,1084-1087,1092-1094
+  s_1818a5989cfcac::t_7c0c4066b58bfe 244
+internal/board/followup_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 1-189
+internal/board/groups.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 16
+internal/harness/claude/claude.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 170-177,190-192,209-216
+  s_1818a5989cfcac::t_27e10c4f0075d9 217
+internal/scheduler/deliver.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 90,113,124-125,129-134,176-178
+  s_1818a5989cfcac::t_13184b10b682fd 179
+docs/spec/trackers.md
+  s_1818a5989cfcac::t_6960e2d1c3876f 189-190,236
+internal/scheduler/note_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 5,30-39,59-62,79-89
+  s_1818a5989cfcac::t_12e9623fd22f65 90
+docs/adr/0033-lineup-closes-a-merged-tab-when-the-user-turns-it-on.md
+  s_1818a5989cfcac::t_6960e2d1c3876f 1-27
+internal/harness/claude/claude_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 180,185,313,324,331-353,357,362
+cmd/lineup/wire_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 287-299
+GLOSSARY.md
+  s_1818a5989cfcac::t_6960e2d1c3876f 50,69-72
+  s_1818a5989cfcac::t_ca0cccc85cc392 88
+internal/board/github.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 5-6,11,27-30,33-35,51-57
+cmd/lineup/hub.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 579-581
+internal/config/board.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 14
+internal/scheduler/record_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 71-91
+go.mod
+  s_1818a5989cfcac::t_6960e2d1c3876f 12
+internal/board/issues_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 100
+  s_1818a5989cfcac::t_aef2c9ab6234c9 286
+internal/github/own_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 60
+internal/scheduler/merged_test.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 1-400
+internal/scheduler/ports.go
+  s_1818a5989cfcac::t_6960e2d1c3876f 6,108-111,116-117,131-134,159-162
+docs/adr/0017-the-user-closes-every-task-tab.md
+  s_1818a5989cfcac::t_6960e2d1c3876f 5-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73a9ed74f0cdf25ae29013620d636082eb6fe722",
+  "prompts": {},
+  "sessions": {
+    "s_1818a5989cfcac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a3fc8e6-5793-4a3f-9e11-3f14d84d32de",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_fe8d4c1691a132": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "954196b3-8743-4035-b4ed-db7be336559e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
