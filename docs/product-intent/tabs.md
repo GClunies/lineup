@@ -12,7 +12,7 @@ Each Repo with an open build Task has its own Rex session, named by the Repo key
 
 ## PROD-TABS-003: A tab label names the Task
 
-The label of a Task tab is the Task ID and the title, for example `ENG-590 Add billing model`. A label longer than 32 characters ends at a word, with `…`. A review Task's ID, for example `PR-4955`, already names the PR. So its label drops the repository and number, the Issue key, and the commit type from the start of the PR title.
+The label of a Task tab is the Task ID and the title, for example `ENG-590 Add billing model`. A GitHub Issue Task's label drops the owner from the ID, for example `lineup#121 Remove the ADRs and…`, because the Repo session names the owner. A label longer than 32 characters ends at a word, with `…`. A review Task's ID, for example `PR-4955`, already names the PR. So its label drops the repository and number, the Issue key, and the commit type from the start of the PR title.
 
 ## PROD-TABS-004: A Task tab opens without the focus
 

@@ -22,6 +22,15 @@ func TestTabLabel(t *testing.T) {
 		{"a title that fits stays whole",
 			Record{ID: "ENG-1", Title: "Add billing model"},
 			"ENG-1 Add billing model"},
+		{"a GitHub Issue loses its owner",
+			Record{ID: "GClunies/lineup#121", Title: "Remove the ADRs and specs from the repo"},
+			"lineup#121 Remove the ADRs and…"},
+		{"a GitHub Issue with no title is its repo and number",
+			Record{ID: "acme/data#3"},
+			"data#3"},
+		{"a Local Issue",
+			Record{ID: "HOD-3", Title: "Add the night mode"},
+			"HOD-3 Add the night mode"},
 		{"a Task with no title is its ID",
 			Record{ID: "ENG-2"},
 			"ENG-2"},
@@ -62,8 +71,8 @@ func TestTabLabel(t *testing.T) {
 			if n := utf8.RuneCountInString(got); n > 32 {
 				t.Errorf("tabLabel() = %q has %d characters, want at most 32", got, n)
 			}
-			if !strings.HasPrefix(got, tt.rec.ID) {
-				t.Errorf("tabLabel() = %q does not start with the ID %q", got, tt.rec.ID)
+			if id := strings.Fields(got)[0]; !strings.HasSuffix(tt.rec.ID, id) {
+				t.Errorf("tabLabel() = %q does not start with the ID %q or its repo#n", got, tt.rec.ID)
 			}
 		})
 	}

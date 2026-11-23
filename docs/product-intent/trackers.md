@@ -28,7 +28,7 @@ By default, a Linear sign-in uses lineup's own Linear OAuth app, which any works
 
 ## PROD-TRACK-007: An ID ignores case and shows in one form
 
-Each command that takes an Issue or a Task takes its ID in any case, so `eng-614`, `Eng-614`, and `ENG-614` name one Task. lineup shows Linear IDs, local Issue IDs, ad hoc Task IDs, and review Task IDs in upper case, for example `HOD-3` and `AH-65`. It shows a GitHub ID in the form that GitHub gives. Branch names and the file names of local Issues are in lower case. The Board, `lineup ls`, `lineup show`, `lineup next-id`, the tab labels, and the Orchestrator's instructions use these forms.
+Each command that takes an Issue or a Task takes its ID in any case, so `eng-614`, `Eng-614`, and `ENG-614` name one Task. lineup shows Linear IDs, local Issue IDs, ad hoc Task IDs, and review Task IDs in upper case, for example `HOD-3` and `AH-65`. It shows a GitHub ID in the form that GitHub gives. Branch names and the file names of local Issues are in lower case. The Board, `lineup ls`, `lineup show`, `lineup next-id`, and the Orchestrator's instructions use these forms.
 
 ## PROD-TRACK-008: Each Repo takes the Issues of one Tracker
 

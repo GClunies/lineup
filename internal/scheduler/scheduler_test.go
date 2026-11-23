@@ -2010,6 +2010,44 @@ func TestOpenFocusesALiveTab(t *testing.T) {
 	}
 }
 
+// A GitHub Task's tab from before its label lost the owner still belongs to
+// the Task, and a restore resumes the same conversation under the new label.
+func TestOpenFindsTheTabAndConversationOfAGitHubTaskFromBeforeTheShortLabel(t *testing.T) {
+	const id = "acme/data#7"
+	seed := func(st *store.Store) {
+		r := Record{
+			Task:  lifecycle.Task{ID: id, Stage: lifecycle.Working, Policy: testPolicy, Left: testPolicy.Budgets},
+			Issue: &Issue{Kind: KindGitHub, Identifier: id, Title: "Backfill events"},
+			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "acme/data", Branch: "ada/data-7",
+			Worktree: "/wt/data-7", Conversation: "conv-7", SessionID: "session:data", WindowID: "window:" + id, BlockID: "block:" + id, Job: JobWorker,
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+	old := &tab{Window: Window{"session:data", "window:" + id, "block:" + id}, label: id + " Backfill events", argv: []string{"claude"}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, func(d *Deps) { d.Rex.(*fakeRex).tabs = []*tab{old} })
+
+	if res := h.open(id); res.Action != OpenFocused {
+		t.Fatalf("open = %+v, want the old tab focused", res)
+	}
+	h.rex.mu.Lock()
+	focused := slices.Clone(h.rex.focused)
+	h.rex.mu.Unlock()
+	if !slices.Equal(focused, []string{old.BlockID}) || h.tabs() != 1 {
+		t.Fatalf("focused %v, %d tabs, want the old tab and no new tab", focused, h.tabs())
+	}
+
+	h.rex.userCloses(*old)
+	eventually(t, "the tab closed flag", func() bool { return h.task(id).Flag == "tab closed" })
+	if res := h.open(id); res.Action != OpenRestored {
+		t.Fatalf("open = %+v, want restored", res)
+	}
+	resumed := h.waitTab("claude --resume conv-7")
+	if resumed.label != "data#7 Backfill events" {
+		t.Fatalf("resumed tab label %q, want data#7 Backfill events", resumed.label)
+	}
+}
+
 func TestOpenRefusesATaskWithNothingToOpen(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	if err := h.openFails("ENG-9"); !errors.Is(err, lifecycle.ErrUnknownTask) {
