@@ -1,0 +1,23 @@
+cmd/lineup/repo.go
+  s_dae4353c4a0fc0::t_05506787892cb0 229-230
+  s_dae4353c4a0fc0::t_4e1844b8365a9e 91-92
+cmd/lineup/repo_test.go
+  s_dae4353c4a0fc0::t_a878adf1042d7a 122
+  s_dae4353c4a0fc0::t_f1712c194ad801 105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c9171c695a6fb6b264c6495244ab45b919262ed5",
+  "prompts": {},
+  "sessions": {
+    "s_dae4353c4a0fc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a7909f97-d7e4-4e97-b846-f43f4021cdf8",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
