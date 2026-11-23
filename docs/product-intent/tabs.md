@@ -8,7 +8,7 @@ The Hub is the Rex session `my-lineup`, with one tab, `lineup`. The Board fills 
 
 ## PROD-TABS-002: Each Repo has its own Rex session
 
-Each Repo with an open build Task has its own Rex session, named after the Repo's folder. If two Repos share a folder name, or the folder is named `my-lineup`, the name adds the parent folder, for example `acme-data`. An ad hoc Task opens in its Repo's session, as an Issue's Task does. Review Tasks open in the `reviews` session. lineup creates a Repo session with its first Task. It removes the session after the last Task tab in it closes, unless the session holds a tab that the user or another Scheduler opened.
+Each Repo with an open build Task has its own Rex session, named by the Repo key, for example `crexi/data`. A key always holds a `/`, so no Repo session takes the Hub's name `my-lineup`. An ad hoc Task opens in its Repo's session, as an Issue's Task does. Review Tasks open in the `reviews` session. lineup creates a Repo session with its first Task. It removes the session after the last Task tab in it closes, unless the session holds a tab that the user or another Scheduler opened.
 
 ## PROD-TABS-003: A tab label names the Task
 
@@ -53,3 +53,7 @@ lineup opens a tab with no ask from the user only for a Task's first Worker. Whe
 ## PROD-TABS-013: The Hub repairs itself after a Rex restart
 
 After a Rex server restart, Rex brings back each tab as an idle shell. When `lineup` runs and the `BOARD` or `LINEUP` pane of the Hub holds an idle shell, `lineup` closes the Hub tab and opens it again. The Orchestrator then continues its conversation. A pane that the user added does not count. If `lineup` runs inside that tab, it stops with an error that says to run `lineup` in another tab, because the close would end it.
+
+## PROD-TABS-014: A Repo session with a folder name takes the Repo key
+
+An older lineup named each Repo session after the Repo's folder, for example `data`. At its start, lineup renames each such session of a Task to the Repo key, for example `crexi/data`, and the session's tabs stay open. If a session already has the key, lineup leaves the old session as it is.

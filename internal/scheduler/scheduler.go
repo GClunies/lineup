@@ -938,6 +938,7 @@ func prURL(p *PRSnapshot) string {
 // failed. A merged Task's tab that lineup waits to close reads its Worker's
 // status. Last, it tidies once, so it needs no tick.
 func (s *Scheduler) recover(ctx context.Context) {
+	s.renameRepoSessions(ctx)
 	live := map[string]map[string]bool{}
 	blocksOf := func(r *Record) (map[string]bool, bool) {
 		if blocks, ok := live[r.SessionID]; ok {
@@ -1031,6 +1032,33 @@ func (s *Scheduler) recover(ctx context.Context) {
 	}
 	// A worktree whose time ended while the Scheduler was down goes now.
 	s.tidy()
+}
+
+// renameRepoSessions gives each build Task's session the Repo key. A Record
+// from before the key names its session after the Repo's folder. The rename
+// keeps the session's ID, so its tabs stay open. Only the loop calls it.
+func (s *Scheduler) renameRepoSessions(ctx context.Context) {
+	renamed := map[string]bool{}
+	for _, r := range s.list() {
+		if r.Review != nil {
+			continue
+		}
+		key, _ := s.d.Config.SetUp(r.Repo)
+		if r.Session == key {
+			continue
+		}
+		if r.WindowID != "" && !renamed[r.SessionID] {
+			renamed[r.SessionID] = true
+			if err := s.d.Rex.RenameSession(ctx, r.SessionID, key); err != nil {
+				s.d.Log.Warn("rename session", "session", r.Session, "label", key, "err", err)
+			}
+		}
+		if r.RepoLabel == "" {
+			r.RepoLabel = r.Session
+		}
+		r.Session = key
+		s.save(r)
+	}
 }
 
 // readStatus applies the program status that Rex reads from the Worker's tab now.

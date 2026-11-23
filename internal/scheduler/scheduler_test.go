@@ -56,7 +56,9 @@ type fakeRex struct {
 	// splitErr fails every Split call.
 	splitErr  error
 	destroyed []string
-	events    chan RexEvent
+	// renamed lists each RenameSession call as "<session> <label>".
+	renamed []string
+	events  chan RexEvent
 	// exitFast makes a tab whose argv starts with this word exit with 0
 	// before NewWindow returns.
 	exitFast string
@@ -81,6 +83,13 @@ type typed struct{ block, text string }
 
 func (f *fakeRex) EnsureSession(_ context.Context, label string) (string, error) {
 	return "session:" + label, nil
+}
+
+func (f *fakeRex) RenameSession(_ context.Context, session, label string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.renamed = append(f.renamed, session+" "+label)
+	return nil
 }
 
 func (f *fakeRex) NewWindow(_ context.Context, session, label, cwd string, env map[string]string, argv []string, keep bool) (Window, error) {
@@ -883,7 +892,7 @@ func TestADoneTabTheUserClosesRemovesTheWorktree(t *testing.T) {
 	}
 	h.rex.userCloses(worker)
 	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
-	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:data"}) })
+	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:acme/data"}) })
 	if v := h.task("ENG-1"); v.Stage != "Done" || v.Outcome != "merged" || v.Tab || v.Live {
 		t.Fatalf("task = %+v, want Done, merged, with no tab", v)
 	}
@@ -907,7 +916,7 @@ func TestClosingADoneTaskClosesItsTabAndRemovesTheWorktree(t *testing.T) {
 	h.do(Request{Op: "close", Task: "ENG-1"})
 	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude working")) == 0 })
 	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
-	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:data"}) })
+	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:acme/data"}) })
 	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
 	h.still("ENG-1", lifecycle.Done)
 	if v := h.task("ENG-1"); v.Outcome != "merged" || v.Tab {
@@ -1493,14 +1502,83 @@ func TestTaskWithNoIssueOpensInItsRepoSession(t *testing.T) {
 		}
 		return len(sessions) == 2
 	})
-	if s := sessions["AH-1 Fix map tooltip"]; s != "session:web" {
-		t.Errorf("text Task session = %q, want session:web (all: %v)", s, sessions)
+	if s := sessions["AH-1 Fix map tooltip"]; s != "session:acme/web" {
+		t.Errorf("text Task session = %q, want session:acme/web (all: %v)", s, sessions)
 	}
-	if s := sessions["ENG-1 Add billing model"]; s != "session:data" {
-		t.Errorf("Issue Task session = %q, want session:data", s)
+	if s := sessions["ENG-1 Add billing model"]; s != "session:acme/data" {
+		t.Errorf("Issue Task session = %q, want session:acme/data", s)
 	}
 	if v := h.task("AH-1"); v.Repo != "web" {
 		t.Errorf("text Task Repo column = %q, want web", v.Repo)
+	}
+}
+
+// ownersConfig resolves a Repo name owner/folder to /repos/owner/folder, so
+// two Repos can share a folder name.
+type ownersConfig struct{ fakeConfig }
+
+func (ownersConfig) ResolveRepo(name string) (string, error) { return "/repos/" + name, nil }
+func (ownersConfig) SetUp(repo string) (string, bool) {
+	return filepath.Base(filepath.Dir(repo)) + "/" + filepath.Base(repo), true
+}
+
+func TestTwoReposWithOneFolderNameOpenInTwoSessions(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Config = ownersConfig{} })
+	h.do(Request{Op: "add", Repo: "acme/data", Text: "Fix the export"})
+	h.do(Request{Op: "add", Repo: "other/data", Text: "Fix the import"})
+
+	sessions := map[string]string{}
+	eventually(t, "both setup tabs", func() bool {
+		h.rex.mu.Lock()
+		defer h.rex.mu.Unlock()
+		for _, tb := range h.rex.tabs {
+			sessions[tb.label] = tb.SessionID
+		}
+		return len(sessions) == 2
+	})
+	if s := sessions["AH-1 Fix the export"]; s != "session:acme/data" {
+		t.Errorf("acme/data session = %q, want session:acme/data (all: %v)", s, sessions)
+	}
+	if s := sessions["AH-2 Fix the import"]; s != "session:other/data" {
+		t.Errorf("other/data session = %q, want session:other/data (all: %v)", s, sessions)
+	}
+	if v := h.task("AH-2"); v.Repo != "other-data" {
+		t.Errorf("other/data Repo column = %q, want other-data", v.Repo)
+	}
+}
+
+func TestARepoSessionUnderItsFolderNameTakesTheRepoKey(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "state.db")
+	seed := func(st *store.Store) {
+		for _, id := range []string{"ENG-7", "ENG-8"} {
+			r := Record{
+				Task:  lifecycle.Task{ID: id, Stage: lifecycle.Working, Policy: testPolicy, Left: testPolicy.Budgets},
+				Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data",
+				Branch: "ada/" + id, Worktree: "/wt/" + id, Conversation: "conv-" + id, SessionID: "session:data",
+				WindowID: "window:" + id, BlockID: "block:" + id, Job: JobWorker, WorkerStage: new(lifecycle.Working),
+			}
+			data, _ := json.Marshal(r)
+			st.Save(r.ID, data, nil)
+		}
+	}
+	h := newHarness(t, db, seed, func(d *Deps) {
+		d.Rex.(*fakeRex).tabs = []*tab{
+			{Window: Window{"session:data", "window:ENG-7", "block:ENG-7"}, argv: []string{"claude"}, program: "working"},
+			{Window: Window{"session:data", "window:ENG-8", "block:ENG-8"}, argv: []string{"claude"}, program: "working"},
+		}
+	})
+	h.do(Request{Op: "ls"})
+	h.rex.mu.Lock()
+	renamed := slices.Clone(h.rex.renamed)
+	h.rex.mu.Unlock()
+	if want := []string{"session:data acme/data"}; !slices.Equal(renamed, want) {
+		t.Fatalf("renamed = %q, want %q", renamed, want)
+	}
+	for _, id := range []string{"ENG-7", "ENG-8"} {
+		r, _ := h.s.snapshot(id)
+		if r.Session != "acme/data" || r.WindowID != "window:"+id || r.BlockID != "block:"+id {
+			t.Errorf("%s session %q, tab %s %s, want acme/data and its tab", id, r.Session, r.WindowID, r.BlockID)
+		}
 	}
 }
 

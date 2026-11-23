@@ -33,6 +33,10 @@ func (p rexPort) EnsureSession(ctx context.Context, label string) (string, error
 	return p.c.EnsureSession(ctx, label)
 }
 
+func (p rexPort) RenameSession(ctx context.Context, session, label string) error {
+	return p.c.RenameSession(ctx, session, label)
+}
+
 func (p rexPort) NewWindow(ctx context.Context, session, label, cwd string, env map[string]string, argv []string, keep bool) (scheduler.Window, error) {
 	w, err := p.c.NewWindow(ctx, session, label, cwd, env, argv, keep)
 	return scheduler.Window(w), err

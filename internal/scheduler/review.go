@@ -200,7 +200,7 @@ func (s *Scheduler) addReview(a reviewAdd) (*Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	r.RepoLabel = sessionLabel(r.Repo, s.repos())
+	r.RepoLabel = repoLabel(r.Repo, s.repos())
 	r.Task = *t
 	s.board.Tasks[r.ID] = &r.Task
 	s.recs[r.ID] = r

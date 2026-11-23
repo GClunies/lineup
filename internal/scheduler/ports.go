@@ -24,6 +24,9 @@ type Status struct{ State, Kind, Msg string }
 
 type Rex interface {
 	EnsureSession(ctx context.Context, label string) (string, error)
+	// RenameSession gives the session the label, unless another session has
+	// it. A missing session is no error.
+	RenameSession(ctx context.Context, session, label string) error
 	// NewWindow opens a tab that runs argv. With keep, the tab stays after argv exits.
 	NewWindow(ctx context.Context, session, label, cwd string, env map[string]string, argv []string, keep bool) (Window, error)
 	// Split opens argv beside block, in block's tab, and keeps the focus on

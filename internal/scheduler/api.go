@@ -387,7 +387,8 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 	default:
 		return TaskView{}, errors.New("add needs an Issue or a text")
 	}
-	if key, ok := s.d.Config.SetUp(r.Repo); !ok {
+	key, ok := s.d.Config.SetUp(r.Repo)
+	if !ok {
 		return TaskView{}, fmt.Errorf("%w: %s", ErrNotSetUp, key)
 	}
 	if is := r.Issue; is != nil {
@@ -449,8 +450,8 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 		if adHoc > 0 {
 			s.d.Store.SetSetting("next_id", strconv.Itoa(adHoc+1))
 		}
-		r.RepoLabel = sessionLabel(r.Repo, s.repos())
-		r.Session = r.RepoLabel
+		r.RepoLabel = repoLabel(r.Repo, s.repos())
+		r.Session = key
 		r.Task = *t
 		s.board.Tasks[r.ID] = &r.Task
 		r.Overrides = maps.Clone(req.Set)
