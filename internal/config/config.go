@@ -30,7 +30,9 @@ const (
 	defaultPollInterval = 30 * time.Second
 	defaultModel        = "claude-opus-5-5"
 	defaultEffort       = "high"
-	defaultReviewCycles = 3
+	// DefaultReviewCycles is the review bot's cycle budget when no
+	// max_review_cycles applies.
+	DefaultReviewCycles = 3
 	// defaultKeepWorktreeDays equals the days that a Done Task stays on the Board.
 	defaultKeepWorktreeDays = 7
 	// maxKeepWorktreeDays is how long Claude keeps a conversation, so that a
@@ -82,9 +84,9 @@ type landingBarFile struct {
 	Approvals *string `toml:"approvals"`
 }
 
-// defaultBar is the user's bar.
-var defaultBar = lifecycle.LandingBar{
-	Checks: lifecycle.RequiredChecks, Threads: lifecycle.RepliedThreads, Approvals: lifecycle.RequiredApprovals,
+// DefaultBar is the user's bar, before the [landing_bar] tables.
+func DefaultBar() lifecycle.LandingBar {
+	return lifecycle.LandingBar{Checks: lifecycle.RequiredChecks, Threads: lifecycle.RepliedThreads, Approvals: lifecycle.RequiredApprovals}
 }
 
 // apply sets each rule that the table names. The error names the key.
@@ -338,26 +340,39 @@ func (g *Global) LocalTrackerOn(linearOn, githubOn bool) bool {
 
 // Load reads the global file. A missing file means defaults.
 func Load(globalPath string) (*Global, error) {
+	data, err := os.ReadFile(globalPath)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return newGlobal()
+	case err != nil:
+		return nil, err
+	}
+	return parseGlobal(globalPath, string(data))
+}
+
+func newGlobal() (*Global, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("find home folder: %w", err)
 	}
-	g := &Global{home: home, lookPath: exec.LookPath, board: DefaultBoard(), keys: map[string]string{}}
-	data, err := os.ReadFile(globalPath)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		return g, nil
-	case err != nil:
+	return &Global{home: home, lookPath: exec.LookPath, board: DefaultBoard(), keys: map[string]string{}}, nil
+}
+
+// parseGlobal reads the text of the global file at globalPath, which each
+// error names.
+func parseGlobal(globalPath, data string) (*Global, error) {
+	g, err := newGlobal()
+	if err != nil {
 		return nil, err
 	}
-	why, err := oldForm(string(data))
+	why, err := oldForm(data)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	if why != "" {
 		return nil, fmt.Errorf("%s: %s", globalPath, why)
 	}
-	if err := decodeStrict(string(data), &g.file); err != nil {
+	if err := decodeStrict(data, &g.file); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	for key, t := range g.file.Repos {
@@ -739,6 +754,13 @@ func (f *reviewBotFile) check(where string) error {
 	return nil
 }
 
+// over sets each key that the table h of a higher layer sets.
+func (f *reviewBotFile) over(h *reviewBotFile) {
+	f.Name = cmp.Or(h.Name, f.Name)
+	f.MinReviewScore = cmp.Or(h.MinReviewScore, f.MinReviewScore)
+	f.MaxReviewCycles = cmp.Or(h.MaxReviewCycles, f.MaxReviewCycles)
+}
+
 // gate resolves the merged [review_bot] tables into the gate and its cycle
 // budget. No table means no gate.
 func (f reviewBotFile) gate() (*lifecycle.ReviewGate, int, error) {
@@ -756,7 +778,7 @@ func (f reviewBotFile) gate() (*lifecycle.ReviewGate, int, error) {
 	if f.MinReviewScore != nil {
 		g.MinScore = *f.MinReviewScore
 	}
-	cycles := defaultReviewCycles
+	cycles := DefaultReviewCycles
 	if f.MaxReviewCycles != nil {
 		cycles = *f.MaxReviewCycles
 	}
@@ -797,7 +819,7 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 	}
 
 	var bot reviewBotFile
-	res.Bar = defaultBar
+	res.Bar = DefaultBar()
 	for _, l := range layers {
 		if l.WIPCap != nil {
 			res.WIPCap = *l.WIPCap
@@ -808,9 +830,7 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 			}
 		}
 		if f := l.ReviewBot; f != nil {
-			bot.Name = cmp.Or(f.Name, bot.Name)
-			bot.MinReviewScore = cmp.Or(f.MinReviewScore, bot.MinReviewScore)
-			bot.MaxReviewCycles = cmp.Or(f.MaxReviewCycles, bot.MaxReviewCycles)
+			bot.over(f)
 		}
 		if l.PollInterval != nil {
 			res.PollInterval, _ = parseInterval(*l.PollInterval)
@@ -981,6 +1001,63 @@ func (g *Global) ReposForTeam(teamKey string) []string {
 func (g *Global) RepoTracker(repoPath string) (key, tracker string) {
 	key = g.keyOf(repoPath)
 	return key, g.tracker(key)
+}
+
+// SetUp reports whether the file has the Repo's own [repos."owner/repo"]
+// table, in any case, even an empty one. An owner/* table sets up no Repo.
+// key is the Repo's key.
+func (g *Global) SetUp(repoPath string) (key string, ok bool) {
+	key = g.keyOf(repoPath)
+	_, ok = g.table(key)
+	return key, ok
+}
+
+// Inherited is what [defaults] and a Repo's owner/* table set for the keys
+// that lineup repo init writes. "" and nil mean that neither sets the key.
+type Inherited struct {
+	// Tracker comes only from the owner/* table, as [defaults] has none.
+	Tracker    string
+	ReviewBot  InheritedBot
+	LandingBar InheritedBar
+}
+
+type InheritedBot struct {
+	Name            string
+	MinReviewScore  *int
+	MaxReviewCycles *int
+}
+
+// InheritedBar holds the names of the Landing bar rules, such as all.
+type InheritedBar struct{ Checks, Threads, Approvals string }
+
+// Inherited merges [defaults] and the owner/* table of the Repo key, as
+// Resolve does. The Repo's own table does not count.
+func (g *Global) Inherited(key string) Inherited {
+	owner, _, _ := strings.Cut(key, "/")
+	layers := []layer{g.file.Defaults}
+	var in Inherited
+	if t, ok := g.table(owner + "/*"); ok {
+		layers, in.Tracker = append(layers, t.layer), t.Tracker
+	}
+	set := func(dst, src *string) {
+		if src != nil {
+			*dst = *src
+		}
+	}
+	var bot reviewBotFile
+	for _, l := range layers {
+		if f := l.ReviewBot; f != nil {
+			bot.over(f)
+		}
+		if f := l.LandingBar; f != nil {
+			set(&in.LandingBar.Checks, f.Checks)
+			set(&in.LandingBar.Threads, f.Threads)
+			set(&in.LandingBar.Approvals, f.Approvals)
+		}
+	}
+	set(&in.ReviewBot.Name, bot.Name)
+	in.ReviewBot.MinReviewScore, in.ReviewBot.MaxReviewCycles = bot.MinReviewScore, bot.MaxReviewCycles
+	return in
 }
 
 // PrefixedRepos lists the tables with a prefix, sorted by key.
