@@ -89,7 +89,7 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The top of the `lineup` tab, above the Orchestrator. It lists the build Tasks, the user's own Issues that have no Task, and the unassigned Issues of the user's teams, grouped as Needs you, Follow-up, Backlog, Team, Up next, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless it still keeps its tab or its worktree.
+The pane of the `lineup` tab beside the Orchestrator. It lists the build Tasks, the user's own Issues that have no Task, and the unassigned Issues of the user's teams, grouped as Needs you, Follow-up, Backlog, Team, Up next, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless it still keeps its tab or its worktree.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:
@@ -97,7 +97,7 @@ A Done Task that the user hid from the Board. Archiving closes the Task's tab an
 _Avoid_: Deleted, removed
 
 **Hub**:
-The Rex session of lineup's own tab. `hub` holds the Board and the Orchestrator in the `LINEUP` pane. The Orchestrator is the one agent for the Board.
+The Rex session `my-lineup` of lineup's own tab, `lineup`. The tab holds the Board and the Orchestrator in the `LINEUP` pane. The `agent_side` and `agent_size` keys of the `[layout]` table set the side and the share of the tab for the `LINEUP` pane. The Orchestrator is the one agent for the Board.
 _Avoid_: Home, control tab
 
 ### Actors

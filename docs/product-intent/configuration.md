@@ -12,7 +12,7 @@ A setting comes from four levels, from lowest to highest: `[defaults]`, the `[re
 
 ## PROD-CONFIG-003: Each key has one level where it belongs
 
-The top level holds the keys that apply once: `roots`, `start_skills`, `linear_client_id`, `[linear.*]`, `[github.labels]`, `local_tracker`, `local_issues_dir`, `[review]`, `[board]`, and `[merged]`. `[defaults]` holds each key that a Repo can override: `wip_cap`, `poll_interval`, `[budgets]`, `[review_bot]`, `[landing_bar]`, and `[stage.*]`. A Repo table holds those keys, and `teams`, `tracker`, and `prefix`. `teams` and `prefix` need an `<owner>/<repo>` key. A layer key at the top level stops the load, for example with `wip_cap belongs in [defaults]. Run lineup config migrate to move it`.
+The top level holds the keys that apply once: `roots`, `start_skills`, `linear_client_id`, `[linear.*]`, `[github.labels]`, `local_tracker`, `local_issues_dir`, `[review]`, `[board]`, `[merged]`, and `[layout]`. `[defaults]` holds each key that a Repo can override: `wip_cap`, `poll_interval`, `[budgets]`, `[review_bot]`, `[landing_bar]`, and `[stage.*]`. A Repo table holds those keys, and `teams`, `tracker`, and `prefix`. `teams` and `prefix` need an `<owner>/<repo>` key. A layer key at the top level stops the load, for example with `wip_cap belongs in [defaults]. Run lineup config migrate to move it`.
 
 ## PROD-CONFIG-004: A Task override changes one Task
 
