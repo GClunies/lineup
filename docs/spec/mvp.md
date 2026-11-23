@@ -512,7 +512,7 @@ The rules for `close_tab`:
 - lineup marks a Task at its merge. A Task that merged before the Scheduler started with `close_tab` on keeps its tab.
 - The Scheduler checks at each poll and once at its start. A worktree whose days ended while the Scheduler was stopped goes at the next start.
 - When lineup closes the tab, it also removes the Repo session if that session holds no other tab.
-- While lineup keeps the worktree, the Task stays on the Board with the note `worktree until <date>`, for example `worktree until Jan 2`. `lineup open` and `enter` restore the Worker, as [Start a Task](#start-a-task) describes.
+- While lineup keeps the worktree, the Task stays on the Board with the note `worktree until <date>`, for example `worktree until Jan 2`. On a Follow-up row, the strip shows this note after the Tracker state. `lineup open` and `enter` restore the Worker, as [Start a Task](#start-a-task) describes.
 
 lineup never removes a worktree that has uncommitted changes. Before it runs `wt remove`, it runs `git status --porcelain` in the worktree. If the output is not empty, lineup keeps the worktree, and the Task's note reads `worktree kept: uncommitted changes in <path>`. lineup tries again at each poll, and removes the worktree after the user commits or discards the changes. This rule also holds when the user closes a tab, with `close_tab` on or off.
 

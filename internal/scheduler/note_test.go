@@ -76,3 +76,15 @@ func TestTheNoteSaysWhatHappensAndWhereTheReviewStands(t *testing.T) {
 		}
 	}
 }
+
+// The Board reads the worktree note apart from the note, because a Follow-up
+// row puts the Tracker state in the note's place.
+func TestTheViewNamesTheWorktreeNoteApart(t *testing.T) {
+	r := Record{Task: lifecycle.Task{Stage: lifecycle.Done, Outcome: lifecycle.OutcomeMerged}, Worktree: "/wt/a", WorktreeKept: true}
+	if got, want := r.view().WorktreeNote, "worktree kept: uncommitted changes in /wt/a"; got != want {
+		t.Fatalf("WorktreeNote = %q, want %q", got, want)
+	}
+	if r.Worktree, r.WorktreeKept = "", false; r.view().WorktreeNote != "" {
+		t.Fatalf("WorktreeNote = %q for a Task that keeps no worktree", r.view().WorktreeNote)
+	}
+}

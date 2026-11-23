@@ -172,3 +172,19 @@ func TestAFollowUpRowKeepsTheAgeAndTheXOfADoneTask(t *testing.T) {
 		})
 	}
 }
+
+// A Follow-up row's strip names the Tracker state, then the note of a worktree
+// that lineup keeps, so the Board still shows why the worktree stays.
+func TestAFollowUpRowKeepsTheWorktreeNoteInTheStrip(t *testing.T) {
+	const kept = "worktree kept: uncommitted changes in /wt/PD-1"
+	task := shipped("PD-1")
+	task.Note, task.WorktreeNote = "#12 merged · "+kept, kept
+	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{task}})
+	m = feed(m, mineIssuesMsg{ws: acme, issues: []linear.Issue{waitingForQA("PD-1")}, live: true})
+	if l := lineOf(t, screen(m), boardID("PD-1")); !strings.Contains(l, "Waiting for QA") || strings.Contains(l, "worktree") {
+		t.Errorf("row %q, want the status word Waiting for QA alone", l)
+	}
+	if f := footerAt(m, 120); !strings.Contains(f, " · Waiting for QA · "+kept) {
+		t.Errorf("the strip must name the Tracker state, then %q:\n%s", kept, f)
+	}
+}

@@ -222,7 +222,12 @@ func (m Model) selection() (title, facts string) {
 	if t.PRNumber == 0 || slices.Contains(strings.FieldsFunc(t.Note, func(r rune) bool { return r != '#' && !unicode.IsDigit(r) }), pr) {
 		pr = ""
 	}
-	return t.Title, join(boardID(t.ID), t.Stage, t.Repo, pr, t.Note)
+	// setBoard put a Follow-up row's Tracker state in the place of its note.
+	var kept string
+	if t.Group == groupFollowUp {
+		kept = t.WorktreeNote
+	}
+	return t.Title, join(boardID(t.ID), t.Stage, t.Repo, pr, t.Note, kept)
 }
 
 type hint struct{ key, does string }

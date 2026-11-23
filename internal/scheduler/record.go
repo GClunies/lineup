@@ -167,6 +167,9 @@ type TaskView struct {
 	Since      time.Time      `json:"since"`
 	Live       bool           `json:"live"`
 	Tab        bool           `json:"tab,omitempty"`
+	// WorktreeNote says why lineup keeps the Task's worktree. The note ends
+	// with it too, and a Follow-up row, whose note is the Tracker state, adds it.
+	WorktreeNote string `json:"worktree_note,omitempty"`
 }
 
 type BoardView struct {
@@ -246,6 +249,7 @@ func (r *Record) view() TaskView {
 		Flag: string(r.Flag), FlagDetail: r.FlagDetail, Outcome: string(r.Outcome),
 		OverCap: r.OverCap, Worktree: r.Worktree, Since: r.StageSince,
 		Live: r.Job == JobWorker, Tab: r.WindowID != "", Skill: r.Overrides["skill"],
+		WorktreeNote: r.worktreeNote(),
 	}
 	if v.Repo == "" { // a Record from before RepoLabel, when the session was the Repo's label
 		v.Repo = r.Session
@@ -323,19 +327,27 @@ func (r *Record) note(pr int) string {
 			lead = append(lead, string(r.Outcome))
 		}
 	}
-	switch {
-	case r.WorktreeKept && r.Review == nil:
-		tail = append(tail, "worktree kept: uncommitted changes in "+r.Worktree)
-	case r.WorktreeKept:
-		tail = append(tail, "worktree kept: "+r.Worktree)
-	case r.done() == kept:
-		tail = append(tail, "worktree until "+r.KeepUntil.Format("Jan 2"))
+	if w := r.worktreeNote(); w != "" {
+		tail = append(tail, w)
 	}
 	parts := tail
 	if len(lead) > 0 {
 		parts = append([]string{strings.Join(lead, " ")}, tail...)
 	}
 	return strings.Join(parts, " · ")
+}
+
+// worktreeNote says why lineup keeps the Task's worktree, or "" when it keeps none.
+func (r *Record) worktreeNote() string {
+	switch {
+	case r.WorktreeKept && r.Review == nil:
+		return "worktree kept: uncommitted changes in " + r.Worktree
+	case r.WorktreeKept:
+		return "worktree kept: " + r.Worktree
+	case r.done() == kept:
+		return "worktree until " + r.KeepUntil.Format("Jan 2")
+	}
+	return ""
 }
 
 // checklist is the Landing bar's checklist for a started Task whose PR a
