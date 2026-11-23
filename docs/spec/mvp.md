@@ -50,7 +50,6 @@ lineup has no dependency on herdr. It copies the Linear client, OAuth, cache, an
 
 | Stage | Owner | Board group | Counts toward WIP cap |
 |---|---|---|---|
-| Queued | user | Queued | no |
 | Working | agent | Working | yes |
 | CI running | CI | Waiting | yes |
 | CI debug | agent | Working | yes |
@@ -60,6 +59,8 @@ lineup has no dependency on herdr. It copies the Linear client, OAuth, cache, an
 | Done | none | Done | no |
 
 A Task with the Needs you flag shows in the Needs you group, whatever its Stage is.
+
+A Task has no Stage before Working. A Task exists only once its Worker starts. An Issue that has not started is an Issue row in Ready or Backlog, not a Task.
 
 ### Stage contracts
 
@@ -90,7 +91,7 @@ A Responding round that pushes nothing meets its contract when the latest poll s
 
 | From | Signal | To |
 |---|---|---|
-| Queued | `start`, and the WIP cap allows it or the user confirms | Working |
+| (none) | `lineup add`, and the WIP cap allows it or the user confirms | Working |
 | Working | `done`, and a PR exists (`pr-open`) | CI running |
 | CI running, In review, Ready to land | `pr-seen` | The Stage that the first gap of the Landing bar leads to. See [Landing bar](#landing-bar). |
 | CI debug, Responding | `pushed` (a new head commit) | CI running |
@@ -309,6 +310,8 @@ A PR whose head commit has no checks meets the check items of the Landing bar, s
 
 When `lineup serve` starts, it compares the store with `rex ls` and `rex session inspect`. Each Task in an agent Stage whose tab or block is gone gets the flag `tab closed`. Recovery opens no tab, because only the user restores a closed tab. A Task whose setup tab is gone, or whose Worker never started, starts again, because it never had a Worker to restore. A setup tab that Rex kept after worktrunk exited counts as gone, and recovery closes it. A failed setup's tab stays, because it shows worktrunk's error. If worktrunk exited while the Scheduler was down, recovery reads its exit code with `rex block call process`, and the Task goes on as if the Scheduler had seen the exit.
 
+When the Scheduler loads the store, each stored Task in Queued becomes Done with the note `removed: never started`. Queued was the Stage of a Task that was added and never started, and lineup no longer has it. The Scheduler archives that Task, so its Issue shows as an Issue row again. The header does not count it as a Task done.
+
 Recovery also runs after a Rex server restart. The Scheduler reads the Rex server's instance id every 5 s. When the id changes, every Worker is gone, so the Scheduler exits. launchd starts it again. Startup recovery flags each Task whose Worker is gone. The user restores each one with `lineup open <task>` or with `enter` on its row.
 
 Rex brings back each tab after its restart, with the same IDs, but as a login shell with no program. Recovery reads each tab's process with `rex block call process`. A tab that holds only an idle login shell counts as gone, and recovery closes it. A tab where the user started a program in that shell counts as live. Recovery reads no process for a Done Task, so its tab stays until the user closes it. A merged Task whose tab waits for an idle Worker is the exception. If its tab holds an idle shell, recovery closes the tab and keeps the worktree. Otherwise recovery reads the Worker's program status, so a Worker that went idle while the Scheduler was down lets the tab close.
@@ -334,9 +337,15 @@ When the Issue's team is on no Repo, the Issue gets the Project's Repo. Without 
 
 ## Start a Task
 
+One command adds a Task and starts it: `lineup add <ISSUE>` for an Issue, or `lineup add --repo <repo> "<text>"` for an ad hoc Task. `s` on a Board Issue row runs the same add. lineup has no command that starts a Task that was added before.
+
+- `--set key=value` sets one Task override, for example `skill=pr-explain` or `pr=false`. The flag can repeat. Each override applies before the Worker's first prompt. `lineup set <task> key=value` changes an override later.
+- `--over-cap` starts the Task once over a full WIP cap. Use it only with the user's yes.
+- The flags can come before or after the Issue or the text, for example `lineup add --repo data "<text>" --set skill=pr-explain --set pr=false`.
+
 This sequence runs in the background. The Board shows only the Task as it changes Stage.
 
-1. The Scheduler checks the WIP cap. If the cap is full, the Board asks the user to start this Task once over the cap or to raise the cap. A start over the cap shows `+1 over` in the header.
+1. The Scheduler checks the WIP cap. If the cap is full and `--over-cap` is absent, `lineup add` adds nothing and fails with `wip cap full`, and the Issue stays in Ready. The Board then asks the user to start this Task once over the cap or to raise the cap. A start over the cap shows `+1 over` in the header.
 2. The Scheduler assigns the Issue to the user and sets the `started` status from the team's status map. See [Linear status map](#linear-status-map).
 3. The Scheduler picks the Repo. A Linear Issue gets its Repo as [Pick the Repo of a Linear Issue](#pick-the-repo-of-a-linear-issue) says. A GitHub Issue gets the checkout of its repository. A Local Issue gets the Repo of its prefix, else the Repo of its `repo` field. If no Repo fits, a fuzzy picker opens. For a Linear Issue, the picker remembers the choice for the Issue's Project.
 4. The Scheduler creates the Repo session if it does not exist, and then a setup tab for the Task with `--focus=false --keep-open`.
@@ -363,13 +372,52 @@ Each Task keeps one Worker for its whole life. The Worker starts with `--session
 - Only a Task's first Worker opens a tab with no ask from the user. A Task that has had a Worker never gets a tab from a prompt, whether or not it holds a conversation.
 - `lineup open <task>` restores the Worker. A live tab comes to the front. A Task with no tab gets a new tab in the Worker's folder that runs `claude --resume <conversation>`, with a new side pane, and the flag clears. A prompt that waited arrives at the restored Worker's first `idle`. The restore types nothing else, because the Stage prompt reached the Worker before the tab closed.
 - A Task with no conversation, or whose conversation file is gone, gets a fresh Worker with the Stage prompt. The prompt says that this is a restart, and it quotes every steer that the user sent to the Task, in order. A Done Task never gets a fresh Worker.
-- `open` refuses a Queued Task, with `<task> has not started`. It refuses a Done review Task that has no tab, with `<task> is Done and its worktree is gone`. It refuses a Task in a Stage that waits for others when no conversation is left to resume.
+- `open` refuses a Done review Task that has no tab, with `<task> is Done and its worktree is gone`. It refuses a Task in a Stage that waits for others when no conversation is left to resume.
 - A Done build Task with no tab resumes its conversation. While its worktree exists, `open` restores the Worker in the worktree, with a new side pane, as for any Task.
 - After the worktree is gone, `open` resumes the Worker read-only in the Repo's main checkout. The Claude adapter trusts the main checkout first. The Worker starts with `--disallowedTools=Bash,Edit,Write,NotebookEdit,EnterWorktree` and without `--allowedTools=Bash(lineup ask:*)`, so it has no tool that writes files. `--append-system-prompt` tells it that lineup removed the worktree, and that it answers the user's questions. `--system-prompt-snapshot off` makes the resume send that text, because a resume otherwise sends the system prompt that the conversation recorded first. The tab has no side pane, because the side pane shows the worktree's changes.
 - If Claude no longer holds the conversation of a Done build Task, `open` refuses with `<task> is Done and Claude no longer holds its conversation`.
 - A Done Task that `open` restored keeps its new tab until the user closes it. That close removes the worktree at once, if the worktree still exists.
 - A Worker that exited and left its tab open, as for a side pane, has no live Worker. `open` closes that tab and opens the new one in its place, so the Task's window is the live tab.
 - The Worker keeps the model and effort of Working. `skill` and `command` apply to each Stage, because the prompt carries them.
+
+### Usage
+
+lineup reports what the Worker of each Task spent: four token counts and the agent time. The Claude adapter reads them from the files of the Task's conversation, in the Claude configuration folder that the Repo uses, as in step 6 above:
+
+- `projects/<folder>/<conversation>.jsonl`. A resume from another folder writes a file with the same name in that folder, so the adapter reads the file in each folder.
+- `projects/<folder>/<conversation>/subagents/agent-*.jsonl`, one file for each subagent of the Worker.
+
+The token counts come from `message.usage` in each assistant entry:
+
+| Count | Field |
+|---|---|
+| Input | `input_tokens` |
+| Output | `output_tokens` |
+| Cache write | `cache_creation_input_tokens` |
+| Cache read | `cache_read_input_tokens` |
+
+Claude writes one entry for each content block of a message, and each entry repeats the usage of the whole message. The adapter counts each `message.id` once across all the files. The counts include the subagents.
+
+Agent time is the time that the Worker worked on prompts. Claude ends each turn with an entry of type `system` and subtype `turn_duration`. Its `durationMs` is the length of the turn less the time that Claude waited for the user, for example at a permission prompt. Agent time is the sum of `durationMs` in the conversation's own files. The time between turns does not count, so a wait for the user, CI, or a reviewer adds nothing. A subagent works inside a turn, so its files add no time. A resume can copy entries, so each turn counts once by its `uuid`. A turn adds its time when it ends.
+
+The usage is unknown for a Task with no conversation, and for a Task whose conversation files are gone, for example after Claude's `cleanupPeriodDays`. lineup shows unknown usage as unknown, never as zero.
+
+The detail pane (`f`) and `lineup show` print two lines:
+
+```
+tokens  output 83.6k · input 268 · cache write 634k · cache read 22.4M
+agent time  5h 12m
+```
+
+A count under 1000 shows in full. A larger count shows three significant digits with `k` or `M`. Agent time shows hours and minutes, only minutes under an hour, and only seconds under a minute. Unknown usage prints `usage  unknown`.
+
+`lineup ls --json` and `lineup show --json` give each Task a `usage` object. The object is `null` when the usage is unknown:
+
+```json
+"usage": {"input_tokens": 268, "output_tokens": 83615, "cache_write_tokens": 634187, "cache_read_tokens": 22427257, "agent_seconds": 18752}
+```
+
+The Scheduler reads the files at each request and stores no usage. The read runs apart from the work that updates the Board, so a slow read never delays the Board. Only `lineup show`, the detail pane, and `lineup ls --json` read usage. `lineup ls`, `lineup ready`, and `lineup decide` read none, so the hooks that run on each Orchestrator turn stay fast. `lineup ls --json` runs direnv once for each Repo and reads the files of the Tasks side by side.
 
 ## Configuration
 
@@ -484,12 +532,12 @@ Each key layers on its own, as in `[budgets]`. A value that is not in the table 
 
 ```toml
 [board]
-order = ["done", "needs_you", "working", "waiting", "queued", "ready", "backlog"]
+order = ["done", "needs_you", "working", "waiting", "ready", "backlog"]
 collapsed = ["backlog"]
 hidden = ["done"]
 ```
 
-`order` lists the groups, first to last. A group that it leaves out follows the listed ones, in the default order: `needs_you`, `follow_up`, `backlog`, `ready`, `queued`, `working`, `waiting`, `done`. `collapsed` lists the groups that start closed. Its default is `backlog` and `done`. `hidden` lists the groups that the Board does not show. Its default is none. A key that is absent takes its default, and an empty list means none. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors, but they do not fail the load. The Scheduler starts, and the Board uses the default layout. The Board shows the error on its own line until it quits, for example `config: board.hidden: unknown section "dun" (default layout)`. If the load fails for any other reason, the Board runs with defaults and shows `config: <error>` the same way.
+`order` lists the groups, first to last. A group that it leaves out follows the listed ones, in the default order: `needs_you`, `follow_up`, `backlog`, `ready`, `working`, `waiting`, `done`. `collapsed` lists the groups that start closed. Its default is `backlog` and `done`. `hidden` lists the groups that the Board does not show. Its default is none. A key that is absent takes its default, and an empty list means none. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors, but they do not fail the load. The Scheduler starts, and the Board uses the default layout. The Board shows the error on its own line until it quits, for example `config: board.hidden: unknown section "dun" (default layout)`. If the load fails for any other reason, the Board runs with defaults and shows `config: <error>` the same way. The key `queued` named a group that lineup no longer has. A list that names it loads with a warning that names the key, and the Board keeps the rest of the layout.
 
 `linear_client_id` is a top-level key. Put it above the first `[table]`, or TOML reads it as part of that table. Leave it out to sign in through lineup's own Linear OAuth app, which any workspace can use. To use your own app, register an OAuth app in Linear with the redirect URI `http://localhost:47821/callback` and no client credentials. Then set its client ID here.
 
@@ -579,8 +627,6 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
  READY  2
    ENG-611  Move the retry job                                            unblocked   ▂▄▆
    LOCAL-7  Rename the log flag                                           ready            data
- QUEUED  1
-   ENG-601  Drop old API keys                                             queued           data
  WORKING  2
    WEB-12   Fix map tooltip                                               responding  5m   web
    ENG-592  Fix flaky test                                                CI debug    1m   data
@@ -619,7 +665,7 @@ A review Task shows `#N reviewing`, `#N review ready` with `· head moved` when 
 
 Reviews by bots do not count as a person's review.
 
-The groups are Needs you, Follow-up, Backlog, Ready, Queued, Working, Waiting, and Done. By default they show in that order: Needs you and Follow-up come first, and the other groups follow the development cycle. The `[board]` table in the global file changes the order. Follow-up holds the Done build Tasks whose Issues are still open in their Trackers. `docs/spec/one-board.md` ("Follow-up") gives the rule for each Tracker. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
+The groups are Needs you, Follow-up, Backlog, Ready, Working, Waiting, and Done. By default they show in that order: Needs you and Follow-up come first, and the other groups follow the development cycle. The `[board]` table in the global file changes the order. Follow-up holds the Done build Tasks whose Issues are still open in their Trackers. `docs/spec/one-board.md` ("Follow-up") gives the rule for each Tracker. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
 
 Each group with at least one row has a heading that shows the group name and its row count, for example `BACKLOG  7`. A heading is a row that the user can select, except the Needs you heading. `j` and `k` stop on each heading and skip the rows of a closed group. `enter` on a heading opens or closes the group. A closed group shows its heading with a `…` mark and hides its rows, as `BACKLOG  7 …` does. Needs you never closes. This keeps a long Backlog or Done group from pushing Ready and Working off the screen.
 
@@ -631,10 +677,10 @@ Backlog and Done start closed, and `[board] collapsed` changes that. `enter` or 
 | `d` | Show or hide Done |
 | `enter` | On a Task row, focus the Task's tab in Rex. If the Task has started and has no live Worker, restore the Worker with `claude --resume`, as `lineup open` does. On a Done Task with no tab, restore the Worker in its kept worktree, or read-only in the main checkout after lineup removed the worktree. The hint reads `restore the Worker`. On a group heading, open or close the group. The hint reads `open` or `close`. |
 | `p` | Show a live preview of the Worker's screen beside the Board |
-| `f` | Show the detail pane at full screen, and back. On an Issue row, the pane shows the Issue's description. |
+| `f` | Show the detail pane at full screen, and back. On a Task row, the pane shows the Task's [usage](#usage). On an Issue row, the pane shows the Issue's description. |
 | `m` | Merge the PR (Ready to land) |
 | `x` | Close the Task, after a confirmation. On a Done Task with a tab, close the tab and remove the worktree, after a confirmation. On a Done Task with no tab, archive it and remove its kept worktree, after a confirmation. |
-| `s` | Start a Queued Task. On an Issue row, open the skill picker, then add the Issue as a Task and start it. The first row of the picker is `just go`, which starts with no skill. The other rows are the skills in `start_skills`. Typed text filters these rows, and a typed name that is not in the list becomes its own row. The picker drops a leading `/`. When no Repo mapping exists, the Repo picker opens next with each Repo of the row's Tracker. When the Issue fits more than one Repo and nothing in the Issue picks one, the picker lists only those Repos. |
+| `s` | On an Issue row, open the skill picker, then add the Issue as a Task, which starts it. The first row of the picker is `just go`, which starts with no skill. The other rows are the skills in `start_skills`. Typed text filters these rows, and a typed name that is not in the list becomes its own row. The picker drops a leading `/`. When no Repo mapping exists, the Repo picker opens next with each Repo of the row's Tracker. When the Issue fits more than one Repo and nothing in the Issue picks one, the picker lists only those Repos. |
 | `c` | On an Issue row, change the status. A Linear row lists the workflow states of its team, and a local row lists the local statuses. |
 | `o` | Open the PR or the Issue in the browser. A local Issue opens in `$EDITOR`. |
 | `n` | Capture a new Issue at a Destination, `local` by default. `tab` picks a Linear team or Project. A local Issue shows and opens Backlog and selects the new row. See `docs/spec/one-board.md`. |
@@ -654,7 +700,7 @@ The Orchestrator has four jobs:
 
 | Job | Example | `lineup` command |
 |---|---|---|
-| Intake | "start ENG-123", "fix the flaky test in data" | `lineup add ENG-123`, `lineup add --repo data "<text>"` |
+| Intake | "start ENG-123", "fix the flaky test in data" | `lineup add ENG-123`, `lineup add --repo data "<text>" --set skill=<skill>` |
 | Status | "what needs me?" | `lineup decide` |
 | Status | "what is ready?" | The ready lines that its hook adds, from `lineup ready` |
 | Steer | "tell ENG-592 to use approach B" | `lineup steer <task> "<text>"` |
@@ -663,7 +709,7 @@ The Orchestrator has four jobs:
 
 The Orchestrator handles build Tasks and review Tasks. It maps each review request, `/pr-review` included, to `lineup review`. Its settings deny every GitHub write to a PR.
 
-If `lineup add` or `lineup start` meets a full WIP cap, the command fails with `wip cap full`. The Orchestrator must then ask the user with `AskUserQuestion`. It must not use `--over-cap` without the user's pick.
+If `lineup add` meets a full WIP cap, the command fails with `wip cap full`. The Orchestrator must then ask the user with `AskUserQuestion`. It must not use `--over-cap` without the user's pick.
 
 ### Alerts
 
@@ -701,8 +747,8 @@ Each time that `lineup` opens the Hub, it writes `lineup.lua` beside Rex's `init
 | What Needs Me… | Lists the Tasks of `lineup decide`. Then it lists the choices of the Task that the user picks. A lone Open the tab runs with no second question. For Answer here, it asks for the user's words. Then it runs `lineup decide <task> <choice>`. |
 | Tell a Worker… | Lists the Tasks with a live Worker, asks for the user's words, and runs `lineup steer`. |
 | Go to a Task… | Lists the Tasks on the Board, except a Done review Task with no tab, and runs `lineup open`. A Done build Task with no tab resumes its Worker, as `enter` on the Board does. |
-| Start a Task… | Lists the Queued Tasks. The user can type an Issue instead, which `lineup add` adds first. Then it runs `lineup start`. |
-| Start an Ad Hoc Task… | Lists the Repos of the build Tasks on the Board. The user can type another Repo. It asks for the job, then runs `lineup add --repo` and `lineup start`. |
+| Start a Task… | Asks for an Issue, for example `ENG-614`, `owner/repo#12`, or `local-7`. Then it runs `lineup add`, which starts the Task. |
+| Start an Ad Hoc Task… | Lists the Repos of the build Tasks on the Board. The user can type another Repo. It asks for the job, then runs `lineup add --repo`. |
 | Review a PR… | Asks for a PR URL and runs `lineup review`. |
 | Close a Task… | Lists the Tasks on the Board, except a Done Task with no tab, asks again, and runs `lineup close`. |
 | Archive Done Tasks… | Lists the Done Tasks with no item ticked, and runs `lineup archive` for each ticked one. |
@@ -711,7 +757,7 @@ Each time that `lineup` opens the Hub, it writes `lineup.lua` beside Rex's `init
 | Pause Reviews, Resume Reviews | Run `lineup reviews pause` or `lineup reviews resume`. |
 | Set a Task's Model… | Lists the Tasks that are not Done, then the Claude models. The user can type another model. It runs `lineup set <task> model=<model>`. The model applies when the Task's next Worker starts. |
 
-When a Task start finds the WIP cap full, the action asks to start the Task once over the cap or to leave it in Queued.
+When `lineup add` finds the WIP cap full, the action asks to start the Task once over the cap. If the user says no, it adds nothing, and the Issue stays in Ready.
 
 The actions ask with Rex prompts, which need Rex API revision 17 or later. On an older server, `lineup.lua` defines no action. Rex asks every connected Rex app, so the user can answer on another device. The first answer wins.
 
@@ -793,3 +839,6 @@ These facts come from probes on this machine: throwaway Rex sessions, and `gh ap
 | `wt remove` without `-f` fails when the worktree has uncommitted changes | `wt remove --help` |
 | A read-only resume from the main checkout keeps the conversation and writes no file | A session started in folder A was told the word `ZEBRA42`. After A was deleted, a resume from a main checkout with `--disallowedTools=Bash,Edit,Write,NotebookEdit,EnterWorktree` answered `ZEBRA42`. `git status` then showed no new file. |
 | A resume sends `--append-system-prompt` only with `--system-prompt-snapshot off` | `claude -p --resume` with an added code word: the default answered that the system prompt holds no such sentence. With `off`, it quoted the sentence. |
+| Claude writes one transcript entry for each content block of a message, and each entry repeats the usage of the whole message | The main transcript file of Task ah-64: 246 entries with `message.usage` hold 117 distinct `message.id` values. No ID has two different `usage` objects. |
+| The `durationMs` of a `turn_duration` entry leaves out the time that Claude waits for the user | The source of Claude Code 2.1.323: `durationMs` is `Date.now() - turnStartTime - totalPausedMs`, and the pause runs while Claude waits on a permission dialog |
+| One `direnv exec` run takes 0.1 to 0.4 s | `claude.ConfigDir` from Go: 110 to 150 ms in 7 runs for lineup, 195 to 360 ms in 4 runs for a Repo whose `.envrc` runs `uv sync` |

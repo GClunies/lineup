@@ -56,7 +56,7 @@ exclude_regex = "HLESS-"
 # Board sections: order, which start closed, and which are hidden.
 # d on the board shows or hides Done.
 [board]
-order = ["done", "needs_you", "working", "waiting", "queued", "ready", "backlog"]
+order = ["done", "needs_you", "working", "waiting", "ready", "backlog"]
 collapsed = ["backlog"]
 hidden = ["done"]
 

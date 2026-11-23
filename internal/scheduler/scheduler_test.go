@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -550,8 +551,11 @@ type fakeHarness struct {
 	// gone lists the conversations that HasConversation does not find.
 	gone []string
 	// trusted lists each folder that Prepare trusted.
-	trusted []string
-	specs   []WorkerSpec
+	trusted    []string
+	specs      []WorkerSpec
+	usage      map[string]*Usage
+	usageCalls int
+	usageHold  chan struct{}
 }
 
 func (h *fakeHarness) Prepare(_ context.Context, _, worktree string) error {
@@ -565,6 +569,23 @@ func (h *fakeHarness) HasConversation(_ context.Context, w WorkerSpec) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return !slices.Contains(h.gone, w.Conversation)
+}
+
+func (h *fakeHarness) Usage(_ context.Context, ws []WorkerSpec) []*Usage {
+	h.mu.Lock()
+	h.usageCalls++
+	hold := h.usageHold
+	h.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]*Usage, len(ws))
+	for i, w := range ws {
+		out[i] = h.usage[w.Conversation]
+	}
+	return out
 }
 
 func (h *fakeHarness) Prompt(_ context.Context, w WorkerSpec) (string, error) {
@@ -698,7 +719,7 @@ func (h *harness) do(req Request) any {
 
 func (h *harness) task(id string) TaskView {
 	h.t.Helper()
-	d, err := h.s.show(id)
+	d, err := h.s.show(context.Background(), id)
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -742,7 +763,6 @@ func TestALongTitleCutsTheTabLabel(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.tr.title = strings.Repeat("é", 200)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 
 	setup := h.waitTab("wt ada/eng-1-billing")
 	want := "ENG-1 " + strings.Repeat("é", 25) + "…"
@@ -765,10 +785,9 @@ func TestTaskFromStartToMerged(t *testing.T) {
 	key := PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}
 
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	if v := h.task("ENG-1"); v.Stage != "Queued" || v.Repo != "data" || v.Kind != lifecycle.KindBuild {
+	if v := h.task("ENG-1"); v.Stage != "Working" || v.Repo != "data" || v.Kind != lifecycle.KindBuild {
 		t.Fatalf("added task = %+v", v)
 	}
-	h.do(Request{Op: "start", Task: "ENG-1"})
 
 	setup := h.waitTab("wt ada/eng-1-billing")
 	if setup.cwd != "/repos/acme/data" || setup.label != "ENG-1 Add billing model" {
@@ -832,7 +851,6 @@ func doneWithATab(t *testing.T) (*harness, tab) {
 	t.Helper()
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 	h.gh.set(PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}, 42, "pr-merged")
@@ -1051,7 +1069,6 @@ func TestRecoveryKeepsADoneTaskWhoseTabIsOpen(t *testing.T) {
 func TestThePollOpPollsNow(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.PollInterval = time.Hour })
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	h.waitTab("claude working")
 	polled := func() bool {
@@ -1066,19 +1083,41 @@ func TestThePollOpPollsNow(t *testing.T) {
 	eventually(t, "a poll of ENG-1's branch", polled)
 }
 
-func TestWIPCapFullFailsStart(t *testing.T) {
+// A full WIP cap refuses an add, and the refused add leaves nothing: no Task,
+// no event, and no number of the ad hoc counter.
+func TestAnAddWithTheWIPCapFullFailsAndLeavesNothing(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "cap", N: 1})
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
-	if _, err := h.s.Handle(context.Background(), Request{Op: "start", Task: "AH-1"}); err == nil || err.Error() != "wip cap full" {
-		t.Fatalf("start over cap: err = %v, want wip cap full", err)
+	adHoc := Request{Op: "add", Repo: "web", Text: "Fix map tooltip"}
+	for _, req := range []Request{{Op: "add", Issue: "ENG-2"}, adHoc} {
+		if _, err := h.s.Handle(context.Background(), req); err == nil || err.Error() != "wip cap full" {
+			t.Fatalf("add %+v over the cap: err = %v, want wip cap full", req, err)
+		}
 	}
-	h.do(Request{Op: "start", Task: "AH-1", OverCap: true})
-	v := h.do(Request{Op: "ls"}).(BoardView)
-	if v.Started != 2 || v.OverCap != 1 || v.Cap != 1 {
-		t.Fatalf("board = %d started, %d over, cap %d", v.Started, v.OverCap, v.Cap)
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"ENG-1"}) {
+		t.Fatalf("board = %v, want only ENG-1", ids)
+	}
+	stored, err := h.st.Tasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ids := slices.Sorted(maps.Keys(stored)); !slices.Equal(ids, []string{"ENG-1"}) {
+		t.Fatalf("stored Tasks = %v, want only ENG-1", ids)
+	}
+	if events, err := h.st.Events("ENG-2"); err != nil || len(events) != 0 {
+		t.Fatalf("events of the refused add = %v, %v, want none", events, err)
+	}
+
+	adHoc.OverCap = true
+	v := h.do(adHoc).(TaskView)
+	if v.ID != "AH-1" || v.Stage != "Working" || !v.OverCap {
+		t.Fatalf("over-cap add = %+v, want ah-1 started in Working over the cap", v)
+	}
+	h.waitTab("wt lineup/ah-1-fix-map-tooltip")
+	b := h.do(Request{Op: "ls"}).(BoardView)
+	if b.Started != 2 || b.OverCap != 1 || b.Cap != 1 {
+		t.Fatalf("board = %d started, %d over, cap %d", b.Started, b.OverCap, b.Cap)
 	}
 }
 
@@ -1086,7 +1125,6 @@ func TestFastExitBeforeNewWindowReturns(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.rex.exitFast = "wt"
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.waitTab("claude working")
 }
 
@@ -1108,7 +1146,7 @@ func TestRecoveryFlagsATaskWhoseTabIsGone(t *testing.T) {
 	if n := h.tabs(); n != 0 {
 		t.Fatalf("recovery opened %d tabs, want none until the user asks", n)
 	}
-	d, _ := h.s.show("ENG-7")
+	d, _ := h.s.show(context.Background(), "ENG-7")
 	if d.Stage != "Working" || d.Group != "Needs you" || d.Tab || d.Live {
 		t.Fatalf("recovered task = %+v", d.TaskView)
 	}
@@ -1198,14 +1236,23 @@ func TestRecoveryLeavesAWaitingTaskWithoutATabUnflagged(t *testing.T) {
 	}
 }
 
+// ENG-8's setup failed before its tab opened, so it has no worktree and no
+// session, and its close removes nothing. ENG-2's setup failed in its tab.
 func TestCloseRemovesTheWorktreeOfAFailedSetupOnly(t *testing.T) {
-	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
-	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "close", Task: "ENG-1"})
-	h.waitStage("ENG-1", lifecycle.Done)
+	seed := func(st *store.Store) {
+		r := Record{
+			Task: lifecycle.Task{ID: "ENG-8", Stage: lifecycle.Working, Flag: lifecycle.ReasonSetupFailed,
+				Policy: testPolicy, Left: testPolicy.Budgets},
+			Title: "No tab", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data", Branch: "ada/eng-8",
+		}
+		data, _ := json.Marshal(r)
+		st.Save(r.ID, data, nil)
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed)
+	h.do(Request{Op: "close", Task: "ENG-8"})
+	h.waitStage("ENG-8", lifecycle.Done)
 
 	h.do(Request{Op: "add", Issue: "ENG-2"})
-	h.do(Request{Op: "start", Task: "ENG-2"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 1)
 	eventually(t, "setup failed", func() bool { return h.task("ENG-2").Flag == "setup failed" })
 	h.do(Request{Op: "close", Task: "ENG-2"})
@@ -1216,8 +1263,8 @@ func TestCloseRemovesTheWorktreeOfAFailedSetupOnly(t *testing.T) {
 	})
 	h.wt.mu.Lock()
 	defer h.wt.mu.Unlock()
-	if len(h.wt.removed) != 1 {
-		t.Fatalf("removed %v, want only the started Task's worktree", h.wt.removed)
+	if !slices.Equal(h.wt.removed, []string{"ada/eng-1-billing"}) {
+		t.Fatalf("removed %v, want only the worktree of ENG-2's setup", h.wt.removed)
 	}
 }
 
@@ -1225,7 +1272,6 @@ func TestChecksThatPassedBeforeCIRunningStillCount(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	key := PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 
@@ -1237,7 +1283,6 @@ func TestChecksThatPassedBeforeCIRunningStillCount(t *testing.T) {
 func TestAStopShowsTheWorkerLastLine(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 
@@ -1322,8 +1367,8 @@ func TestArchiveHidesADoneTaskAndKeepsItsHistory(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	_, err := h.s.Handle(context.Background(), Request{Op: "archive", Task: "ENG-1"})
-	if err == nil || err.Error() != "archive is not allowed in Queued" {
-		t.Fatalf("archive in Queued: err = %v", err)
+	if err == nil || err.Error() != "archive is not allowed in Working" {
+		t.Fatalf("archive in Working: err = %v", err)
 	}
 	h.do(Request{Op: "close", Task: "ENG-1"})
 	h.waitStage("ENG-1", lifecycle.Done)
@@ -1333,7 +1378,7 @@ func TestArchiveHidesADoneTaskAndKeepsItsHistory(t *testing.T) {
 	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); len(ids) != 0 {
 		t.Fatalf("board after archive = %v", ids)
 	}
-	d, _ := h.s.show("ENG-1")
+	d, _ := h.s.show(context.Background(), "ENG-1")
 	var archives int
 	for _, e := range d.Events {
 		if e.Signal == "archive" {
@@ -1386,7 +1431,7 @@ func TestTheViewHoldsTheTimeOfEachTaskDoneInTheLast48Hours(t *testing.T) {
 			{"ENG-3", lifecycle.Done, 30 * time.Hour, false},
 			{"ENG-4", lifecycle.Done, 47 * time.Hour, false},
 			{"ENG-5", lifecycle.Done, 72 * time.Hour, false},
-			{"ENG-6", lifecycle.Queued, time.Hour, false},
+			{"ENG-6", lifecycle.Working, time.Hour, false},
 		} {
 			r := Record{Task: lifecycle.Task{ID: x.id, Stage: x.stage, Policy: testPolicy}, Title: x.id,
 				StageSince: c.now().Add(-x.age), Archived: x.archived}
@@ -1437,8 +1482,6 @@ func TestTaskWithNoIssueOpensInItsRepoSession(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "AH-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 
 	sessions := map[string]string{}
 	eventually(t, "both setup tabs", func() bool {
@@ -1564,7 +1607,6 @@ func TestAFastSetupOpensOneSetupTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.rex.exitFast = "wt"
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.waitTab("claude working")
 	h.rex.mu.Lock()
 	defer h.rex.mu.Unlock()
@@ -1627,7 +1669,6 @@ func TestAGatedTaskWaitsForTheBotThenFlagsIt(t *testing.T) {
 	key := PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing", Bot: "greptile"}
 
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "done"}}
@@ -1892,10 +1933,6 @@ func TestOpenFocusesALiveTab(t *testing.T) {
 
 func TestOpenRefusesATaskWithNothingToOpen(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
-	h.do(Request{Op: "add", Issue: "ENG-1"})
-	if err := h.openFails("ENG-1"); err.Error() != "ENG-1 has not started" {
-		t.Fatalf("queued: %v", err)
-	}
 	if err := h.openFails("ENG-9"); !errors.Is(err, lifecycle.ErrUnknownTask) {
 		t.Fatalf("unknown: %v", err)
 	}
@@ -2001,7 +2038,6 @@ func TestASlowOpenKeepsAPromptThatARerunSetAgain(t *testing.T) {
 	h.rex.hold = hold
 	h.rex.mu.Unlock()
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	eventually(t, "the Worker command built", func() bool {
 		h.hn.mu.Lock()
@@ -2039,7 +2075,7 @@ func TestResumeFallsBackToSessionID(t *testing.T) {
 	if spec.Stage != lifecycle.Reviewing || spec.Conversation == "" {
 		t.Fatalf("fallback spec = %+v, want a Reviewing start with a conversation, so Command passes --session-id and a prompt", spec)
 	}
-	d, _ := h.s.show("PR-7")
+	d, _ := h.s.show(context.Background(), "PR-7")
 	if d.Stage != lifecycle.Reviewing.String() || d.Note != "#7 reviewing" {
 		t.Fatalf("task = %+v, want Reviewing with no flag", d.TaskView)
 	}
@@ -2060,7 +2096,7 @@ func TestOtherExitDoesNotFallBack(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.reopenAndExit("Error: session ID is already in use")
 	h.still("PR-7", lifecycle.ReviewReady)
-	d, _ := h.s.show("PR-7")
+	d, _ := h.s.show(context.Background(), "PR-7")
 	for _, e := range d.Events {
 		if e.Signal == replacedSignal {
 			t.Fatalf("%s event for another failure: %+v", replacedSignal, d.Events)
@@ -2123,7 +2159,7 @@ func (h *harness) tabs() int {
 
 func (h *harness) events(id string) []string {
 	h.t.Helper()
-	d, err := h.s.show(id)
+	d, err := h.s.show(context.Background(), id)
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -2148,11 +2184,11 @@ func TestTheNextStageTypesIntoTheSameWorker(t *testing.T) {
 	if v := h.task("ENG-1"); !v.Live || !v.Tab {
 		t.Fatalf("task = %+v, want the Working Worker live in its tab", v)
 	}
-	var stage lifecycle.Stage
+	var stage *lifecycle.Stage
 	var conversation string
 	h.s.call(func() { stage, conversation = h.s.recs["ENG-1"].WorkerStage, h.s.recs["ENG-1"].Conversation })
-	if stage != lifecycle.CIDebug || conversation == "" {
-		t.Fatalf("worker stage %s, conversation %q, want CI debug in the Working conversation", stage, conversation)
+	if stage == nil || *stage != lifecycle.CIDebug || conversation == "" {
+		t.Fatalf("worker stage %v, conversation %q, want CI debug in the Working conversation", stage, conversation)
 	}
 }
 
@@ -2502,7 +2538,7 @@ func seedPromptedWorker(since time.Time) func(*store.Store) {
 			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Policy: testPolicy, Left: testPolicy.Budgets},
 			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data",
 			Branch: "ada/eng-7", Worktree: "/wt/eng-7", SessionID: "session:data", WindowID: "window:live", BlockID: "block:live",
-			Job: JobWorker, WorkerState: promptedState, WorkerStage: lifecycle.Working, PendingSince: since,
+			Job: JobWorker, WorkerState: promptedState, WorkerStage: new(lifecycle.Working), PendingSince: since,
 		}
 		data, _ := json.Marshal(r)
 		st.Save(r.ID, data, nil)
@@ -2588,7 +2624,7 @@ func TestRecoveryReplacesAStoredWorkerLostFlag(t *testing.T) {
 	seed := func(st *store.Store) {
 		r := Record{
 			Task:  lifecycle.Task{ID: "ENG-7", Stage: lifecycle.Working, Flag: "worker lost", Policy: testPolicy, Left: testPolicy.Budgets},
-			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data", WorkerStage: lifecycle.Working,
+			Title: "Backfill events", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: "data", WorkerStage: new(lifecycle.Working),
 			Branch: "ada/eng-7", Worktree: "/wt/eng-7", Conversation: "conv-7", SessionID: "session:data", WindowID: "window:gone", BlockID: "block:gone", Job: JobWorker,
 		}
 		data, _ := json.Marshal(r)
@@ -2737,7 +2773,6 @@ func TestASetupTabThatTheUserClosesGivesTheWorkerANewTab(t *testing.T) {
 	h.rex.hold = hold
 	h.rex.mu.Unlock()
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	setup := h.waitTabRecorded("wt ada/eng-1-billing", "ENG-1")
 	h.rex.exits(setup, 0)
 	eventually(t, "the Worker command built", func() bool {
@@ -2766,7 +2801,6 @@ func TestASetupTabThatTheUserClosesGivesTheWorkerANewTab(t *testing.T) {
 func TestAFailedSetupKeepsItsTabUntilTheUserClosesTheTask(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	setup := h.waitTabRecorded("wt ada/eng-1-billing", "ENG-1")
 	h.rex.exits(setup, 1)
 	eventually(t, "the setup failed flag", func() bool { return h.task("ENG-1").Flag == "setup failed" })
@@ -2785,7 +2819,6 @@ func TestAFailedSetupKeepsItsTabUntilTheUserClosesTheTask(t *testing.T) {
 func TestARerunAfterAFailedSetupReplacesItsTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	failed := h.waitTabRecorded("wt ada/eng-1-billing", "ENG-1")
 	h.rex.exits(failed, 1)
 	eventually(t, "the setup failed flag", func() bool { return h.task("ENG-1").Flag == "setup failed" })
@@ -2890,7 +2923,6 @@ func TestRecoveryWaitsForASetupThatStillRuns(t *testing.T) {
 func TestTheWorkerStartsInTheSetupTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	setup := h.waitTab("wt ada/eng-1-billing")
 	h.rex.exits(setup, 0)
 	worker := h.waitTab("claude working")
@@ -2914,7 +2946,6 @@ func TestTheWorkerStartsInTheSetupTab(t *testing.T) {
 func TestTheSidePaneOpensAfterTheSetupBlockCloses(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 	if pane := h.waitSplit(1); pane.anchor != worker.BlockID || len(pane.beside) != 0 {

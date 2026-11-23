@@ -244,11 +244,12 @@ type queueFile struct {
 const defaultSlots = 3
 
 type Global struct {
-	file     globalFile
-	board    Board
-	boardErr error
-	home     string
-	lookPath func(string) (string, error)
+	file          globalFile
+	board         Board
+	boardWarnings []string
+	boardErr      error
+	home          string
+	lookPath      func(string) (string, error)
 
 	// keys caches the Repo key of each checkout path. The Scheduler asks for
 	// keys from several goroutines.
@@ -403,7 +404,7 @@ func Load(globalPath string) (*Global, error) {
 	if err := g.file.Merged.check(); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
-	if g.board, g.boardErr = resolveBoard(g.file.Board); g.boardErr != nil {
+	if g.board, g.boardWarnings, g.boardErr = resolveBoard(g.file.Board); g.boardErr != nil {
 		g.board = DefaultBoard()
 	}
 	return g, nil

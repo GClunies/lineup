@@ -55,7 +55,7 @@ func layoutEnv(t *testing.T, b config.Board) *workEnv {
 
 // userBoard is the layout that the user asked for.
 var userBoard = config.Board{
-	Order:     []string{"Done", "Needs you", "Follow-up", "Working", "Waiting", "Queued", "Ready", "Backlog"},
+	Order:     []string{"Done", "Needs you", "Follow-up", "Working", "Waiting", "Ready", "Backlog"},
 	Collapsed: []string{"Backlog"},
 	Hidden:    []string{"Done"},
 }
@@ -82,7 +82,7 @@ func TestEachHeadingIsTheGroupNameInSentenceCaseAndItsCount(t *testing.T) {
 	v.Tasks = append(v.Tasks, shipped("ENG-9"))
 	e.m = openAll(feed(e.m, boardMsg(v)))
 	out := screen(e.m)
-	want := map[string]int{"Needs you": 2, "Follow-up": 1, "Backlog": 1, "Ready": 1, "Queued": 1, "Working": 2, "Waiting": 1, "Done": 1}
+	want := map[string]int{"Needs you": 2, "Follow-up": 1, "Backlog": 1, "Ready": 1, "Working": 3, "Waiting": 1, "Done": 1}
 	lines := strings.Split(out, "\n")
 	for g, n := range want {
 		if head := fmt.Sprintf(" %s %d", g, n); !slices.Contains(lines, head) {
@@ -97,7 +97,7 @@ func TestEachHeadingIsTheGroupNameInSentenceCaseAndItsCount(t *testing.T) {
 func TestBacklogAndDoneStartClosedWithTheirCounts(t *testing.T) {
 	e := groupEnv(t)
 	out := screen(e.m)
-	for _, want := range []string{"Needs you 2", "Backlog 1 …", "Ready 2", "ENG-9", "LOCAL-1", "Queued 1", "Working 2", "Waiting 1", "Done 1 …"} {
+	for _, want := range []string{"Needs you 2", "Backlog 1 …", "Ready 2", "ENG-9", "LOCAL-1", "Working 3", "Waiting 1", "Done 1 …"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("screen lacks %q:\n%s", want, out)
 		}
@@ -145,8 +145,8 @@ func TestJAndKStopOnEachHeadingExceptNeedsYouAndSkipClosedRows(t *testing.T) {
 		seen = append(seen, e.m.sel)
 		e.press("j")
 	}
-	want := []string{"ENG-588", "ENG-590", "group:Backlog", "group:Ready", "ENG-9", "LOCAL-1", "group:Queued", "ENG-601",
-		"group:Working", "WEB-12", "ENG-592", "group:Waiting", "ENG-571", "group:Done", "group:Done", "group:Done"}
+	want := []string{"ENG-588", "ENG-590", "group:Backlog", "group:Ready", "ENG-9", "LOCAL-1", "group:Working", "ENG-601",
+		"WEB-12", "ENG-592", "group:Waiting", "ENG-571", "group:Done", "group:Done", "group:Done", "group:Done"}
 	if !slices.Equal(seen, want) {
 		t.Fatalf("j moved through %v, want %v", seen, want)
 	}
@@ -211,7 +211,7 @@ func TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		var tasks []scheduler.TaskView
 		inGroup := map[string][]string{}
-		for _, g := range []string{groupNeedsYou, "Queued", "Working", "Waiting", groupDone} {
+		for _, g := range []string{groupNeedsYou, "Working", "Waiting", groupDone} {
 			for i := range rapid.IntRange(0, 3).Draw(t, "tasks in "+g) {
 				id := fmt.Sprintf("%s-%d", strings.ToUpper(g[:2]), i)
 				tk := tv(id, lifecycle.Working, "data", "t", "", 0)
@@ -296,12 +296,12 @@ func TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce(t *testing.T) {
 func TestTheHeaderCountsNoGroupButWorking(t *testing.T) {
 	e := groupEnv(t)
 	h := ansi.Strip(e.m.header())
-	for _, gone := range []string{"need you", "waiting", "queued", "ready", "backlog", "◐", "◷"} {
+	for _, gone := range []string{"need you", "waiting", "ready", "backlog", "◐", "◷"} {
 		if strings.Contains(h, gone) {
 			t.Errorf("header %q still shows %q", h, gone)
 		}
 	}
-	for _, want := range []string{"● 2 working", "WIP 4/5"} {
+	for _, want := range []string{"● 3 working", "WIP 4/5"} {
 		if !strings.Contains(h, want) {
 			t.Errorf("header %q lacks %q", h, want)
 		}
@@ -309,7 +309,7 @@ func TestTheHeaderCountsNoGroupButWorking(t *testing.T) {
 }
 
 func TestTheDefaultOrderIsNeedsYouThenFollowUpThenTheDevelopmentCycle(t *testing.T) {
-	want := []string{groupNeedsYou, "Follow-up", groupBacklog, groupReady, "Queued", "Working", "Waiting", groupDone}
+	want := []string{groupNeedsYou, "Follow-up", groupBacklog, groupReady, "Working", "Waiting", groupDone}
 	if got := newSections(config.Board{}).order; !slices.Equal(got, want) {
 		t.Fatalf("default order %v, want %v", got, want)
 	}
@@ -320,14 +320,14 @@ func TestTheConfiguredOrderSetsTheSectionsOnScreen(t *testing.T) {
 	b.Hidden = nil
 	e := layoutEnv(t, b)
 	out := screen(e.m)
-	inOrder(t, out, "Done 1\n", "ENG-560", "Needs you 2", "ENG-588", "Working 2", "Waiting 1", "Queued 1", "Ready 2", "Backlog 1 …")
+	inOrder(t, out, "Done 1\n", "ENG-560", "Needs you 2", "ENG-588", "Working 3", "Waiting 1", "Ready 2", "Backlog 1 …")
 	var heads []string
 	for _, id := range e.m.rowIDs() {
 		if _, ok := headingName(id); ok {
 			heads = append(heads, id)
 		}
 	}
-	want := []string{"group:Done", "group:Working", "group:Waiting", "group:Queued", "group:Ready", "group:Backlog"}
+	want := []string{"group:Done", "group:Working", "group:Waiting", "group:Ready", "group:Backlog"}
 	if !slices.Equal(heads, want) {
 		t.Fatalf("heading stops %v, want %v", heads, want)
 	}

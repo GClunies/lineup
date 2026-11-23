@@ -91,31 +91,33 @@ local function notDone(t)
   return t.stage_key ~= "done"
 end
 
-local function started(t)
-  return t.stage_key ~= "queued" and t.stage_key ~= "done"
-end
-
--- start starts a Task. If the WIP cap is full, it asks to start the Task once
--- over the cap.
-local function start(id)
-  local ok, err = pcall(lineup, { "start", id })
-  if ok then
-    return err
+-- add runs lineup add with args, and the add starts the Task. If the WIP cap
+-- is full, it asks to start the Task once over the cap. name names the Task in
+-- the choices, and leave is the choice that starts nothing.
+local function add(args, name, leave)
+  local cmd = { "add" }
+  for _, a in ipairs(args) do
+    cmd[#cmd + 1] = a
   end
-  if not tostring(err):find("wip cap full", 1, true) then
-    error(err, 0)
+  local ok, out = pcall(lineup, cmd)
+  if ok then
+    return out
+  end
+  if not tostring(out):find("wip cap full", 1, true) then
+    error(out, 0)
   end
   local yes, reason = rex.ui.pick{
     title = "The WIP cap is full",
     items = {
-      { id = "over", title = "Start " .. id .. " over the cap" },
-      { id = "wait", title = "Leave " .. id .. " in Queued" },
+      { id = "over", title = "Start " .. name .. " over the cap" },
+      { id = "leave", title = leave },
     },
   }
   if yes ~= "over" then
-    return nil, reason or "left in Queued"
+    return nil, reason or "not started"
   end
-  return lineup({ "start", "--over-cap", id })
+  table.insert(cmd, 2, "--over-cap")
+  return lineup(cmd)
 end
 
 -- The agent Stages of each Kind, the ones that Run a Stage Again can run.
@@ -214,30 +216,18 @@ rex.action{
 rex.action{
   name = "lineup_start",
   title = "Start a Task…",
-  description = "Start a Queued lineup Task, or add an Issue and start it.",
+  description = "Start a lineup Task for an Issue.",
   category = "Lineup",
-  keywords = "lineup start issue begin queue add",
+  keywords = "lineup start issue begin add",
   run = function(ctx, args)
-    local items = {}
-    for _, t in ipairs(tasksWhere(board(), function(t) return t.stage_key == "queued" end)) do
-      items[#items + 1] = taskItem(t)
-    end
-    local id, reason = rex.ui.pick{
-      title = "Start which Task?",
-      placeholder = "Filter Queued Tasks, or type an Issue: ENG-614, owner/repo#12, LOCAL-7",
-      items = items,
-      allow_other = true,
-    }
-    if id == nil then
+    local issue, reason = rex.ui.input{ title = "Start which Issue?", placeholder = "ENG-614, owner/repo#12, LOCAL-7, or HOD-3", confirm = "Start the Task" }
+    if issue == nil then
       return { answered = false, reason = reason }
     end
-    if type(id) == "table" then
-      local added = lineup({ "add", id.text })
-      id = added:match("^(%S+)")
-    end
+    issue = issue:match("^%s*(.-)%s*$")
     local out
-    out, reason = start(id)
-    return { task = id, started = out ~= nil, out = out, reason = reason }
+    out, reason = add({ issue }, issue, "Do not start " .. issue)
+    return { task = issue, started = out ~= nil, out = out, reason = reason }
   end,
 }
 
@@ -272,10 +262,9 @@ rex.action{
     if text == nil then
       return { repo = repo, answered = false, reason = reason }
     end
-    local id = lineup({ "add", "--repo", repo, text }):match("^(%S+)")
     local out
-    out, reason = start(id)
-    return { task = id, started = out ~= nil, out = out, reason = reason }
+    out, reason = add({ "--repo", repo, text }, "the Task", "Do not start it")
+    return { task = out and out:match("^(%S+)"), started = out ~= nil, out = out, reason = reason }
   end,
 }
 
@@ -353,7 +342,7 @@ rex.action{
   category = "Lineup",
   keywords = "lineup rerun retry again stage prompt",
   run = function(ctx, args)
-    local task, reason = pickTask("Run a Stage of which Task?", "No Task has started", started)
+    local task, reason = pickTask("Run a Stage of which Task?", "No Task has started", notDone)
     if task == nil then
       return { answered = false, reason = reason }
     end

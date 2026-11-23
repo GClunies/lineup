@@ -23,7 +23,6 @@ import (
 var clientCommands = map[string]func(c scheduler.Client, args []string, out io.Writer) error{
 	"add":     cmdAdd,
 	"next-id": cmdNextID,
-	"start":   cmdStart,
 	"review":  cmdReview,
 	"reviews": cmdReviews,
 	"ls":      cmdLs,
@@ -52,29 +51,47 @@ func parse(name, usage string, args []string, setup func(*flag.FlagSet)) (*flag.
 	return fs, fs.Parse(args)
 }
 
+// cmdAdd adds a Task for an Issue, or an ad hoc Task in a Repo, and the add
+// starts it. Its flags can come before or after the Issue or the text.
 func cmdAdd(c scheduler.Client, args []string, out io.Writer) error {
-	var repo string
-	fs, err := parse("add", "<ISSUE> | --repo <repo> \"<text>\"", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&repo, "repo", "", "the Repo: a folder name such as data, an owner/repo key, or a path")
+	req := scheduler.Request{Op: "add"}
+	fs, err := parse("add", "[--over-cap] [--set key=value]... <ISSUE> | --repo <repo> \"<text>\"", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&req.Repo, "repo", "", "the Repo: a folder name such as data, an owner/repo key, or a path")
+		fs.BoolVar(&req.OverCap, "over-cap", false, "start once over the WIP cap; only with the user's yes")
+		fs.Func("set", "override configuration for the Task, for example skill=pr-explain; repeat it for each key", func(s string) error {
+			k, v, ok := strings.Cut(s, "=")
+			if !ok || k == "" {
+				return errors.New("want key=value")
+			}
+			if req.Set == nil {
+				req.Set = map[string]string{}
+			}
+			req.Set[k] = v
+			return nil
+		})
 	})
-	if err != nil {
-		return err
+	var pos []string
+	for err == nil && fs.NArg() > 0 {
+		pos = append(pos, fs.Arg(0))
+		err = fs.Parse(fs.Args()[1:])
 	}
-	if fs.NArg() != 1 {
+	if err != nil {
+		return errUsage
+	}
+	if len(pos) != 1 {
 		fs.Usage()
 		return errUsage
 	}
-	req := scheduler.Request{Op: "add", Repo: repo}
-	if repo != "" && !looksLikeIssue(fs.Arg(0), repoPrefixes()) {
-		req.Text = fs.Arg(0)
+	if req.Repo != "" && !looksLikeIssue(pos[0], repoPrefixes()) {
+		req.Text = pos[0]
 	} else {
-		req.Issue = fs.Arg(0)
+		req.Issue = pos[0]
 	}
 	var v scheduler.TaskView
 	if err := c.Do(req, &v); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "%s queued in %s: %s\n", v.ID, v.Repo, v.Title)
+	fmt.Fprintf(out, "%s started in %s: %s\n", v.ID, v.Repo, v.Title)
 	return nil
 }
 
@@ -135,28 +152,9 @@ func looksLikeIssue(s string, prefixes []string) bool {
 // linearID is the form of a Linear ID, <TEAM>-<n>, in any case.
 var linearID = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*-[1-9][0-9]*$`)
 
-func cmdStart(c scheduler.Client, args []string, out io.Writer) error {
-	var over bool
-	fs, err := parse("start", "[--over-cap] <task>", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&over, "over-cap", false, "start once over the WIP cap; only with the user's yes")
-	})
-	if err != nil {
-		return err
-	}
-	if fs.NArg() != 1 {
-		fs.Usage()
-		return errUsage
-	}
-	if err := c.Do(scheduler.Request{Op: "start", Task: fs.Arg(0), OverCap: over}, nil); err != nil {
-		return err
-	}
-	fmt.Fprintf(out, "%s started\n", scheduler.CanonicalID(fs.Arg(0)))
-	return nil
-}
-
 // cmdReview adds and starts a review Task for the PR. If the PR has an open
-// review Task, it adds nothing. It starts that Task if it is Queued, runs it
-// again if it stopped for good, and otherwise focuses its tab.
+// review Task, it adds nothing. It runs that Task again if it stopped for
+// good, and otherwise focuses its tab.
 func cmdReview(c scheduler.Client, args []string, out io.Writer) error {
 	if len(args) != 1 {
 		return fmt.Errorf("%w: lineup review <PR URL>", errUsage)
@@ -169,7 +167,7 @@ func cmdReview(c scheduler.Client, args []string, out io.Writer) error {
 	case scheduler.ReviewAdded:
 		fmt.Fprintf(out, "%s reviewing in %s: %s\n", res.ID, res.Repo, res.Title)
 		return nil
-	case scheduler.ReviewStarted, scheduler.ReviewRestarted, scheduler.ReviewReopened:
+	case scheduler.ReviewRestarted, scheduler.ReviewReopened:
 		fmt.Fprintf(out, "%s %s: %s\n", res.ID, res.Action, res.Title)
 		return nil
 	}
@@ -296,7 +294,7 @@ func cmdLs(c scheduler.Client, args []string, out io.Writer) error {
 		return err
 	}
 	var v scheduler.BoardView
-	if err := c.Do(scheduler.Request{Op: "ls"}, &v); err != nil {
+	if err := c.Do(scheduler.Request{Op: "ls", Usage: asJSON}, &v); err != nil {
 		return err
 	}
 	if asJSON {
@@ -368,6 +366,9 @@ func cmdShow(c scheduler.Client, args []string, out io.Writer) error {
 		for _, line := range d.Bar {
 			fmt.Fprintln(out, "  "+line)
 		}
+	}
+	for _, line := range d.Usage.Lines() {
+		fmt.Fprintln(out, line)
 	}
 	for _, e := range d.Events {
 		fmt.Fprintf(out, "  %s  %-26s %s -> %s  %s\n", e.At.Local().Format(time.DateTime), e.Signal, e.From, e.To, e.Detail)

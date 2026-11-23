@@ -9,7 +9,6 @@ type Signal interface {
 
 // User signals. Apply returns an error when one does not fit the Task's Stage.
 
-type Start struct{ OverCap bool }
 type PRMerge struct{}
 
 // TaskClosed is the user's close. It ends a Task that has not ended, and it
@@ -85,7 +84,6 @@ type PRReviewed struct{}
 // 0 when the sender does not know it.
 type PRClosed struct{ Number int }
 
-func (Start) Name() string                   { return "start" }
 func (PRMerge) Name() string                 { return "pr-merge" }
 func (TaskClosed) Name() string              { return "task-closed" }
 func (TabClosed) Name() string               { return "tab-closed" }
@@ -107,7 +105,6 @@ func (PromptStalled) Name() string           { return "prompt-stalled" }
 func (PRReviewed) Name() string              { return "pr-reviewed" }
 func (PRClosed) Name() string                { return "pr-closed" }
 
-func (Start) signal()                   {}
 func (PRMerge) signal()                 {}
 func (TaskClosed) signal()              {}
 func (TabClosed) signal()               {}

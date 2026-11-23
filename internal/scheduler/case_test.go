@@ -95,20 +95,17 @@ func TestTheOpsTakeLineupsOwnIDsInAnyCase(t *testing.T) {
 			t.Fatalf("show %s = %s on %s with skill %q, want %s on %s with skill tdd", strings.ToLower(c.want), d.ID, d.Branch, d.Skill, c.want, c.branch)
 		}
 	}
-	h.do(Request{Op: "start", Task: "ah-1"})
+	// Each add starts its Task, so AH-1 gets its setup tab under the canonical ID.
 	var labels []string
-	eventually(t, "the setup tab", func() bool {
+	eventually(t, "the AH-1 setup tab", func() bool {
 		h.rex.mu.Lock()
 		defer h.rex.mu.Unlock()
 		labels = labels[:0]
 		for _, tb := range h.rex.tabs {
 			labels = append(labels, tb.label)
 		}
-		return len(labels) == 1
+		return slices.Contains(labels, "AH-1 tidy logs")
 	})
-	if labels[0] != "AH-1 tidy logs" {
-		t.Errorf("tab label = %q, want AH-1 tidy logs", labels[0])
-	}
 	h.do(Request{Op: "close", Task: "local-7"})
 	h.waitStage("LOCAL-7", lifecycle.Done)
 }

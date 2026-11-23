@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,19 +46,46 @@ func ConfigDir(ctx context.Context, repoMain string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// HasConversation reports whether the profile folder holds the conversation. A
-// conversation is the file projects/<folder>/<id>.jsonl, and the folder name
-// comes from the Worker's own folder, so it matches any folder.
+// HasConversation reports whether the profile folder holds the conversation.
 func HasConversation(configDir, id string) bool {
+	mains, _, err := conversationFiles(configDir, id)
+	return err != nil || len(mains) > 0
+}
+
+// conversationFiles lists the files of the conversation and of its subagents
+// in the profile folder. A conversation is the file
+// projects/<folder>/<id>.jsonl, and the folder name comes from the Worker's
+// own folder, so it matches any folder. A resume from another folder writes
+// a file there with the same ID. A subagent writes
+// projects/<folder>/<id>/subagents/agent-<n>.jsonl beside the conversation.
+func conversationFiles(configDir, id string) (mains, subagents []string, err error) {
 	if configDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return true
+			return nil, nil, err
 		}
 		configDir = filepath.Join(home, ".claude")
 	}
-	files, err := filepath.Glob(filepath.Join(configDir, "projects", "*", id+".jsonl"))
-	return err != nil || len(files) > 0
+	projects := filepath.Join(configDir, "projects")
+	// A glob of projects/*/<id>.jsonl reads every project folder, so each
+	// folder gets one stat instead.
+	folders, err := os.ReadDir(projects)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, f := range folders {
+		main := filepath.Join(projects, f.Name(), id+".jsonl")
+		if _, err := os.Stat(main); err != nil {
+			continue
+		}
+		mains = append(mains, main)
+		subs, _ := filepath.Glob(filepath.Join(projects, f.Name(), id, "subagents", "agent-*.jsonl"))
+		subagents = append(subagents, subs...)
+	}
+	return mains, subagents, nil
 }
 
 func stateFile(configDir string) (string, error) {

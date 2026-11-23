@@ -309,7 +309,7 @@ func TestLineupShowOfAReviewPrintsNoBranch(t *testing.T) {
 	if err := cmdShow(c, []string{"R-1"}, &out); err != nil {
 		t.Fatal(err)
 	}
-	if want := "R-1  data#4955 Pull the base images\nReviewing in data\n"; out.String() != want {
+	if want := "R-1  data#4955 Pull the base images\nReviewing in data\nusage  unknown\n"; out.String() != want {
 		t.Fatalf("out = %q, want %q", out.String(), want)
 	}
 }
@@ -325,7 +325,7 @@ func TestLineupShowPrintsTheLandingBar(t *testing.T) {
 	if err := cmdShow(c, []string{"ENG-590"}, &out); err != nil {
 		t.Fatal(err)
 	}
-	want := "ENG-590  Add billing model\nReady to land in data (ada/eng-590-billing)\nLanding bar\n  ✓ required checks passed\n  ! optional checks failed: lint\n"
+	want := "ENG-590  Add billing model\nReady to land in data (ada/eng-590-billing)\nLanding bar\n  ✓ required checks passed\n  ! optional checks failed: lint\nusage  unknown\n"
 	if out.String() != want {
 		t.Fatalf("out = %q, want %q", out.String(), want)
 	}

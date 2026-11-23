@@ -15,7 +15,7 @@ import (
 
 // This file holds the start that s opens on an Issue row: the skill picker,
 // then the Repo picker when the Issue has no Repo mapping or fits more than
-// one Repo, then the add and the start of the Task.
+// one Repo, then the add, which starts the Task.
 
 const (
 	// noSkill is the first row of the skill picker.
@@ -128,33 +128,38 @@ func (m Model) repoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// startTask adds the Issue as a Task, sets its skill if any, then starts it.
-// An empty repo lets the Scheduler choose. Without a mapping, the Repo picker
-// opens.
+// startTask adds the Issue as a Task with its skill, if any, and the add
+// starts the Task. An empty repo lets the Scheduler choose. Without a mapping,
+// the Repo picker opens.
 func (m Model) startTask(r issueRow, repo, skill string) tea.Cmd {
-	c, need := m.client, needRepoMsg{row: r, skill: skill}
+	req := scheduler.Request{Op: "add", Issue: r.ID, Kind: r.Kind, Repo: repo}
+	if skill != "" {
+		req.Set = map[string]string{"skill": skill}
+	}
+	start, need := m.add(req), needRepoMsg{row: r, skill: skill}
+	return func() tea.Msg {
+		msg := start().(opMsg)
+		var ask *scheduler.RepoAsk
+		switch {
+		case repo != "" || msg.err == nil:
+		case errors.As(msg.err, &ask):
+			need.repos = ask.Repos
+			return need
+		case strings.Contains(msg.err.Error(), noMapping):
+			return need
+		}
+		return msg
+	}
+}
+
+// add sends the add of a start. Its opMsg keeps the add, so that the cap
+// prompt can send it again.
+func (m Model) add(req scheduler.Request) tea.Cmd {
+	c := m.client
 	return func() tea.Msg {
 		var v scheduler.TaskView
-		err := c.Do(scheduler.Request{Op: "add", Issue: r.ID, Kind: r.Kind, Repo: repo}, &v)
-		if err != nil {
-			var ask *scheduler.RepoAsk
-			switch {
-			case repo != "":
-			case errors.As(err, &ask):
-				need.repos = ask.Repos
-				return need
-			case strings.Contains(err.Error(), noMapping):
-				return need
-			}
-			return opMsg{label: "add", task: r.ID, err: err}
-		}
-		id := firstNonEmpty(v.ID, r.ID)
-		if skill != "" {
-			if err := c.Do(scheduler.Request{Op: "set", Task: id, Key: "skill", Value: skill}, nil); err != nil {
-				return opMsg{label: "set skill", task: id, err: err}
-			}
-		}
-		return opMsg{label: "start", task: id, note: skill, err: c.Do(scheduler.Request{Op: "start", Task: id}, nil)}
+		err := c.Do(req, &v)
+		return opMsg{label: "start", task: firstNonEmpty(v.ID, req.Issue), note: req.Set["skill"], add: req, err: err}
 	}
 }
 

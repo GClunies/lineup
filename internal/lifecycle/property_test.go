@@ -15,7 +15,7 @@ import (
 func seen(f PRFacts) Signal { return PRSeen{f} }
 
 var anySignal = rapid.OneOf(rapid.SampledFrom([]Signal{
-	Start{}, Start{OverCap: true}, PRMerge{}, TaskClosed{}, TaskClosed{Skipped: true},
+	PRMerge{}, TaskClosed{}, TaskClosed{Skipped: true},
 	Rerun{Working}, Rerun{CIDebug}, Rerun{Responding}, Rerun{Reviewing},
 	WorkerDone{ContractMet: true}, WorkerDone{ContractMet: false},
 	WorkerStatus{State: "working"}, WorkerStatus{State: "blocked", Kind: "permission"}, WorkerStatus{State: "error"},
@@ -53,7 +53,8 @@ func failure(t *rapid.T, s Stage, pushes bool) Signal {
 var queues = []string{"", "q1", "q2"}
 
 // randomBoard mixes build Tasks with review Tasks. q1 and q2 get 0 to 2
-// slots, so some review starts must fail.
+// slots, so some review adds must fail, and a full cap refuses a build add
+// without the user's yes. ids are the Tasks that the Board took.
 func randomBoard(t *rapid.T) (*Board, []string) {
 	b := NewBoard(rapid.IntRange(1, 4).Draw(t, "cap"))
 	for _, q := range queues[1:] {
@@ -61,7 +62,8 @@ func randomBoard(t *rapid.T) (*Board, []string) {
 	}
 	b.SharedSlots = rapid.IntRange(0, 3).Draw(t, "shared slots")
 	var ids []string
-	for i := range rapid.IntRange(1, 8).Draw(t, "tasks") {
+	n := rapid.IntRange(1, 8).Draw(t, "tasks")
+	for i := 0; i < n || len(ids) == 0; i++ {
 		id := fmt.Sprintf("T%d", i)
 		p := Policy{
 			Budgets: Budgets{
@@ -73,12 +75,18 @@ func randomBoard(t *rapid.T) (*Board, []string) {
 		if p.Bar.Bot != nil {
 			p.Budgets.ReviewCycles = rapid.IntRange(0, 3).Draw(t, "cycles")
 		}
+		var err error
 		if rapid.Bool().Draw(t, "review") {
-			b.AddReview(id, rapid.SampledFrom(queues).Draw(t, "queue"), p)
+			_, _, err = b.AddReview(id, rapid.SampledFrom(queues).Draw(t, "queue"), p)
 		} else {
-			b.Add(id, p)
+			_, _, err = b.Add(id, p, rapid.Bool().Draw(t, "over cap"))
 		}
-		ids = append(ids, id)
+		switch {
+		case err == nil:
+			ids = append(ids, id)
+		case !errors.Is(err, ErrWIPCapFull) && !errors.Is(err, ErrSlotsFull):
+			t.Fatal(err)
+		}
 	}
 	return b, ids
 }
@@ -121,7 +129,7 @@ var nearFacts = rapid.Custom(func(t *rapid.T) PRFacts {
 // barSignal favors the Signals that carry a Task to CI running and past its
 // Landing bar. With anySignal alone, a run reaches Ready to land rarely.
 var barSignal = rapid.OneOf(anySignal, rapid.SampledFrom([]Signal{
-	Start{OverCap: true}, WorkerDone{ContractMet: true}, Pushed{},
+	WorkerDone{ContractMet: true}, Pushed{},
 }), rapid.Map(passingFacts, seen), rapid.Map(nearFacts, seen))
 
 // step applies one random Signal to the Task and fails on an error that no
@@ -134,7 +142,7 @@ func stepFrom(t *rapid.T, b *Board, task *Task, signals *rapid.Generator[Signal]
 	s := signals.Draw(t, "signal")
 	effects, err := b.Apply(task.ID, s)
 	var na *NotAllowedError
-	if err != nil && !errors.As(err, &na) && !errors.Is(err, ErrWIPCapFull) && !errors.Is(err, ErrSlotsFull) {
+	if err != nil && !errors.As(err, &na) {
 		t.Fatal(err)
 	}
 	return s, effects, err
@@ -144,16 +152,24 @@ func anyTask(t *rapid.T, b *Board, ids []string) *Task {
 	return b.Tasks[rapid.SampledFrom(ids).Draw(t, "task")]
 }
 
+// Adds come between the Signals, so an add can meet a cap that a Task's end
+// freed.
 func TestWIPCapNeverPassedWithoutOverride(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		b, ids := randomBoard(t)
-		for range rapid.IntRange(0, 200).Draw(t, "steps") {
-			id := rapid.SampledFrom(ids).Draw(t, "task")
-			s := anySignal.Draw(t, "signal")
-			before := b.Started()
-			_, err := b.Apply(id, s)
-			if start, ok := s.(Start); ok && err == nil && !start.OverCap && before >= b.Cap && b.Tasks[id].Kind == KindBuild {
-				t.Fatalf("start without override with %d started and cap %d", before, b.Cap)
+		for i := range rapid.IntRange(0, 200).Draw(t, "steps") {
+			if rapid.Bool().Draw(t, "add") {
+				before, held := b.Started(), len(b.Tasks)
+				over := rapid.Bool().Draw(t, "over cap")
+				_, _, err := b.Add(fmt.Sprintf("N%d", i), policy, over)
+				if refused := before >= b.Cap && !over; refused != (err != nil) {
+					t.Fatalf("an add with %d started, cap %d, over cap %v: err %v", before, b.Cap, over, err)
+				}
+				if err != nil && (!errors.Is(err, ErrWIPCapFull) || len(b.Tasks) != held) {
+					t.Fatalf("a refused add: err %v, %d Tasks, want ErrWIPCapFull and %d Tasks", err, len(b.Tasks), held)
+				}
+			} else {
+				b.Apply(rapid.SampledFrom(ids).Draw(t, "task"), anySignal.Draw(t, "signal"))
 			}
 			if b.Started()-b.OverCap() > b.Cap {
 				t.Fatalf("%d started, %d recorded over cap, cap %d", b.Started(), b.OverCap(), b.Cap)
@@ -189,15 +205,18 @@ func TestEveryStartedTaskEndsInDoneOrNeedsYou(t *testing.T) {
 	})
 }
 
-func TestReviewStartNeverPassesItsQueueSlots(t *testing.T) {
+func TestReviewAddNeverPassesItsQueueSlots(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		b, ids := randomBoard(t)
-		for range rapid.IntRange(0, 200).Draw(t, "steps") {
-			task := anyTask(t, b, ids)
-			before := b.QueueStarted(task.Queue)
-			s, _, err := step(t, b, task)
-			if _, ok := s.(Start); ok && err == nil && task.Kind == KindReview && task.Queue != "" && before >= b.Slots[task.Queue] {
-				t.Fatalf("%s started in %s with %d started and %d slots", task.ID, task.Queue, before, b.Slots[task.Queue])
+		for i := range rapid.IntRange(0, 200).Draw(t, "steps") {
+			if rapid.Bool().Draw(t, "add") {
+				held := len(b.Tasks)
+				_, _, err := b.AddReview(fmt.Sprintf("N%d", i), rapid.SampledFrom(queues).Draw(t, "queue"), policy)
+				if err != nil && (!errors.Is(err, ErrSlotsFull) || len(b.Tasks) != held) {
+					t.Fatalf("a refused review add: err %v, %d Tasks, want ErrSlotsFull and %d Tasks", err, len(b.Tasks), held)
+				}
+			} else {
+				step(t, b, anyTask(t, b, ids))
 			}
 			if b.SharedSlots > 0 && b.QueuesStarted() > b.SharedSlots {
 				t.Fatalf("%d started queue reviews and %d shared slots", b.QueuesStarted(), b.SharedSlots)
@@ -326,7 +345,6 @@ func TestASecondPRSeenChangesNothing(t *testing.T) {
 		}
 		task := anyTask(t, b, ids)
 		if rapid.Bool().Draw(t, "to CI running") {
-			b.Apply(task.ID, Start{OverCap: true})
 			b.Apply(task.ID, WorkerDone{ContractMet: true})
 		}
 		passing := passingFacts.Draw(t, "passing")

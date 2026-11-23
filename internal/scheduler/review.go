@@ -93,7 +93,6 @@ type ReviewAction string
 
 const (
 	ReviewAdded     ReviewAction = "added"     // a new review Task, started
-	ReviewStarted   ReviewAction = "started"   // the open Task was Queued, now started
 	ReviewRestarted ReviewAction = "restarted" // the open Task had stopped, now running again
 	ReviewReopened  ReviewAction = "reopened"  // the open Task's Worker had closed, now resumed
 	ReviewOpen      ReviewAction = "open"      // the open Task runs, nothing changed
@@ -106,9 +105,8 @@ type ReviewResult struct {
 }
 
 // review adds and starts a review Task with no queue for the PR at url. If an
-// open review Task has the PR, it adds nothing. It starts that Task if it is
-// Queued, restores its Worker if it closed in Review ready, and runs it again
-// if it stopped for good.
+// open review Task has the PR, it adds nothing. It restores that Task's Worker
+// if it closed in Review ready, and runs it again if it stopped for good.
 func (s *Scheduler) review(ctx context.Context, url string) (ReviewResult, error) {
 	key, err := ParseReviewKey(url)
 	if err != nil {
@@ -146,8 +144,11 @@ func (s *Scheduler) review(ctx context.Context, url string) (ReviewResult, error
 			PR:    ReviewPR{Repo: pr.Repo, Number: pr.Number, URL: pr.URL, Head: pr.Head, Base: pr.Base},
 			Title: pr.Title, Repo: repo, Policy: policy,
 		})
+		if err != nil {
+			return err
+		}
 		res = ReviewResult{TaskView: r.view(), Action: ReviewAdded}
-		return err
+		return nil
 	})
 	return res, err
 }
@@ -186,8 +187,8 @@ func (s *Scheduler) reviewID(pr ReviewPR) string {
 	return id
 }
 
-// addReview puts a review Task on the Board and starts it. Only the loop
-// calls it.
+// addReview puts a review Task on the Board and starts it. Full slots of its
+// queue refuse it. Only the loop calls it.
 func (s *Scheduler) addReview(a reviewAdd) (*Record, error) {
 	_, name, _ := strings.Cut(a.PR.Repo, "/")
 	r := &Record{
@@ -195,16 +196,20 @@ func (s *Scheduler) addReview(a reviewAdd) (*Record, error) {
 		Review: &a.PR, CreatedAt: s.now(), StageSince: s.now(),
 	}
 	r.ID = s.reviewID(a.PR)
+	t, effects, err := s.board.AddReview(r.ID, a.Queue, a.Policy)
+	if err != nil {
+		return nil, err
+	}
 	r.RepoLabel = sessionLabel(r.Repo, s.repos())
-	r.Task = *s.board.AddReview(r.ID, a.Queue, a.Policy)
+	r.Task = *t
 	s.board.Tasks[r.ID] = &r.Task
 	s.recs[r.ID] = r
 	detail := a.PR.URL
 	if a.Queue != "" {
 		detail = "queue " + a.Queue + ": " + detail
 	}
-	s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: "add", To: lifecycle.Queued.String(), Detail: detail})
-	return r, s.apply(r, lifecycle.Start{}, "")
+	s.transition(r, store.Event{Signal: "add", Detail: detail}, effects)
+	return r, nil
 }
 
 // reviewTask is the Record as the queue rules see it. ok is false for a
@@ -217,10 +222,10 @@ func (r *Record) reviewTask() (t github.ReviewTask, ok bool) {
 		Skipped: r.Outcome == lifecycle.OutcomeSkipped, Reviewed: r.Outcome == lifecycle.OutcomeReviewed}, true
 }
 
-// startOpenReview finds the open review Task of the PR. It starts the Task if
-// it is Queued, and restores its Worker if the Worker closed in Review ready or
-// in a Stage that needs it. It runs the Task again if no Worker will, because
-// its flag never clears by itself. Only the loop calls it.
+// startOpenReview finds the open review Task of the PR. It restores the
+// Task's Worker if the Worker closed in Review ready or in a Stage that needs
+// it. It runs the Task again if no Worker will, because its flag never clears
+// by itself. Only the loop calls it.
 func (s *Scheduler) startOpenReview(key ReviewKey) (ReviewResult, bool, error) {
 	for _, r := range s.list() {
 		if r.Review != nil && r.keepsTab() && r.Review.is(key) {
@@ -232,8 +237,6 @@ func (s *Scheduler) startOpenReview(key ReviewKey) (ReviewResult, bool, error) {
 		var err error
 		action := ReviewOpen
 		switch {
-		case r.Stage == lifecycle.Queued:
-			action, err = ReviewStarted, s.apply(r, lifecycle.Start{}, "")
 		case r.Stage == lifecycle.ReviewReady && r.Job != JobWorker && r.Conversation == "":
 			// A Task from before conversation IDs has no conversation to resume.
 			action, err = ReviewRestarted, s.apply(r, lifecycle.Rerun{Stage: lifecycle.Reviewing}, "")

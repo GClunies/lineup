@@ -313,9 +313,6 @@ func (m Model) rowActions() []hint {
 	if t.StageKey == lifecycle.ReadyToLand.Key() {
 		hs = append(hs, hint{"m", "merge"})
 	}
-	if t.Group == lifecycle.GroupQueued.String() {
-		hs = append(hs, hint{"s", "start"})
-	}
 	switch {
 	case t.Live:
 		hs = append(hs, hint{"enter", "go to the Worker"}, hint{"p", "preview"})
@@ -406,7 +403,6 @@ const (
 
 // stageWord is the status word of a Task row, by its Stage key.
 var stageWord = map[string]string{
-	lifecycle.Queued.Key():      "queued",
 	lifecycle.Working.Key():     "working",
 	lifecycle.CIRunning.Key():   "CI running",
 	lifecycle.CIDebug.Key():     "CI debug",
@@ -504,7 +500,7 @@ func (m Model) rowLines(w int) []rowLine {
 		var rows []cellRow
 		for _, t := range m.tasks {
 			if t.Group == g {
-				r := cellRow{id: t.ID, faded: g == groupDone || g == "Queued", alert: inNeedsYou(t)}
+				r := cellRow{id: t.ID, faded: g == groupDone, alert: inNeedsYou(t)}
 				for i, c := range columns {
 					r.cells[i] = c.task(m, t)
 				}
@@ -599,7 +595,7 @@ func pad(s string, w int) string {
 }
 
 func (m Model) age(t scheduler.TaskView) string {
-	if t.Since.IsZero() || t.Group == "Queued" {
+	if t.Since.IsZero() {
 		return ""
 	}
 	now := m.opts.Now()
@@ -635,8 +631,8 @@ const boardHelp = `
    m        merge the PR            (Ready to land)
    x        close the Task, or its tab and worktree when it is Done,
             or archive a Done Task with no tab, after y/n
-   s        start a Queued Task, or start a Task from a Ready or
-            Backlog Issue; pick or type a skill, or just go
+   s        start a Task from a Ready or Backlog Issue; pick or
+            type a skill, or just go
    c        change the status of an Issue row: pick a Linear state of
             its team, or a local status
    o        open the PR or the Issue; a local Issue opens in $EDITOR

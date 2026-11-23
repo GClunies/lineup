@@ -18,7 +18,6 @@ import (
 func (h *harness) working() tab {
 	h.t.Helper()
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	w := h.waitTab("claude working")
 	eventually(h.t, "a live Worker", func() bool { return h.task("ENG-1").Live })
@@ -66,7 +65,7 @@ func TestAskReplacesTheOldQuestion(t *testing.T) {
 	if err := h.ask("ENG-1", "second?"); err != nil {
 		t.Fatal(err)
 	}
-	d, err := h.s.show("ENG-1")
+	d, err := h.s.show(context.Background(), "ENG-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +109,7 @@ func TestAskRefusedWithoutWorker(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	if err := h.ask("ENG-1", "ok?"); err == nil || err.Error() != "ENG-1 has no live Worker" {
-		t.Fatalf("ask on a Queued task = %v", err)
+		t.Fatalf("ask during setup = %v", err)
 	}
 }
 
@@ -142,7 +141,7 @@ func TestSteerIsRecordedAsAnEvent(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.working()
 	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
-	d, err := h.s.show("ENG-1")
+	d, err := h.s.show(context.Background(), "ENG-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +258,7 @@ func TestAddTakesAGitHubIssueOfARepositoryWithNoCheckout(t *testing.T) {
 		t.Fatalf("add with no repo: err %v, want %q", err, want)
 	}
 	v := h.do(Request{Op: "add", Issue: "upstream/tool#3", Kind: KindGitHub, Repo: "issues"}).(TaskView)
-	if v.ID != "upstream/tool#3" || v.Stage != "Queued" {
+	if v.ID != "upstream/tool#3" || v.Stage != "Working" {
 		t.Fatalf("add with a repo: %+v", v)
 	}
 	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); len(ids) != 1 || ids[0] != "upstream/tool#3" {

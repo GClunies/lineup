@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -196,7 +197,7 @@ func TestDecideRunsTheChosenCommand(t *testing.T) {
 		if err := cmdDecide(sched, c.args, &out); err != nil {
 			t.Fatalf("%q: %v", c.args, err)
 		}
-		if reqs := got(); len(reqs) != 2 || reqs[0].Op != "ls" || reqs[1] != c.want {
+		if reqs := got(); len(reqs) != 2 || reqs[0].Op != "ls" || !reflect.DeepEqual(reqs[1], c.want) {
 			t.Errorf("%q: requests %+v, want ls then %+v", c.args, reqs, c.want)
 		}
 		if out.String() != c.wantOut {
