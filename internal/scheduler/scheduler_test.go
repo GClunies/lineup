@@ -616,8 +616,15 @@ var testPolicy = lifecycle.Policy{Budgets: lifecycle.Budgets{CIDebug: 3, Respond
 func (fakeConfig) Policy(string, map[string]string) (lifecycle.Policy, error) { return testPolicy, nil }
 func (fakeConfig) RepoForIssue(Issue) (string, error)                         { return "/repos/acme/data", nil }
 func (fakeConfig) ResolveRepo(name string) (string, error)                    { return "/repos/acme/" + name, nil }
-func (fakeConfig) RepoTrackers(string) []string                               { return nil }
 func (fakeConfig) RepoPrefix(string) string                                   { return "" }
+
+// RepoTracker gives /repos/acme/issues the GitHub Tracker, /repos/acme/notes
+// the Local Tracker, and every other Repo Linear.
+func (fakeConfig) RepoTracker(repo string) (string, string) {
+	base := filepath.Base(repo)
+	return "acme/" + base, cmp.Or(map[string]string{"issues": KindGitHub, "notes": KindLocal}[base], KindLinear)
+}
+
 func (fakeConfig) RepoForGitHub(slug string) (string, bool) {
 	if strings.EqualFold(slug, "acme/data") {
 		return "/repos/acme/data", true
@@ -982,17 +989,17 @@ func withOpenTabs(ids ...string) func(*Deps) {
 
 func TestADoneTaskWithAnOpenTabStaysOnTheBoard(t *testing.T) {
 	seed := func(st *store.Store) {
-		seedDone("ENG-tab", 8*24*time.Hour, true)(st)
+		seedDone("ENG-TAB", 8*24*time.Hour, true)(st)
 		seedDone("ENG-bare", 8*24*time.Hour, false)(st)
-		seedDone("ENG-new", 24*time.Hour, false)(st)
+		seedDone("ENG-NEW", 24*time.Hour, false)(st)
 	}
-	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, withOpenTabs("ENG-tab"))
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, withOpenTabs("ENG-TAB"))
 	ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView))
 	slices.Sort(ids)
-	if !slices.Equal(ids, []string{"ENG-new", "ENG-tab"}) {
-		t.Fatalf("board = %v, want ENG-new and ENG-tab", ids)
+	if !slices.Equal(ids, []string{"ENG-NEW", "ENG-TAB"}) {
+		t.Fatalf("board = %v, want ENG-NEW and ENG-TAB", ids)
 	}
-	if v := h.task("ENG-tab"); !v.Tab {
+	if v := h.task("ENG-TAB"); !v.Tab {
 		t.Fatalf("task = %+v, want its tab shown", v)
 	}
 }
@@ -1062,10 +1069,10 @@ func TestWIPCapFullFailsStart(t *testing.T) {
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
-	if _, err := h.s.Handle(context.Background(), Request{Op: "start", Task: "ah-1"}); err == nil || err.Error() != "wip cap full" {
+	if _, err := h.s.Handle(context.Background(), Request{Op: "start", Task: "AH-1"}); err == nil || err.Error() != "wip cap full" {
 		t.Fatalf("start over cap: err = %v, want wip cap full", err)
 	}
-	h.do(Request{Op: "start", Task: "ah-1", OverCap: true})
+	h.do(Request{Op: "start", Task: "AH-1", OverCap: true})
 	v := h.do(Request{Op: "ls"}).(BoardView)
 	if v.Started != 2 || v.OverCap != 1 || v.Cap != 1 {
 		t.Fatalf("board = %d started, %d over, cap %d", v.Started, v.OverCap, v.Cap)
@@ -1343,7 +1350,7 @@ func TestArchiveHidesADoneTaskAndKeepsItsHistory(t *testing.T) {
 func TestDoneTasksAgeOffTheBoard(t *testing.T) {
 	db := filepath.Join(t.TempDir(), "state.db")
 	seed := func(st *store.Store) {
-		for id, age := range map[string]time.Duration{"ENG-old": 8 * 24 * time.Hour, "ENG-new": 24 * time.Hour} {
+		for id, age := range map[string]time.Duration{"ENG-OLD": 8 * 24 * time.Hour, "ENG-NEW": 24 * time.Hour} {
 			r := Record{Task: lifecycle.Task{ID: id, Stage: lifecycle.Done, Outcome: lifecycle.OutcomeClosed, Policy: testPolicy},
 				Title: id, StageSince: time.Now().Add(-age)}
 			data, _ := json.Marshal(r)
@@ -1351,10 +1358,10 @@ func TestDoneTasksAgeOffTheBoard(t *testing.T) {
 		}
 	}
 	h := newHarness(t, db, seed)
-	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"ENG-new"}) {
-		t.Fatalf("board = %v, want only ENG-new", ids)
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"ENG-NEW"}) {
+		t.Fatalf("board = %v, want only ENG-NEW", ids)
 	}
-	if v := h.task("ENG-old"); v.Stage != "Done" {
+	if v := h.task("ENG-OLD"); v.Stage != "Done" {
 		t.Fatalf("aged-out task = %+v", v)
 	}
 }
@@ -1403,8 +1410,8 @@ func TestTaskWithNoIssueGetsAnAhID(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})
 	h.do(Request{Op: "add", Repo: "web", Text: "Second"})
-	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"ah-1", "ah-2"}) {
-		t.Fatalf("board = %v, want ah-1 and ah-2", ids)
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"AH-1", "AH-2"}) {
+		t.Fatalf("board = %v, want AH-1 and AH-2", ids)
 	}
 }
 
@@ -1427,7 +1434,7 @@ func TestTaskWithNoIssueOpensInItsRepoSession(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ah-1"})
+	h.do(Request{Op: "start", Task: "AH-1"})
 	h.do(Request{Op: "start", Task: "ENG-1"})
 
 	sessions := map[string]string{}
@@ -1439,13 +1446,13 @@ func TestTaskWithNoIssueOpensInItsRepoSession(t *testing.T) {
 		}
 		return len(sessions) == 2
 	})
-	if s := sessions["ah-1 Fix map tooltip"]; s != "session:web" {
+	if s := sessions["AH-1 Fix map tooltip"]; s != "session:web" {
 		t.Errorf("text Task session = %q, want session:web (all: %v)", s, sessions)
 	}
 	if s := sessions["ENG-1 Add billing model"]; s != "session:data" {
 		t.Errorf("Issue Task session = %q, want session:data", s)
 	}
-	if v := h.task("ah-1"); v.Repo != "web" {
+	if v := h.task("AH-1"); v.Repo != "web" {
 		t.Errorf("text Task Repo column = %q, want web", v.Repo)
 	}
 }
@@ -1495,40 +1502,56 @@ func TestAddPassesTheBrowsersKindToTheTracker(t *testing.T) {
 	}
 }
 
-// lockedConfig locks /repos/acme/data, the Repo of every mapping, to the Local Tracker.
-type lockedConfig struct{ fakeConfig }
+// trackerConfig gives /repos/acme/data, the Repo of every mapping, the Local
+// Tracker, and /repos/acme/web no Tracker.
+type trackerConfig struct{ fakeConfig }
 
-func (lockedConfig) RepoTrackers(repo string) []string {
+func (trackerConfig) RepoTracker(repo string) (string, string) {
+	key := "acme/" + filepath.Base(repo)
 	if repo == "/repos/acme/data" {
-		return []string{KindLocal}
+		return key, KindLocal
 	}
-	return nil
+	return key, ""
 }
 
-func TestAddRefusesAnIssueOfATrackerThatItsRepoIsNotLockedTo(t *testing.T) {
-	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Config = lockedConfig{} })
+func TestAddRefusesAnIssueOfAnotherTrackerThanItsRepos(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Config = trackerConfig{} })
 	for _, req := range []Request{
 		{Op: "add", Issue: "ENG-1"},
 		{Op: "add", Issue: "acme/data#3", Kind: KindGitHub},
 		{Op: "add", Issue: "ENG-2", Repo: "data"},
 	} {
 		_, err := h.s.Handle(context.Background(), req)
-		if !errors.Is(err, ErrLockedRepo) {
-			t.Fatalf("add %s: err = %v, want ErrLockedRepo", req.Issue, err)
+		if err == nil {
+			t.Fatalf("add %s: no error, want a refusal", req.Issue)
 		}
-		for _, want := range []string{"/repos/acme/data", "trackers local", req.Issue} {
+		for _, want := range []string{"acme/data", "its Tracker local", req.Issue, "is a " + cmp.Or(req.Kind, KindLinear) + " Issue"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("add %s: error %q does not name %q", req.Issue, err, want)
 			}
 		}
 	}
-	h.do(Request{Op: "add", Issue: "local-1", Kind: KindLocal})
-	h.do(Request{Op: "add", Issue: "ENG-3", Repo: "web"})
+	h.do(Request{Op: "add", Issue: "LOCAL-1", Kind: KindLocal})
 	h.do(Request{Op: "add", Repo: "data", Text: "tidy the README"})
 	ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView))
 	slices.Sort(ids)
-	if want := []string{"ENG-3", "ah-1", "local-1"}; !slices.Equal(ids, want) {
+	if want := []string{"AH-1", "LOCAL-1"}; !slices.Equal(ids, want) {
 		t.Fatalf("Tasks = %v, want %v", ids, want)
+	}
+}
+
+func TestARepoWithNoTrackerTakesOnlyAdHocTasks(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Config = trackerConfig{} })
+	for _, req := range []Request{
+		{Op: "add", Issue: "ENG-3", Repo: "web"},
+		{Op: "add", Issue: "LOCAL-2", Kind: KindLocal, Repo: "web"},
+	} {
+		if _, err := h.s.Handle(context.Background(), req); err == nil || err.Error() != "repo has no tracker: acme/web" {
+			t.Fatalf("add %s --repo web: err = %v, want repo has no tracker: acme/web", req.Issue, err)
+		}
+	}
+	if v := h.do(Request{Op: "add", Repo: "web", Text: "tidy the README"}).(TaskView); v.Repo != "web" {
+		t.Fatalf("the ad hoc Task %+v, want it in web", v)
 	}
 }
 
@@ -1876,12 +1899,12 @@ func TestOpenRefusesATaskWithNothingToOpen(t *testing.T) {
 	h = newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
-	h.waitTabRecorded("claude reviewing", "pr-7")
+	h.waitTabRecorded("claude reviewing", "PR-7")
 	merged := openPR(7, "h1")
 	merged.State = "MERGED"
 	h.gh.setReview(merged)
-	eventually(t, "the review tab closed", func() bool { v := h.task("pr-7"); return v.Stage == "Done" && !v.Tab })
-	if err := h.openFails("pr-7"); err.Error() != "pr-7 is Done and its worktree is gone" {
+	eventually(t, "the review tab closed", func() bool { v := h.task("PR-7"); return v.Stage == "Done" && !v.Tab })
+	if err := h.openFails("PR-7"); err.Error() != "PR-7 is Done and its worktree is gone" {
 		t.Fatalf("done review: %v", err)
 	}
 	if n := len(h.rex.open("claude reviewing")); n != 0 {
@@ -2013,7 +2036,7 @@ func TestResumeFallsBackToSessionID(t *testing.T) {
 	if spec.Stage != lifecycle.Reviewing || spec.Conversation == "" {
 		t.Fatalf("fallback spec = %+v, want a Reviewing start with a conversation, so Command passes --session-id and a prompt", spec)
 	}
-	d, _ := h.s.show("pr-7")
+	d, _ := h.s.show("PR-7")
 	if d.Stage != lifecycle.Reviewing.String() || d.Note != "#7 reviewing" {
 		t.Fatalf("task = %+v, want Reviewing with no flag", d.TaskView)
 	}
@@ -2033,8 +2056,8 @@ func TestResumeFallsBackToSessionID(t *testing.T) {
 func TestOtherExitDoesNotFallBack(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.reopenAndExit("Error: session ID is already in use")
-	h.still("pr-7", lifecycle.ReviewReady)
-	d, _ := h.s.show("pr-7")
+	h.still("PR-7", lifecycle.ReviewReady)
+	d, _ := h.s.show("PR-7")
 	for _, e := range d.Events {
 		if e.Signal == replacedSignal {
 			t.Fatalf("%s event for another failure: %+v", replacedSignal, d.Events)

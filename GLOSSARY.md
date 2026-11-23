@@ -18,9 +18,9 @@ _Avoid_: Repo name, slug, match
 The folders that the `roots` key of the config file lists. lineup finds each git checkout in a root and up to two folders below it, and names it by its Repo key.
 _Avoid_: Repo glob, search path
 
-**Locked Repo**:
-A Repo whose `[repos."<key>"]` table, or its owner's `[repos."<owner>/*"]` table, has a `trackers` list. It takes Tasks only for the Issues of those Trackers. An ad hoc Task can still use it.
-_Avoid_: Pinned Repo, restricted Repo
+**Repo Tracker**:
+The one Tracker whose Issues a Repo takes. The `tracker` key of the Repo's `[repos."<owner>/<repo>"]` table names it, or else the `tracker` key of its owner's `[repos."<owner>/*"]` table. A Repo with no Repo Tracker takes no Issues. An ad hoc Task can use each Repo.
+_Avoid_: Locked Repo, pinned Repo, trackers list
 
 **Tracker**:
 The system that holds planned work. One Tracker is a Linear workspace, for example `acme`, the user's GitHub account, or the Local Tracker.
@@ -51,11 +51,11 @@ One unit of work on the Board, in exactly one Repo, done by one Worker in one is
 _Avoid_: Job, thread, card, item
 
 **Ad hoc Task**:
-A Task with no Issue, made from the user's own words. Its ID has the form `ah-<n>`, or `<prefix>-<n>` when its Repo has a Repo prefix. Its tab opens in its Repo's session.
+A Task with no Issue, made from the user's own words. Its ID has the form `AH-<n>`, or `<PREFIX>-<n>` when its Repo has a Repo prefix. Its tab opens in its Repo's session.
 _Avoid_: Text Task, one-off
 
 **Repo prefix**:
-The `prefix` key of a Repo's `[repos."<owner>/<repo>"]` table, for example `hod`. The Repo's Local Issues and ad hoc Tasks take IDs of the form `<prefix>-<n>`, numbered on their own.
+The `prefix` key of a Repo's `[repos."<owner>/<repo>"]` table, for example `hod`, in any case. The Repo's Local Issues and ad hoc Tasks take IDs of the form `<PREFIX>-<n>`, numbered on their own, for example `HOD-3`.
 _Avoid_: team key
 
 **Ready**:

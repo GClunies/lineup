@@ -43,7 +43,7 @@
         },
         "Claude": ""
       },
-      "Trackers": null,
+      "Tracker": "",
       "Prefix": ""
     },
     "repos/crexi/data": {
@@ -95,7 +95,7 @@
         },
         "Claude": ""
       },
-      "Trackers": null,
+      "Tracker": "linear",
       "Prefix": ""
     },
     "repos/crexi/de-interview-exercise": {
@@ -147,7 +147,7 @@
         },
         "Claude": ""
       },
-      "Trackers": null,
+      "Tracker": "",
       "Prefix": ""
     },
     "repos/crexi/web": {
@@ -199,7 +199,7 @@
         },
         "Claude": ""
       },
-      "Trackers": null,
+      "Tracker": "",
       "Prefix": ""
     },
     "repos/gclunies/brain": {
@@ -245,7 +245,7 @@
         },
         "Claude": ""
       },
-      "Trackers": null,
+      "Tracker": "",
       "Prefix": ""
     },
     "repos/gclunies/hod": {
@@ -291,9 +291,7 @@
         },
         "Claude": ""
       },
-      "Trackers": [
-        "local"
-      ],
+      "Tracker": "local",
       "Prefix": "hod"
     },
     "repos/gclunies/lineup": {
@@ -339,7 +337,7 @@
         },
         "Claude": ""
       },
-      "Trackers": null,
+      "Tracker": "",
       "Prefix": ""
     }
   },

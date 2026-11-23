@@ -25,11 +25,12 @@ const usage = `usage: lineup [command]
   lineup logout github         stop using GitHub Issues as a Tracker
   lineup trackers              name the Trackers that are on
   lineup config migrate        rewrite the config file from [[repos]] tables to roots
-                               and [repos."owner/repo"] tables
+                               and [repos."owner/repo"] tables, and from trackers
+                               lists to tracker keys
 
-  lineup add <ISSUE>           put an Issue on the Board: ENG-614, owner/repo#12, local-7, or hod-3
+  lineup add <ISSUE>           put an Issue on the Board: ENG-614, owner/repo#12, LOCAL-7, or HOD-3
   lineup add --repo <repo> "<text>"
-  lineup next-id [<repo>]      print the ID of the Repo's next Local Issue, for example hod-4
+  lineup next-id [<repo>]      print the ID of the Repo's next Local Issue, for example HOD-4
   lineup start [--over-cap] <task>
   lineup review <PR URL>       review someone else's PR; it posts only what you decide
   lineup reviews [--json]      list each review queue: its started reviews and the PRs that wait

@@ -184,9 +184,10 @@ const (
 	KindLocal  = "local"
 )
 
-// KindOf reads the Tracker from a typed Issue ID: local-7, and <prefix>-<n>
-// for each Repo prefix, such as hod-3, are local, owner/repo#12 is GitHub,
-// and anything else, such as ENG-614, is Linear. The checks ignore case.
+// KindOf reads the Tracker from a typed Issue ID: LOCAL-7, and <PREFIX>-<n>
+// for each Repo prefix, such as HOD-3, are local, owner/repo#12 is GitHub,
+// and anything else, such as ENG-614, is Linear. The checks ignore case, and
+// prefixes are in lower case.
 func KindOf(identifier string, prefixes []string) string {
 	id := strings.ToLower(identifier)
 	switch {
@@ -199,6 +200,15 @@ func KindOf(identifier string, prefixes []string) string {
 		return KindLocal
 	}
 	return KindLinear
+}
+
+// CanonicalID is the one form of an ID: owner/repo#12 as it is, and every
+// other ID in upper case, such as ENG-614, LOCAL-7, HOD-3, AH-65, or PR-12.
+func CanonicalID(id string) string {
+	if KindOf(id, nil) == KindGitHub {
+		return id
+	}
+	return strings.ToUpper(id)
 }
 
 var prefixedID = regexp.MustCompile(`^(.+)-([1-9][0-9]*)$`)
@@ -256,14 +266,14 @@ type Config interface {
 	// ResolveRepo turns a name such as "data", an owner/repo key, or a path
 	// into a Repo's main checkout.
 	ResolveRepo(name string) (string, error)
-	// RepoTrackers lists the Kinds of Tracker that the Repo is locked to. nil
-	// means that the Repo takes Issues of every Tracker.
-	RepoTrackers(repo string) []string
+	// RepoTracker is the Kind of Tracker whose Issues the Repo takes, or ""
+	// for a Repo that takes none, and the Repo's owner/repo key.
+	RepoTracker(repo string) (key, tracker string)
 	// RepoForGitHub picks the checkout below the roots whose origin is the
 	// GitHub repository owner/name. ok is false when none is.
 	RepoForGitHub(slug string) (repo string, ok bool)
 	// RepoPrefix is the prefix of the Repo's Local Issue and ad hoc Task IDs,
-	// such as hod, or "" for local-<n> and ah-<n>.
+	// in lower case, such as hod, or "" for LOCAL-<n> and AH-<n>.
 	RepoPrefix(repo string) string
 }
 

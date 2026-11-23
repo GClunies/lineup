@@ -93,12 +93,12 @@ func TestAskInAReviewIsRefusedOnlyAfterTheFindings(t *testing.T) {
 	h.gh.setReview(openPR(7, "abc"))
 	h.review(prURL7)
 	h.waitTab("claude reviewing")
-	eventually(t, "a live Worker", func() bool { return h.task("pr-7").Live })
-	if err := h.ask("pr-7", "post the nit?"); err != nil {
+	eventually(t, "a live Worker", func() bool { return h.task("PR-7").Live })
+	if err := h.ask("PR-7", "post the nit?"); err != nil {
 		t.Fatalf("ask before the findings: %v", err)
 	}
 	h.writeFindings(7, "abc")
-	if err := h.ask("pr-7", "post the nit?"); err == nil || err.Error() != "pr-7: contract output exists" {
+	if err := h.ask("PR-7", "post the nit?"); err == nil || err.Error() != "PR-7: contract output exists" {
 		t.Fatalf("ask after the findings = %v", err)
 	}
 }
@@ -200,11 +200,40 @@ func TestAddTakesAGitHubIssueOfARepositoryWithNoCheckout(t *testing.T) {
 	if want := "no Repo mapping for upstream/tool#3: pass a repo"; !errors.Is(err, ErrNoRepo) || err.Error() != want {
 		t.Fatalf("add with no repo: err %v, want %q", err, want)
 	}
-	v := h.do(Request{Op: "add", Issue: "upstream/tool#3", Kind: KindGitHub, Repo: "data"}).(TaskView)
+	v := h.do(Request{Op: "add", Issue: "upstream/tool#3", Kind: KindGitHub, Repo: "issues"}).(TaskView)
 	if v.ID != "upstream/tool#3" || v.Stage != "Queued" {
 		t.Fatalf("add with a repo: %+v", v)
 	}
 	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); len(ids) != 1 || ids[0] != "upstream/tool#3" {
 		t.Fatalf("Tasks = %v", ids)
+	}
+}
+
+// The CLI and the Board can name a Task in any case. A GitHub name ignores
+// case, so owner/repo#12 matches in any case too.
+func TestEachOpFindsATaskByItsIDInAnyCase(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.working()
+	h.do(Request{Op: "steer", Task: "eng-1", Text: "use a dual write"})
+	d := h.do(Request{Op: "show", Task: "Eng-1"}).(TaskDetail)
+	if d.ID != "ENG-1" || d.Events[len(d.Events)-1].Detail != "use a dual write" {
+		t.Fatalf("show Eng-1 = %s with events %+v, want ENG-1 and its steer", d.ID, d.Events)
+	}
+
+	h.do(Request{Op: "add", Issue: "acme/issues#3", Kind: KindGitHub, Repo: "issues"})
+	if _, err := h.s.Handle(context.Background(), Request{Op: "add", Issue: "ACME/issues#3", Kind: KindGitHub, Repo: "issues"}); err == nil || !strings.Contains(err.Error(), "already on the Board") {
+		t.Fatalf("add ACME/issues#3 over acme/issues#3: err = %v, want already on the Board", err)
+	}
+	h.do(Request{Op: "set", Task: "ACME/Issues#3", Key: "skill", Value: "tdd"})
+	if v := h.do(Request{Op: "show", Task: "Acme/ISSUES#3"}).(TaskDetail); v.ID != "acme/issues#3" || v.Skill != "tdd" {
+		t.Fatalf("show Acme/ISSUES#3 = %+v, want acme/issues#3 with the skill tdd", v.TaskView)
+	}
+
+	h.do(Request{Op: "close", Task: "eNg-1"})
+	h.waitStage("ENG-1", lifecycle.Done)
+
+	_, err := h.s.Handle(context.Background(), Request{Op: "show", Task: "eng-99"})
+	if !errors.Is(err, lifecycle.ErrUnknownTask) || !strings.Contains(err.Error(), "ENG-99") {
+		t.Fatalf("show eng-99: err = %v, want ErrUnknownTask that names ENG-99", err)
 	}
 }

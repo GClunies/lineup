@@ -84,7 +84,7 @@ func TestCreateWritesANewIssueInTheBacklog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := os.ReadFile(filepath.Join(s.Dir, is.ID()+".md"))
+	b, _ := os.ReadFile(filepath.Join(s.Dir, is.File()))
 	if !strings.Contains(string(b), "\nstatus: backlog\n") {
 		t.Fatalf("file\n%s\nwant status: backlog", b)
 	}
@@ -101,7 +101,7 @@ func TestABrokenFileIsReportedAndTheRestStillList(t *testing.T) {
 	os.WriteFile(filepath.Join(s.Dir, "local-2.md"), []byte("no frontmatter here"), 0o644)
 	os.WriteFile(filepath.Join(s.Dir, "notes.md"), []byte("not an Issue file"), 0o644)
 	got, broken, err := s.List()
-	if err != nil || len(got) != 1 || got[0].ID() != "local-1" {
+	if err != nil || len(got) != 1 || got[0].ID() != "LOCAL-1" {
 		t.Fatalf("list = %+v, %v", got, err)
 	}
 	if len(broken) != 1 || broken[0].File != "local-2.md" {
@@ -206,7 +206,7 @@ func TestAPrefixedIssueLivesInItsOwnFileAndNumbersOnItsOwn(t *testing.T) {
 	for _, is := range list {
 		ids = append(ids, is.ID())
 	}
-	if want := []string{"local-1", "hod-1", "hod-4", "web-2"}; !reflect.DeepEqual(ids, want) {
+	if want := []string{"LOCAL-1", "HOD-1", "HOD-4", "WEB-2"}; !reflect.DeepEqual(ids, want) {
 		t.Fatalf("List IDs = %q, want %q", ids, want)
 	}
 	for prefix, want := range map[string]int{"local": 1, "hod": 4, "web": 2, "dex": 0} {
@@ -215,7 +215,7 @@ func TestAPrefixedIssueLivesInItsOwnFileAndNumbersOnItsOwn(t *testing.T) {
 		}
 	}
 	got, err := s.Get("HOD-4")
-	if err != nil || got.ID() != "hod-4" || got.Title != "c" {
+	if err != nil || got.ID() != "HOD-4" || got.File() != "hod-4.md" || got.Title != "c" {
 		t.Fatalf("Get(HOD-4) = %+v, %v", got, err)
 	}
 	if err := s.SetStatus("hod-4", Started); err != nil {
@@ -225,8 +225,11 @@ func TestAPrefixedIssueLivesInItsOwnFileAndNumbersOnItsOwn(t *testing.T) {
 		t.Fatalf("hod-4 status %q after SetStatus", got.Status)
 	}
 	made, err := s.Create("e", "", "")
-	if err != nil || made.ID() != "local-2" {
-		t.Fatalf("Create = %q, %v, want local-2", made.ID(), err)
+	if err != nil || made.ID() != "LOCAL-2" || made.File() != "local-2.md" {
+		t.Fatalf("Create = %q, %v, want LOCAL-2 in local-2.md", made.ID(), err)
+	}
+	if b := (Issue{Prefix: "hod", N: 3, Title: "Block Linear writes"}).Branch(); b != "hod-3-block-linear-writes" {
+		t.Fatalf("Branch = %q, want hod-3-block-linear-writes in lower case", b)
 	}
 	if n, _ := (Store{Dir: filepath.Join(s.Dir, "none")}).Highest("hod"); n != 0 {
 		t.Fatalf("a missing folder has Highest %d", n)

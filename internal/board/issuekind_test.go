@@ -13,7 +13,7 @@ import (
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
-// withLocal2 adds local-2 in Ready, with a Markdown body, to a mineEnv.
+// withLocal2 adds LOCAL-2 in Ready, with a Markdown body, to a mineEnv.
 func withLocal2(t *testing.T, e *workEnv, store localissues.Store) {
 	t.Helper()
 	is, err := store.Create("Split the log writer", "", "The writer holds **two** jobs.\n\n- rotate\n- flush")
@@ -28,7 +28,7 @@ func withLocal2(t *testing.T, e *workEnv, store localissues.Store) {
 
 func TestTheFooterOfAnIssueRowNamesFDetails(t *testing.T) {
 	e, _ := mineEnv(t)
-	for _, id := range []string{"ENG-9", "local-1"} {
+	for _, id := range []string{"ENG-9", "LOCAL-1"} {
 		e.m.sel = id
 		if f := footerAt(e.m, 200); !strings.Contains(f, "f details") {
 			t.Fatalf("%s: footer %q, want f details", id, f)
@@ -65,10 +65,10 @@ func TestFOnALinearIssueRowShowsItsDescriptionAndFGoesBack(t *testing.T) {
 func TestFOnALocalIssueRowShowsTheFileBody(t *testing.T) {
 	e, store := mineEnv(t)
 	withLocal2(t, e, store)
-	e.m.sel = "local-2"
+	e.m.sel = "LOCAL-2"
 	e.press("f")
 	v := ansi.Strip(e.m.View())
-	for _, want := range []string{"local-2  Split the log writer", "todo", "The writer holds two jobs.", "rotate", "flush"} {
+	for _, want := range []string{"LOCAL-2  Split the log writer", "todo", "The writer holds two jobs.", "rotate", "flush"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("the detail pane lacks %q:\n%s", want, v)
 		}
@@ -77,7 +77,7 @@ func TestFOnALocalIssueRowShowsTheFileBody(t *testing.T) {
 		t.Fatalf("a local row read Linear: %v", e.api.described)
 	}
 	e.press("esc")
-	if v := ansi.Strip(e.m.View()); strings.Contains(v, "rotate") || !strings.Contains(v, "▸ local-2") {
+	if v := ansi.Strip(e.m.View()); strings.Contains(v, "rotate") || !strings.Contains(v, "▸ LOCAL-2") {
 		t.Fatalf("esc did not go back to the rows:\n%s", v)
 	}
 }
@@ -104,7 +104,7 @@ func rowOf(m Model, id string) (issueRow, bool) {
 
 func TestTheFooterOfAnIssueRowNamesCStatus(t *testing.T) {
 	e, _ := mineEnv(t)
-	for _, id := range []string{"ENG-9", "local-1"} {
+	for _, id := range []string{"ENG-9", "LOCAL-1"} {
 		e.m.sel = id
 		if f := footerAt(e.m, 200); !strings.Contains(f, "c status") {
 			t.Fatalf("%s: footer %q, want c status", id, f)
@@ -114,27 +114,27 @@ func TestTheFooterOfAnIssueRowNamesCStatus(t *testing.T) {
 
 func TestCOnALocalRowWritesTheNewStatusAndTheRowMovesGroup(t *testing.T) {
 	e, store := mineEnv(t)
-	e.m.sel = "local-1"
+	e.m.sel = "LOCAL-1"
 	e.press("c")
 	v := ansi.Strip(e.m.View())
 	if e.m.mode != modeStatus {
 		t.Fatalf("mode %d, want the status list:\n%s", e.m.mode, v)
 	}
-	inOrder(t, v, "Status of local-1", "backlog", "▸ todo", "started", "in review", "   done", "canceled")
+	inOrder(t, v, "Status of LOCAL-1", "backlog", "▸ todo", "started", "in review", "   done", "canceled")
 	e.press("k", "enter")
-	if is, _ := store.Get("local-1"); is.Status != localissues.Backlog {
-		t.Fatalf("local-1 has status %q, want backlog", is.Status)
+	if is, _ := store.Get("LOCAL-1"); is.Status != localissues.Backlog {
+		t.Fatalf("LOCAL-1 has status %q, want backlog", is.Status)
 	}
-	if r, ok := rowOf(e.m, "local-1"); !ok || r.Group != groupBacklog {
-		t.Fatalf("local-1 row %+v %v, want it in Backlog", r, ok)
+	if r, ok := rowOf(e.m, "LOCAL-1"); !ok || r.Group != groupBacklog {
+		t.Fatalf("LOCAL-1 row %+v %v, want it in Backlog", r, ok)
 	}
-	if !strings.Contains(e.m.status, "status local-1 ok · backlog") {
+	if !strings.Contains(e.m.status, "status LOCAL-1 ok · backlog") {
 		t.Fatalf("status %q", e.m.status)
 	}
-	e.m.sel = "local-1"
+	e.m.sel = "LOCAL-1"
 	e.press("c", "j", "j", "j", "enter")
-	if _, ok := rowOf(e.m, "local-1"); ok {
-		t.Fatal("local-1 in done is still on the board")
+	if _, ok := rowOf(e.m, "LOCAL-1"); ok {
+		t.Fatal("LOCAL-1 in done is still on the board")
 	}
 }
 
@@ -145,9 +145,9 @@ func TestCOnALocalRowPutsTheRowInTheGroupOfAnyStatus(t *testing.T) {
 		e, store := mineEnv(t)
 		from := rapid.SampledFrom([]localissues.Status{localissues.Backlog, localissues.Todo}).Draw(rt, "from")
 		to := rapid.SampledFrom(localissues.Statuses).Draw(rt, "to")
-		store.SetStatus("local-1", from)
+		store.SetStatus("LOCAL-1", from)
 		e.m = drain(e.m, e.m.loadMine())
-		e.m.sel = "local-1"
+		e.m.sel = "LOCAL-1"
 		e.press("c")
 		step := "j"
 		d := slices.Index(localissues.Statuses, to) - slices.Index(localissues.Statuses, from)
@@ -158,10 +158,10 @@ func TestCOnALocalRowPutsTheRowInTheGroupOfAnyStatus(t *testing.T) {
 			e.press(step)
 		}
 		e.press("enter")
-		if is, _ := store.Get("local-1"); is.Status != to {
+		if is, _ := store.Get("LOCAL-1"); is.Status != to {
 			rt.Fatalf("from %s to %s: the file has %q", from, to, is.Status)
 		}
-		r, ok := rowOf(e.m, "local-1")
+		r, ok := rowOf(e.m, "LOCAL-1")
 		if want := issueGroup[scheduler.KindLocal][string(to)]; (want != "") != ok || r.Group != want {
 			rt.Fatalf("from %s to %s: row %+v on the board %v, want group %q", from, to, r, ok, want)
 		}
@@ -216,9 +216,9 @@ func TestAFailedStatusListReadNamesTheErrorAndOpensNoList(t *testing.T) {
 
 func TestEscInTheStatusListWritesNothing(t *testing.T) {
 	e, store := mineEnv(t)
-	e.m.sel = "local-1"
+	e.m.sel = "LOCAL-1"
 	e.press("c", "k", "esc")
-	if is, _ := store.Get("local-1"); is.Status != localissues.Todo || e.m.mode != modeNormal {
+	if is, _ := store.Get("LOCAL-1"); is.Status != localissues.Todo || e.m.mode != modeNormal {
 		t.Fatalf("status %q mode %d, want todo and the keys back", is.Status, e.m.mode)
 	}
 	e.m.sel = "ENG-9"

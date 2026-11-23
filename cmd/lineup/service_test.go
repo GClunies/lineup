@@ -289,16 +289,16 @@ func TestRestartRefusesABadConfigAndKeepsTheScheduler(t *testing.T) {
 	}
 }
 
-func TestRestartRefusesAnUnknownTrackerInTheTrackersKey(t *testing.T) {
+func TestRestartRefusesAnUnknownTrackerInTheTrackerKey(t *testing.T) {
 	m, calls := testManager(t)
 	m.config = filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(m.config, []byte("[repos.\"GClunies/hod\"]\ntrackers = [\"local\", \"jira\"]\n"), 0o600); err != nil {
+	if err := os.WriteFile(m.config, []byte("[repos.\"GClunies/hod\"]\ntracker = \"jira\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	m.ensure()
 	*calls = nil
 	err := m.restart()
-	if err == nil || !strings.Contains(err.Error(), `trackers[1] "jira" is not a Tracker`) {
+	if err == nil || !strings.Contains(err.Error(), `tracker "jira" is not a Tracker`) {
 		t.Fatalf("restart with an unknown tracker: %v, want the load error", err)
 	}
 	if len(*calls) != 0 {
@@ -316,7 +316,7 @@ func TestRestartRefusesAPrefixThatEqualsALinearTeamKey(t *testing.T) {
 	m.ensure()
 	*calls = nil
 	err := m.restart()
-	if err == nil || !strings.Contains(err.Error(), `prefix "hod" equals a Linear team key`) || !strings.Contains(err.Error(), "keeps running on the old config") {
+	if err == nil || !strings.Contains(err.Error(), `prefix "HOD" equals a Linear team key`) || !strings.Contains(err.Error(), "keeps running on the old config") {
 		t.Fatalf("restart: %v, want a refusal that names hod", err)
 	}
 	if len(*calls) != 0 {
@@ -336,7 +336,7 @@ func TestRestartRefusesABadPrefix(t *testing.T) {
 	}
 	m.ensure()
 	*calls = nil
-	if err := m.restart(); err == nil || !strings.Contains(err.Error(), `prefix "ah" is reserved`) {
+	if err := m.restart(); err == nil || !strings.Contains(err.Error(), `prefix "AH" is reserved`) {
 		t.Fatalf("restart: %v, want a refusal that names ah", err)
 	}
 	if len(*calls) != 0 {

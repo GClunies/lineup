@@ -107,6 +107,24 @@ func (s *Store) Save(id string, data []byte, events []Event) error {
 	return tx.Commit()
 }
 
+// Rename moves a Task's record and its events from the ID from to the ID to,
+// and writes data as the record, in one transaction.
+func (s *Store) Rename(from, to string, data []byte) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := tx.Exec(`UPDATE tasks SET id = ?, data = ?, updated_at = ? WHERE id = ?`, to, string(data), now, from); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE events SET task_id = ? WHERE task_id = ?`, to, from); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) Events(taskID string) ([]Event, error) {
 	rows, err := s.db.Query(`SELECT task_id, at, signal, from_stage, to_stage, detail FROM events WHERE task_id = ? ORDER BY seq`, taskID)
 	if err != nil {

@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -51,9 +50,6 @@ type TaskDetail struct {
 }
 
 var ErrNoRepo = errors.New("no Repo mapping")
-
-// ErrLockedRepo refuses an Issue whose Tracker is not on its Repo's trackers list.
-var ErrLockedRepo = errors.New("locked Repo")
 
 // drafts is the detail of the drafts flag, which the Board's row shows.
 func drafts(n int) string {
@@ -131,7 +127,9 @@ func (s *Scheduler) watch(ctx context.Context, enc *json.Encoder) {
 }
 
 // Handle runs one request. The CLI and the Board reach it through the socket.
+// An ID in the request can come in any case.
 func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
+	req.Issue = CanonicalID(req.Issue)
 	switch req.Op {
 	case "ls":
 		var v BoardView
@@ -241,12 +239,27 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 	return nil, fmt.Errorf("unknown op %q", req.Op)
 }
 
+// find is the Record of the Task that id names in any case. GitHub names
+// ignore case, so owner/repo#12 matches in any case too. Only the loop calls
+// it.
+func (s *Scheduler) find(id string) (*Record, bool) {
+	if r, ok := s.recs[CanonicalID(id)]; ok {
+		return r, true
+	}
+	for k, r := range s.recs {
+		if strings.EqualFold(k, id) {
+			return r, true
+		}
+	}
+	return nil, false
+}
+
 func (s *Scheduler) with(id string, f func(r *Record) error) error {
 	var err error
 	s.call(func() {
-		r, ok := s.recs[id]
+		r, ok := s.find(id)
 		if !ok {
-			err = fmt.Errorf("%w: %s", lifecycle.ErrUnknownTask, id)
+			err = fmt.Errorf("%w: %s", lifecycle.ErrUnknownTask, CanonicalID(id))
 			return
 		}
 		err = f(r)
@@ -267,7 +280,7 @@ func (s *Scheduler) show(id string) (TaskDetail, error) {
 	if err != nil {
 		return d, err
 	}
-	d.Events, err = s.d.Store.Events(id)
+	d.Events, err = s.d.Store.Events(d.ID)
 	return d, err
 }
 
@@ -324,9 +337,12 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 				return TaskView{}, fmt.Errorf("%w: pass a repo", err)
 			}
 		}
-		if ts := s.d.Config.RepoTrackers(r.Repo); ts != nil && !slices.Contains(ts, is.Tracker()) {
-			return TaskView{}, fmt.Errorf("%w: %s takes only Issues of the trackers %s, and %s is a %s Issue",
-				ErrLockedRepo, r.Repo, strings.Join(ts, ", "), is.Identifier, is.Tracker())
+		switch key, tracker := s.d.Config.RepoTracker(r.Repo); tracker {
+		case is.Tracker():
+		case "":
+			return TaskView{}, fmt.Errorf("repo has no tracker: %s", key)
+		default:
+			return TaskView{}, fmt.Errorf("%s takes Issues only from its Tracker %s, and %s is a %s Issue", key, tracker, is.Identifier, is.Tracker())
 		}
 	case r.Text != "":
 		if r.Repo == "" {
@@ -352,13 +368,13 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 				if err != nil {
 					return err
 				}
-				r.ID, r.Branch = id, strings.TrimSuffix(id+"-"+slug, "-")
+				r.ID, r.Branch = id, strings.TrimSuffix(strings.ToLower(id)+"-"+slug, "-")
 			} else {
-				r.ID = s.nextID("ah")
+				r.ID = s.nextID("AH")
 				r.Branch = "lineup/" + strings.ToLower(r.ID) + "-" + slug
 			}
 		}
-		if old, ok := s.recs[r.ID]; ok {
+		if old, ok := s.find(r.ID); ok {
 			if r.Issue != nil && (old.Issue == nil || old.Issue.Tracker() != r.Issue.Tracker()) {
 				return fmt.Errorf("%s is already the ID of another Task: give the %s Issue another ID", r.ID, r.Issue.Tracker())
 			}
@@ -400,7 +416,7 @@ func (s *Scheduler) nextID(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, n)
 }
 
-// nextLocalID is <prefix>-<n>, with n one more than the highest n of the
+// nextLocalID is <PREFIX>-<n>, with n one more than the highest n of the
 // prefix among the Local Issues and every Task in the store. Only the loop
 // calls it.
 func (s *Scheduler) nextLocalID(prefix string) (string, error) {
@@ -416,11 +432,11 @@ func (s *Scheduler) nextLocalID(prefix string) (string, error) {
 			hi = max(hi, n)
 		}
 	}
-	return fmt.Sprintf("%s-%d", prefix, hi+1), nil
+	return fmt.Sprintf("%s-%d", strings.ToUpper(prefix), hi+1), nil
 }
 
 // nextIssueID is the ID that the next Local Issue of the named Repo takes:
-// <prefix>-<n> for a Repo with a prefix, and local-<n> for any other Repo
+// <PREFIX>-<n> for a Repo with a prefix, and LOCAL-<n> for any other Repo
 // or no name.
 func (s *Scheduler) nextIssueID(name string) (string, error) {
 	prefix := KindLocal

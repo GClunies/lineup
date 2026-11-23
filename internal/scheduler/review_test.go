@@ -115,11 +115,11 @@ func TestTheUsersReviewClosesTheReviewTab(t *testing.T) {
 	h.gh.setReview(openPR(7, "h1"))
 
 	res := h.review(prURL7)
-	if res.ID != "pr-7" || res.Kind != lifecycle.KindReview || res.Action != ReviewAdded || res.Stage != "Reviewing" || res.Title != "data#7 Fix the tooltip" || res.PRURL != prURL7 || res.ReviewHead != "h1" {
+	if res.ID != "PR-7" || res.Kind != lifecycle.KindReview || res.Action != ReviewAdded || res.Stage != "Reviewing" || res.Title != "data#7 Fix the tooltip" || res.PRURL != prURL7 || res.ReviewHead != "h1" {
 		t.Fatalf("review = %+v", res)
 	}
 	worker := h.waitTab("claude reviewing")
-	if worker.cwd != "/repos/acme/data" || worker.SessionID != "session:reviews" || worker.label != "pr-7 Fix the tooltip" {
+	if worker.cwd != "/repos/acme/data" || worker.SessionID != "session:reviews" || worker.label != "PR-7 Fix the tooltip" {
 		t.Fatalf("worker tab = %+v, want the main checkout in the reviews session", worker)
 	}
 	if worker.env["XDG_STATE_HOME"] != h.stateHome {
@@ -139,31 +139,31 @@ func TestTheUsersReviewClosesTheReviewTab(t *testing.T) {
 	}
 
 	h.status(worker.BlockID, "done")
-	eventually(t, "stopped without findings", func() bool { return h.task("pr-7").Flag == "stopped" })
+	eventually(t, "stopped without findings", func() bool { return h.task("PR-7").Flag == "stopped" })
 
 	h.writeFindings(7, "h1")
 	h.status(worker.BlockID, "working")
 	h.status(worker.BlockID, "done")
-	h.waitStage("pr-7", lifecycle.ReviewReady)
-	if v := h.task("pr-7"); v.Group != "Needs you" || v.Note != "#7 review ready" {
+	h.waitStage("PR-7", lifecycle.ReviewReady)
+	if v := h.task("PR-7"); v.Group != "Needs you" || v.Note != "#7 review ready" {
 		t.Fatalf("review ready = %+v", v)
 	}
 
 	moved := openPR(7, "h2")
 	h.gh.setReview(moved)
-	eventually(t, "the head moved note", func() bool { return h.task("pr-7").Note == "#7 review ready · head moved" })
+	eventually(t, "the head moved note", func() bool { return h.task("PR-7").Note == "#7 review ready · head moved" })
 
 	// The user tells the Worker to post. While it works, the review waits.
 	h.status(worker.BlockID, "working")
 	moved.ReviewedAt = time.Now().Add(time.Hour)
 	h.gh.setReview(moved)
-	h.still("pr-7", lifecycle.ReviewReady)
+	h.still("PR-7", lifecycle.ReviewReady)
 	h.status(worker.BlockID, "blocked")
-	h.still("pr-7", lifecycle.ReviewReady)
+	h.still("PR-7", lifecycle.ReviewReady)
 
 	h.status(worker.BlockID, "done")
-	h.waitStage("pr-7", lifecycle.Done)
-	if v := h.task("pr-7"); v.Outcome != "reviewed" {
+	h.waitStage("PR-7", lifecycle.Done)
+	if v := h.task("PR-7"); v.Outcome != "reviewed" {
 		t.Fatalf("done = %+v", v)
 	}
 	eventually(t, "the review worktree removed", func() bool { return len(h.reviewsRemoved()) == 1 })
@@ -175,7 +175,7 @@ func TestTheUsersReviewClosesTheReviewTab(t *testing.T) {
 	}
 	eventually(t, "the reviews session removed", func() bool { return slices.Contains(h.sessionsDestroyed(), "session:reviews") })
 	var held github.ReviewTask
-	h.s.call(func() { held, _ = h.s.recs["pr-7"].reviewTask() })
+	h.s.call(func() { held, _ = h.s.recs["PR-7"].reviewTask() })
 	if !held.Done || !held.Reviewed {
 		t.Fatalf("queue hold = %+v, want a Done review that only a new request lets back", held)
 	}
@@ -184,7 +184,7 @@ func TestTheUsersReviewClosesTheReviewTab(t *testing.T) {
 	if len(h.wt.removed) != 0 {
 		t.Fatalf("a review Task ran wt remove for %v", h.wt.removed)
 	}
-	if v := h.task("pr-7"); v.Worktree != "" || v.Note != "#7 reviewed" || v.Tab {
+	if v := h.task("PR-7"); v.Worktree != "" || v.Note != "#7 reviewed" || v.Tab {
 		t.Fatalf("done task after cleanup = %+v", v)
 	}
 }
@@ -197,7 +197,7 @@ func TestAMergedPRClosesTheReviewTabWithItsSidePane(t *testing.T) {
 	merged := openPR(7, "h1")
 	merged.State = "MERGED"
 	h.gh.setReview(merged)
-	h.waitStage("pr-7", lifecycle.Done)
+	h.waitStage("PR-7", lifecycle.Done)
 
 	eventually(t, "the side pane's tab closed", func() bool {
 		splits := h.rex.allSplits()
@@ -212,24 +212,24 @@ func TestADoneReviewWithAnOpenTabBlocksANewReviewOfThePR(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
-	h.waitTabRecorded("claude reviewing", "pr-7")
+	h.waitTabRecorded("claude reviewing", "PR-7")
 	// Cleanup runs in the Task's lane after the loop call that ends the Task,
 	// so for a moment the loop sees a Done review that keeps its tab.
-	h.s.call(func() { h.s.recs["pr-7"].Stage = lifecycle.Done })
+	h.s.call(func() { h.s.recs["PR-7"].Stage = lifecycle.Done })
 
 	h.gh.setReview(openPR(7, "h2"))
-	if _, err := h.s.Handle(context.Background(), Request{Op: "review", URL: prURL7}); err == nil || !strings.Contains(err.Error(), "close its tab first with lineup close pr-7") {
+	if _, err := h.s.Handle(context.Background(), Request{Op: "review", URL: prURL7}); err == nil || !strings.Contains(err.Error(), "close its tab first with lineup close PR-7") {
 		t.Fatalf("review of a PR whose Done review keeps its tab: err = %v, want a refusal that names the tab", err)
 	}
 	var task github.ReviewTask
-	h.s.call(func() { task, _ = h.s.recs["pr-7"].reviewTask() })
+	h.s.call(func() { task, _ = h.s.recs["PR-7"].reviewTask() })
 	if task.Done {
 		t.Fatal("the queue sees a Done review that keeps its tab as ended, so it would add the PR again")
 	}
 
-	h.do(Request{Op: "close", Task: "pr-7"})
+	h.do(Request{Op: "close", Task: "PR-7"})
 	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude reviewing")) == 0 })
-	h.s.call(func() { task, _ = h.s.recs["pr-7"].reviewTask() })
+	h.s.call(func() { task, _ = h.s.recs["PR-7"].reviewTask() })
 	if !task.Done {
 		t.Fatal("the queue still holds the PR after the tab closed")
 	}
@@ -248,8 +248,8 @@ func TestMergedAndClosedPRsEndTheReview(t *testing.T) {
 		gone := openPR(7, "h1")
 		gone.State = state
 		h.gh.setReview(gone)
-		h.waitStage("pr-7", lifecycle.Done)
-		if v := h.task("pr-7"); v.Outcome != outcome {
+		h.waitStage("PR-7", lifecycle.Done)
+		if v := h.task("PR-7"); v.Outcome != outcome {
 			t.Fatalf("%s: outcome %q, want %q", state, v.Outcome, outcome)
 		}
 		eventually(t, "the review worktree removed", func() bool { return len(h.reviewsRemoved()) == 1 })
@@ -271,7 +271,7 @@ func TestTheLastReviewKeepsASessionThatHoldsOtherTabs(t *testing.T) {
 	merged.State = "MERGED"
 	h.gh.setReview(merged)
 	h.status(worker.BlockID, "idle")
-	h.waitStage("pr-7", lifecycle.Done)
+	h.waitStage("PR-7", lifecycle.Done)
 	eventually(t, "the review worktree removed", func() bool { return len(h.reviewsRemoved()) == 1 })
 	time.Sleep(150 * time.Millisecond)
 	h.rex.mu.Lock()
@@ -290,7 +290,7 @@ func TestAReviewThatReusesFindingsMeetsTheContract(t *testing.T) {
 	os.Chtimes(old, time.Now().Add(-time.Hour), time.Now().Add(-time.Hour))
 	h.review(prURL7)
 	h.status(h.waitTab("claude reviewing").BlockID, "done")
-	h.waitStage("pr-7", lifecycle.ReviewReady)
+	h.waitStage("PR-7", lifecycle.ReviewReady)
 }
 
 func TestAnOldFindingsFileOfAnotherHeadDoesNotMeetTheContract(t *testing.T) {
@@ -301,7 +301,7 @@ func TestAnOldFindingsFileOfAnotherHeadDoesNotMeetTheContract(t *testing.T) {
 	os.Chtimes(old, time.Now().Add(-time.Hour), time.Now().Add(-time.Hour))
 	h.review(prURL7)
 	h.status(h.waitTab("claude reviewing").BlockID, "done")
-	eventually(t, "stopped", func() bool { return h.task("pr-7").Flag == "stopped" })
+	eventually(t, "stopped", func() bool { return h.task("PR-7").Flag == "stopped" })
 }
 
 func TestReviewTwiceOnOnePRMakesOneTask(t *testing.T) {
@@ -315,7 +315,7 @@ func TestReviewTwiceOnOnePRMakesOneTask(t *testing.T) {
 			t.Fatalf("%s: %+v, want the open %s", again, res, first.ID)
 		}
 	}
-	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"pr-7"}) {
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"PR-7"}) {
 		t.Fatalf("board = %v", ids)
 	}
 	h.wt.mu.Lock()
@@ -330,18 +330,18 @@ func TestReviewOfAStoppedReviewRunsItAgain(t *testing.T) {
 	h.gh.setReview(openPR(7, "h1"))
 	h.wt.addErr = errors.New("fetch: no network")
 	h.review(prURL7)
-	eventually(t, "setup failed", func() bool { return h.task("pr-7").Flag == "setup failed" })
+	eventually(t, "setup failed", func() bool { return h.task("PR-7").Flag == "setup failed" })
 	if n := len(h.rex.open("claude reviewing")); n != 0 {
 		t.Fatalf("a Worker runs after the setup failed: %d tabs", n)
 	}
 
 	res := h.review(prURL7)
-	if res.ID != "pr-7" || res.Action != ReviewRestarted {
-		t.Fatalf("review of the stopped Task = %+v, want pr-7 restarted", res)
+	if res.ID != "PR-7" || res.Action != ReviewRestarted {
+		t.Fatalf("review of the stopped Task = %+v, want PR-7 restarted", res)
 	}
 	h.waitTab("claude reviewing")
-	eventually(t, "the flag to clear", func() bool { return h.task("pr-7").Flag == "" })
-	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"pr-7"}) {
+	eventually(t, "the flag to clear", func() bool { return h.task("PR-7").Flag == "" })
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"PR-7"}) {
 		t.Fatalf("board = %v", ids)
 	}
 }
@@ -359,13 +359,13 @@ func TestReviewOfAQueuedReviewStartsIt(t *testing.T) {
 		h.s.board.Tasks[r.ID] = &r.Task
 		h.s.recs[r.ID] = r
 	})
-	if v := h.task("pr-7"); v.Stage != "Queued" {
+	if v := h.task("PR-7"); v.Stage != "Queued" {
 		t.Fatalf("Task = %+v, want Queued", v)
 	}
 
 	res := h.review(prURL7)
-	if res.ID != "pr-7" || res.Action != ReviewStarted {
-		t.Fatalf("review of the Queued Task = %+v, want pr-7 started", res)
+	if res.ID != "PR-7" || res.Action != ReviewStarted {
+		t.Fatalf("review of the Queued Task = %+v, want PR-7 started", res)
 	}
 	h.waitTab("claude reviewing")
 }
@@ -378,7 +378,7 @@ func TestReviewOfARunningReviewChangesNothing(t *testing.T) {
 	if res := h.review(prURL7); res.Action != ReviewOpen {
 		t.Fatalf("review of the running Task = %+v, want open", res)
 	}
-	h.still("pr-7", lifecycle.Reviewing)
+	h.still("PR-7", lifecycle.Reviewing)
 	if n := len(h.rex.open("claude reviewing")); n != 1 {
 		t.Fatalf("%d Worker tabs, want 1", n)
 	}
@@ -394,8 +394,8 @@ func TestAReviewIDNamesItsPR(t *testing.T) {
 		h.s.recs[data].Stage = lifecycle.Done
 		later = h.s.reviewID(ReviewPR{Repo: "acme/web", Number: 7})
 	})
-	if data != "pr-7" || web != "pr-7-web" || later != "pr-7" {
-		t.Errorf("IDs = %q, %q, %q, want pr-7, then pr-7-web beside a live pr-7, then pr-7 once it is Done", data, web, later)
+	if data != "PR-7" || web != "PR-7-WEB" || later != "PR-7" {
+		t.Errorf("IDs = %q, %q, %q, want PR-7, then PR-7-WEB beside a live PR-7, then PR-7 once it is Done", data, web, later)
 	}
 }
 
@@ -403,14 +403,14 @@ func TestAReviewIDKeepsADoneReviewThatHoldsItsTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	var web string
 	h.s.call(func() {
-		h.s.recs["pr-7"] = &Record{
-			Task:   lifecycle.Task{ID: "pr-7", Kind: lifecycle.KindReview, Stage: lifecycle.Done},
+		h.s.recs["PR-7"] = &Record{
+			Task:   lifecycle.Task{ID: "PR-7", Kind: lifecycle.KindReview, Stage: lifecycle.Done},
 			Review: &ReviewPR{Repo: "acme/data", Number: 7}, WindowID: "window:7", BlockID: "block:7",
 		}
 		web = h.s.reviewID(ReviewPR{Repo: "acme/web", Number: 7})
 	})
-	if web != "pr-7-web" {
-		t.Errorf("ID of acme/web#7 = %q, want pr-7-web beside a Done acme/data#7 that keeps its tab", web)
+	if web != "PR-7-WEB" {
+		t.Errorf("ID of acme/web#7 = %q, want PR-7-WEB beside a Done acme/data#7 that keeps its tab", web)
 	}
 }
 
@@ -418,10 +418,10 @@ func TestADoneReviewDoesNotBlockANewOne(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
-	h.do(Request{Op: "close", Task: "pr-7"})
-	h.waitStage("pr-7", lifecycle.Done)
-	if res := h.review(prURL7); res.Action != ReviewAdded || res.ID != "pr-7" {
-		t.Fatalf("review after close = %+v, want a new pr-7", res)
+	h.do(Request{Op: "close", Task: "PR-7"})
+	h.waitStage("PR-7", lifecycle.Done)
+	if res := h.review(prURL7); res.Action != ReviewAdded || res.ID != "PR-7" {
+		t.Fatalf("review after close = %+v, want a new PR-7", res)
 	}
 }
 
@@ -485,11 +485,11 @@ func TestCleanupKeepsAReviewWorktreeWithWorkOnNoRemote(t *testing.T) {
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
 	h.waitTab("claude reviewing")
-	h.do(Request{Op: "close", Task: "pr-7"})
+	h.do(Request{Op: "close", Task: "PR-7"})
 	eventually(t, "the kept note", func() bool {
-		return h.task("pr-7").Note == "#7 closed · worktree kept: /repos/acme/data.review-pr-7"
+		return h.task("PR-7").Note == "#7 closed · worktree kept: /repos/acme/data.review-pr-7"
 	})
-	if v := h.task("pr-7"); v.Worktree != "/repos/acme/data.review-pr-7" || v.Outcome != "closed" {
+	if v := h.task("PR-7"); v.Worktree != "/repos/acme/data.review-pr-7" || v.Outcome != "closed" {
 		t.Fatalf("closed task = %+v", v)
 	}
 }
@@ -525,21 +525,21 @@ func TestALostTabInReviewReadyKeepsTheReview(t *testing.T) {
 		h.s.fill(context.Background())
 		worker := h.waitTab("claude reviewing")
 		h.status(worker.BlockID, "done")
-		h.waitStage("pr-7", lifecycle.ReviewReady)
+		h.waitStage("PR-7", lifecycle.ReviewReady)
 		ev.BlockID = worker.BlockID
 		if ev.Kind == EvClosed {
 			h.rex.userCloses(worker)
 		} else {
 			h.rex.events <- ev
 		}
-		eventually(t, "the Worker gone", func() bool { return !h.task("pr-7").Live })
+		eventually(t, "the Worker gone", func() bool { return !h.task("PR-7").Live })
 		h.s.fill(context.Background())
-		h.still("pr-7", lifecycle.ReviewReady)
-		if v := h.task("pr-7"); v.Group != "Needs you" || v.Flag != "" {
+		h.still("PR-7", lifecycle.ReviewReady)
+		if v := h.task("PR-7"); v.Group != "Needs you" || v.Flag != "" {
 			t.Fatalf("event %+v: task = %+v, want Needs you with no flag", ev, v)
 		}
-		if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Review ready"}) {
-			t.Fatalf("event %+v: reviews %v, want the slot held by pr-7", ev, got)
+		if got := h.reviews(); !slices.Equal(got, []string{"PR-7 #7 Review ready"}) {
+			t.Fatalf("event %+v: reviews %v, want the slot held by PR-7", ev, got)
 		}
 		if n := len(h.reviewsRemoved()); n != 0 {
 			t.Fatalf("event %+v: removed %d review worktrees", ev, n)
@@ -563,9 +563,9 @@ func (h *harness) readyReview() WorkerSpec {
 	worker := h.waitTab("claude reviewing")
 	spec := h.lastSpec()
 	h.status(worker.BlockID, "done")
-	h.waitStage("pr-7", lifecycle.ReviewReady)
+	h.waitStage("PR-7", lifecycle.ReviewReady)
 	h.rex.userCloses(worker)
-	eventually(h.t, "the Worker gone", func() bool { return !h.task("pr-7").Live })
+	eventually(h.t, "the Worker gone", func() bool { return !h.task("PR-7").Live })
 	return spec
 }
 
@@ -577,8 +577,8 @@ func TestReviewOfAClosedReviewReadyWorkerResumesItsConversation(t *testing.T) {
 	}
 
 	res := h.review(prURL7)
-	if res.ID != "pr-7" || res.Action != ReviewReopened {
-		t.Fatalf("review of the closed Worker = %+v, want pr-7 reopened", res)
+	if res.ID != "PR-7" || res.Action != ReviewReopened {
+		t.Fatalf("review of the closed Worker = %+v, want PR-7 reopened", res)
 	}
 	worker := h.waitTab("claude --resume " + reviewing.Conversation)
 	if worker.cwd != "/repos/acme/data" || worker.env["XDG_STATE_HOME"] != h.stateHome {
@@ -588,8 +588,8 @@ func TestReviewOfAClosedReviewReadyWorkerResumesItsConversation(t *testing.T) {
 	if spec.Stage != lifecycle.ReviewReady || spec.Conversation != reviewing.Conversation || spec.Worktree != "/repos/acme/data.review-pr-7" || spec.PRURL != prURL7 {
 		t.Fatalf("reopened spec = %+v, want Review ready in conversation %s", spec, reviewing.Conversation)
 	}
-	eventually(t, "the reopened Worker live", func() bool { return h.task("pr-7").Live })
-	if v := h.task("pr-7"); v.Stage != "Review ready" || v.Flag != "" {
+	eventually(t, "the reopened Worker live", func() bool { return h.task("PR-7").Live })
+	if v := h.task("PR-7"); v.Stage != "Review ready" || v.Flag != "" {
 		t.Fatalf("reopened task = %+v", v)
 	}
 	if res := h.review(prURL7); res.Action != ReviewOpen {
@@ -618,16 +618,16 @@ func TestALostTabWhileReviewingFlagsTheTask(t *testing.T) {
 	first := h.waitTab("claude reviewing")
 	firstSpec := h.lastSpec()
 	h.rex.userCloses(first)
-	eventually(t, "the tab closed flag", func() bool { return h.task("pr-7").Flag == "tab closed" })
+	eventually(t, "the tab closed flag", func() bool { return h.task("PR-7").Flag == "tab closed" })
 	time.Sleep(150 * time.Millisecond)
 	if n := len(h.rex.open("claude --resume " + firstSpec.Conversation)); n != 0 {
 		t.Fatalf("%d tabs opened by themselves, want none until the user asks", n)
 	}
-	if v := h.task("pr-7"); v.Stage != "Reviewing" || v.Group != "Needs you" || v.Live {
+	if v := h.task("PR-7"); v.Stage != "Reviewing" || v.Group != "Needs you" || v.Live {
 		t.Fatalf("task = %+v, want Reviewing, Needs you, with no Worker", v)
 	}
 
-	res := h.open("pr-7")
+	res := h.open("PR-7")
 	if res.Action != OpenRestored {
 		t.Fatalf("open = %+v, want restored", res)
 	}
@@ -640,8 +640,8 @@ func TestALostTabWhileReviewingFlagsTheTask(t *testing.T) {
 	if got := h.rex.typedInto(second.BlockID); len(got) != 0 {
 		t.Fatalf("typed %q into the restored review Worker", got)
 	}
-	eventually(t, "the restored Worker live", func() bool { return h.task("pr-7").Live })
-	if v := h.task("pr-7"); v.Stage != "Reviewing" || v.Flag != "" {
+	eventually(t, "the restored Worker live", func() bool { return h.task("PR-7").Live })
+	if v := h.task("PR-7"); v.Stage != "Reviewing" || v.Flag != "" {
 		t.Fatalf("restored task = %+v", v)
 	}
 }
@@ -653,13 +653,13 @@ func TestReviewOfAReviewingTaskWhoseTabClosedReopensItsWorker(t *testing.T) {
 	first := h.waitTab("claude reviewing")
 	conversation := h.lastSpec().Conversation
 	h.rex.userCloses(first)
-	eventually(t, "the tab closed flag", func() bool { return h.task("pr-7").Flag == "tab closed" })
+	eventually(t, "the tab closed flag", func() bool { return h.task("PR-7").Flag == "tab closed" })
 
-	if res := h.review(prURL7); res.ID != "pr-7" || res.Action != ReviewReopened {
-		t.Fatalf("review = %+v, want pr-7 reopened", res)
+	if res := h.review(prURL7); res.ID != "PR-7" || res.Action != ReviewReopened {
+		t.Fatalf("review = %+v, want PR-7 reopened", res)
 	}
 	h.waitTab("claude --resume " + conversation)
-	eventually(t, "the reopened Worker live", func() bool { v := h.task("pr-7"); return v.Live && v.Flag == "" })
+	eventually(t, "the reopened Worker live", func() bool { v := h.task("PR-7"); return v.Live && v.Flag == "" })
 }
 
 func seedReview(stage lifecycle.Stage) func(*store.Store) {
@@ -744,9 +744,9 @@ func TestFindingsForANewerHeadMeetTheContract(t *testing.T) {
 	h.gh.setReview(openPR(7, "h2"))
 	h.writeFindings(7, "h2")
 	h.status(worker.BlockID, "done")
-	h.waitStage("pr-7", lifecycle.ReviewReady)
-	h.still("pr-7", lifecycle.ReviewReady)
-	if v := h.task("pr-7"); v.Note != "#7 review ready" {
+	h.waitStage("PR-7", lifecycle.ReviewReady)
+	h.still("PR-7", lifecycle.ReviewReady)
+	if v := h.task("PR-7"); v.Note != "#7 review ready" {
 		t.Fatalf("note %q, want no head moved: the review read the current head", v.Note)
 	}
 }
@@ -784,8 +784,8 @@ func TestEachReviewWorkerTabOpensThePRBesideIt(t *testing.T) {
 	}
 
 	h.rex.userCloses(started)
-	eventually(t, "the tab closed flag", func() bool { return h.task("pr-7").Flag == "tab closed" })
-	h.open("pr-7")
+	eventually(t, "the tab closed flag", func() bool { return h.task("PR-7").Flag == "tab closed" })
+	h.open("PR-7")
 	resumed := h.waitTab("claude --resume " + conversation)
 	if pane := h.waitSplit(2); pane.anchor != resumed.BlockID {
 		t.Fatalf("resume: side pane beside %s, want %s", pane.anchor, resumed.BlockID)
@@ -794,7 +794,7 @@ func TestEachReviewWorkerTabOpensThePRBesideIt(t *testing.T) {
 	h.status(resumed.BlockID, "working")
 	h.status(resumed.BlockID, "idle")
 
-	h.do(Request{Op: "rerun", Task: "pr-7", Stage: "reviewing"})
+	h.do(Request{Op: "rerun", Task: "PR-7", Stage: "reviewing"})
 	h.waitTyped(resumed.BlockID, "prompt reviewing")
 	time.Sleep(50 * time.Millisecond)
 	if n := len(h.rex.allSplits()); n != 2 {
@@ -804,15 +804,15 @@ func TestEachReviewWorkerTabOpensThePRBesideIt(t *testing.T) {
 	h.writeFindings(7, "h1")
 	h.status(resumed.BlockID, "working")
 	h.status(resumed.BlockID, "done")
-	h.waitStage("pr-7", lifecycle.ReviewReady)
+	h.waitStage("PR-7", lifecycle.ReviewReady)
 	h.rex.userCloses(resumed)
-	eventually(t, "the Worker gone", func() bool { return !h.task("pr-7").Live })
+	eventually(t, "the Worker gone", func() bool { return !h.task("PR-7").Live })
 	h.review(prURL7)
 	reopened := h.waitNewTab("claude --resume "+conversation, resumed.BlockID)
 	if pane := h.waitSplit(3); pane.anchor != reopened.BlockID || !slices.Equal(pane.argv, sidePR7) {
 		t.Fatalf("reopen: side pane = %+v, want the PR beside %s", pane, reopened.BlockID)
 	}
-	h.still("pr-7", lifecycle.ReviewReady)
+	h.still("PR-7", lifecycle.ReviewReady)
 	if n := len(h.rex.allSplits()); n != 3 {
 		t.Fatalf("%d side panes for 3 Worker tabs", n)
 	}
@@ -961,9 +961,9 @@ func TestAFailedSidePaneLeavesTheReviewWorkerRunning(t *testing.T) {
 	h.review(prURL7)
 	h.waitTab("claude reviewing")
 	eventually(t, "the warning", func() bool {
-		return strings.Contains(log.String(), `level=WARN msg="side pane" task=pr-7 err="rex split: no such block"`)
+		return strings.Contains(log.String(), `level=WARN msg="side pane" task=PR-7 err="rex split: no such block"`)
 	})
-	if v := h.task("pr-7"); !v.Live || v.Stage != "Reviewing" || v.Flag != "" {
+	if v := h.task("PR-7"); !v.Live || v.Stage != "Reviewing" || v.Flag != "" {
 		t.Fatalf("task = %+v, want a live Worker in Reviewing with no flag", v)
 	}
 }
@@ -975,8 +975,8 @@ func TestSidePaneEventsLeaveTheReviewAsItWas(t *testing.T) {
 	h.review(prURL7)
 	worker := h.waitTab("claude reviewing")
 	pane := h.waitSplit(1)
-	eventually(t, "the Worker live", func() bool { return h.task("pr-7").Live })
-	before := h.task("pr-7")
+	eventually(t, "the Worker live", func() bool { return h.task("PR-7").Live })
+	before := h.task("PR-7")
 
 	for _, ev := range []RexEvent{
 		{Kind: EvStatus, Status: Status{State: "done"}},
@@ -987,8 +987,8 @@ func TestSidePaneEventsLeaveTheReviewAsItWas(t *testing.T) {
 		ev.BlockID = pane.BlockID
 		h.rex.events <- ev
 	}
-	h.still("pr-7", lifecycle.Reviewing)
-	if v := h.task("pr-7"); !reflect.DeepEqual(v, before) {
+	h.still("PR-7", lifecycle.Reviewing)
+	if v := h.task("PR-7"); !reflect.DeepEqual(v, before) {
 		t.Fatalf("task = %+v after side pane events, want it as it was: %+v", v, before)
 	}
 	if tabs := h.rex.open("claude reviewing"); len(tabs) != 1 || tabs[0].BlockID != worker.BlockID {
@@ -998,9 +998,9 @@ func TestSidePaneEventsLeaveTheReviewAsItWas(t *testing.T) {
 	conversation := h.lastSpec().Conversation
 	h.rex.userCloses(worker)
 	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: pane.BlockID}
-	eventually(t, "the tab closed flag", func() bool { return h.task("pr-7").Flag == "tab closed" })
-	h.still("pr-7", lifecycle.Reviewing)
-	h.open("pr-7")
+	eventually(t, "the tab closed flag", func() bool { return h.task("PR-7").Flag == "tab closed" })
+	h.still("PR-7", lifecycle.Reviewing)
+	h.open("PR-7")
 	h.waitTab("claude --resume " + conversation)
 }
 
@@ -1013,11 +1013,11 @@ func TestAClosedReviewWorkerClosesItsSidePane(t *testing.T) {
 	worker := h.waitTab("claude reviewing")
 	h.waitSplit(1)
 	h.status(worker.BlockID, "done")
-	h.waitStage("pr-7", lifecycle.ReviewReady)
+	h.waitStage("PR-7", lifecycle.ReviewReady)
 
 	h.rex.blockCloses(worker)
 	eventually(t, "the side pane closed", func() bool { return h.rex.allSplits()[0].closed })
-	if v := h.task("pr-7"); v.Live || v.Stage != "Review ready" || v.Flag != "" {
+	if v := h.task("PR-7"); v.Live || v.Stage != "Review ready" || v.Flag != "" {
 		t.Fatalf("task = %+v, want Review ready with no Worker", v)
 	}
 }
@@ -1095,9 +1095,9 @@ func TestAReviewQuestionMeetsTheContractOnlyAfterTheFindings(t *testing.T) {
 			h.writeFindings(7, "h1")
 		}
 		h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "blocked", Kind: c.kind, Msg: "answer: finding 3"}}
-		h.waitStage("pr-7", c.stage)
-		h.still("pr-7", c.stage)
-		if v := h.task("pr-7"); v.Flag != c.flag {
+		h.waitStage("PR-7", c.stage)
+		h.still("PR-7", c.stage)
+		if v := h.task("PR-7"); v.Flag != c.flag {
 			t.Errorf("%s: %s with flag %q, want %s with flag %q", c.name, v.Stage, v.Flag, c.stage, c.flag)
 		}
 	}
@@ -1110,16 +1110,16 @@ func TestLaterStatusesKeepAReviewReadyFromAQuestion(t *testing.T) {
 	worker := h.waitTab("claude reviewing")
 	h.writeFindings(7, "h1")
 	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "blocked", Kind: "question"}}
-	h.waitStage("pr-7", lifecycle.ReviewReady)
+	h.waitStage("PR-7", lifecycle.ReviewReady)
 	for _, state := range []string{"working", "done", "idle"} {
 		h.status(worker.BlockID, state)
-		h.still("pr-7", lifecycle.ReviewReady)
-		if v := h.task("pr-7"); v.Flag != "" {
+		h.still("PR-7", lifecycle.ReviewReady)
+		if v := h.task("PR-7"); v.Flag != "" {
 			t.Fatalf("after %s: flag %q, want none", state, v.Flag)
 		}
 	}
 	h.rex.userCloses(worker)
-	eventually(t, "the Worker gone", func() bool { return !h.task("pr-7").Live })
+	eventually(t, "the Worker gone", func() bool { return !h.task("PR-7").Live })
 	if res := h.review(prURL7); res.Action != ReviewReopened {
 		t.Fatalf("review after the tab closed = %+v, want reopened", res)
 	}
@@ -1145,15 +1145,15 @@ func TestARerunReviewKeepsTheConversation(t *testing.T) {
 	worker := h.waitTab("claude reviewing")
 	conversation := h.lastSpec().Conversation
 	h.status(worker.BlockID, "done")
-	h.waitStage("pr-7", lifecycle.ReviewReady)
+	h.waitStage("PR-7", lifecycle.ReviewReady)
 
-	h.do(Request{Op: "rerun", Task: "pr-7", Stage: "reviewing"})
+	h.do(Request{Op: "rerun", Task: "PR-7", Stage: "reviewing"})
 	h.waitTyped(worker.BlockID, "prompt reviewing")
 	if spec := h.lastSpec(); spec.Stage != lifecycle.Reviewing || spec.Conversation != conversation || spec.PRURL != prURL7 {
 		t.Fatalf("rerun spec = %+v, want Reviewing in conversation %s", spec, conversation)
 	}
 	var got string
-	h.s.call(func() { got = h.s.recs["pr-7"].Conversation })
+	h.s.call(func() { got = h.s.recs["PR-7"].Conversation })
 	if got != conversation || len(h.rex.open("claude reviewing")) != 1 {
 		t.Fatalf("conversation %q after the rerun, want %q in the one tab", got, conversation)
 	}
@@ -1171,13 +1171,13 @@ func TestOpenClosesATabThatRexKeptAfterTheWorkerExited(t *testing.T) {
 	conversation := h.lastSpec().Conversation
 	h.waitSplit(1)
 	h.status(old.BlockID, "done")
-	h.waitStage("pr-7", lifecycle.ReviewReady)
-	h.keptTabRestore("pr-7", old, conversation)
+	h.waitStage("PR-7", lifecycle.ReviewReady)
+	h.keptTabRestore("PR-7", old, conversation)
 	if tabs := h.rex.open("claude reviewing"); len(tabs) != 0 {
 		t.Fatalf("the kept tab stayed open: %+v", tabs)
 	}
 
-	h.do(Request{Op: "close", Task: "pr-7"})
+	h.do(Request{Op: "close", Task: "PR-7"})
 	eventually(t, "the reopened tab closed", func() bool { return len(h.rex.open("claude --resume "+conversation)) == 0 })
 }
 

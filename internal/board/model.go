@@ -55,7 +55,7 @@ type Options struct {
 	// GitHub holds the calls to GitHub for the GitHub Issue rows.
 	GitHub GitHub
 	// Repos lists the checkouts that the Repo picker offers for an Issue of the
-	// Kind. It leaves out each Repo that is locked to other Trackers.
+	// Kind: the checkouts whose Tracker is the Kind.
 	Repos func(kind string) []string
 	// LocalIssues is the Local Tracker folder that the work view reads,
 	// whatever local_tracker says. Empty reads no local Issues.

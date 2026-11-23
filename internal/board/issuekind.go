@@ -187,7 +187,7 @@ func (m Model) localStore() localissues.Store {
 	return localissues.Store{Dir: m.opts.LocalIssues, Prefixes: m.opts.LocalPrefixes}
 }
 
-func (l localRow) path() string { return filepath.Join(l.store.Dir, l.is.ID()+".md") }
+func (l localRow) path() string { return filepath.Join(l.store.Dir, l.is.File()) }
 
 func (l localRow) facts() string {
 	return strings.Join([]string{string(l.is.Status), firstNonEmpty(l.is.Repo, "no repo"), repoLabels([]string{l.path()})[0]}, " · ")
