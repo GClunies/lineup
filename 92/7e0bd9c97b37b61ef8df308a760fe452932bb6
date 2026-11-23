@@ -1,0 +1,27 @@
+internal/board/groups_test.go
+  s_a56bd72ec7104f::t_93e1dc521a42e7 112
+internal/board/view_test.go
+  s_a56bd72ec7104f::t_f53a7537d2b2ae 9,12,233-296,298,300-323
+  s_a56bd72ec7104f::t_8aaa9bf6b676f7 297,299
+internal/board/view.go
+  s_a56bd72ec7104f::t_bb841cf4044795 531-535
+  s_a56bd72ec7104f::t_b0c456d40a7408 27
+  s_a56bd72ec7104f::t_50ab01af0640c3 562
+  s_a56bd72ec7104f::t_528645fd1242d6 518
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "927e0bd9c97b37b61ef8df308a760fe452932bb6",
+  "prompts": {},
+  "sessions": {
+    "s_a56bd72ec7104f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7def645d-2c6a-46b8-912b-a30a82ff8bc6",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
