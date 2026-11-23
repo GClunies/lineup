@@ -65,11 +65,12 @@ An Issue row is an Issue of the user's own with no Task on the Board. The Board 
 
 ## The status column and the strip
 
-Each Task row and Issue row shows one status word in its own column, after the title. A status word has one or two words. The title takes the cells that the other columns leave.
+Each Task row and Issue row shows one status word in its own column, after the title. A status word has one or two words, except a Tracker state in Follow-up. The title takes the cells that the other columns leave.
 
 | Row | Status word |
 |---|---|
 | A Task in Needs you with a flag | The reason of the flag: `question`, `permission`, `auth`, `error`, `setup failed`, `stopped`, `budget spent`, `tab closed`, `worker silent`, `draft`, `drafts`, `PR closed` for `pr closed`, or `bot late` for `no bot review` |
+| A Task in Follow-up | The Tracker state, for example `Waiting for QA`. The Tracker names the state, so it can have more than two words. |
 | Any other Task | The Stage: `queued`, `working`, `CI running`, `CI debug`, `in review`, `responding`, `ready` for Ready to land, or `done` |
 | An Issue with an open blocker | `blocked` |
 | An Issue whose blockers are all done or canceled | `unblocked` |
@@ -81,7 +82,7 @@ The strip is the footer under the rows. It has these lines:
 
 1. A rule.
 2. The full title of the selected row.
-3. The facts of the selected row, joined by ` · `: the ID, the Stage, the Repo, the PR number, and the full note. An empty fact does not show. The PR number shows only when the note does not start with it. An Issue row shows its group in place of the Stage, and its note is `blocked by <IDs>`, `unblocked`, or empty.
+3. The facts of the selected row, joined by ` · `: the ID, the Stage, the Repo, the PR number, and the full note. An empty fact does not show. The PR number shows only when the note does not name it. An Issue row shows its group in place of the Stage, and its note is `blocked by <IDs>`, `unblocked`, or empty.
 4. The Board message, for example `open ENG-590 ok`, while it is set. The next key clears the message.
 5. The key hints.
 
@@ -121,9 +122,9 @@ Both groups sort in this order:
 
 ## Follow-up
 
-When a build Task's PR merges, the Task goes to Done. Its Issue can still need the user, for example in the Linear state "Waiting for QA". A Done Task whose Issue its Tracker still holds open is in the Follow-up group. The row's note is the Tracker state.
+When a build Task's PR merges, the Task goes to Done. Its Issue can still need the user, for example in the Linear state "Waiting for QA". A Done Task whose Issue its Tracker still holds open is in the Follow-up group. The row's status word and its note in the strip are the Tracker state.
 
-| Tracker | The Issue is open when | Note |
+| Tracker | The Issue is open when | Tracker state |
 |---|---|---|
 | Linear | The state type is `unstarted` or `started` | The state name, for example `Waiting for QA` |
 | GitHub | The Issue is open | `open` |

@@ -107,8 +107,8 @@ func TestANeedsYouRowShowsItsReasonAndNotItsNote(t *testing.T) {
 	if l := lineOf(t, out, "ah-65"); !strings.Contains(l, "PR closed") || strings.Contains(l, "closed without") {
 		t.Errorf("the row must show PR closed and not the note: %q", l)
 	}
-	if f := footerAt(m, 95); !strings.Contains(f, "pr closed: #5226 closed without a merge") {
-		t.Errorf("the strip must show the note in full:\n%s", f)
+	if f := footerAt(m, 95); !strings.Contains(f, "pr closed: #5226 closed without a merge") || strings.Count(f, "#5226") != 1 {
+		t.Errorf("the strip must show the note in full and name the PR once:\n%s", f)
 	}
 }
 

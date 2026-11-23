@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -216,9 +217,10 @@ func (m Model) selection() (title, facts string) {
 	if !ok {
 		return "", ""
 	}
-	pr := ""
-	if n := fmt.Sprintf("#%d", t.PRNumber); t.PRNumber != 0 && !strings.HasPrefix(t.Note, n) {
-		pr = n
+	// The note can name the PR, as in "pr closed: #5226 closed without a merge".
+	pr := fmt.Sprintf("#%d", t.PRNumber)
+	if t.PRNumber == 0 || slices.Contains(strings.FieldsFunc(t.Note, func(r rune) bool { return r != '#' && !unicode.IsDigit(r) }), pr) {
+		pr = ""
 	}
 	return t.Title, join(boardID(t.ID), t.Stage, t.Repo, pr, t.Note)
 }
@@ -393,10 +395,14 @@ var flagWord = map[string]string{
 }
 
 // taskStatus is the status word of a Task row: the flag of a Task in Needs
-// you, and the Stage of any other Task.
+// you, the Tracker state of a Task in Follow-up, which setBoard puts in its
+// note, and the Stage of any other Task.
 func taskStatus(t scheduler.TaskView) string {
-	if inNeedsYou(t) && t.Flag != "" {
+	switch {
+	case inNeedsYou(t) && t.Flag != "":
 		return cmp.Or(flagWord[t.Flag], t.Flag)
+	case t.Group == groupFollowUp:
+		return t.Note
 	}
 	return cmp.Or(stageWord[t.StageKey], t.Stage)
 }
