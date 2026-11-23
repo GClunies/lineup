@@ -74,7 +74,7 @@ An Issue row is an Issue of the user's own with no Task on the Board. The Board 
 - A row shows the ID, the Repo when it is known, the title, a note, and the priority. The note is `blocked by <IDs>`, `unblocked`, or empty. A GitHub row's Repo is the repository name, and its note names a blocker in the same repository as `#12`.
 - `unblocked` means that the Issue has one or more blockers and that every blocker is done or canceled. A Linear blocker is a "blocks" relation. A local blocker is an entry in `blocked_by`. A GitHub blocker is a `Blocked by #12` line in the body, and it is done when GitHub reports it closed.
 
-The default group order is Needs you, Backlog, Ready, Queued, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
+The default group order is Needs you, Follow-up, Backlog, Ready, Queued, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. Follow-up comes next because its Issues still need the user after their PRs merge. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
 
 Both groups sort in this order:
 
@@ -90,6 +90,22 @@ Both groups sort in this order:
 - A failed fetch keeps the rows from the last fetch, and the footer names the workspace that failed.
 - The Board reads the Local Tracker folder whatever `local_tracker` says (ADR 0020).
 - The Board reads GitHub Issues at each load while the GitHub Tracker is on, and it has no cache for them. A failed read keeps the GitHub rows from the last read, and the footer shows `GitHub Issues:` and the error. The other rows stay. When the Tracker turns off, the GitHub rows leave.
+
+## Follow-up
+
+When a build Task's PR merges, the Task goes to Done. Its Issue can still need the user, for example in the Linear state "Waiting for QA". A Done Task whose Issue its Tracker still holds open is in the Follow-up group. The row's note is the Tracker state.
+
+| Tracker | The Issue is open when | Note |
+|---|---|---|
+| Linear | The state type is `unstarted` or `started` | The state name, for example `Waiting for QA` |
+| GitHub | The Issue is open | `open` |
+| Local | `status` is not `done` or `canceled` | The status, for example `in review` |
+
+- The Task's ID must match the Issue's ID exactly, as for an Issue row.
+- Each load of the Issues places the row again. When the Tracker closes the Issue, the row moves to Done.
+- The Board reads only the user's own Issues. When an Issue leaves them, for example when someone assigns the Linear Issue to another person, its Task moves to Done.
+- Follow-up starts open, and its rows do not fade. On a Follow-up row, `x`, its hint, and the `today` age work as on a Done row.
+- Follow-up rows are not in Needs you. They add nothing to the Needs you count in the header or on the `lineup` tab.
 
 ## Keys on an Issue row
 
@@ -196,7 +212,7 @@ collapsed = ["backlog"]
 hidden = ["done"]
 ```
 
-The keys of a group are `needs_you`, `backlog`, `ready`, `queued`, `working`, `waiting`, and `done`. A key that is absent takes its default, and an empty list means none. A group that `order` leaves out follows the listed groups, in the default order. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors that name the key, but they do not fail the load, so the Scheduler still starts. The board then uses the default layout and shows the error on its own line, for example `config: board.hidden: unknown section "dun" (default layout)`. No other status message replaces that line, and it stays until the board quits. If `config.Load` fails for any other reason, the board runs with defaults and shows `config: <error>` in the same line.
+The keys of a group are `needs_you`, `follow_up`, `backlog`, `ready`, `queued`, `working`, `waiting`, and `done`. A key that is absent takes its default, and an empty list means none. A group that `order` leaves out follows the listed groups, in the default order. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors that name the key, but they do not fail the load, so the Scheduler still starts. The board then uses the default layout and shows the error on its own line, for example `config: board.hidden: unknown section "dun" (default layout)`. No other status message replaces that line, and it stays until the board quits. If `config.Load` fails for any other reason, the board runs with defaults and shows `config: <error>` in the same line.
 
 | Rule | Behavior |
 |---|---|
@@ -260,6 +276,10 @@ Each PR lands on `main` before the next one starts.
 | A bad `[board]` table loads with the default layout and an error, and the board shows the error until it quits | Config tests, and a board test that reads the screen after other status messages |
 | `d` shows or hides Done, and opens it when it shows | Board tests that read the screen before and after `d` |
 | `[board]` fails at load on an unknown group, a duplicate, and `needs_you` in `collapsed` or `hidden` | Config tests that read the error |
+| `[board]` takes `follow_up` in `order`, `collapsed`, and `hidden`. Follow-up is second in the default order, and it starts open. | Config tests that read the layout |
+| A Done Task whose Issue is open in Linear, GitHub, or the Local Tracker shows in Follow-up with the Tracker state. It moves to Done when the Tracker closes the Issue. | Board tests that read the screen before and after the Tracker closes the Issue, and a table test over every Linear state type and every local status |
+| A Follow-up row adds nothing to the Needs you count | A board test that reads the Status reports and the header |
+| A Follow-up row keeps the `x` key, the archive hint, and the `today` age of a Done row | A board test that reads the row and the footer, and presses `x` and `y` |
 | `j` and `k` stop on each shown heading except Needs you and skip the rows of closed groups | A board test over the fixture, and a `rapid` property test over random rows, orders, closed sets, and hidden sets |
 | The free slot toast names the first Ready row, and only when a slot is free | A board test that sends two board views |
 | `1`, `2`, and `3` do nothing | A board test that reads the screen and the command |
