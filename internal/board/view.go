@@ -631,7 +631,7 @@ const boardHelp = `
    m        merge the PR            (Ready to land)
    x        close the Task, or its tab and worktree when it is Done,
             or archive a Done Task with no tab, after y/n
-   s        start a Task from an Up next or Backlog Issue; pick
+   s        start a Task from an Up next, Backlog, or Team Issue; pick
             or type a skill, or just go
    c        change the status of an Issue row: pick a Linear state of
             its team, or a local status

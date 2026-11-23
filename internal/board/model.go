@@ -60,6 +60,9 @@ type Options struct {
 	// LocalIssues is the Local Tracker folder that the work view reads,
 	// whatever local_tracker says. Empty reads no local Issues.
 	LocalIssues string
+	// Teams are the Linear team keys whose unassigned Issues show in Team.
+	// Empty reads none.
+	Teams []string
 	// LocalPrefixes are the Repo prefixes of the Local Issues, besides local.
 	LocalPrefixes []string
 	// Destinations is destinations.json in the state folder. It keeps the
@@ -179,7 +182,7 @@ func New(v scheduler.BoardView, opts Options) Model {
 	m.lin = newLinearClients(opts.Linear)
 	m.st = newStarter()
 	m.filter = newFilter()
-	m.mine = mine{lin: map[string][]linear.Issue{}, wss: map[string]linear.Workspace{}, fresh: map[string]bool{}}
+	m.mine = mine{lin: map[string][]linear.Issue{}, team: map[string][]linear.Issue{}, wss: map[string]linear.Workspace{}, fresh: map[string]bool{}}
 	m.box = newCaptureBox()
 	m.lay = newSections(opts.Board)
 	m.dests = destinations{linear: map[string][]destination{}, errs: map[string]string{}}

@@ -18,11 +18,13 @@ import (
 )
 
 // This file holds the work view's Issue rows: the user's own Issues that
-// have no Task on the Board, in the Up next and Backlog groups.
+// have no Task on the Board, in the Up next and Backlog groups, and the
+// unassigned Issues of the user's teams, in Team.
 
 const (
 	groupUpNext  = "Up next"
 	groupBacklog = "Backlog"
+	groupTeam    = "Team"
 	mineEvery    = 60 * time.Second
 )
 
@@ -81,10 +83,12 @@ func (r issueRow) priorityText() string {
 	return priorityGlyph[0]
 }
 
-// issueRows makes the Issue rows: the Issues in Up next or Backlog that no Task
-// on the Board holds. An ID matches a Task's ID exactly, as each has its
-// canonical form. backlog is the label that puts a GitHub Issue in Backlog.
-func issueRows(lin []linear.Issue, loc []localissues.Issue, gh []github.OwnIssue, backlog string, tasks []scheduler.TaskView) []issueRow {
+// issueRows makes the Issue rows: the Issues in Up next, Backlog, or Team
+// that no Task on the Board holds. An ID matches a Task's ID exactly, as each
+// has its canonical form. team is the Team list. An Issue in lin too is not in
+// Team, as the Team list can lag a start. backlog is the label that puts a
+// GitHub Issue in Backlog.
+func issueRows(lin, team []linear.Issue, loc []localissues.Issue, gh []github.OwnIssue, backlog string, tasks []scheduler.TaskView) []issueRow {
 	held := map[string]bool{}
 	for _, t := range tasks {
 		held[t.ID] = true
@@ -99,10 +103,19 @@ func issueRows(lin []linear.Issue, loc []localissues.Issue, gh []github.OwnIssue
 	// Issue joins it under its own ID.
 	graph := slices.Clone(lin)
 	var rows []issueRow
+	own := map[string]bool{}
 	for i := range lin {
 		is := &lin[i]
-		rows = append(rows, issueRow{ID: is.Identifier, Kind: scheduler.KindLinear, Group: issueGroup[scheduler.KindLinear][is.State.Type],
-			Title: is.Title, URL: is.URL, Priority: is.Priority, Blockers: linear.BlockedBy(*is), Unblocked: is.Unblocked, lin: is})
+		own[is.ID] = true
+		rows = append(rows, linearIssueRow(is, issueGroup[scheduler.KindLinear][is.State.Type]))
+	}
+	for i := range team {
+		is := &team[i]
+		if own[is.ID] {
+			continue
+		}
+		graph = append(graph, *is)
+		rows = append(rows, linearIssueRow(is, groupTeam))
 	}
 	for i := range loc {
 		is := &loc[i]
@@ -159,6 +172,11 @@ func issueRows(lin []linear.Issue, loc []localissues.Issue, gh []github.OwnIssue
 	return out
 }
 
+func linearIssueRow(is *linear.Issue, group string) issueRow {
+	return issueRow{ID: is.Identifier, Kind: scheduler.KindLinear, Group: group, Title: is.Title, URL: is.URL,
+		Priority: is.Priority, Blockers: linear.BlockedBy(*is), Unblocked: is.Unblocked, lin: is}
+}
+
 // githubGroup puts a GitHub Issue in Backlog when it carries the backlog
 // label, and in Up next when it does not. GitHub matches label names without
 // case, and so does the Board.
@@ -204,27 +222,40 @@ func natural(a, b string) int {
 // mine holds the Issues behind the Issue rows.
 type mine struct {
 	lin   map[string][]linear.Issue   // My Issues, by workspace ID
-	wss   map[string]linear.Workspace // the workspaces in lin, by ID
-	fresh map[string]bool             // the workspaces whose live list came back
+	team  map[string][]linear.Issue   // the Team list: the unassigned Issues of the user's teams, by workspace ID
+	wss   map[string]linear.Workspace // the workspaces in lin and team, by ID
+	fresh map[string]bool             // the cache keys of the lists whose live read came back
 	loc   []localissues.Issue
 	gh    []github.OwnIssue // the user's own GitHub Issues, while the GitHub Tracker is on
 }
 
-// workspaceOf is the workspace whose My Issues hold is.
+// list is the map that holds the Team list, or My Issues, by workspace ID.
+// key is the list's cache key in ws, and name its name in a status message.
+func (mi mine) list(ws linear.Workspace, team bool) (lists map[string][]linear.Issue, key, name string) {
+	if team {
+		return mi.team, ws.ID + "/team", "team Issues"
+	}
+	return mi.lin, ws.ID + "/my", "my Issues"
+}
+
+// workspaceOf is the workspace whose My Issues or Team list holds is.
 func (mi mine) workspaceOf(is linear.Issue) linear.Workspace {
-	for id, list := range mi.lin {
-		if slices.ContainsFunc(list, func(x linear.Issue) bool { return x.ID == is.ID }) {
-			return mi.wss[id]
+	for _, lists := range []map[string][]linear.Issue{mi.lin, mi.team} {
+		for id, list := range lists {
+			if slices.ContainsFunc(list, func(x linear.Issue) bool { return x.ID == is.ID }) {
+				return mi.wss[id]
+			}
 		}
 	}
 	return linear.Workspace{}
 }
 
-// linearIssues lists every workspace's Issues, in workspace ID order.
-func (mi mine) linearIssues() []linear.Issue {
+// inWorkspaceOrder lists the Issues of every workspace in lists, in workspace
+// ID order.
+func inWorkspaceOrder(lists map[string][]linear.Issue) []linear.Issue {
 	var out []linear.Issue
-	for _, id := range slices.Sorted(maps.Keys(mi.lin)) {
-		out = append(out, mi.lin[id]...)
+	for _, id := range slices.Sorted(maps.Keys(lists)) {
+		out = append(out, lists[id]...)
 	}
 	return out
 }
@@ -234,7 +265,7 @@ func (mi mine) linearIssues() []linear.Issue {
 // open GitHub Issues.
 func (mi mine) openStates() map[string]string {
 	open := map[string]string{}
-	for _, is := range mi.linearIssues() {
+	for _, is := range inWorkspaceOrder(mi.lin) {
 		if is.State.Type == "unstarted" || is.State.Type == "started" {
 			open[is.Identifier] = is.State.Name
 		}
@@ -255,8 +286,11 @@ type (
 		wss []linear.Workspace
 		err error
 	}
+	// mineIssuesMsg is one list of a workspace: the Team list when team is
+	// true, else My Issues.
 	mineIssuesMsg struct {
 		ws     linear.Workspace
+		team   bool
 		issues []linear.Issue
 		live   bool
 		err    error
@@ -299,33 +333,46 @@ func tickMine() tea.Cmd {
 	return tea.Tick(mineEvery, func(time.Time) tea.Msg { return mineTick{} })
 }
 
-// fetchMine paints a workspace that has no list yet from the cache, and
-// fetches every workspace live. A cached list never replaces a live one.
+// fetchMine reads My Issues of every workspace, and its Team list when the
+// user has teams.
 func (m Model) fetchMine(wss []linear.Workspace) tea.Cmd {
-	read, write := m.lin.ReadCache, m.lin.WriteCache
 	var cmds []tea.Cmd
+	teams := m.opts.Teams
 	for _, w := range wss {
-		key, api := w.ID+"/my", m.lin.api(w)
-		if _, ok := m.mine.lin[w.ID]; !ok {
-			cmds = append(cmds, func() tea.Msg {
-				is, ok := read(key)
-				if !ok {
-					return nil
-				}
-				return mineIssuesMsg{ws: w, issues: is}
-			})
+		api := m.lin.api(w)
+		cmds = append(cmds, m.fetchList(w, false, api.MyIssues)...)
+		if len(teams) > 0 {
+			cmds = append(cmds, m.fetchList(w, true, func(ctx context.Context) ([]linear.Issue, error) { return api.TeamIssues(ctx, teams) })...)
 		}
-		cmds = append(cmds, func() tea.Msg {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			is, err := api.MyIssues(ctx)
-			if err == nil {
-				write(key, is)
-			}
-			return mineIssuesMsg{ws: w, issues: is, live: true, err: err}
-		})
 	}
 	return tea.Batch(cmds...)
+}
+
+// fetchList paints one list of a workspace from the cache when the Board has
+// no copy of it yet, and reads it live. A cached list never replaces a live
+// one.
+func (m Model) fetchList(w linear.Workspace, team bool, live func(context.Context) ([]linear.Issue, error)) []tea.Cmd {
+	read, write := m.lin.ReadCache, m.lin.WriteCache
+	lists, key, _ := m.mine.list(w, team)
+	var cmds []tea.Cmd
+	if _, ok := lists[w.ID]; !ok {
+		cmds = append(cmds, func() tea.Msg {
+			is, ok := read(key)
+			if !ok {
+				return nil
+			}
+			return mineIssuesMsg{ws: w, team: team, issues: is}
+		})
+	}
+	return append(cmds, func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		is, err := live(ctx)
+		if err == nil {
+			write(key, is)
+		}
+		return mineIssuesMsg{ws: w, team: team, issues: is, live: true, err: err}
+	})
 }
 
 // mineMsg handles the messages of the Issue rows. ok is false for any other message.
@@ -342,17 +389,19 @@ func (m Model) mineMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		for _, w := range msg.wss {
 			signedIn[w.ID] = true
 		}
-		for id := range m.mine.lin {
+		for id := range m.mine.wss {
 			if !signedIn[id] {
 				delete(m.mine.lin, id)
+				delete(m.mine.team, id)
 				delete(m.mine.wss, id)
 			}
 		}
 		m.setBoard(m.board)
 		return m, m.fetchMine(msg.wss), true
 	case mineIssuesMsg:
+		lists, key, name := m.mine.list(msg.ws, msg.team)
 		if msg.live {
-			prefix := "my Issues in " + msg.ws.Name + ": "
+			prefix := name + " in " + msg.ws.Name + ": "
 			if msg.err != nil {
 				m.setStatus(prefix+msg.err.Error(), true)
 				if len(msg.issues) == 0 {
@@ -362,11 +411,11 @@ func (m Model) mineMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 				// A good fetch ends this workspace's error.
 				m.setStatus("", false)
 			}
-			m.mine.fresh[msg.ws.ID] = true
-		} else if m.mine.fresh[msg.ws.ID] {
+			m.mine.fresh[key] = true
+		} else if m.mine.fresh[key] {
 			return m, nil, true
 		}
-		m.mine.lin[msg.ws.ID] = msg.issues
+		lists[msg.ws.ID] = msg.issues
 		m.mine.wss[msg.ws.ID] = msg.ws
 		m.setBoard(m.board)
 	case mineGitHubMsg:
