@@ -182,6 +182,7 @@ func TestDecideRunsTheChosenCommand(t *testing.T) {
 		wantOut string
 	}{
 		{[]string{"ENG-1", "merge"}, scheduler.Request{Op: "merge", Task: "ENG-1"}, ""},
+		{[]string{"eng-1", "merge"}, scheduler.Request{Op: "merge", Task: "ENG-1"}, ""},
 		{[]string{"ENG-2", "open"}, scheduler.Request{Op: "open", Task: "ENG-2"}, "ENG-2 restored: ENG-2 title\n"},
 		{[]string{"ENG-2", "close"}, scheduler.Request{Op: "close", Task: "ENG-2"}, ""},
 		{[]string{"ENG-3", "answer", "Use the fast path."}, scheduler.Request{Op: "steer", Task: "ENG-3", Text: "Use the fast path."}, ""},
@@ -212,6 +213,7 @@ func TestDecideRefusesWhatTheTaskCannotDo(t *testing.T) {
 		requests int
 	}{
 		{[]string{"ENG-10", "open"}, false, "ENG-10 does not need you", 1},
+		{[]string{"eng-10", "open"}, false, "ENG-10 does not need you", 1},
 		{[]string{"R-4", "open"}, false, "R-4 does not need you", 1},
 		{[]string{"ENG-2", "merge"}, false, `ENG-2 has no choice "merge". Its choices are open, close`, 1},
 		{[]string{"ENG-3", "answer"}, true, "", 1},

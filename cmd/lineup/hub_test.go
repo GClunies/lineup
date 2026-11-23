@@ -521,7 +521,7 @@ func TestTheRoleNamesEachRepoTableAndItsTracker(t *testing.T) {
 func TestTheRoleNamesEachRepoPrefixAndItsFileRule(t *testing.T) {
 	path, _, _ := trackerConfig(t)
 	body, _ := os.ReadFile(path)
-	if err := os.WriteFile(path, append(body, "prefix = \"hod\"\n"...), 0o600); err != nil {
+	if err := os.WriteFile(path, append(body, "prefix = \"Hod\"\n"...), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Load(path)
@@ -537,7 +537,7 @@ func TestTheRoleNamesEachRepoPrefixAndItsFileRule(t *testing.T) {
 		t.Fatalf("the role has no Repo prefixes section:\n%s", raw)
 	}
 	section, _, _ = strings.Cut(section, "\n## ")
-	for _, want := range []string{"| `GClunies/hod` | `hod` | `/Users/g/issues/hod-<n>.md` |", "Name a new Local Issue file for a Repo with a prefix `<prefix>-<n>.md`", "`prefix` key of its `[repos.\"<owner>/<repo>\"]` table", path} {
+	for _, want := range []string{"| `GClunies/hod` | `HOD` | `HOD-<n>` | `/Users/g/issues/hod-<n>.md` |", "Name a new Local Issue file for a Repo with a prefix `<prefix>-<n>.md`, in lower case", "A `<PREFIX>-<n>` ID is a Local Issue ID", "`prefix` key of its `[repos.\"<owner>/<repo>\"]` table", path} {
 		if !strings.Contains(section, want) {
 			t.Errorf("the Repo prefixes section has no %q:\n%s", want, section)
 		}

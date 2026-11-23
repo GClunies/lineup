@@ -655,18 +655,18 @@ func TestFooterShowsTheKeysForTheSelection(t *testing.T) {
 func TestTheMessageShowsWithTheHintsUntilTheNextKey(t *testing.T) {
 	f := &fakeClient{}
 	m := exampleBoard()
-	m.client, m.sel = f, "ah-64"
+	m.client, m.sel = f, "AH-64"
 	m, cmd := press(m, "enter")
 	m = run(m, cmd)
 	if got := f.ops(); !slices.Equal(got, []string{"open"}) {
 		t.Fatalf("enter sent %v, want open", got)
 	}
 	lines := strings.Split(footerAt(m, 95), "\n")
-	if n := len(lines); n < 2 || lines[n-2] != " open ah-64 ok" || !strings.HasSuffix(lines[n-1], "? all keys") {
+	if n := len(lines); n < 2 || lines[n-2] != " open AH-64 ok" || !strings.HasSuffix(lines[n-1], "? all keys") {
 		t.Fatalf("the strip must show the message, then the hints:\n%s", strings.Join(lines, "\n"))
 	}
 	m, _ = press(m, "k")
-	if f := footerAt(m, 95); strings.Contains(f, "open ah-64 ok") || !strings.HasSuffix(f, "? all keys") {
+	if f := footerAt(m, 95); strings.Contains(f, "open AH-64 ok") || !strings.HasSuffix(f, "? all keys") {
 		t.Fatalf("the next key must clear the message and keep the hints:\n%s", f)
 	}
 }
@@ -1051,8 +1051,8 @@ func TestEnterOnAQueuedTaskOffersNoRestore(t *testing.T) {
 func idBoard() Model {
 	done := tv("GClunies/lineup#108", lifecycle.Done, "lineup", "Show only main checkouts as Repos", "#127 merged", 2*time.Hour)
 	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Started: 2, Tasks: []scheduler.TaskView{
-		tv("ah-63", lifecycle.Working, "lineup", "setup and brainstorming session", "", 24*time.Hour),
-		tv("ah-64", lifecycle.Working, "lineup", "Start a sessions to explore the ideas and UI here", "", 5*time.Hour),
+		tv("AH-63", lifecycle.Working, "lineup", "setup and brainstorming session", "", 24*time.Hour),
+		tv("AH-64", lifecycle.Working, "lineup", "Start a sessions to explore the ideas and UI here", "", 5*time.Hour),
 		done,
 	}})
 	m.width = 95
@@ -1069,10 +1069,10 @@ func idCells(t *testing.T, out, id, title string) int {
 
 func TestTheIDColumnFitsTheRowsOnScreen(t *testing.T) {
 	closed := screen(withClosed(idBoard(), "Done"))
-	if got := idCells(t, closed, "ah-64", "Start a sessions"); got != 5 {
+	if got := idCells(t, closed, "AH-64", "Start a sessions"); got != 5 {
 		t.Errorf("with Done closed the ID column is %d cells, want 5:\n%s", got, closed)
 	}
-	if l := lineOf(t, closed, "ah-64"); !strings.Contains(l, "Start a sessions to explore the ideas and UI here") {
+	if l := lineOf(t, closed, "AH-64"); !strings.Contains(l, "Start a sessions to explore the ideas and UI here") {
 		t.Errorf("the title must take the cells that the ID column frees: %q", l)
 	}
 
@@ -1085,7 +1085,7 @@ func TestTheIDColumnFitsTheRowsOnScreen(t *testing.T) {
 	}
 
 	filtered, _ := press(openAll(idBoard()), "/", "ah-")
-	if out := screen(filtered); idCells(t, out, "ah-64", "Start a sessions") != 5 {
+	if out := screen(filtered); idCells(t, out, "AH-64", "Start a sessions") != 5 {
 		t.Errorf("a filter that hides lineup#108 must narrow the ID column to 5 cells:\n%s", out)
 	}
 }

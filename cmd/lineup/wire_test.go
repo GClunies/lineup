@@ -54,7 +54,7 @@ func TestTheMuxSendsEachCallOnlyToItsIssuesTracker(t *testing.T) {
 	}
 	ctx := context.Background()
 	for _, add := range []struct{ kind, id string }{
-		{"", "ENG-614"}, {"", "o/r#12"}, {"", "local-7"}, {"", "hod-3"},
+		{"", "ENG-614"}, {"", "o/r#12"}, {"", "LOCAL-7"}, {"", "HOD-3"},
 		{scheduler.KindLinear, "LOCAL-7"}, // a Linear team keyed LOCAL has Issues such as LOCAL-7
 	} {
 		is, err := mux.Lookup(ctx, add.kind, add.id)
@@ -71,8 +71,8 @@ func TestTheMuxSendsEachCallOnlyToItsIssuesTracker(t *testing.T) {
 	want := []string{
 		"linear lookup ENG-614", "linear begin ENG-614", "linear status:started ENG-614", "linear describe ENG-614",
 		"github lookup o/r#12", "github begin o/r#12", "github status:started o/r#12", "github describe o/r#12",
-		"local lookup local-7", "local begin local-7", "local status:started local-7", "local describe local-7",
-		"local lookup hod-3", "local begin hod-3", "local status:started hod-3", "local describe hod-3",
+		"local lookup LOCAL-7", "local begin LOCAL-7", "local status:started LOCAL-7", "local describe LOCAL-7",
+		"local lookup HOD-3", "local begin HOD-3", "local status:started HOD-3", "local describe HOD-3",
 		"linear lookup LOCAL-7", "linear begin LOCAL-7", "linear status:started LOCAL-7", "linear describe LOCAL-7",
 		"linear status:merged ENG-1",
 	}
@@ -89,7 +89,7 @@ func TestTheLocalTrackerWritesEachEventsStatus(t *testing.T) {
 	}
 	ctx := context.Background()
 	is, err := l.Lookup(ctx, "LOCAL-1")
-	if err != nil || is.Identifier != "local-1" || is.BranchName != made.Branch() || is.RepoHint != "data" {
+	if err != nil || is.Identifier != "LOCAL-1" || is.BranchName != made.Branch() || is.RepoHint != "data" {
 		t.Fatalf("lookup %+v %v", is, err)
 	}
 	for _, step := range []struct {
@@ -99,7 +99,7 @@ func TestTheLocalTrackerWritesEachEventsStatus(t *testing.T) {
 		if err := l.SetStatus(ctx, is, step.event); err != nil {
 			t.Fatal(err)
 		}
-		if got, _ := l.s.Get("local-1"); got.Status != step.want {
+		if got, _ := l.s.Get("LOCAL-1"); got.Status != step.want {
 			t.Fatalf("after %s: status %q, want %q", step.event, got.Status, step.want)
 		}
 	}
@@ -252,17 +252,17 @@ func TestAPrefixedLocalIssueMapsToItsPrefixesRepo(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	hod := gitCheckout(t, filepath.Join(home, "repos", "gclunies", "hod"), "git@github.com:gclunies/hod.git")
-	cfg := loadConfig(t, "roots = [\"~/repos\"]\n[repos.\"gclunies/hod\"]\ntracker = \"local\"\nprefix = \"hod\"\n")
+	cfg := loadConfig(t, "roots = [\"~/repos\"]\n[repos.\"gclunies/hod\"]\ntracker = \"local\"\nprefix = \"HOD\"\n")
 	l := localTracker{s: localissues.Store{Dir: t.TempDir(), Prefixes: cfg.Prefixes()}}
 	if err := os.WriteFile(filepath.Join(l.s.Dir, "hod-3.md"), []byte("---\ntitle: Block Linear writes\nstatus: todo\n---\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	mux := trackerMux{kinds: map[string]issueTracker{scheduler.KindLocal: l}, prefixes: cfg.Prefixes()}
-	is, err := mux.Lookup(context.Background(), "", "HOD-3")
+	is, err := mux.Lookup(context.Background(), "", "hod-3")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if is.Kind != scheduler.KindLocal || is.Identifier != "hod-3" || is.BranchName != "hod-3-block-linear-writes" ||
+	if is.Kind != scheduler.KindLocal || is.Identifier != "HOD-3" || is.BranchName != "hod-3-block-linear-writes" ||
 		is.URL != "file://"+filepath.Join(l.s.Dir, "hod-3.md") {
 		t.Fatalf("lookup %+v", is)
 	}
@@ -277,10 +277,10 @@ func TestAPrefixedLocalIssueMapsToItsPrefixesRepo(t *testing.T) {
 	if repo, _ := p.RepoForIssue(is); repo != hod {
 		t.Fatalf("repo %q, want %s: the prefix names the Repo before the repo field", repo, hod)
 	}
-	if repo, err := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindLocal, Identifier: "local-1"}); err == nil {
-		t.Fatalf("local-1 with no repo field mapped to %q", repo)
+	if repo, err := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindLocal, Identifier: "LOCAL-1"}); err == nil {
+		t.Fatalf("LOCAL-1 with no repo field mapped to %q", repo)
 	}
-	if _, err := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindLocal, Identifier: "local-1", RepoHint: "nope"}); !errors.Is(err, scheduler.ErrNoRepo) || !strings.Contains(err.Error(), "no checkout named nope") {
-		t.Fatalf("local-1 with repo: nope: err %v, want ErrNoRepo that says why", err)
+	if _, err := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindLocal, Identifier: "LOCAL-1", RepoHint: "nope"}); !errors.Is(err, scheduler.ErrNoRepo) || !strings.Contains(err.Error(), "no checkout named nope") {
+		t.Fatalf("LOCAL-1 with repo: nope: err %v, want ErrNoRepo that says why", err)
 	}
 }

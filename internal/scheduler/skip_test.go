@@ -53,14 +53,14 @@ func TestPlanFillSkips(t *testing.T) {
 			fillInput{Queues: []Queue{{Name: "q", Slots: 2}}, Skips: skip(a2), Found: map[string][]github.PullRequest{"q": {a1, a2, b3}}},
 			[]string{"q acme/a#1 in /repos/a", "q acme/b#3 in /repos/b"}},
 		{"a review that a skip ended holds the PR through the skip",
-			fillInput{Queues: one, Skips: skip(a1), Records: []*Record{doneReview("pr-1", a1, lifecycle.OutcomeSkipped)},
+			fillInput{Queues: one, Skips: skip(a1), Records: []*Record{doneReview("PR-1", a1, lifecycle.OutcomeSkipped)},
 				Found: map[string][]github.PullRequest{"q": {a1}}}, nil},
 		{"a review that a skip ended lets the PR back in at the same head after the unskip",
-			fillInput{Queues: one, Records: []*Record{doneReview("pr-1", a1, lifecycle.OutcomeSkipped)},
+			fillInput{Queues: one, Records: []*Record{doneReview("PR-1", a1, lifecycle.OutcomeSkipped)},
 				Found: map[string][]github.PullRequest{"q": {a1}}},
 			[]string{"q acme/a#1 in /repos/a"}},
 		{"a review that the user closed holds the PR at the same head",
-			fillInput{Queues: one, Records: []*Record{doneReview("pr-1", a1, lifecycle.OutcomeClosed)},
+			fillInput{Queues: one, Records: []*Record{doneReview("PR-1", a1, lifecycle.OutcomeClosed)},
 				Found: map[string][]github.PullRequest{"q": {a1}}}, nil},
 	}
 	for _, c := range cases {
@@ -140,7 +140,7 @@ func startedReview(t *testing.T) (*harness, github.PullRequest) {
 	h.gh.found = map[string][]github.PullRequest{"q": {p7}}
 	h.gh.setReview(openPR(7, "h7"))
 	h.s.fill(context.Background())
-	h.waitTabRecorded("claude reviewing", "pr-7")
+	h.waitTabRecorded("claude reviewing", "PR-7")
 	return h, p7
 }
 
@@ -149,11 +149,11 @@ func TestASkipEndsTheOpenReviewAndHoldsEveryHead(t *testing.T) {
 	ctx := context.Background()
 
 	res := h.skip("acme/data#7")
-	if !res.Changed || res.Closed != "pr-7" || res.URL != prURL7 || res.Title != "Fix the tooltip" {
-		t.Fatalf("skip = %+v, want pr-7 closed and the PR kept with its title", res)
+	if !res.Changed || res.Closed != "PR-7" || res.URL != prURL7 || res.Title != "Fix the tooltip" {
+		t.Fatalf("skip = %+v, want PR-7 closed and the PR kept with its title", res)
 	}
-	if v := h.task("pr-7"); v.Stage != lifecycle.Done.String() || v.Outcome != "skipped" {
-		t.Fatalf("pr-7 = %+v, want Done with the outcome skipped", v)
+	if v := h.task("PR-7"); v.Stage != lifecycle.Done.String() || v.Outcome != "skipped" {
+		t.Fatalf("PR-7 = %+v, want Done with the outcome skipped", v)
 	}
 	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude reviewing")) == 0 })
 	eventually(t, "the review worktree removed", func() bool { return len(h.reviewsRemoved()) == 1 })
@@ -172,8 +172,8 @@ func TestASkipEndsTheOpenReviewAndHoldsEveryHead(t *testing.T) {
 		pr.Head = head
 		h.gh.found = map[string][]github.PullRequest{"q": {pr}}
 		h.s.fill(ctx)
-		if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Done"}) {
-			t.Fatalf("at head %s: reviews %v, want only the ended pr-7", head, got)
+		if got := h.reviews(); !slices.Equal(got, []string{"PR-7 #7 Done"}) {
+			t.Fatalf("at head %s: reviews %v, want only the ended PR-7", head, got)
 		}
 	}
 	v := h.do(Request{Op: "reviews"}).(ReviewsView)
@@ -188,27 +188,27 @@ func TestAnUnskipLetsAPRBackInAtTheSameHead(t *testing.T) {
 	h.skip(prURL7)
 	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude reviewing")) == 0 })
 	h.s.fill(ctx)
-	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Done"}) {
-		t.Fatalf("reviews %v, want only the ended pr-7", got)
+	if got := h.reviews(); !slices.Equal(got, []string{"PR-7 #7 Done"}) {
+		t.Fatalf("reviews %v, want only the ended PR-7", got)
 	}
 
 	h.unskip("ACME/DATA#7")
 	h.s.fill(ctx)
-	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Reviewing"}) {
-		t.Fatalf("after the unskip: %v, want pr-7 reviewing again at the same head", got)
+	if got := h.reviews(); !slices.Equal(got, []string{"PR-7 #7 Reviewing"}) {
+		t.Fatalf("after the unskip: %v, want PR-7 reviewing again at the same head", got)
 	}
 }
 
 func TestACloseStillHoldsThePRAtItsHead(t *testing.T) {
 	h, p7 := startedReview(t)
 	ctx := context.Background()
-	h.do(Request{Op: "close", Task: "pr-7"})
-	if v := h.task("pr-7"); v.Outcome != "closed" {
-		t.Fatalf("pr-7 = %+v, want the outcome closed", v)
+	h.do(Request{Op: "close", Task: "PR-7"})
+	if v := h.task("PR-7"); v.Outcome != "closed" {
+		t.Fatalf("PR-7 = %+v, want the outcome closed", v)
 	}
 	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude reviewing")) == 0 })
 	h.s.fill(ctx)
-	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Done"}) {
+	if got := h.reviews(); !slices.Equal(got, []string{"PR-7 #7 Done"}) {
 		t.Fatalf("reviews %v, want the close to hold the PR at its head", got)
 	}
 
@@ -216,7 +216,7 @@ func TestACloseStillHoldsThePRAtItsHead(t *testing.T) {
 	pushed.Head = "h7-pushed"
 	h.gh.found = map[string][]github.PullRequest{"q": {pushed}}
 	h.s.fill(ctx)
-	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Reviewing"}) {
+	if got := h.reviews(); !slices.Equal(got, []string{"PR-7 #7 Reviewing"}) {
 		t.Fatalf("reviews %v, want a new head to bring the PR back", got)
 	}
 }
@@ -238,7 +238,7 @@ func TestASkipHoldsAcrossARestart(t *testing.T) {
 		t.Fatalf("after the restart: skips = %v", h.skips())
 	}
 	h.s.fill(ctx)
-	if got := h.reviews(); !slices.Equal(got, []string{"pr-8 #8 Reviewing"}) {
+	if got := h.reviews(); !slices.Equal(got, []string{"PR-8 #8 Reviewing"}) {
 		t.Fatalf("reviews %v, want #8 only: #7 is still skipped", got)
 	}
 }
@@ -292,12 +292,12 @@ func TestReviewOfASkippedPRKeepsTheSkipAndTheSkipHoldsAfterItEnds(t *testing.T) 
 	if !slices.Equal(h.skips(), []string{prURL7}) {
 		t.Fatalf("the review dropped the skip: %v", h.skips())
 	}
-	h.do(Request{Op: "close", Task: "pr-7"})
+	h.do(Request{Op: "close", Task: "PR-7"})
 	pushed := queuePR("acme/data", 7, 30)
 	pushed.Head = "h7-pushed"
 	h.gh.found = map[string][]github.PullRequest{"q": {pushed}}
 	h.s.fill(context.Background())
-	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Done"}) {
+	if got := h.reviews(); !slices.Equal(got, []string{"PR-7 #7 Done"}) {
 		t.Fatalf("reviews %v, want the skip to hold the PR after the review ended", got)
 	}
 }
@@ -326,14 +326,14 @@ func TestASkipLeavesADoneReviewAsItIs(t *testing.T) {
 	merged := openPR(7, "h1")
 	merged.State = "MERGED"
 	h.gh.setReview(merged)
-	h.waitStage("pr-7", lifecycle.Done)
+	h.waitStage("PR-7", lifecycle.Done)
 	h.gh.setReview(openPR(7, "h2"))
 
 	if r := h.skip(prURL7); r.Closed != "" {
 		t.Fatalf("skip = %+v, want no Task closed", r)
 	}
-	if v := h.task("pr-7"); v.Outcome != "merged" {
-		t.Fatalf("pr-7 = %+v, want the merged outcome kept", v)
+	if v := h.task("PR-7"); v.Outcome != "merged" {
+		t.Fatalf("PR-7 = %+v, want the merged outcome kept", v)
 	}
 }
 
@@ -361,13 +361,13 @@ func TestASecondSkipEndsATaskThatSurvivedACrashAfterTheStoreWrite(t *testing.T) 
 		rows, _ := h.s.d.Store.Skips()
 		h.s.skips = []github.Skip{github.Skip(rows[0])}
 	})
-	if got := h.reviews(); !slices.Equal(got, []string{"pr-7 #7 Reviewing"}) {
-		t.Fatalf("reviews %v, want pr-7 still open", got)
+	if got := h.reviews(); !slices.Equal(got, []string{"PR-7 #7 Reviewing"}) {
+		t.Fatalf("reviews %v, want PR-7 still open", got)
 	}
-	if r := h.skip(prURL7); r.Closed != "pr-7" || !r.Changed {
-		t.Fatalf("second skip = %+v, want pr-7 closed", r)
+	if r := h.skip(prURL7); r.Closed != "PR-7" || !r.Changed {
+		t.Fatalf("second skip = %+v, want PR-7 closed", r)
 	}
-	h.waitStage("pr-7", lifecycle.Done)
+	h.waitStage("PR-7", lifecycle.Done)
 }
 
 // skipped reports whether the user skipped the PR at url. GitHub URLs ignore case.

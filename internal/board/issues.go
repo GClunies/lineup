@@ -82,16 +82,15 @@ func (r issueRow) priorityText() string {
 }
 
 // issueRows makes the Issue rows: the Issues in Ready or Backlog that no Task
-// on the Board holds. An ID matches a Task's ID exactly, so LOCAL-5 in Linear
-// and local-5 in the Local Tracker are two Issues. backlog is the label that
-// puts a GitHub Issue in Backlog.
+// on the Board holds. An ID matches a Task's ID exactly, as each has its
+// canonical form. backlog is the label that puts a GitHub Issue in Backlog.
 func issueRows(lin []linear.Issue, loc []localissues.Issue, gh []github.OwnIssue, backlog string, tasks []scheduler.TaskView) []issueRow {
 	held := map[string]bool{}
 	for _, t := range tasks {
 		held[t.ID] = true
 	}
-	// status holds each local Issue's status by its ID, which a blocked_by
-	// item can write in any case.
+	// status holds each local Issue's status by its ID. A blocked_by item can
+	// write the ID in any case.
 	status := map[string]localissues.Status{}
 	for _, is := range loc {
 		status[is.ID()] = is.Status
@@ -110,12 +109,12 @@ func issueRows(lin []linear.Issue, loc []localissues.Issue, gh []github.OwnIssue
 		node := linear.Issue{ID: is.ID(), Identifier: is.ID()}
 		var open []string
 		for _, b := range is.BlockedBy {
-			id := strings.ToLower(b)
+			id := scheduler.CanonicalID(b)
 			st, local := status[id]
 			if closedLocal[st] {
 				continue
 			}
-			open = append(open, b)
+			open = append(open, id)
 			if local {
 				node.Blockers = append(node.Blockers, linear.Ref{ID: id})
 			}

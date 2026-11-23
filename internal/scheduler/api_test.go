@@ -93,12 +93,12 @@ func TestAskInAReviewIsRefusedOnlyAfterTheFindings(t *testing.T) {
 	h.gh.setReview(openPR(7, "abc"))
 	h.review(prURL7)
 	h.waitTab("claude reviewing")
-	eventually(t, "a live Worker", func() bool { return h.task("pr-7").Live })
-	if err := h.ask("pr-7", "post the nit?"); err != nil {
+	eventually(t, "a live Worker", func() bool { return h.task("PR-7").Live })
+	if err := h.ask("PR-7", "post the nit?"); err != nil {
 		t.Fatalf("ask before the findings: %v", err)
 	}
 	h.writeFindings(7, "abc")
-	if err := h.ask("pr-7", "post the nit?"); err == nil || err.Error() != "pr-7: contract output exists" {
+	if err := h.ask("PR-7", "post the nit?"); err == nil || err.Error() != "PR-7: contract output exists" {
 		t.Fatalf("ask after the findings = %v", err)
 	}
 }

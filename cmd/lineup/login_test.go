@@ -51,8 +51,9 @@ func TestLoginNamesTheTrackerForms(t *testing.T) {
 
 func TestLooksLikeIssueTakesEveryTrackersID(t *testing.T) {
 	for s, want := range map[string]bool{
-		"ENG-614": true, "owner/repo#12": true, "local-7": true, "LOCAL-7": true, "hod-3": true, "HOD-3": true,
-		"fix the flaky test": false, "local-x": false, "lineup#12": false, "o/r#0": false, "hod-0": false, "dex-3": false,
+		"ENG-614": true, "eng-614": true, "Eng-614": true, "dex-3": true, "owner/repo#12": true, "Owner/Repo#12": true,
+		"local-7": true, "LOCAL-7": true, "hod-3": true, "HOD-3": true, "Hod-3": true,
+		"fix the flaky test": false, "fix the flaky-2": false, "local-x": false, "lineup#12": false, "o/r#0": false, "hod-0": false, "eng-0": false,
 	} {
 		if got := looksLikeIssue(s, []string{"hod"}); got != want {
 			t.Errorf("looksLikeIssue(%q) = %v, want %v", s, got, want)

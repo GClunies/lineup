@@ -16,7 +16,7 @@ import (
 
 const local7 = "---\ntitle: Split billing ingest\nstatus: todo\n---\n\nThe ingest job does two things.\n"
 
-// promoteEnv is captureEnv with local-7 on the work view and selected.
+// promoteEnv is captureEnv with LOCAL-7 on the work view and selected.
 func promoteEnv(t *testing.T) (*workEnv, string) {
 	t.Helper()
 	e, store := captureEnv(t)
@@ -25,7 +25,7 @@ func promoteEnv(t *testing.T) (*workEnv, string) {
 		t.Fatal(err)
 	}
 	e.m = drain(e.m, e.m.loadMine())
-	e.m.sel = "local-7"
+	e.m.sel = "LOCAL-7"
 	return e, path
 }
 
@@ -44,7 +44,7 @@ func listRows(m Model) []string {
 func TestPPromotesALocalIssueToTheLinearDestination(t *testing.T) {
 	e, path := promoteEnv(t)
 	e.press("P")
-	if f := footerAt(e.m, 200); !strings.Contains(f, "promote local-7 to Linear") {
+	if f := footerAt(e.m, 200); !strings.Contains(f, "promote LOCAL-7 to Linear") {
 		t.Fatalf("footer %q, want the Promote named", f)
 	}
 	delete(e.wrote, "w1/my")
@@ -57,16 +57,16 @@ func TestPPromotesALocalIssueToTheLinearDestination(t *testing.T) {
 	b, _ := os.ReadFile(path)
 	is, err := localissues.Parse(b)
 	if err != nil || is.Status != localissues.Canceled || !strings.HasSuffix(string(b), "\n\nPromoted to ENG-900.\n") {
-		t.Fatalf("local-7 is\n%s(%v), want canceled with the Promoted line", b, err)
+		t.Fatalf("LOCAL-7 is\n%s(%v), want canceled with the Promoted line", b, err)
 	}
-	if f := footerAt(e.m, 200); !strings.Contains(f, "promoted local-7 to ENG-900") {
+	if f := footerAt(e.m, 200); !strings.Contains(f, "promoted LOCAL-7 to ENG-900") {
 		t.Fatalf("footer %q, want both Issues named", f)
 	}
 	if _, ok := e.wrote["w1/my"]; !ok {
 		t.Fatal("the Promote did not fetch the Issue rows again")
 	}
-	if slices.Contains(rowIDs(e.m.issues), "local-7") {
-		t.Fatalf("Issue rows %v, want local-7 gone", rowIDs(e.m.issues))
+	if slices.Contains(rowIDs(e.m.issues), "LOCAL-7") {
+		t.Fatalf("Issue rows %v, want LOCAL-7 gone", rowIDs(e.m.issues))
 	}
 	if got := savedRecent(t, e.m.opts.Destinations); !slices.Equal(got, []string{"acme / ENG / Billing"}) {
 		t.Fatalf("destinations.json %q, want the Destination saved", got)
@@ -97,9 +97,9 @@ func TestAFailedCreateLeavesTheLocalFileAsItIs(t *testing.T) {
 	e.api.createErr = errors.New("rate limited")
 	e.press("P", "bill", "enter")
 	if b, _ := os.ReadFile(path); string(b) != local7 {
-		t.Fatalf("local-7 changed after a failed create:\n%s", b)
+		t.Fatalf("LOCAL-7 changed after a failed create:\n%s", b)
 	}
-	if f := footerAt(e.m, 200); !strings.Contains(f, "promote local-7 to acme / ENG / Billing: rate limited") {
+	if f := footerAt(e.m, 200); !strings.Contains(f, "promote LOCAL-7 to acme / ENG / Billing: rate limited") {
 		t.Fatalf("footer %q, want the error", f)
 	}
 	if _, err := os.Stat(e.m.opts.Destinations); !errors.Is(err, os.ErrNotExist) {
@@ -118,11 +118,11 @@ func TestAFailedWriteAfterTheCreateNamesBothIssues(t *testing.T) {
 	if len(e.api.created) != 1 {
 		t.Fatalf("created %+v, want one Issue", e.api.created)
 	}
-	if f := footerAt(e.m, 300); !strings.Contains(f, "created ENG-900, but local-7 did not change: ") {
+	if f := footerAt(e.m, 300); !strings.Contains(f, "created ENG-900, but LOCAL-7 did not change: ") {
 		t.Fatalf("footer %q, want both Issues named", f)
 	}
 	if b, _ := os.ReadFile(path); string(b) != local7 {
-		t.Fatalf("local-7 is\n%s, want it unchanged", b)
+		t.Fatalf("LOCAL-7 is\n%s, want it unchanged", b)
 	}
 }
 

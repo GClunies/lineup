@@ -16,13 +16,13 @@ import (
 )
 
 // exampleBoard is the Board of the example in Issue 123, 95 columns wide.
-// ah-63 waits for the user because its Worker stopped, and ah-64 works.
+// AH-63 waits for the user because its Worker stopped, and AH-64 works.
 func exampleBoard() Model {
-	stopped := tv("ah-63", lifecycle.Working, "lineup", "setup and brainstorming session", "stopped", 24*time.Hour)
+	stopped := tv("AH-63", lifecycle.Working, "lineup", "setup and brainstorming session", "stopped", 24*time.Hour)
 	stopped.Flag, stopped.Group = "stopped", "Needs you"
 	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Started: 2, Tasks: []scheduler.TaskView{
 		stopped,
-		tv("ah-64", lifecycle.Working, "lineup", "Start a sessions to explore the ideas and UI here", "", 5*time.Hour),
+		tv("AH-64", lifecycle.Working, "lineup", "Start a sessions to explore the ideas and UI here", "", 5*time.Hour),
 	}})
 	m.width = 95
 	return m
@@ -36,7 +36,7 @@ func blockedBoard() Model {
 
 func TestEachRowShowsItsStatusWordInItsOwnColumn(t *testing.T) {
 	out := screen(exampleBoard())
-	stopped, working := lineOf(t, out, "ah-63"), lineOf(t, out, "ah-64")
+	stopped, working := lineOf(t, out, "AH-63"), lineOf(t, out, "AH-64")
 	at := cellOf(stopped, "stopped")
 	if at < 0 || cellOf(working, "working") != at {
 		t.Fatalf("each row must show its status word, both at one cell:\n%s", out)
@@ -98,13 +98,13 @@ func TestEveryStageAndFlagHasAStatusOfAtMostTwoWords(t *testing.T) {
 
 func TestANeedsYouRowShowsItsReasonAndNotItsNote(t *testing.T) {
 	v := exampleBoard().board
-	closed := tv("ah-65", lifecycle.InReview, "lineup", "Retry failed loads", "pr closed: #5226 closed without a merge", time.Hour)
+	closed := tv("AH-65", lifecycle.InReview, "lineup", "Retry failed loads", "pr closed: #5226 closed without a merge", time.Hour)
 	closed.Flag, closed.Group, closed.PRNumber = "pr closed", "Needs you", 5226
 	v.Tasks = append(v.Tasks, closed)
 	m := newModel(&fakeClient{}, v)
-	m.width, m.sel = 95, "ah-65"
+	m.width, m.sel = 95, "AH-65"
 	out := screen(m)
-	if l := lineOf(t, out, "ah-65"); !strings.Contains(l, "PR closed") || strings.Contains(l, "closed without") {
+	if l := lineOf(t, out, "AH-65"); !strings.Contains(l, "PR closed") || strings.Contains(l, "closed without") {
 		t.Errorf("the row must show PR closed and not the note: %q", l)
 	}
 	if f := footerAt(m, 95); !strings.Contains(f, "pr closed: #5226 closed without a merge") || strings.Count(f, "#5226") != 1 {
@@ -132,11 +132,11 @@ func strip(m Model, w int) []string { return strings.Split(footerAt(m, w), "\n")
 
 func TestTheStripShowsTheSelectedRowsTitleAndFacts(t *testing.T) {
 	m := exampleBoard()
-	m.sel = "ah-64"
+	m.sel = "AH-64"
 	want := []string{
 		" " + strings.Repeat("─", 94),
 		" Start a sessions to explore the ideas and UI here",
-		" ah-64 · Working · lineup",
+		" AH-64 · Working · lineup",
 	}
 	got := strip(m, 95)
 	if !slices.Equal(got[:len(got)-1], want) || !strings.HasSuffix(got[len(got)-1], "? all keys") {
@@ -199,7 +199,7 @@ func TestWithNoRowTheStripShowsTheRuleAndTheHints(t *testing.T) {
 func TestAStatusIsAWordWithAndWithoutColor(t *testing.T) {
 	before := lipgloss.ColorProfile()
 	t.Cleanup(func() { lipgloss.SetColorProfile(before) })
-	words := map[string]string{"ah-63": "stopped", "ah-64": "working", "ENG-900": "ready", "ENG-901": "blocked"}
+	words := map[string]string{"AH-63": "stopped", "AH-64": "working", "ENG-900": "ready", "ENG-901": "blocked"}
 	const pink = "38;2;243;163;181"
 	sgr := regexp.MustCompile(`\x1b\[([0-9;]*)m`)
 	for _, p := range []termenv.Profile{termenv.Ascii, termenv.TrueColor} {
@@ -222,7 +222,7 @@ func TestAStatusIsAWordWithAndWithoutColor(t *testing.T) {
 			if codes := sgr.FindAllStringSubmatch(l[:at], -1); len(codes) > 0 {
 				last = codes[len(codes)-1][1]
 			}
-			if alert := id == "ah-63" || id == "ENG-901"; strings.Contains(last, pink) != alert {
+			if alert := id == "AH-63" || id == "ENG-901"; strings.Contains(last, pink) != alert {
 				t.Errorf("the %s row shows %q in %q, want pink %v", id, word, last, alert)
 			}
 		}

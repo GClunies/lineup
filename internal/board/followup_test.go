@@ -54,7 +54,7 @@ func TestADoneTaskShowsInFollowUpUntilItsTrackerClosesTheIssue(t *testing.T) {
 		{"GitHub, then gone from the open Issues", "octo/sandbox#12", "open",
 			mineGitHubMsg{issues: []github.OwnIssue{ownIssue(12), ownIssue(14)}},
 			mineGitHubMsg{issues: []github.OwnIssue{ownIssue(14)}}},
-		{"Local, then done", "local-1", "in review",
+		{"Local, then done", "LOCAL-1", "in review",
 			mineLocalMsg{issues: []localissues.Issue{localIssue(1, localissues.InReview)}},
 			mineLocalMsg{issues: []localissues.Issue{localIssue(1, localissues.Done)}}},
 	} {
@@ -105,11 +105,11 @@ func TestEachOpenTrackerStateKeepsADoneTaskInFollowUp(t *testing.T) {
 		}
 	}
 	for st, want := range localOpen {
-		m := feed(shippedBoard(&fakeClient{}, "local-1"), mineLocalMsg{issues: []localissues.Issue{localIssue(1, st)}})
+		m := feed(shippedBoard(&fakeClient{}, "LOCAL-1"), mineLocalMsg{issues: []localissues.Issue{localIssue(1, st)}})
 		if inFollowUp(m) != want {
 			t.Errorf("local status %q: in Follow-up %v, want %v:\n%s", st, !want, want, screen(m))
 		}
-		if want && !strings.Contains(lineOf(t, screen(m), "local-1"), string(st)) {
+		if want && !strings.Contains(lineOf(t, screen(m), "LOCAL-1"), string(st)) {
 			t.Errorf("local status %q: the row lacks the status:\n%s", st, screen(m))
 		}
 	}

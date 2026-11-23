@@ -62,13 +62,13 @@ func TestEveryGroupWithAMatchOpensAndItsHeadingCountsTheMatches(t *testing.T) {
 	e := groupEnv(t)
 	e.press("/", "rename")
 	v := screen(e.m)
-	inOrder(t, v, "READY  1\n", "local-1", "DONE  1\n", "ENG-560")
+	inOrder(t, v, "READY  1\n", "LOCAL-1", "DONE  1\n", "ENG-560")
 	for _, gone := range []string{"ENG-9 ", "ENG-588", "WORKING", "BACKLOG"} {
 		if strings.Contains(v, gone) {
 			t.Fatalf("the filter shows %q:\n%s", gone, v)
 		}
 	}
-	if got := e.m.rowIDs(); !slices.Equal(got, []string{"local-1", "ENG-560"}) {
+	if got := e.m.rowIDs(); !slices.Equal(got, []string{"LOCAL-1", "ENG-560"}) {
 		t.Fatalf("j and k stop at %v, want just the two matches", got)
 	}
 }

@@ -170,9 +170,10 @@ const (
 	KindLocal  = "local"
 )
 
-// KindOf reads the Tracker from a typed Issue ID: local-7, and <prefix>-<n>
-// for each Repo prefix, such as hod-3, are local, owner/repo#12 is GitHub,
-// and anything else, such as ENG-614, is Linear. The checks ignore case.
+// KindOf reads the Tracker from a typed Issue ID: LOCAL-7, and <PREFIX>-<n>
+// for each Repo prefix, such as HOD-3, are local, owner/repo#12 is GitHub,
+// and anything else, such as ENG-614, is Linear. The checks ignore case, and
+// prefixes are in lower case.
 func KindOf(identifier string, prefixes []string) string {
 	id := strings.ToLower(identifier)
 	switch {
@@ -258,7 +259,7 @@ type Config interface {
 	// GitHub repository owner/name. ok is false when none is.
 	RepoForGitHub(slug string) (repo string, ok bool)
 	// RepoPrefix is the prefix of the Repo's Local Issue and ad hoc Task IDs,
-	// such as hod, or "" for local-<n> and ah-<n>.
+	// in lower case, such as hod, or "" for LOCAL-<n> and AH-<n>.
 	RepoPrefix(repo string) string
 }
 

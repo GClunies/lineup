@@ -127,7 +127,9 @@ func (s *Scheduler) watch(ctx context.Context, enc *json.Encoder) {
 }
 
 // Handle runs one request. The CLI and the Board reach it through the socket.
+// An ID in the request can come in any case.
 func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
+	req.Issue = CanonicalID(req.Issue)
 	switch req.Op {
 	case "ls":
 		var v BoardView
@@ -369,9 +371,9 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 				if err != nil {
 					return err
 				}
-				r.ID, r.Branch = id, strings.TrimSuffix(id+"-"+slug, "-")
+				r.ID, r.Branch = id, strings.TrimSuffix(strings.ToLower(id)+"-"+slug, "-")
 			} else {
-				r.ID = s.nextID("ah")
+				r.ID = s.nextID("AH")
 				r.Branch = "lineup/" + strings.ToLower(r.ID) + "-" + slug
 			}
 		}
@@ -414,7 +416,7 @@ func (s *Scheduler) nextID(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, n)
 }
 
-// nextLocalID is <prefix>-<n>, with n one more than the highest n of the
+// nextLocalID is <PREFIX>-<n>, with n one more than the highest n of the
 // prefix among the Local Issues and every Task in the store. Only the loop
 // calls it.
 func (s *Scheduler) nextLocalID(prefix string) (string, error) {
@@ -430,11 +432,11 @@ func (s *Scheduler) nextLocalID(prefix string) (string, error) {
 			hi = max(hi, n)
 		}
 	}
-	return fmt.Sprintf("%s-%d", prefix, hi+1), nil
+	return fmt.Sprintf("%s-%d", strings.ToUpper(prefix), hi+1), nil
 }
 
 // nextIssueID is the ID that the next Local Issue of the named Repo takes:
-// <prefix>-<n> for a Repo with a prefix, and local-<n> for any other Repo
+// <PREFIX>-<n> for a Repo with a prefix, and LOCAL-<n> for any other Repo
 // or no name.
 func (s *Scheduler) nextIssueID(name string) (string, error) {
 	prefix := KindLocal

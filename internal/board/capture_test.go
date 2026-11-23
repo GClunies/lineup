@@ -78,8 +78,8 @@ func TestNIntoAHiddenBacklogShowsItAndSelectsTheNewRow(t *testing.T) {
 	}
 	e.press("n", "Retry failed loads", "enter")
 	inOrder(t, ansi.Strip(e.m.View()), "BACKLOG  2\n", "ENG-20", "Retry failed loads")
-	if e.m.sel != "local-2" {
-		t.Fatalf("selection %q, want the new row local-2", e.m.sel)
+	if e.m.sel != "LOCAL-2" {
+		t.Fatalf("selection %q, want the new row LOCAL-2", e.m.sel)
 	}
 }
 
@@ -100,15 +100,15 @@ func TestNCapturesALocalIssueInTheBacklog(t *testing.T) {
 		t.Fatalf("footer %q, want the capture box with the local Destination", f)
 	}
 	e.press("enter")
-	is, err := store.Get("local-2")
+	is, err := store.Get("LOCAL-2")
 	if err != nil || is.Title != "Retry failed loads" || is.Status != localissues.Backlog {
-		t.Fatalf("local-2 is %+v (%v), want the title in the backlog", is, err)
+		t.Fatalf("LOCAL-2 is %+v (%v), want the title in the backlog", is, err)
 	}
-	if f := footerAt(e.m, 100); !strings.Contains(f, "added local-2") {
+	if f := footerAt(e.m, 100); !strings.Contains(f, "added LOCAL-2") {
 		t.Fatalf("footer %q, want the new Issue named", f)
 	}
 	body := strings.Split(ansi.Strip(e.m.View()), "\n")
-	inOrder(t, strings.Join(body[:len(body)-1], "\n"), "BACKLOG", "ENG-20", "local-2")
+	inOrder(t, strings.Join(body[:len(body)-1], "\n"), "BACKLOG", "ENG-20", "LOCAL-2")
 	if len(e.api.created) != 0 {
 		t.Fatalf("a local capture created Linear Issues: %+v", e.api.created)
 	}
@@ -133,7 +133,7 @@ func TestTabPicksALinearProjectAndTheIssueIsAssignedToTheUser(t *testing.T) {
 	if _, ok := e.wrote["w1/my"]; !ok {
 		t.Fatal("the capture did not fetch the Issue rows again")
 	}
-	if got := localIDs(t, store); !slices.Equal(got, []string{"local-1"}) {
+	if got := localIDs(t, store); !slices.Equal(got, []string{"LOCAL-1"}) {
 		t.Fatalf("local Issues %v, want no new file", got)
 	}
 }
@@ -192,7 +192,7 @@ func TestEscInTheListKeepsTheTitleAndEscInTheBoxCancels(t *testing.T) {
 	if f := footerAt(e.m, 200); !strings.Contains(f, "n new Issue") {
 		t.Fatalf("footer %q, want the key hints after an empty title", f)
 	}
-	if got := localIDs(t, store); !slices.Equal(got, []string{"local-1"}) || len(e.api.created) != 0 {
+	if got := localIDs(t, store); !slices.Equal(got, []string{"LOCAL-1"}) || len(e.api.created) != 0 {
 		t.Fatalf("local Issues %v and Linear Issues %+v, want no new Issue", got, e.api.created)
 	}
 }
@@ -218,8 +218,8 @@ func TestTheCaptureBoxTakesEveryKeyAsText(t *testing.T) {
 		t.Fatalf("footer %q, want every key as text", f)
 	}
 	e.press("enter")
-	if is, err := store.Get("local-2"); err != nil || is.Title != "123qsx" {
-		t.Fatalf("local-2 is %+v (%v), want the typed title", is, err)
+	if is, err := store.Get("LOCAL-2"); err != nil || is.Title != "123qsx" {
+		t.Fatalf("LOCAL-2 is %+v (%v), want the typed title", is, err)
 	}
 }
 
@@ -230,7 +230,7 @@ func TestAFailedLinearCreateLeavesNoLocalFileAndNamesTheError(t *testing.T) {
 	if f := footerAt(e.m, 200); !strings.Contains(f, "add Issue at acme / ENG / Billing: rate limited") {
 		t.Fatalf("footer %q, want the error", f)
 	}
-	if got := localIDs(t, store); !slices.Equal(got, []string{"local-1"}) {
+	if got := localIDs(t, store); !slices.Equal(got, []string{"LOCAL-1"}) {
 		t.Fatalf("local Issues %v, want no new file", got)
 	}
 	if _, err := os.Stat(e.m.opts.Destinations); !errors.Is(err, os.ErrNotExist) {

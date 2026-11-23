@@ -967,7 +967,7 @@ roots = ["~/repos"]
 tracker = "local"
 prefix = "hod"
 [repos."crexi/web"]
-prefix = "web-2"
+prefix = "WEB-2"
 `)
 	for repo, want := range map[string]string{
 		"~/repos/gclunies/hod":                    "hod",

@@ -86,24 +86,17 @@ func TestEachStateLandsInItsGroupOrInNone(t *testing.T) {
 	}
 }
 
-// A Task's ID hides only the Issue with that exact ID: a Linear ID is in upper
-// case and a local ID in lower case.
-func TestATaskHidesOnlyTheIssueWithItsExactID(t *testing.T) {
-	for _, c := range []struct{ task, kept string }{{"local-5", "LOCAL-5"}, {"LOCAL-5", "local-5"}} {
-		v := scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{tv(c.task, lifecycle.Working, "data", "The Task", "", time.Minute)}}
-		m := feed(newModel(&fakeClient{}, v),
-			mineIssuesMsg{ws: acme, issues: []linear.Issue{mineIssue("LOCAL-5", "unstarted", 0)}, live: true},
-			mineLocalMsg{issues: []localissues.Issue{localIssue(5, localissues.Todo)}})
-		if got := rowIDs(m.issues); !slices.Equal(got, []string{c.kept}) {
-			t.Errorf("Task %s: Issue rows %v, want only %s", c.task, got, c.kept)
-		}
-		out := bodyOf(m)
-		if n := strings.Count(out, c.task); n != 1 {
-			t.Errorf("Task %s shows %d times, want once as the Task row:\n%s", c.task, n, out)
-		}
-		if !strings.Contains(out, c.kept+" ") {
-			t.Errorf("Task %s hid %s:\n%s", c.task, c.kept, out)
-		}
+// A Task's ID hides the Issue row with that ID, and no other row.
+func TestATaskHidesOnlyTheIssueWithItsID(t *testing.T) {
+	v := scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{tv("LOCAL-5", lifecycle.Working, "data", "The Task", "", time.Minute)}}
+	m := feed(newModel(&fakeClient{}, v),
+		mineIssuesMsg{ws: acme, issues: []linear.Issue{mineIssue("ENG-5", "unstarted", 0)}, live: true},
+		mineLocalMsg{issues: []localissues.Issue{localIssue(5, localissues.Todo), localIssue(6, localissues.Todo)}})
+	if got := rowIDs(m.issues); !slices.Equal(got, []string{"ENG-5", "LOCAL-6"}) {
+		t.Errorf("Issue rows %v, want ENG-5 and LOCAL-6", got)
+	}
+	if out := bodyOf(m); strings.Count(out, "LOCAL-5") != 1 {
+		t.Errorf("LOCAL-5 shows %d times, want once as the Task row:\n%s", strings.Count(out, "LOCAL-5"), out)
 	}
 }
 
@@ -124,21 +117,21 @@ func TestIssueRowsSortUnblockedThenPriorityThenLevelThenID(t *testing.T) {
 		{"a local Issue has no priority",
 			[]linear.Issue{mineIssue("ENG-7", "unstarted", 4), mineIssue("ENG-8", "unstarted", 0)},
 			[]localissues.Issue{localIssue(1, localissues.Todo)},
-			[]string{"ENG-7", "ENG-8", "local-1"}},
+			[]string{"ENG-7", "ENG-8", "LOCAL-1"}},
 		{"a lower dependency level first, against the ID order",
 			[]linear.Issue{mineIssue("ENG-9", "unstarted", 0, "ENG-10"), mineIssue("ENG-10", "unstarted", 0, "ENG-11"),
 				mineIssue("ENG-11", "started", 0)}, nil,
 			[]string{"ENG-10", "ENG-9"}},
 		{"local blockers set the level of local Issues",
-			nil, []localissues.Issue{localIssue(1, localissues.Todo, "local-2"), localIssue(2, localissues.Todo, "local-3"), localIssue(3, localissues.Started)},
-			[]string{"local-2", "local-1"}},
+			nil, []localissues.Issue{localIssue(1, localissues.Todo, "LOCAL-2"), localIssue(2, localissues.Todo, "LOCAL-3"), localIssue(3, localissues.Started)},
+			[]string{"LOCAL-2", "LOCAL-1"}},
 		{"natural ID order last",
 			[]linear.Issue{mineIssue("ENG-10", "unstarted", 2), mineIssue("ENG-9", "unstarted", 2), mineIssue("APP-30", "unstarted", 2)}, nil,
 			[]string{"APP-30", "ENG-9", "ENG-10"}},
 		{"Backlog before Ready",
 			[]linear.Issue{mineIssue("ENG-1", "backlog", 1), mineIssue("ENG-2", "triage", 1), mineIssue("ENG-3", "unstarted", 4, "ENG-1")},
 			[]localissues.Issue{localIssue(1, localissues.Backlog), localIssue(2, localissues.Todo)},
-			[]string{"ENG-1", "ENG-2", "local-1", "local-2", "ENG-3"}},
+			[]string{"ENG-1", "ENG-2", "LOCAL-1", "LOCAL-2", "ENG-3"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := rowIDs(issueRows(c.lin, c.loc, nil, "", nil)); !slices.Equal(got, c.want) {
@@ -228,18 +221,19 @@ func TestUnblockedNeedsEveryBlockerDoneOrCanceled(t *testing.T) {
 		want      string
 	}{
 		{"no blockers", nil, ""},
-		{"a done blocker", []string{"local-1"}, "unblocked"},
-		{"a canceled blocker", []string{"local-2"}, "unblocked"},
-		{"a blocker ID in upper case", []string{"LOCAL-1"}, "unblocked"},
-		{"done and canceled blockers", []string{"local-1", "local-2"}, "unblocked"},
-		{"a done and an open blocker", []string{"local-1", "local-3"}, "blocked by local-3"},
-		{"a blocker with no file", []string{"local-9"}, "blocked by local-9"},
+		{"a done blocker", []string{"LOCAL-1"}, "unblocked"},
+		{"a canceled blocker", []string{"LOCAL-2"}, "unblocked"},
+		{"a blocker ID in lower case", []string{"local-1"}, "unblocked"},
+		{"an open blocker ID in lower case", []string{"local-3"}, "blocked by LOCAL-3"},
+		{"done and canceled blockers", []string{"LOCAL-1", "LOCAL-2"}, "unblocked"},
+		{"a done and an open blocker", []string{"LOCAL-1", "LOCAL-3"}, "blocked by LOCAL-3"},
+		{"a blocker with no file", []string{"LOCAL-9"}, "blocked by LOCAL-9"},
 		{"a Linear blocker", []string{"ENG-5"}, "blocked by ENG-5"},
 	} {
 		t.Run("local "+c.name, func(t *testing.T) {
 			rows := issueRows(nil, append([]localissues.Issue{localIssue(7, localissues.Todo, c.blockedBy...)}, others...), nil, "", nil)
 			if len(rows) != 1 || rows[0].note() != c.want {
-				t.Fatalf("rows %+v, want local-7 with note %q", rows, c.want)
+				t.Fatalf("rows %+v, want LOCAL-7 with note %q", rows, c.want)
 			}
 		})
 	}
@@ -264,7 +258,7 @@ func TestUnblockedNeedsEveryBlockerDoneOrCanceled(t *testing.T) {
 }
 
 // mineEnv is a tracker env whose work view has Issue rows: two Linear Issues
-// in Ready and Backlog, and local-1 in Ready.
+// in Ready and Backlog, and LOCAL-1 in Ready.
 func mineEnv(t *testing.T) (*workEnv, localissues.Store) {
 	t.Helper()
 	e := newWorkEnv(t, acme)
@@ -283,7 +277,7 @@ func TestTheWorkViewShowsReadyAndBacklogInTheirPlaces(t *testing.T) {
 	e.m = openAll(feed(e.m, boardMsg(v)))
 	e.m.width = 200
 	out := ansi.Strip(e.m.View())
-	inOrder(t, out, "NEEDS YOU", "BACKLOG", "ENG-20", "READY", "ENG-9", "local-1", "QUEUED", "WORKING", "WAITING", "DONE")
+	inOrder(t, out, "NEEDS YOU", "BACKLOG", "ENG-20", "READY", "ENG-9", "LOCAL-1", "QUEUED", "WORKING", "WAITING", "DONE")
 }
 
 func TestJAndKMoveAcrossTaskAndIssueRows(t *testing.T) {
@@ -295,7 +289,7 @@ func TestJAndKMoveAcrossTaskAndIssueRows(t *testing.T) {
 		seen = append(seen, e.m.sel)
 		e.press("j")
 	}
-	want := []string{"ENG-588", "ENG-590", "group:Backlog", "ENG-20", "group:Ready", "ENG-9", "local-1", "group:Queued", "ENG-601",
+	want := []string{"ENG-588", "ENG-590", "group:Backlog", "ENG-20", "group:Ready", "ENG-9", "LOCAL-1", "group:Queued", "ENG-601",
 		"group:Working", "WEB-12", "ENG-592", "group:Waiting", "ENG-571", "group:Done", "ENG-560", "ENG-560", "ENG-560"}
 	if !slices.Equal(seen, want) {
 		t.Fatalf("j moved through %v, want %v", seen, want)
@@ -334,20 +328,20 @@ func TestSOnALinearIssueRowAddsItAsLinearThenStarts(t *testing.T) {
 
 func TestSOnALocalIssueRowWithNoRepoAsksAndWritesTheRepoBack(t *testing.T) {
 	e, store := mineEnv(t)
-	e.sched.errs["add"] = errors.New(noMapping + " for local-1: pass a repo")
-	e.m.sel = "local-1"
+	e.sched.errs["add"] = errors.New(noMapping + " for LOCAL-1: pass a repo")
+	e.m.sel = "LOCAL-1"
 	e.press("s", "enter")
-	if v := e.m.View(); !strings.Contains(v, "Which Repo for local-1?") {
+	if v := e.m.View(); !strings.Contains(v, "Which Repo for LOCAL-1?") {
 		t.Fatalf("no Repo picker on the work view:\n%s", v)
 	}
 	e.press("enter")
 	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "add", "start"}) {
 		t.Fatalf("ops %v, want add, add with the Repo, then start", got)
 	}
-	if add := lastAdd(t, e); add.Issue != "local-1" || add.Kind != scheduler.KindLocal || add.Repo != "/Users/g/repos/acme/data" {
-		t.Fatalf("add %+v, want local-1 with Kind local and the picked Repo", add)
+	if add := lastAdd(t, e); add.Issue != "LOCAL-1" || add.Kind != scheduler.KindLocal || add.Repo != "/Users/g/repos/acme/data" {
+		t.Fatalf("add %+v, want LOCAL-1 with Kind local and the picked Repo", add)
 	}
-	if is, _ := store.Get("local-1"); is.Repo != "/Users/g/repos/acme/data" {
+	if is, _ := store.Get("LOCAL-1"); is.Repo != "/Users/g/repos/acme/data" {
 		t.Fatalf("the Repo was not written back: %+v", is)
 	}
 }
@@ -360,7 +354,7 @@ func TestOOnAnIssueRowOpensTheIssue(t *testing.T) {
 	if !slices.Equal(e.opened, []string{"https://linear.app/x/ENG-9"}) {
 		t.Fatalf("opened %v, want ENG-9 in the browser", e.opened)
 	}
-	e.m.sel = "local-1"
+	e.m.sel = "LOCAL-1"
 	_, cmd := press(e.m, "o")
 	// Bubble Tea keeps the *exec.Cmd in unexported fields, so reflect reads its Args.
 	c := reflect.ValueOf(cmd()).FieldByName("cmd").Elem().Elem().Field(0).Elem()
@@ -398,7 +392,7 @@ func TestIssueRowsPaintFromTheCacheThenLive(t *testing.T) {
 func TestAFailedFetchKeepsTheRowsAndNamesTheWorkspace(t *testing.T) {
 	e, _ := mineEnv(t)
 	e.m = feed(e.m, mineIssuesMsg{ws: acme, live: true, err: errors.New("timeout")})
-	if got := rowIDs(e.m.issues); !slices.Equal(got, []string{"ENG-20", "ENG-9", "local-1"}) {
+	if got := rowIDs(e.m.issues); !slices.Equal(got, []string{"ENG-20", "ENG-9", "LOCAL-1"}) {
 		t.Fatalf("rows %v, want the rows of the last fetch", got)
 	}
 	if f := footerAt(e.m, 100); !strings.Contains(f, "my Issues in acme: timeout") {
@@ -428,7 +422,7 @@ func TestAGoodFetchKeepsOtherMessages(t *testing.T) {
 func TestASignedOutWorkspaceLosesItsRows(t *testing.T) {
 	e, _ := mineEnv(t)
 	e.m = feed(e.m, mineWorkspacesMsg{})
-	if got := rowIDs(e.m.issues); !slices.Equal(got, []string{"local-1"}) {
+	if got := rowIDs(e.m.issues); !slices.Equal(got, []string{"LOCAL-1"}) {
 		t.Fatalf("rows %v, want only the local Issue", got)
 	}
 }
@@ -439,25 +433,25 @@ func TestTheMinuteTickFetchesTheRowsAgain(t *testing.T) {
 	_, cmd := e.m.Update(mineTick{})
 	load := cmd().(tea.BatchMsg)[0]
 	e.m = drain(e.m, load)
-	if got := rowIDs(e.m.issues); !slices.Equal(got, []string{"ENG-30", "local-1"}) {
-		t.Fatalf("rows after the tick %v, want ENG-30 and local-1", got)
+	if got := rowIDs(e.m.issues); !slices.Equal(got, []string{"ENG-30", "LOCAL-1"}) {
+		t.Fatalf("rows after the tick %v, want ENG-30 and LOCAL-1", got)
 	}
 }
 
 // A prefixed Issue is a row of its own, and its blockers read by ID, so
-// hod-1 and local-1 are two Issues.
+// HOD-1 and LOCAL-1 are two Issues.
 func TestAPrefixedLocalIssueBlocksByItsOwnID(t *testing.T) {
 	hod1 := localIssue(1, localissues.Done)
 	hod1.Prefix = "hod"
 	hod2 := localIssue(2, localissues.Todo, "HOD-1")
 	hod2.Prefix = "hod"
-	waits := localIssue(5, localissues.Todo, "local-1", "hod-1")
+	waits := localIssue(5, localissues.Todo, "LOCAL-1", "HOD-1")
 	rows := issueRows(nil, []localissues.Issue{localIssue(1, localissues.Started), hod1, hod2, waits}, nil, "", nil)
 	notes := map[string]string{}
 	for _, r := range rows {
 		notes[r.ID] = r.note()
 	}
-	if want := map[string]string{"hod-2": "unblocked", "local-5": "blocked by local-1"}; !maps.Equal(notes, want) {
+	if want := map[string]string{"HOD-2": "unblocked", "LOCAL-5": "blocked by LOCAL-1"}; !maps.Equal(notes, want) {
 		t.Fatalf("notes = %v, want %v", notes, want)
 	}
 }

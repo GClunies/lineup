@@ -118,11 +118,12 @@ func cmdDecide(c scheduler.Client, args []string, out io.Writer) error {
 		return printDecisions(ds, asJSON, out)
 	}
 	id, choiceID, text := fs.Arg(0), fs.Arg(1), fs.Arg(2)
-	i := slices.IndexFunc(ds, func(d decision) bool { return d.ID == id })
+	i := slices.IndexFunc(ds, func(d decision) bool { return strings.EqualFold(d.ID, id) })
 	if i < 0 {
-		return fmt.Errorf("%s does not need you", id)
+		return fmt.Errorf("%s does not need you", scheduler.CanonicalID(id))
 	}
 	d := ds[i]
+	id = d.ID
 	j := slices.IndexFunc(d.Choices, func(ch choice) bool { return ch.ID == choiceID })
 	if j < 0 {
 		var ids []string

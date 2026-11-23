@@ -217,7 +217,7 @@ rex.action{
     end
     local id, reason = rex.ui.pick{
       title = "Start which Task?",
-      placeholder = "Filter Queued Tasks, or type an Issue: ENG-614, owner/repo#12, local-7",
+      placeholder = "Filter Queued Tasks, or type an Issue: ENG-614, owner/repo#12, LOCAL-7",
       items = items,
       allow_other = true,
     }

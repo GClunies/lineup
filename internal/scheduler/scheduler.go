@@ -145,10 +145,33 @@ func New(d Deps) (*Scheduler, error) {
 		if err := json.Unmarshal(data, r); err != nil {
 			return nil, fmt.Errorf("task %s: %w", id, err)
 		}
-		s.recs[id] = r
-		s.board.Tasks[id] = &r.Task
+		if err := s.canonicalize(id, r); err != nil {
+			return nil, fmt.Errorf("task %s: %w", id, err)
+		}
+		s.recs[r.ID] = r
+		s.board.Tasks[r.ID] = &r.Task
 	}
 	return s, nil
+}
+
+// canonicalize gives a Record stored under an ID in lower case, such as
+// ah-65 or local-7, the canonical ID, and its Issue the canonical
+// Identifier. It moves the Record's rows and events to the new ID in one
+// write, so a second start finds nothing to change.
+func (s *Scheduler) canonicalize(id string, r *Record) error {
+	canon := CanonicalID(id)
+	if canon == id {
+		return nil
+	}
+	r.ID = canon
+	if r.Issue != nil {
+		r.Issue.Identifier = CanonicalID(r.Issue.Identifier)
+	}
+	data, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	return s.d.Store.Rename(id, canon, data)
 }
 
 // Run recovers lost Workers, then serves until ctx ends.
