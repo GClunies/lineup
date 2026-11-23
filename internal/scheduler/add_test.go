@@ -21,8 +21,8 @@ func TestAnAddStartsTheTask(t *testing.T) {
 		tracker bool
 	}{
 		{"a Linear Issue", Request{Op: "add", Issue: "ENG-1"}, "ENG-1", "wt ada/eng-1-billing", true},
-		{"a GitHub Issue", Request{Op: "add", Issue: "acme/data#12", Kind: KindGitHub}, "acme/data#12", "wt ada/eng-1-billing", true},
-		{"an ad hoc Task", Request{Op: "add", Repo: "web", Text: "Fix map tooltip"}, "ah-1", "wt lineup/ah-1-fix-map-tooltip", false},
+		{"a GitHub Issue", Request{Op: "add", Issue: "acme/data#12", Kind: KindGitHub, Repo: "issues"}, "acme/data#12", "wt ada/eng-1-billing", true},
+		{"an ad hoc Task", Request{Op: "add", Repo: "web", Text: "Fix map tooltip"}, "AH-1", "wt lineup/ah-1-fix-map-tooltip", false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)

@@ -27,27 +27,27 @@ func seedKept(id string, age time.Duration, until time.Time) func(*store.Store) 
 
 func TestAStoppedSchedulerRemovesAWorktreeWhoseDaysEndedAtItsStart(t *testing.T) {
 	seed := func(st *store.Store) {
-		seedKept("ENG-due", time.Hour, time.Now().Add(-time.Hour))(st)
-		seedKept("ENG-kept", time.Hour, time.Now().Add(24*time.Hour))(st)
+		seedKept("ENG-DUE", time.Hour, time.Now().Add(-time.Hour))(st)
+		seedKept("ENG-KEPT", time.Hour, time.Now().Add(24*time.Hour))(st)
 	}
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, func(d *Deps) { d.PollInterval = time.Hour })
-	eventually(t, "the due worktree removed", func() bool { return h.task("ENG-due").Worktree == "" })
+	eventually(t, "the due worktree removed", func() bool { return h.task("ENG-DUE").Worktree == "" })
 	time.Sleep(100 * time.Millisecond)
-	if got := h.worktreesRemoved(); !slices.Equal(got, []string{"b-ENG-due"}) {
+	if got := h.worktreesRemoved(); !slices.Equal(got, []string{"b-ENG-DUE"}) {
 		t.Fatalf("removed %v, want only the worktree whose days ended", got)
 	}
-	if v := h.task("ENG-kept"); v.Worktree == "" || !strings.Contains(v.Note, "worktree until ") {
+	if v := h.task("ENG-KEPT"); v.Worktree == "" || !strings.Contains(v.Note, "worktree until ") {
 		t.Fatalf("kept task = %+v, want its worktree and the date it goes", v)
 	}
 }
 
 func TestAKeptWorktreeKeepsItsTaskOnTheBoardPastTheAgeOff(t *testing.T) {
 	seed := func(st *store.Store) {
-		seedKept("ENG-kept", 8*24*time.Hour, time.Now().Add(24*time.Hour))(st)
-		seedDone("ENG-bare", 8*24*time.Hour, false)(st)
+		seedKept("ENG-KEPT", 8*24*time.Hour, time.Now().Add(24*time.Hour))(st)
+		seedDone("ENG-BARE", 8*24*time.Hour, false)(st)
 	}
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed)
-	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"ENG-kept"}) {
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"ENG-KEPT"}) {
 		t.Fatalf("board = %v, want only the Task that keeps its worktree", ids)
 	}
 }
@@ -262,13 +262,13 @@ func (f *fakeRex) closedWindow(window string) bool {
 // Rex lost the tab while the Scheduler was down, so the user did not close it,
 // and the worktree stays for its days.
 func TestATabThatRexLostWhileTheTaskWaitedKeepsTheWorktree(t *testing.T) {
-	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedMergedTab("ENG-lost", "working", true), closeMerged(newClock(), 7*24*time.Hour))
-	eventually(t, "the lost tab forgotten", func() bool { return !h.task("ENG-lost").Tab })
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedMergedTab("ENG-LOST", "working", true), closeMerged(newClock(), 7*24*time.Hour))
+	eventually(t, "the lost tab forgotten", func() bool { return !h.task("ENG-LOST").Tab })
 	time.Sleep(100 * time.Millisecond)
 	if got := h.worktreesRemoved(); len(got) != 0 {
 		t.Fatalf("removed %v, want the worktree kept", got)
 	}
-	if v := h.task("ENG-lost"); v.Note != "merged · worktree until Nov 14" {
+	if v := h.task("ENG-LOST"); v.Note != "merged · worktree until Nov 14" {
 		t.Fatalf("note = %q, want the worktree kept until Nov 14", v.Note)
 	}
 }
@@ -276,25 +276,25 @@ func TestATabThatRexLostWhileTheTaskWaitedKeepsTheWorktree(t *testing.T) {
 // Rex restored the tab as an idle shell, so lineup's Worker is gone. The
 // shell closes, and the worktree stays for its days.
 func TestAClosingTabThatRexRestoredAsAShellClosesAndKeepsTheWorktree(t *testing.T) {
-	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedMergedTab("ENG-shell", "working", true),
-		restoredTabs("ENG-shell"), closeMerged(newClock(), 7*24*time.Hour))
-	eventually(t, "the restored shell closed", func() bool { return h.rex.closedWindow("window:ENG-shell") })
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedMergedTab("ENG-SHELL", "working", true),
+		restoredTabs("ENG-SHELL"), closeMerged(newClock(), 7*24*time.Hour))
+	eventually(t, "the restored shell closed", func() bool { return h.rex.closedWindow("window:ENG-SHELL") })
 	time.Sleep(100 * time.Millisecond)
 	if got := h.worktreesRemoved(); len(got) != 0 {
 		t.Fatalf("removed %v, want the worktree kept", got)
 	}
-	if v := h.task("ENG-shell"); v.Tab || v.Worktree == "" || v.Note != "merged · worktree until Nov 14" {
+	if v := h.task("ENG-SHELL"); v.Tab || v.Worktree == "" || v.Note != "merged · worktree until Nov 14" {
 		t.Fatalf("task = %+v, want no tab and the worktree kept until Nov 14", v)
 	}
 }
 
 // The Worker went idle while the Scheduler was down, so its tab closes at start.
 func TestAClosingTabWhoseWorkerWentIdleWhileTheSchedulerWasDownCloses(t *testing.T) {
-	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedMergedTab("ENG-idle", "working", true),
-		liveWorker("ENG-idle", "idle"), closeMerged(newClock(), 7*24*time.Hour))
-	eventually(t, "the idle Worker's tab closed", func() bool { return h.rex.closedWindow("window:ENG-idle") })
-	eventually(t, "the closed tab to leave the Task", func() bool { return !h.task("ENG-idle").Tab })
-	if v := h.task("ENG-idle"); v.Worktree == "" || v.Note != "merged · worktree until Nov 14" {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedMergedTab("ENG-IDLE", "working", true),
+		liveWorker("ENG-IDLE", "idle"), closeMerged(newClock(), 7*24*time.Hour))
+	eventually(t, "the idle Worker's tab closed", func() bool { return h.rex.closedWindow("window:ENG-IDLE") })
+	eventually(t, "the closed tab to leave the Task", func() bool { return !h.task("ENG-IDLE").Tab })
+	if v := h.task("ENG-IDLE"); v.Worktree == "" || v.Note != "merged · worktree until Nov 14" {
 		t.Fatalf("task = %+v, want the worktree kept until Nov 14", v)
 	}
 }
@@ -302,13 +302,13 @@ func TestAClosingTabWhoseWorkerWentIdleWhileTheSchedulerWasDownCloses(t *testing
 // A Done Task that lineup does not wait to close keeps a restored shell for
 // the user, with close_tab on too.
 func TestADoneTaskThatIsNotClosingKeepsItsRestoredShell(t *testing.T) {
-	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedMergedTab("ENG-kept", "idle", false),
-		restoredTabs("ENG-kept"), closeMerged(newClock(), 7*24*time.Hour))
-	h.still("ENG-kept", lifecycle.Done)
-	if h.rex.closedWindow("window:ENG-kept") {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedMergedTab("ENG-KEPT", "idle", false),
+		restoredTabs("ENG-KEPT"), closeMerged(newClock(), 7*24*time.Hour))
+	h.still("ENG-KEPT", lifecycle.Done)
+	if h.rex.closedWindow("window:ENG-KEPT") {
 		t.Fatal("lineup closed the tab of a Done Task that it does not wait to close")
 	}
-	if v := h.task("ENG-kept"); !v.Tab || v.Worktree == "" {
+	if v := h.task("ENG-KEPT"); !v.Tab || v.Worktree == "" {
 		t.Fatalf("task = %+v, want its tab and worktree kept", v)
 	}
 }
@@ -318,16 +318,16 @@ func TestAMergedReviewIgnoresCloseTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, closeMerged(newClock(), 7*24*time.Hour))
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
-	h.waitTabRecorded("claude reviewing", "pr-7")
+	h.waitTabRecorded("claude reviewing", "PR-7")
 	merged := openPR(7, "h1")
 	merged.State = "MERGED"
 	h.gh.setReview(merged)
-	h.waitStage("pr-7", lifecycle.Done)
+	h.waitStage("PR-7", lifecycle.Done)
 	eventually(t, "the review worktree removed", func() bool {
 		return slices.Equal(h.reviewsRemoved(), []string{"/repos/acme/data.review-pr-7"})
 	})
-	eventually(t, "the review tab closed", func() bool { return !h.task("pr-7").Tab })
-	if v := h.task("pr-7"); v.Note != "#7 merged" || v.Worktree != "" {
+	eventually(t, "the review tab closed", func() bool { return !h.task("PR-7").Tab })
+	if v := h.task("PR-7"); v.Note != "#7 merged" || v.Worktree != "" {
 		t.Fatalf("task = %+v, want the review ended as before", v)
 	}
 }

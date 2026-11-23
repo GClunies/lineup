@@ -335,7 +335,7 @@ type issueTracker interface {
 
 // trackerMux is the Scheduler's Tracker port. It routes each call to the
 // Tracker that the Issue's Kind names. prefixes are the Repo prefixes, so
-// that an ID such as hod-3 reads as a local Issue.
+// that an ID such as HOD-3 reads as a local Issue.
 type trackerMux struct {
 	kinds    map[string]issueTracker
 	prefixes []string
@@ -526,7 +526,7 @@ func (l localTracker) Lookup(_ context.Context, identifier string) (scheduler.Is
 	if err != nil {
 		return scheduler.Issue{}, err
 	}
-	return scheduler.Issue{Identifier: is.ID(), Title: is.Title, URL: "file://" + filepath.Join(l.s.Dir, is.ID()+".md"),
+	return scheduler.Issue{Identifier: is.ID(), Title: is.Title, URL: "file://" + filepath.Join(l.s.Dir, is.File()),
 		BranchName: is.Branch(), RepoHint: is.Repo}, nil
 }
 
@@ -596,7 +596,7 @@ func (p configPort) RepoForIssue(is scheduler.Issue) (string, error) {
 	return "", noRepo
 }
 
-func (p configPort) RepoTrackers(repo string) []string { return p.cfg.RepoTrackers(repo) }
+func (p configPort) RepoTracker(repo string) (string, string) { return p.cfg.RepoTracker(repo) }
 
 func (p configPort) RepoPrefix(repo string) string { return p.cfg.RepoPrefix(repo) }
 

@@ -34,7 +34,7 @@ func withClosed(m Model, groups ...string) Model {
 func openAll(m Model) Model { return withClosed(m) }
 
 // groupEnv is mineEnv with the fixture Board. The work view holds ENG-20 in
-// Backlog and ENG-9 and local-1 in Ready.
+// Backlog and ENG-9 and LOCAL-1 in Ready.
 func groupEnv(t *testing.T) *workEnv {
 	t.Helper()
 	e, _ := mineEnv(t)
@@ -97,7 +97,7 @@ func TestEachHeadingIsTheGroupNameInSentenceCaseAndItsCount(t *testing.T) {
 func TestBacklogAndDoneStartClosedWithTheirCounts(t *testing.T) {
 	e := groupEnv(t)
 	out := screen(e.m)
-	for _, want := range []string{"Needs you 2", "Backlog 1 …", "Ready 2", "ENG-9", "local-1", "Working 3", "Waiting 1", "Done 1 …"} {
+	for _, want := range []string{"Needs you 2", "Backlog 1 …", "Ready 2", "ENG-9", "LOCAL-1", "Working 3", "Waiting 1", "Done 1 …"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("screen lacks %q:\n%s", want, out)
 		}
@@ -145,7 +145,7 @@ func TestJAndKStopOnEachHeadingExceptNeedsYouAndSkipClosedRows(t *testing.T) {
 		seen = append(seen, e.m.sel)
 		e.press("j")
 	}
-	want := []string{"ENG-588", "ENG-590", "group:Backlog", "group:Ready", "ENG-9", "local-1", "group:Working", "ENG-601",
+	want := []string{"ENG-588", "ENG-590", "group:Backlog", "group:Ready", "ENG-9", "LOCAL-1", "group:Working", "ENG-601",
 		"WEB-12", "ENG-592", "group:Waiting", "ENG-571", "group:Done", "group:Done", "group:Done", "group:Done"}
 	if !slices.Equal(seen, want) {
 		t.Fatalf("j moved through %v, want %v", seen, want)
@@ -235,7 +235,7 @@ func TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce(t *testing.T) {
 			if st == localissues.Todo {
 				g = groupReady
 			}
-			inGroup[g] = append(inGroup[g], fmt.Sprintf("local-%d", i+1))
+			inGroup[g] = append(inGroup[g], fmt.Sprintf("LOCAL-%d", i+1))
 		}
 		all := config.DefaultBoard().Order
 		order := rapid.SliceOfNDistinct(rapid.SampledFrom(all), len(all), len(all), func(g string) string { return g }).Draw(t, "order")

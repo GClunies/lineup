@@ -1,6 +1,8 @@
 // Package localissues is the Local Tracker: one folder of Markdown Issues,
 // each a file <prefix>-<n>.md with a frontmatter of title, repo, status, and
-// blocked_by. The prefix is local, or the prefix of a Repo, such as hod.
+// blocked_by. The prefix is local, or the prefix of a Repo, such as hod. A
+// file name is in lower case, and an ID in upper case: local-7.md holds
+// LOCAL-7.
 package localissues
 
 import (
@@ -45,7 +47,11 @@ type Issue struct {
 	Body      string
 }
 
-func (is Issue) ID() string { return id(is.Prefix, is.N) }
+// ID is the Issue's ID, in upper case, such as LOCAL-7 or HOD-3.
+func (is Issue) ID() string { return strings.ToUpper(id(is.Prefix, is.N)) }
+
+// File is the name of the Issue's file, in lower case, such as local-7.md.
+func (is Issue) File() string { return id(is.Prefix, is.N) + ".md" }
 
 func id(prefix string, n int) string {
 	if prefix == "" {
@@ -56,16 +62,16 @@ func id(prefix string, n int) string {
 
 var notSlug = regexp.MustCompile(`[^a-z0-9]+`)
 
-// Branch is <prefix>-<n>-<title slug>.
+// Branch is <prefix>-<n>-<title slug>, in lower case.
 func (is Issue) Branch() string {
 	slug := strings.Trim(notSlug.ReplaceAllString(strings.ToLower(is.Title), "-"), "-")
 	if len(slug) > 40 {
 		slug = strings.Trim(slug[:40], "-")
 	}
 	if slug == "" {
-		return is.ID()
+		return id(is.Prefix, is.N)
 	}
-	return is.ID() + "-" + slug
+	return id(is.Prefix, is.N) + "-" + slug
 }
 
 // Broken is a file in the folder that does not parse as an Issue.
@@ -76,8 +82,8 @@ type Broken struct {
 
 var idForm = regexp.MustCompile(`^(.+)-([1-9][0-9]*)$`)
 
-// Store is the folder. Prefixes are the Repo prefixes whose Issues it holds
-// besides local-<n>.
+// Store is the folder. Prefixes are the Repo prefixes, in lower case, whose
+// Issues it holds besides LOCAL-<n>.
 type Store struct {
 	Dir      string
 	Prefixes []string
@@ -88,7 +94,7 @@ type Store struct {
 func (s Store) ParseID(id string) (prefix string, n int, err error) {
 	m := idForm.FindStringSubmatch(strings.ToLower(id))
 	if m == nil || (m[1] != DefaultPrefix && !slices.Contains(s.Prefixes, m[1])) {
-		return "", 0, fmt.Errorf("%q is not a local Issue ID such as local-7", id)
+		return "", 0, fmt.Errorf("%q is not a local Issue ID such as LOCAL-7", id)
 	}
 	n, err = strconv.Atoi(m[2])
 	return m[1], n, err
@@ -106,7 +112,7 @@ func (s Store) file(name string) (prefix string, n int, ok bool) {
 	return prefix, n, err == nil
 }
 
-// List reads every Issue in the folder: local-<n> first, then by prefix,
+// List reads every Issue in the folder: LOCAL-<n> first, then by prefix,
 // lowest n first. A missing folder holds no Issues.
 func (s Store) List() ([]Issue, []Broken, error) {
 	ents, err := os.ReadDir(s.Dir)
@@ -155,7 +161,7 @@ func (s Store) read(prefix string, n int) (Issue, error) {
 	return is, err
 }
 
-// Create writes a new local-<n> Issue in the backlog with the next free ID.
+// Create writes a new LOCAL-<n> Issue in the backlog with the next free ID.
 // O_EXCL makes two writers that pick the same ID retry instead of
 // overwriting each other.
 func (s Store) Create(title, repo, body string) (Issue, error) {
@@ -326,7 +332,7 @@ func Parse(data []byte) (Issue, error) {
 					}
 				}
 			default:
-				return Issue{}, fmt.Errorf("blocked_by must be a list, such as [local-3]")
+				return Issue{}, fmt.Errorf("blocked_by must be a list, such as [LOCAL-3]")
 			}
 		}
 	}

@@ -34,10 +34,10 @@ The Board shows the work view only. It has no plan view (ADR 0021) and no review
    ENG-590  Add billing model                                              stopped    12m  data
  Backlog 2
    ENG-620  Split billing ingest                                           backlog    ▂
-   local-9  Retry failed loads before alerting                             backlog
+   LOCAL-9  Retry failed loads before alerting                             backlog
  Ready 3
    ENG-611  Move the retry job                                             unblocked  ▂▄▆
-   local-7  Rename the log flag                                            ready           data
+   LOCAL-7  Rename the log flag                                            ready           data
  ▸ ENG-614  Drop old API keys                                              blocked    ▂▄
  Working 1
    ENG-592  Fix flaky test                                                 CI debug   1m   data
@@ -110,7 +110,7 @@ A Task with no Issue stores the plain title of its text, cut at a word to at mos
 - An Issue in a started, completed, or canceled state is in neither group.
 - A GitHub Issue is the user's own when the user is an assignee, or when it has no assignee and the user opened it. A pull request gets no row. `docs/spec/trackers.md` ("The Board") gives the details.
 - The Board shows a GitHub Issue only when a checkout below the roots has the Issue's owner/repo as its Repo key. The match ignores case. `lineup add --repo <repo> owner/repo#n` adds an Issue from any repository.
-- An Issue whose ID a Task on the Board holds has no Issue row. The Task row shows that Issue. A Linear ID is in upper case, for example `LOCAL-5`, a local ID is in lower case, for example `local-5`, and a GitHub ID is `owner/repo#12`, so an exact match names one Tracker.
+- An Issue whose ID a Task on the Board holds has no Issue row. The Task row shows that Issue. Each ID has one form, as the [Trackers spec](trackers.md#case) gives, so an exact match finds the Issue.
 - A row shows the ID, the title, a status word, the priority, and the Repo when it is known. The status word is `blocked`, `unblocked`, `ready`, or `backlog`. The strip names the open blockers of the selected row, as `blocked by <IDs>`. A GitHub row's Repo is the repository name, and the strip names a blocker in the same repository as `#12`.
 - `unblocked` means that the Issue has one or more blockers and that every blocker is done or canceled. A Linear blocker is a "blocks" relation. A local blocker is an entry in `blocked_by`. A GitHub blocker is a `Blocked by #12` line in the body, and it is done when GitHub reports it closed.
 
@@ -174,7 +174,7 @@ One table, `issueKinds` in `internal/board/issuekind.go`, decides the keys of ea
 ```
  / rename
  Ready 1
- ▸ local-7  Rename the log flag                                              ready         data
+ ▸ LOCAL-7  Rename the log flag                                              ready         data
  Done 1
    ENG-560  Rename config options                                            done   today  data
 ```
@@ -221,7 +221,7 @@ The list shows `local` first, then the recent Destinations, then every other Des
 - `destinations.json` in the state folder keeps the last 5 Destinations that the user picked.
 - A local capture writes a new `local-<n>.md` with `status: backlog`.
 - A Linear capture creates the Issue in the team, and in the Project when the Destination names one. It assigns the Issue to the user. It sets no status, so the Issue gets the team's default status.
-- The footer names the new Issue, for example `added local-9`, and the row shows after the next fetch.
+- The footer names the new Issue, for example `added LOCAL-9`, and the row shows after the next fetch.
 
 ## Promote
 
@@ -321,7 +321,7 @@ Each PR lands on `main` before the next one starts.
 | Criterion | Test |
 |---|---|
 | Each Linear state type and local status lands in the right group, or in none | A table test over every state type and every status |
-| An Issue that a Task holds has no Issue row, and `LOCAL-5` never hides `local-5` | A board test with a Task and both Issues |
+| An Issue that a Task holds has no Issue row | A board test with a Task and its Issue |
 | Ready sorts unblocked, then priority, then level, then ID | A table test, and a `rapid` property test that the order is total and stable |
 | `unblocked` shows only when every blocker is done or canceled | Table tests for Linear relations and local `blocked_by` |
 | `s` on an Issue row sends `add` with the right Kind, then `start` | A board test that reads the fake client's ops |

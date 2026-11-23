@@ -56,7 +56,7 @@ func gitRun(t *testing.T, dir string, args ...string) {
 // settings is what a load resolves for one checkout.
 type settings struct {
 	Resolved Resolved
-	Trackers []string
+	Tracker  string
 	Prefix   string
 }
 
@@ -79,7 +79,8 @@ func dumpSettings(t *testing.T, g *Global, home string) settingsDump {
 			t.Fatalf("Resolve(%s): %v", rel, err)
 		}
 		r.Claude = ""
-		d.Checkouts[rel] = settings{Resolved: r, Trackers: g.RepoTrackers(path), Prefix: g.RepoPrefix(path)}
+		_, tracker := g.RepoTracker(path)
+		d.Checkouts[rel] = settings{Resolved: r, Tracker: tracker, Prefix: g.RepoPrefix(path)}
 	}
 	if repo, ok := g.RepoForTeam("PD"); ok {
 		d.TeamPD, _ = filepath.Rel(home, repo)
@@ -220,6 +221,8 @@ func TestMigrateRefusesWhatNoTableCanReplace(t *testing.T) {
 		"[[repos]]\nmatch = \"~/deep/*/*/*\"\n":                                                                      "which is more than two folders below the roots ~/deep",
 		"[[repos]]\nmatch = \"~/repos/crexi/data\"\nteams = [\"\"\"PD\"\"\"]\n":                                      "line 3: lineup config migrate cannot move a multi-line string",
 		"poll_interval = '''10s'''\n":                                                                                "line 1: lineup config migrate cannot move a multi-line string",
+		"[repos.\"GClunies/*\"]\ntrackers = [\"local\", \"github\"]\n":                                               `repos."GClunies/*": trackers holds 2 Trackers, but a Repo takes Issues from one Tracker`,
+		"[repos.\"GClunies/hod\"]\ntrackers = []\n":                                                                  `repos."GClunies/hod": trackers holds 0 Trackers`,
 	} {
 		path := write(t, filepath.Join(t.TempDir(), "config.toml"), text)
 		_, err := Migrate(path)
@@ -248,11 +251,72 @@ func TestMigratePutsTheOldFileBackWhenTheNewOneDoesNotLoad(t *testing.T) {
 	}
 }
 
+func TestMigrateRewritesATrackersListOfOneTrackerAsTracker(t *testing.T) {
+	old := `roots = ["~/repos"]
+
+# hod tracks its Issues in the Local Tracker.
+[repos."GClunies/hod"]
+  trackers = ["local"] # only local
+prefix = "hod"
+
+
+[repos."crexi/data"]
+teams = ["PD"]
+wip_cap = 2
+
+# the end
+`
+	path := write(t, filepath.Join(t.TempDir(), "config.toml"), old)
+	msg, err := Migrate(path)
+	if err != nil || !strings.HasPrefix(msg, "Rewrote "+path) {
+		t.Fatalf("Migrate = %q %v", msg, err)
+	}
+	want := `roots = ["~/repos"]
+
+# hod tracks its Issues in the Local Tracker.
+[repos."GClunies/hod"]
+  tracker = "local" # only local
+prefix = "hod"
+
+
+[repos."crexi/data"]
+teams = ["PD"]
+tracker = "linear"
+wip_cap = 2
+
+# the end
+`
+	if got, _ := os.ReadFile(path); string(got) != want {
+		t.Errorf("migrated file:\n%s\nwant\n%s", got, want)
+	}
+	if bak, _ := os.ReadFile(path + ".bak"); string(bak) != old {
+		t.Errorf("the .bak file is not the old file:\n%s", bak)
+	}
+	g, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := g.TrackedRepos(); !reflect.DeepEqual(got, []TrackedRepo{{"GClunies/hod", "local"}, {"crexi/data", "linear"}}) {
+		t.Errorf("TrackedRepos = %+v", got)
+	}
+	if msg, err := Migrate(path); err != nil || !strings.Contains(msg, "changed nothing") {
+		t.Errorf("a second migration: %q %v", msg, err)
+	}
+}
+
+func TestMigrateLeavesTeamsWithAnOwnerTrackerAlone(t *testing.T) {
+	text := "[repos.\"crexi/*\"]\ntracker = \"linear\"\n[repos.\"Crexi/data\"]\nteams = [\"PD\"]\n"
+	path := write(t, filepath.Join(t.TempDir(), "config.toml"), text)
+	if msg, err := Migrate(path); err != nil || !strings.Contains(msg, "changed nothing") {
+		t.Fatalf("Migrate = %q %v", msg, err)
+	}
+}
+
 func TestMigrateChangesNothingInANewFile(t *testing.T) {
 	text := "roots = [\"~/repos\"]\n[defaults]\nwip_cap = 3\n[repos.\"o/r\"]\nwip_cap = 2\n"
 	path := write(t, filepath.Join(t.TempDir(), "config.toml"), text)
 	msg, err := Migrate(path)
-	if err != nil || msg != path+" has no [[repos]] tables and no layer keys at the top level, so lineup changed nothing." {
+	if err != nil || msg != path+" has no [[repos]] tables, no layer keys at the top level, and no trackers lists, so lineup changed nothing." {
 		t.Fatalf("Migrate = %q %v", msg, err)
 	}
 	if _, err := os.Stat(path + ".bak"); err == nil {

@@ -87,3 +87,33 @@ func TestSkipsSurviveReopenAndIgnoreCase(t *testing.T) {
 		t.Fatalf("skips = %+v after the remove", got)
 	}
 }
+
+func TestRenameMovesATaskAndItsEventsToTheNewID(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	at := time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
+	for _, id := range []string{"ah-65", "ENG-1"} {
+		if err := s.Save(id, []byte(`{"v":1}`), []Event{{TaskID: id, At: at, Signal: "start", From: "Queued", To: "Working"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Rename("ah-65", "AH-65", []byte(`{"v":2}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save("AH-65", []byte(`{"v":3}`), nil); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := s.Tasks()
+	if err != nil || len(tasks) != 2 || string(tasks["AH-65"]) != `{"v":3}` || string(tasks["ENG-1"]) != `{"v":1}` {
+		t.Fatalf("tasks = %q, %v, want AH-65 at v3 and ENG-1 at v1 only", tasks, err)
+	}
+	if ev, err := s.Events("AH-65"); err != nil || len(ev) != 1 || ev[0].TaskID != "AH-65" || ev[0].Signal != "start" {
+		t.Fatalf("AH-65 events = %+v, %v, want the start event of ah-65", ev, err)
+	}
+	if ev, _ := s.Events("ah-65"); len(ev) != 0 {
+		t.Fatalf("ah-65 still holds events %+v", ev)
+	}
+}

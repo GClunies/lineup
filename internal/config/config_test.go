@@ -207,6 +207,7 @@ name = "greptile"
 [repos."crexi/data"]
 wip_cap = 2
 teams = ["APP"]
+tracker = "linear"
 [repos."crexi/data".stage.ci_debug]
 skill = "diagnosing-bugs"
 [repos."crexi/data".review_bot]
@@ -392,7 +393,7 @@ func TestMissingClaudeIsAnError(t *testing.T) {
 }
 
 func TestTildeExpansion(t *testing.T) {
-	g, home := loadFixture(t, "roots = [\"~/repos\"]\n[repos.\"crexi/data\"]\nteams = [\"APP\", \"ENG\"]\nwip_cap = 4\n")
+	g, home := loadFixture(t, "roots = [\"~/repos\"]\n[repos.\"crexi/data\"]\nteams = [\"APP\", \"ENG\"]\ntracker = \"linear\"\nwip_cap = 4\n")
 	if repo, ok := g.RepoForTeam("ENG"); !ok || repo != filepath.Join(home, "repos/crexi/data") {
 		t.Errorf("RepoForTeam = %q %v", repo, ok)
 	}
@@ -893,72 +894,80 @@ func TestTheRestartsHintTellsTheUserToDeleteTheLine(t *testing.T) {
 	}
 }
 
-func TestTheTrackersKeyLocksARepo(t *testing.T) {
+func TestTheTrackerKeyGivesEachRepoOneTracker(t *testing.T) {
 	g, home := loadFixture(t, `
 roots = ["~/repos"]
 [repos."GClunies/*"]
-trackers = ["local", "github"]
+tracker = "github"
 [repos."GClunies/hod"]
-trackers = ["local"]
+tracker = "local"
 [repos."crexi/data"]
 teams = ["ENG"]
+tracker = "linear"
 `)
-	for repo, want := range map[string][]string{
-		"~/repos/gclunies/hod":                    {"local"},
-		filepath.Join(home, "repos/gclunies/hod"): {"local"},
-		"~/repos/gclunies/lineup":                 {"local", "github"},
-		"~/repos/crexi/data":                      nil,
-		"~/repos/gclunies/brain":                  nil,
+	for repo, want := range map[string][2]string{
+		"~/repos/gclunies/hod":                    {"GClunies/hod", "local"}, // the Repo's own table wins
+		filepath.Join(home, "repos/gclunies/hod"): {"GClunies/hod", "local"},
+		"~/repos/gclunies/lineup":                 {"GClunies/lineup", "github"}, // from the owner/* table
+		"~/repos/crexi/data":                      {"crexi/data", "linear"},
+		"~/repos/crexi/web":                       {"crexi/web", ""}, // no table sets a tracker
+		"~/repos/gclunies/brain":                  {"local/brain", ""},
 	} {
-		if got := g.RepoTrackers(repo); !slices.Equal(got, want) || (want == nil) != (got == nil) {
-			t.Errorf("RepoTrackers(%s) = %q, want %q", repo, got, want)
+		if key, tracker := g.RepoTracker(repo); key != want[0] || tracker != want[1] {
+			t.Errorf("RepoTracker(%s) = %q, %q, want %q", repo, key, tracker, want)
 		}
 	}
-	want := []LockedRepo{{"GClunies/*", []string{"local", "github"}}, {"GClunies/hod", []string{"local"}}}
-	if got := g.LockedRepos(); !reflect.DeepEqual(got, want) {
-		t.Errorf("LockedRepos = %+v, want %+v", got, want)
+	want := []TrackedRepo{{"GClunies/*", "github"}, {"GClunies/hod", "local"}, {"crexi/data", "linear"}}
+	if got := g.TrackedRepos(); !reflect.DeepEqual(got, want) {
+		t.Errorf("TrackedRepos = %+v, want %+v", got, want)
 	}
-	for kind, left := range map[string][]string{"linear": {"repos/gclunies/hod", "repos/gclunies/lineup"}, "github": {"repos/gclunies/hod"}} {
-		got := g.CheckoutsFor(kind)
-		for _, rel := range left {
-			if slices.Contains(got, filepath.Join(home, rel)) {
-				t.Errorf("CheckoutsFor(%s) offers %s", kind, rel)
-			}
+	for kind, want := range map[string][]string{
+		"linear": {"repos/crexi/data"},
+		"github": {"repos/gclunies/lineup"},
+		"local":  {"repos/gclunies/hod"},
+	} {
+		var paths []string
+		for _, rel := range want {
+			paths = append(paths, filepath.Join(home, rel))
 		}
-		if len(got) != len(fixtureCheckouts)-len(left) {
-			t.Errorf("CheckoutsFor(%s) = %q, want all but %q", kind, got, left)
+		if got := g.CheckoutsFor(kind); !slices.Equal(got, paths) {
+			t.Errorf("CheckoutsFor(%s) = %q, want %q", kind, got, paths)
 		}
-	}
-	if n := len(g.CheckoutsFor("local")); n != len(fixtureCheckouts) {
-		t.Errorf("CheckoutsFor(local) has %d checkouts, want all %d", n, len(fixtureCheckouts))
 	}
 }
 
-func TestTheTrackersKeyTakesOnlyKnownTrackers(t *testing.T) {
+func TestTheTrackerKeyTakesOneKnownTracker(t *testing.T) {
 	for _, c := range []struct{ body, want string }{
-		{"[repos.\"GClunies/hod\"]\ntrackers = [\"jira\"]", `repos."GClunies/hod": trackers[0] "jira" is not a Tracker: use linear, github, local`},
-		{"[repos.\"GClunies/hod\"]\ntrackers = [\"Local\"]", `trackers[0] "Local" is not a Tracker`},
-		{"[repos.\"GClunies/*\"]\ntrackers = []", `repos."GClunies/*": trackers must name at least one of linear, github, local`},
-		{"[repos.\"GClunies/hod\"]\ntrackers = [\"local\"]\nteams = [\"ENG\"]", `repos."GClunies/hod": teams maps Linear teams to the Repo, so trackers must hold linear`},
-		{"[repos.\"crexi/*\"]\ntrackers = [\"local\"]\n[repos.\"crexi/data\"]\nteams = [\"ENG\"]", `repos."crexi/data": teams maps Linear teams to the Repo, so trackers must hold linear`},
+		{"[repos.\"GClunies/hod\"]\ntracker = \"jira\"", `repos."GClunies/hod": tracker "jira" is not a Tracker: use linear, github, local`},
+		{"[repos.\"GClunies/hod\"]\ntracker = \"Local\"", `tracker "Local" is not a Tracker`},
+		{"[repos.\"GClunies/hod\"]\ntracker = \"local\"\nteams = [\"ENG\"]", `repos."GClunies/hod": teams maps Linear teams to the Repo, so its tracker must be linear, not local`},
+		{"[repos.\"crexi/*\"]\ntracker = \"github\"\n[repos.\"crexi/data\"]\nteams = [\"ENG\"]", `repos."crexi/data": teams maps Linear teams to the Repo, so its tracker must be linear, not github`},
+		{"[repos.\"crexi/data\"]\nteams = [\"ENG\"]", `repos."crexi/data": teams maps Linear teams to the Repo, so the Repo needs tracker = "linear". Run lineup config migrate to add it`},
 		{"[repos.\"crexi/*\"]\nteams = [\"ENG\"]", `repos."crexi/*": teams maps Linear teams to one Repo, so it needs an owner/repo key`},
 	} {
 		if err := loadErr(t, c.body+"\n"); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: err = %v, want %q", c.body, err, c.want)
 		}
 	}
-	load(t, "[repos.\"acme/data\"]\nteams = [\"ENG\"]\ntrackers = [\"linear\", \"local\"]\n")
-	load(t, "[repos.\"acme/*\"]\ntrackers = [\"local\"]\n[repos.\"acme/data\"]\nteams = [\"ENG\"]\ntrackers = [\"linear\"]\n")
+	load(t, "[repos.\"acme/data\"]\nteams = [\"ENG\"]\ntracker = \"linear\"\n")
+	load(t, "[repos.\"acme/*\"]\ntracker = \"linear\"\n[repos.\"acme/data\"]\nteams = [\"ENG\"]\n")
+}
+
+func TestATrackersListFailsAndNamesTheMigration(t *testing.T) {
+	err := loadErr(t, "[repos.\"GClunies/hod\"]\ntrackers = [\"local\"]\n")
+	if want := `repos."GClunies/hod": the trackers list is gone, as a Repo takes Issues from one Tracker. Run lineup config migrate to rewrite it as tracker`; err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %v, want %q", err, want)
+	}
 }
 
 func TestThePrefixKeyNamesARepo(t *testing.T) {
 	g, home := loadFixture(t, `
 roots = ["~/repos"]
 [repos."GClunies/hod"]
-trackers = ["local"]
+tracker = "local"
 prefix = "hod"
 [repos."crexi/web"]
-prefix = "web-2"
+prefix = "WEB-2"
 `)
 	for repo, want := range map[string]string{
 		"~/repos/gclunies/hod":                    "hod",
@@ -984,19 +993,33 @@ prefix = "web-2"
 	}
 }
 
+func TestThePrefixKeyIgnoresCase(t *testing.T) {
+	for _, p := range []string{"SCP", "scp", "Scp"} {
+		g, home := loadFixture(t, "roots = [\"~/repos\"]\n[repos.\"GClunies/lineup\"]\nprefix = \""+p+"\"\n")
+		lineup := filepath.Join(home, "repos/gclunies/lineup")
+		if got := g.RepoPrefix(lineup); got != "scp" {
+			t.Errorf("prefix %q: RepoPrefix = %q, want scp", p, got)
+		}
+		if repo, ok := g.RepoForPrefix("scp"); !ok || repo != lineup {
+			t.Errorf("prefix %q: RepoForPrefix(scp) = %q, %v", p, repo, ok)
+		}
+	}
+}
+
 func TestThePrefixKeyRefusesABadPrefix(t *testing.T) {
 	hod := "[repos.\"GClunies/hod\"]\n"
 	for _, c := range []struct{ body, want string }{
-		{hod + `prefix = "Hod"`, `repos."GClunies/hod": prefix "Hod" must hold only lowercase letters, digits, and dashes`},
-		{hod + `prefix = "hod_1"`, `prefix "hod_1" must hold only lowercase letters, digits, and dashes`},
-		{hod + `prefix = "hod.x"`, `prefix "hod.x" must hold only`},
-		{hod + `prefix = "-hod"`, `prefix "-hod" must hold only`},
-		{hod + "prefix = \"hod\"\n[repos.\"acme/data\"]\nprefix = \"hod\"", `repos."acme/data": prefix "hod" is also the prefix of repos."GClunies/hod"`},
-		{hod + "prefix = \"eng\"\n[repos.\"acme/data\"]\nteams = [\"ENG\"]", `repos."GClunies/hod": prefix "eng" equals a Linear team key`},
-		{hod + `prefix = "local"`, `prefix "local" is reserved`},
-		{hod + `prefix = "ah"`, `prefix "ah" is reserved`},
-		{hod + `prefix = "pr"`, `prefix "pr" is reserved`},
-		{"[repos.\"GClunies/*\"]\nprefix = \"gc\"", `repos."GClunies/*": prefix "gc" needs an owner/repo key, the key of one Repo`},
+		{hod + `prefix = "hod_1"`, `repos."GClunies/hod": prefix "HOD_1" must hold only letters, digits, and dashes`},
+		{hod + `prefix = "hod.x"`, `prefix "HOD.X" must hold only`},
+		{hod + `prefix = "-hod"`, `prefix "-HOD" must hold only`},
+		{hod + "prefix = \"hod\"\n[repos.\"acme/data\"]\nprefix = \"HOD\"", `repos."acme/data": prefix "HOD" is also the prefix of repos."GClunies/hod"`},
+		{hod + "prefix = \"eng\"\n[repos.\"acme/data\"]\nteams = [\"ENG\"]\ntracker = \"linear\"", `repos."GClunies/hod": prefix "ENG" equals a Linear team key`},
+		{hod + "prefix = \"data\"\n[repos.\"acme/data\"]\nteams = [\"DATA\"]\ntracker = \"linear\"", `repos."GClunies/hod": prefix "DATA" equals a Linear team key`},
+		{hod + "prefix = \"DATA\"\n[repos.\"acme/data\"]\nteams = [\"data\"]\ntracker = \"linear\"", `repos."GClunies/hod": prefix "DATA" equals a Linear team key`},
+		{hod + `prefix = "local"`, `prefix "LOCAL" is reserved: lineup uses LOCAL, AH, PR for IDs without a Repo prefix`},
+		{hod + `prefix = "Ah"`, `prefix "AH" is reserved`},
+		{hod + `prefix = "PR"`, `prefix "PR" is reserved`},
+		{"[repos.\"GClunies/*\"]\nprefix = \"gc\"", `repos."GClunies/*": prefix "GC" needs an owner/repo key, the key of one Repo`},
 	} {
 		if err := loadErr(t, c.body+"\n"); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: err = %v, want %q", c.body, err, c.want)
@@ -1010,7 +1033,7 @@ func TestCheckPrefixTeamsRefusesAPrefixThatEqualsATeamKeyInAnyCase(t *testing.T)
 		t.Fatalf("other team keys: %v", err)
 	}
 	err := g.CheckPrefixTeams([]string{"ENG", "HOD"})
-	if err == nil || !strings.Contains(err.Error(), `prefix "hod" equals a Linear team key`) {
+	if err == nil || !strings.Contains(err.Error(), `prefix "HOD" equals a Linear team key`) {
 		t.Fatalf("err = %v, want a refusal that names hod", err)
 	}
 }

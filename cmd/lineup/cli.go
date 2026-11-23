@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -134,8 +135,8 @@ func repoPrefixes() []string {
 	return g.Prefixes()
 }
 
-// looksLikeIssue matches an Issue ID: ENG-123, owner/repo#12, local-7, or
-// <prefix>-<n> for one of the Repo prefixes, such as hod-3.
+// looksLikeIssue matches an Issue ID in any case: ENG-123, owner/repo#12,
+// LOCAL-7, or <PREFIX>-<n> for one of the Repo prefixes, such as HOD-3.
 func looksLikeIssue(s string, prefixes []string) bool {
 	switch scheduler.KindOf(s, prefixes) {
 	case scheduler.KindGitHub:
@@ -145,17 +146,11 @@ func looksLikeIssue(s string, prefixes []string) bool {
 		_, _, err := localissues.Store{Prefixes: prefixes}.ParseID(s)
 		return err == nil
 	}
-	team, num, ok := strings.Cut(s, "-")
-	if !ok || team == "" || num == "" || strings.ToUpper(team) != team {
-		return false
-	}
-	for _, r := range num {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
+	return linearID.MatchString(s)
 }
+
+// linearID is the form of a Linear ID, <TEAM>-<n>, in any case.
+var linearID = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*-[1-9][0-9]*$`)
 
 // cmdReview adds and starts a review Task for the PR. If the PR has an open
 // review Task, it adds nothing. It runs that Task again if it stopped for

@@ -179,10 +179,10 @@ type reviewAdd struct {
 // open review of the PR, so a Task with the ID that is live or keeps its tab
 // reviews another repository's PR, and the ID then adds the repository's name.
 func (s *Scheduler) reviewID(pr ReviewPR) string {
-	id := fmt.Sprintf("pr-%d", pr.Number)
+	id := fmt.Sprintf("PR-%d", pr.Number)
 	if o, ok := s.recs[id]; ok && (o.Stage != lifecycle.Done || o.keepsTab()) {
 		_, name, _ := strings.Cut(pr.Repo, "/")
-		id += "-" + name
+		id += "-" + strings.ToUpper(name)
 	}
 	return id
 }

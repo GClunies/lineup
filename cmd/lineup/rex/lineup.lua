@@ -220,7 +220,7 @@ rex.action{
   category = "Lineup",
   keywords = "lineup start issue begin add",
   run = function(ctx, args)
-    local issue, reason = rex.ui.input{ title = "Start which Issue?", placeholder = "ENG-614, owner/repo#12, local-7, or hod-3", confirm = "Start the Task" }
+    local issue, reason = rex.ui.input{ title = "Start which Issue?", placeholder = "ENG-614, owner/repo#12, LOCAL-7, or HOD-3", confirm = "Start the Task" }
     if issue == nil then
       return { answered = false, reason = reason }
     end

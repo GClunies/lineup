@@ -438,8 +438,8 @@ func TestLineupReviewsSkipAndUnskip(t *testing.T) {
 	}{
 		{[]string{"skip", "umbrella/data#4945"}, scheduler.SkipResult{Skip: skipped, Changed: true},
 			"Skipped umbrella/data#4945: Write the usage logs again. No queue picks it until you run lineup reviews unskip umbrella/data#4945.\n"},
-		{[]string{"skip", "umbrella/data#4945"}, scheduler.SkipResult{Skip: skipped, Changed: true, Closed: "pr-4945"},
-			"Skipped umbrella/data#4945: Write the usage logs again. No queue picks it until you run lineup reviews unskip umbrella/data#4945.\nClosed pr-4945.\n"},
+		{[]string{"skip", "umbrella/data#4945"}, scheduler.SkipResult{Skip: skipped, Changed: true, Closed: "PR-4945"},
+			"Skipped umbrella/data#4945: Write the usage logs again. No queue picks it until you run lineup reviews unskip umbrella/data#4945.\nClosed PR-4945.\n"},
 		{[]string{"skip", "umbrella/data#4945"}, scheduler.SkipResult{Skip: skipped}, "umbrella/data#4945 is already skipped.\n"},
 		{[]string{"skip", "https://github.com/Umbrella/Data/pull/4945/files"}, scheduler.SkipResult{Skip: skipped, Changed: true},
 			"Skipped umbrella/data#4945: Write the usage logs again. No queue picks it until you run lineup reviews unskip umbrella/data#4945.\n"},

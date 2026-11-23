@@ -142,7 +142,7 @@ The Scheduler reads the queues and their slots when it starts. After a change to
 
 ## Review Tasks
 
-A review Task is a Task with Kind `review`. Its ID has the form `pr-<number>`, for example `pr-4955`. If a Task with that ID for another repository's PR is live or keeps its tab, the ID adds the repository's name, for example `pr-4955-web`. A new review of a PR whose review Task is Done takes the same ID. The Task keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `lineup review` has no queue.
+A review Task is a Task with Kind `review`. Its ID has the form `PR-<number>`, for example `PR-4955`. If a Task with that ID for another repository's PR is live or keeps its tab, the ID adds the repository's name in upper case, for example `PR-4955-WEB`. A new review of a PR whose review Task is Done takes the same ID. The Task keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `lineup review` has no queue.
 
 `lineup review` reads the URL as `owner/repo#number`. If a review Task for that PR is open, it adds nothing. It restores the Task's Worker if the Worker closed in Review ready, or in Reviewing with the flag `tab closed`. It runs the Task again if the Task stopped for good, for example after a failed setup. If the Task runs, it focuses the Task's tab. It refuses a PR from a fork, and a PR that is closed or merged.
 

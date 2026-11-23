@@ -12,11 +12,16 @@ import (
 )
 
 // prefixConfig gives /repos/acme/hod the prefix hod and /repos/acme/web the
-// prefix web. Every other Repo has none.
+// prefix web, and each of them the Local Tracker. Every other Repo has no
+// prefix.
 type prefixConfig struct{ fakeConfig }
 
 func (prefixConfig) RepoPrefix(repo string) string {
 	return map[string]string{"/repos/acme/hod": "hod", "/repos/acme/web": "web"}[repo]
+}
+
+func (prefixConfig) RepoTracker(repo string) (string, string) {
+	return "acme/" + filepath.Base(repo), KindLocal
 }
 
 // fakeLocal is the highest n of each prefix among the Local Issue files.
@@ -33,8 +38,8 @@ func prefixHarness(t *testing.T, local fakeLocal, seed func(*store.Store)) *harn
 func TestAnAdHocTaskOfAPrefixedRepoTakesThePrefix(t *testing.T) {
 	h := prefixHarness(t, fakeLocal{"hod": 2}, nil)
 	v := h.do(Request{Op: "add", Repo: "hod", Text: "block linear writes"}).(TaskView)
-	if v.ID != "hod-3" {
-		t.Fatalf("ID = %q, want hod-3, one more than the Local Issue hod-2", v.ID)
+	if v.ID != "HOD-3" {
+		t.Fatalf("ID = %q, want HOD-3, one more than the Local Issue HOD-2", v.ID)
 	}
 	if d, _ := h.s.show("hod-3"); d.Branch != "hod-3-block-linear-writes" {
 		t.Errorf("branch = %q, want hod-3-block-linear-writes", d.Branch)
@@ -48,8 +53,8 @@ func TestAnAdHocTaskOfAPrefixedRepoTakesThePrefix(t *testing.T) {
 		}
 		return len(sessions) == 1
 	})
-	if s, ok := sessions["hod-3 block linear writes"]; !ok || s != "session:hod" {
-		t.Errorf("tabs = %v, want the tab hod-3 block linear writes in session:hod", sessions)
+	if s, ok := sessions["HOD-3 block linear writes"]; !ok || s != "session:hod" {
+		t.Errorf("tabs = %v, want the tab HOD-3 block linear writes in session:hod", sessions)
 	}
 }
 
@@ -65,18 +70,18 @@ func seedIDs(ids ...string) func(*store.Store) {
 }
 
 func TestEachPrefixNumbersOnItsOwnAndSkipsEveryStoredID(t *testing.T) {
-	h := prefixHarness(t, fakeLocal{"hod": 3, "local": 4}, seedIDs("hod-7", "web-1", "ah-61"))
+	h := prefixHarness(t, fakeLocal{"hod": 3, "local": 4}, seedIDs("HOD-7", "WEB-1", "AH-61"))
 	for _, c := range []struct{ repo, want string }{
-		{"hod", "hod-8"}, // the archived hod-7 is higher than the Local Issue hod-3
-		{"web", "web-2"},
-		{"hod", "hod-9"},
-		{"data", "ah-1"}, // no prefix: the ah- counter, which ah-61 does not move
+		{"hod", "HOD-8"}, // the archived HOD-7 is higher than the Local Issue HOD-3
+		{"web", "WEB-2"},
+		{"hod", "HOD-9"},
+		{"data", "AH-1"}, // no prefix: the ah- counter, which AH-61 does not move
 	} {
 		if v := h.do(Request{Op: "add", Repo: c.repo, Text: "work"}).(TaskView); v.ID != c.want {
 			t.Errorf("add --repo %s = %s, want %s", c.repo, v.ID, c.want)
 		}
 	}
-	for repo, want := range map[string]string{"hod": "hod-10", "web": "web-3", "data": "local-5", "": "local-5"} {
+	for repo, want := range map[string]string{"hod": "HOD-10", "web": "WEB-3", "data": "LOCAL-5", "": "LOCAL-5"} {
 		if got := h.do(Request{Op: "next-id", Repo: repo}).(string); got != want {
 			t.Errorf("next-id %q = %s, want %s", repo, got, want)
 		}
@@ -86,11 +91,11 @@ func TestEachPrefixNumbersOnItsOwnAndSkipsEveryStoredID(t *testing.T) {
 func TestALocalIssueCannotTakeTheIDOfAnAdHocTask(t *testing.T) {
 	h := prefixHarness(t, fakeLocal{}, nil)
 	h.do(Request{Op: "add", Repo: "hod", Text: "block linear writes"})
-	_, err := h.s.Handle(context.Background(), Request{Op: "add", Issue: "hod-1", Kind: KindLocal, Repo: "hod"})
-	if err == nil || !strings.Contains(err.Error(), "hod-1 is already the ID of another Task") {
-		t.Fatalf("err = %v, want a refusal that names hod-1", err)
+	_, err := h.s.Handle(context.Background(), Request{Op: "add", Issue: "HOD-1", Kind: KindLocal, Repo: "hod"})
+	if err == nil || !strings.Contains(err.Error(), "HOD-1 is already the ID of another Task") {
+		t.Fatalf("err = %v, want a refusal that names HOD-1", err)
 	}
-	if v := h.task("hod-1"); v.Title != "block linear writes" {
-		t.Fatalf("hod-1 = %+v, want the ad hoc Task", v)
+	if v := h.task("HOD-1"); v.Title != "block linear writes" {
+		t.Fatalf("HOD-1 = %+v, want the ad hoc Task", v)
 	}
 }
