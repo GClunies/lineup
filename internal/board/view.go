@@ -236,7 +236,7 @@ func (m Model) rowActions() []hint {
 		hs = append(hs, hint{"o", "open the Issue"})
 	}
 	hs = append(hs, hint{"f", "details"})
-	if t.Group == lifecycle.GroupDone.String() && !t.Tab {
+	if t.StageKey == lifecycle.Done.Key() && !t.Tab {
 		return append(hs, hint{"x", "archive"})
 	}
 	return append(hs, hint{"x", "close"})
@@ -486,7 +486,7 @@ func (m Model) age(t scheduler.TaskView) string {
 	}
 	now := m.opts.Now()
 	d := now.Sub(t.Since)
-	if t.Group == "Done" && t.Since.Local().YearDay() == now.Local().YearDay() && d < 24*time.Hour {
+	if t.StageKey == lifecycle.Done.Key() && t.Since.Local().YearDay() == now.Local().YearDay() && d < 24*time.Hour {
 		return "today"
 	}
 	return ago(d)

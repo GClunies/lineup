@@ -13,6 +13,7 @@ import (
 
 	"github.com/gclunies/lineup/internal/config"
 	"github.com/gclunies/lineup/internal/lifecycle"
+	"github.com/gclunies/lineup/internal/linear"
 	"github.com/gclunies/lineup/internal/localissues"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
@@ -185,6 +186,13 @@ func TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce(t *testing.T) {
 				inGroup[g] = append(inGroup[g], id)
 			}
 		}
+		var lin []linear.Issue
+		for i := range rapid.IntRange(0, 3).Draw(t, "tasks in "+groupFollowUp) {
+			id := fmt.Sprintf("FO-%d", i)
+			tasks = append(tasks, tv(id, lifecycle.Done, "data", "t", "", 0))
+			lin = append(lin, mineIssue(id, "started", 0))
+			inGroup[groupFollowUp] = append(inGroup[groupFollowUp], id)
+		}
 		var loc []localissues.Issue
 		for i := range rapid.IntRange(0, 4).Draw(t, "local Issues") {
 			st := rapid.SampledFrom([]localissues.Status{localissues.Todo, localissues.Backlog}).Draw(t, "status")
@@ -204,6 +212,7 @@ func TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce(t *testing.T) {
 
 		m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Tasks: tasks})
 		m.mine.loc = loc
+		m.mine.lin[acme.ID] = lin
 		m.lay = newSections(config.Board{Order: order, Collapsed: closed, Hidden: hidden})
 		m.setBoard(m.board)
 		ids := m.rowIDs()

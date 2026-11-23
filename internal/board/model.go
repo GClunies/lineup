@@ -191,6 +191,12 @@ func (m *Model) setBoard(v scheduler.BoardView) {
 	m.board = v
 	m.tasks = m.tasks[:0]
 	own := v.OfKind(lifecycle.KindBuild).Tasks
+	open := m.mine.openStates()
+	for i, t := range own {
+		if st, ok := open[t.ID]; ok && t.StageKey == lifecycle.Done.Key() {
+			own[i].Group, own[i].Note = groupFollowUp, st
+		}
+	}
 	for _, g := range m.lay.order {
 		for _, t := range own {
 			if t.Group == g {
@@ -502,7 +508,7 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if ok {
 			m.mode, m.pendingTask, m.pendingOp = modeConfirm, t.ID, "close"
 			m.pendingAsk = "close " + t.ID
-			if t.Group == lifecycle.GroupDone.String() {
+			if t.StageKey == lifecycle.Done.Key() {
 				if t.Tab {
 					m.pendingAsk = "close " + t.ID + "'s tab and worktree"
 				} else {

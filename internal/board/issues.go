@@ -219,6 +219,27 @@ func (mi mine) linearIssues() []linear.Issue {
 	return out
 }
 
+// openStates maps the ID of each Issue that its Tracker still holds open to
+// the Tracker's state, for example "Waiting for QA". OwnIssues reads only
+// open GitHub Issues.
+func (mi mine) openStates() map[string]string {
+	open := map[string]string{}
+	for _, is := range mi.linearIssues() {
+		if is.State.Type == "unstarted" || is.State.Type == "started" {
+			open[is.Identifier] = is.State.Name
+		}
+	}
+	for _, is := range mi.gh {
+		open[is.ID()] = "open"
+	}
+	for _, is := range mi.loc {
+		if !closedLocal[is.Status] {
+			open[is.ID()] = string(is.Status)
+		}
+	}
+	return open
+}
+
 type (
 	mineWorkspacesMsg struct {
 		wss []linear.Workspace
