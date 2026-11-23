@@ -1,0 +1,45 @@
+internal/board/github_test.go
+  s_3b28055ecbdc0f::t_3813fa929c368e 124-128
+go.mod
+  s_3b28055ecbdc0f::t_ac3632da1f27a1 12
+internal/board/board_test.go
+  s_3b28055ecbdc0f::t_56e58b5a76dbd5 693
+  s_3b28055ecbdc0f::t_db5c9fe0b98b63 703
+  s_3b28055ecbdc0f::t_e4b9edbec13e69 711
+  s_3b28055ecbdc0f::t_e54e032809396a 423
+  s_3b28055ecbdc0f::t_d883ce3218d95e 716,723,725-726,729-730
+  s_3b28055ecbdc0f::t_daec738f5a8810 747-753,757,759-761
+  s_3b28055ecbdc0f::t_159ccd36c6df3e 768
+internal/board/view_test.go
+  s_3b28055ecbdc0f::t_c2aa71c51f4d36 1-144,149-154
+  s_3b28055ecbdc0f::t_090c1ef2d5691a 145-148
+internal/board/view.go
+  s_3b28055ecbdc0f::t_d1cee59236ec23 386,393
+  s_3b28055ecbdc0f::t_57c103c8ad3234 4
+  s_3b28055ecbdc0f::t_579280d31c8069 281-282,284-286,292
+  s_3b28055ecbdc0f::t_c16b2e1c1d2edf 420
+  s_3b28055ecbdc0f::t_d1ce81fc1a9fbb 411
+  s_3b28055ecbdc0f::t_3ab0ac127ab8d3 379
+  s_3b28055ecbdc0f::t_99c6276fd5f162 301-305,310,312,315-343
+  s_3b28055ecbdc0f::t_6d09a802be9861 355-356,358-360,364-365
+  s_3b28055ecbdc0f::t_9c51d33ed659d4 436-437,439-444,448-449,451-455,457
+  s_3b28055ecbdc0f::t_9b0bfbb9c23bb9 300,344
+internal/board/issues.go
+  s_3b28055ecbdc0f::t_22b59903cf3db6 60-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f2f30fa20699871fe801314dece4b295068bd375",
+  "prompts": {},
+  "sessions": {
+    "s_3b28055ecbdc0f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c32c2d84-afbb-49eb-9fa5-8182023a14e3",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
