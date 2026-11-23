@@ -57,8 +57,10 @@ type Record struct {
 	// SideBlockID is the side pane beside the Task's Worker. No event of it
 	// reaches the Task. The JSON key keeps its old name: a stored record holds
 	// it, and recovery opens a second pane beside a Worker whose key it lost.
-	SideBlockID string          `json:"hunk_block_id,omitempty"`
-	WorkerStage lifecycle.Stage `json:"worker_stage"`
+	SideBlockID string `json:"hunk_block_id,omitempty"`
+	// WorkerStage is the Stage of the prompt that the Task's Worker got last.
+	// It is nil until a Worker opens.
+	WorkerStage *lifecycle.Stage `json:"worker_stage,omitempty"`
 	// Pending is the Stage whose prompt the Worker has not received yet. It is
 	// nil or the Task's Stage.
 	Pending      *lifecycle.Stage `json:"pending,omitempty"`
@@ -187,7 +189,7 @@ func (v BoardView) OfKind(k lifecycle.Kind) BoardView {
 
 // hadWorker reports whether a Worker ever opened in a tab for the Task. A Task
 // that had one and has no tab now waits for the user, so no prompt opens a tab.
-func (r *Record) hadWorker() bool { return r.WorkerStage != lifecycle.Queued }
+func (r *Record) hadWorker() bool { return r.WorkerStage != nil }
 
 // keptSetupTab reports whether the Task's tab is its setup tab, which Rex keeps
 // after worktrunk exits.
@@ -275,7 +277,11 @@ func (r *Record) note(pr int) string {
 			tail = append(tail, "head moved")
 		}
 	case lifecycle.Done:
-		if r.Outcome != "" {
+		switch r.Outcome {
+		case lifecycle.OutcomeNone:
+		case lifecycle.OutcomeRemoved:
+			lead = append(lead, string(r.Outcome)+": never started")
+		default:
 			lead = append(lead, string(r.Outcome))
 		}
 	}

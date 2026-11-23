@@ -2,6 +2,8 @@ package board
 
 import (
 	"errors"
+	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -41,22 +43,25 @@ func TestTheSkillPickerListsJustGoFirstAndJustGoSetsNoSkill(t *testing.T) {
 		t.Fatalf("picker rows out of order:\n%s", v)
 	}
 	e.press("enter")
-	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "start"}) {
-		t.Fatalf("just go ops = %v", got)
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add"}) {
+		t.Fatalf("just go ops = %v, want one add", got)
+	}
+	if set := e.sched.calls[0].Set; set != nil {
+		t.Fatalf("just go set %v, want no override", set)
 	}
 	if !strings.Contains(e.m.status, "start ENG-9 ok") || strings.Contains(e.m.status, "·") {
 		t.Fatalf("status %q, want start ENG-9 ok with no skill", e.m.status)
 	}
 }
 
-func TestASkillStartSetsTheSkillBeforeTheStart(t *testing.T) {
+func TestASkillStartSendsOneAddWithTheSkill(t *testing.T) {
 	e := startEnv(t, "kit:test-first", "diagnosing-bugs")
 	e.press("s", "down", "enter")
-	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "set", "start"}) {
-		t.Fatalf("ops = %v", got)
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add"}) {
+		t.Fatalf("ops = %v, want one add", got)
 	}
-	if c := e.sched.calls[1]; c.Task != "ENG-9" || c.Key != "skill" || c.Value != "kit:test-first" {
-		t.Fatalf("set = %+v", c)
+	if c := e.sched.calls[0]; c.Issue != "ENG-9" || !maps.Equal(c.Set, map[string]string{"skill": "kit:test-first"}) {
+		t.Fatalf("add = %+v, want ENG-9 with the skill kit:test-first", c)
 	}
 	if !strings.Contains(e.m.status, "start ENG-9 ok · kit:test-first") {
 		t.Fatalf("status %q", e.m.status)
@@ -81,8 +86,8 @@ func TestThePickerOpensWithNoListedSkills(t *testing.T) {
 		t.Fatalf("mode %d, ops %v", e.m.mode, e.sched.ops())
 	}
 	e.press("enter")
-	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "start"}) {
-		t.Fatalf("just go ops = %v", got)
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add"}) {
+		t.Fatalf("just go ops = %v, want one add", got)
 	}
 }
 
@@ -94,8 +99,8 @@ func TestTypedTextFiltersTheListedSkills(t *testing.T) {
 		t.Fatalf("typing must hide just go and the rows that do not match:\n%s", v)
 	}
 	e.press("enter")
-	if c := e.sched.calls[1]; c.Key != "skill" || c.Value != "kit:test-first" {
-		t.Fatalf("set = %+v", c)
+	if c := lastAdd(t, e); c.Set["skill"] != "kit:test-first" {
+		t.Fatalf("add = %+v, want the skill kit:test-first", c)
 	}
 }
 
@@ -106,11 +111,11 @@ func TestASkillThatIsNotListedStartsFromTheTypedText(t *testing.T) {
 		t.Fatalf("the typed skill is not a row:\n%s", v)
 	}
 	e.press("enter")
-	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "set", "start"}) {
-		t.Fatalf("ops = %v", got)
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add"}) {
+		t.Fatalf("ops = %v, want one add", got)
 	}
-	if c := e.sched.calls[1]; c.Value != "kit:plan" {
-		t.Fatalf("set = %+v, want the typed skill without its slash", c)
+	if c := e.sched.calls[0]; c.Set["skill"] != "kit:plan" {
+		t.Fatalf("add = %+v, want the typed skill without its slash", c)
 	}
 	if !strings.Contains(e.m.status, "start ENG-9 ok · kit:plan") {
 		t.Fatalf("status %q", e.m.status)
@@ -153,8 +158,8 @@ func TestTheRepoPickerFiltersAndRemembersTheRepoOfTheProject(t *testing.T) {
 	if got := e.remem["p1"]; got != "/Users/g/repos/acme/web" {
 		t.Fatalf("remembered %v, want web for the Project p1", e.remem)
 	}
-	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "add", "start"}) {
-		t.Fatalf("ops = %v", got)
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "add"}) {
+		t.Fatalf("ops = %v, want the add, then the add with the Repo", got)
 	}
 	if c := lastAdd(t, e); c.Repo != "/Users/g/repos/acme/web" || c.Issue != "ENG-9" {
 		t.Fatalf("second add = %+v", c)
@@ -182,29 +187,62 @@ func TestTheSkillCarriesThroughTheRepoPicker(t *testing.T) {
 	if e.m.mode != modeRepo {
 		t.Fatalf("mode %d, status %q, want the Repo picker", e.m.mode, e.m.status)
 	}
-	delete(e.sched.errs, "add")
 	e.press("enter")
-	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "add", "set", "start"}) {
-		t.Fatalf("ops = %v", got)
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "add"}) {
+		t.Fatalf("ops = %v, want the add, then the add with the Repo", got)
 	}
-	if c := e.sched.calls[2]; c.Key != "skill" || c.Value != "kit:test-first" {
-		t.Fatalf("set = %+v", c)
+	if c := lastAdd(t, e); c.Repo != "/Users/g/repos/acme/data" || c.Set["skill"] != "kit:test-first" {
+		t.Fatalf("add = %+v, want the picked Repo and the skill", c)
 	}
 }
 
-func TestAStartOverTheCapUsesTheCapPrompt(t *testing.T) {
+// fullCapStart starts ENG-9 with the keys while the WIP cap is full, so the
+// add fails and the cap prompt opens. It returns the add that failed.
+func fullCapStart(t *testing.T, keys ...string) (*workEnv, scheduler.Request) {
+	t.Helper()
+	e := startEnv(t, "kit:test-first")
+	e.sched.errs["add"] = errors.New(capFull)
+	e.press(keys...)
+	if !strings.Contains(e.m.footer(), "wip cap full: start once over the cap (o) or raise the cap to 6 (c)?") {
+		t.Fatalf("%v: footer %q, want the cap prompt", keys, e.m.footer())
+	}
+	return e, lastAdd(t, e)
+}
+
+func TestTheCapPromptSendsTheAddAgainOverTheCap(t *testing.T) {
 	for _, keys := range [][]string{{"s", "enter"}, {"s", "down", "enter"}} {
-		e := startEnv(t, "kit:test-first")
-		e.sched.errs["start"] = errors.New(capFull)
-		e.press(keys...)
-		if e.m.mode != modeCap || e.m.pendingTask != "ENG-9" {
-			t.Fatalf("%v: mode=%d pending=%q, want the cap prompt for ENG-9", keys, e.m.mode, e.m.pendingTask)
-		}
-		delete(e.sched.errs, "start")
+		e, failed := fullCapStart(t, keys...)
 		e.press("o")
-		if last := e.sched.calls[len(e.sched.calls)-1]; last.Op != "start" || !last.OverCap || last.Task != "ENG-9" {
-			t.Fatalf("%v: over-cap start = %+v", keys, last)
+		want := failed
+		want.OverCap = true
+		if got := e.sched.ops(); !slices.Equal(got, []string{"add", "add"}) {
+			t.Fatalf("%v: ops = %v, want the add, then the add over the cap", keys, got)
 		}
+		if last := lastAdd(t, e); !reflect.DeepEqual(last, want) {
+			t.Fatalf("%v: second add = %+v, want %+v", keys, last, want)
+		}
+	}
+}
+
+func TestRaisingTheCapSendsTheAddAgain(t *testing.T) {
+	e, failed := fullCapStart(t, "s", "down", "enter")
+	e.press("c")
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "cap", "add"}) {
+		t.Fatalf("ops = %v, want the add, the cap, then the add again", got)
+	}
+	if c := e.sched.calls[1]; c.N != 6 {
+		t.Fatalf("cap = %+v, want 6", c)
+	}
+	if last := lastAdd(t, e); !reflect.DeepEqual(last, failed) {
+		t.Fatalf("second add = %+v, want %+v", last, failed)
+	}
+}
+
+func TestAnyOtherKeyCancelsTheCapPrompt(t *testing.T) {
+	e, _ := fullCapStart(t, "s", "enter")
+	e.press("esc")
+	if e.m.mode != modeNormal || !slices.Equal(e.sched.ops(), []string{"add"}) {
+		t.Fatalf("mode %d, ops %v, want the keys back and no other op", e.m.mode, e.sched.ops())
 	}
 }
 

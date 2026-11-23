@@ -10,7 +10,7 @@ import (
 
 func TestBoardDefaults(t *testing.T) {
 	want := Board{
-		Order:     []string{"Needs you", "Backlog", "Ready", "Queued", "Working", "Waiting", "Done"},
+		Order:     []string{"Needs you", "Backlog", "Ready", "Working", "Waiting", "Done"},
 		Collapsed: []string{"Backlog", "Done"},
 		Hidden:    []string{},
 	}
@@ -28,11 +28,11 @@ func TestBoardDefaults(t *testing.T) {
 func TestBoardKeysTakeTheirValuesAndAbsentKeysTakeDefaults(t *testing.T) {
 	g := load(t, `
 [board]
-order = ["done", "needs_you", "working", "waiting", "queued", "ready", "backlog"]
+order = ["done", "needs_you", "working", "waiting", "ready", "backlog"]
 hidden = ["done"]
 `)
 	want := Board{
-		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Queued", "Ready", "Backlog"},
+		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Ready", "Backlog"},
 		Collapsed: []string{"Backlog", "Done"},
 		Hidden:    []string{"Done"},
 	}
@@ -47,7 +47,7 @@ func TestBoardEmptyCollapsedMeansNoneAndOrderKeepsTheRest(t *testing.T) {
 	if got := b.Collapsed; len(got) != 0 {
 		t.Fatalf("collapsed %v, want none", got)
 	}
-	want := []string{"Waiting", "Ready", "Needs you", "Backlog", "Queued", "Working", "Done"}
+	want := []string{"Waiting", "Ready", "Needs you", "Backlog", "Working", "Done"}
 	if got := b.Order; !slices.Equal(got, want) {
 		t.Fatalf("order %v, want %v", got, want)
 	}

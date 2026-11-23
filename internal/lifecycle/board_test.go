@@ -13,7 +13,7 @@ var policy = Policy{Budgets: Budgets{CIDebug: 3, Responding: 3}}
 
 func taskIn(stage Stage) (*Board, *Task) {
 	b := NewBoard(5)
-	t := b.Add("T", policy)
+	t, _, _ := b.Add("T", policy, false)
 	t.Stage = stage
 	return b, t
 }
@@ -36,7 +36,6 @@ func TestTransitions(t *testing.T) {
 		effects []Effect
 		outcome Outcome
 	}{
-		{"start", Queued, Start{}, Working, []Effect{TrackerStatus{"started"}, PromptWorker{Working}}, ""},
 		{"working done with draft PR", Working, WorkerDone{ContractMet: true}, CIRunning, nil, ""},
 		{"ci failed", CIRunning, failedCI, CIDebug, []Effect{PromptWorker{CIDebug}}, ""},
 		{"ci pending", CIRunning, pendingCI, CIRunning, nil, ""},
@@ -59,7 +58,6 @@ func TestTransitions(t *testing.T) {
 		{"merged by another person", Working, PRMerged{}, Done, []Effect{TrackerStatus{"merged"}}, OutcomeMerged},
 		{"merged from ready to land", ReadyToLand, PRMerged{}, Done, []Effect{TrackerStatus{"merged"}}, OutcomeMerged},
 		{"closed", InReview, TaskClosed{}, Done, []Effect{Cleanup{}, TrackerStatus{"closed"}}, OutcomeClosed},
-		{"closed while queued", Queued, TaskClosed{}, Done, []Effect{Cleanup{}, TrackerStatus{"closed"}}, OutcomeClosed},
 		{"a skip closes a build Task as a close does", InReview, TaskClosed{Skipped: true}, Done, []Effect{Cleanup{}, TrackerStatus{"closed"}}, OutcomeClosed},
 		{"rerun ci debug", CIRunning, Rerun{CIDebug}, CIDebug, []Effect{PromptWorker{CIDebug}}, ""},
 	}
@@ -116,7 +114,7 @@ func TestTabClosedCleansUpADoneTask(t *testing.T) {
 }
 
 func TestTabClosedChangesNothingInAStartedStage(t *testing.T) {
-	for _, stage := range []Stage{Queued, Working, CIRunning, CIDebug, InReview, Responding, ReadyToLand} {
+	for _, stage := range []Stage{Working, CIRunning, CIDebug, InReview, Responding, ReadyToLand} {
 		b, task := taskIn(stage)
 		effects, err := b.Apply("T", TabClosed{})
 		if err != nil || len(effects) != 0 || task.Stage != stage {
@@ -162,35 +160,46 @@ func TestAnOldTaskKeepsItsGateAndTheOldRules(t *testing.T) {
 	}
 }
 
-func TestWIPCap(t *testing.T) {
-	b := NewBoard(1)
-	b.Add("A", policy)
-	second := b.Add("B", policy)
-	if _, err := b.Apply("A", Start{}); err != nil {
+func TestAnAddStartsABuildTaskInWorking(t *testing.T) {
+	b := NewBoard(5)
+	task, effects, err := b.Add("T", policy, false)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.Apply("B", Start{}); !errors.Is(err, ErrWIPCapFull) {
-		t.Fatalf("start over cap: err = %v, want ErrWIPCapFull", err)
+	if task.Stage != Working || task.Kind != KindBuild || b.Tasks["T"] != task || b.Started() != 1 {
+		t.Fatalf("task %+v, %d started, want a started build Task in Working on the Board", task, b.Started())
 	}
-	if second.Stage != Queued {
-		t.Fatalf("refused start moved the Task to %s", second.Stage)
-	}
-	if _, err := b.Apply("B", Start{OverCap: true}); err != nil {
-		t.Fatal(err)
-	}
-	if !second.OverCap || b.OverCap() != 1 {
-		t.Fatalf("over-cap start not recorded: task %v, board %d", second.OverCap, b.OverCap())
+	if want := []Effect{TrackerStatus{"started"}, PromptWorker{Working}}; !reflect.DeepEqual(effects, want) {
+		t.Fatalf("effects = %#v, want %#v", effects, want)
 	}
 }
 
-func TestStartUnderCapIsNotRecordedAsOverCap(t *testing.T) {
+func TestWIPCap(t *testing.T) {
+	b := NewBoard(1)
+	b.Add("A", policy, false)
+	if task, effects, err := b.Add("B", policy, false); !errors.Is(err, ErrWIPCapFull) || task != nil || effects != nil {
+		t.Fatalf("add over cap: task %v, effects %v, err %v, want ErrWIPCapFull", task, effects, err)
+	}
+	if _, ok := b.Tasks["B"]; ok || b.Started() != 1 {
+		t.Fatalf("the refused add put B on the Board: %d started", b.Started())
+	}
+	second, _, err := b.Add("B", policy, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Stage != Working || !second.OverCap || b.OverCap() != 1 {
+		t.Fatalf("over-cap add: stage %s, over cap %v, board %d", second.Stage, second.OverCap, b.OverCap())
+	}
+}
+
+func TestAnAddUnderCapIsNotRecordedAsOverCap(t *testing.T) {
 	b := NewBoard(2)
-	task := b.Add("A", policy)
-	if _, err := b.Apply("A", Start{OverCap: true}); err != nil {
+	task, _, err := b.Add("A", policy, true)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if task.OverCap {
-		t.Fatal("a start with room under the cap was recorded as over the cap")
+		t.Fatal("an add with room under the cap was recorded as over the cap")
 	}
 }
 
@@ -200,8 +209,7 @@ func TestUserSignalsOutsideTheirStageFail(t *testing.T) {
 		signal Signal
 	}{
 		{InReview, PRMerge{}},
-		{Working, Start{}},
-		{Queued, Rerun{Working}},
+		{Done, Rerun{Working}},
 		{Working, Rerun{InReview}},
 	}
 	for _, c := range cases {
@@ -222,7 +230,6 @@ func TestObservedSignalsOutsideTheirStageChangeNothing(t *testing.T) {
 		stage  Stage
 		signal Signal
 	}{
-		{Queued, failedCI},
 		{Working, approved},
 		{Working, Pushed{}},
 		{CIDebug, failedCI},
@@ -452,7 +459,7 @@ var userPolicy = Policy{Budgets: Budgets{CIDebug: 3, Responding: 3, ReviewCycles
 
 func userTaskIn(stage Stage) (*Board, *Task) {
 	b := NewBoard(5)
-	t := b.Add("T", userPolicy)
+	t, _, _ := b.Add("T", userPolicy, false)
 	t.Stage = stage
 	return b, t
 }
@@ -505,7 +512,7 @@ func TestBotThreadsOnAPassingScoreSpendAReviewCycle(t *testing.T) {
 	p := userPolicy
 	p.Bar.Bot = greptile(4)
 	b := NewBoard(5)
-	task := b.Add("T", p)
+	task, _, _ := b.Add("T", p, false)
 	task.Stage = CIRunning
 	b.Apply("T", threads(&five, Thread{Bot: true}))
 	if task.Stage != Responding || task.Left.ReviewCycles != 0 || task.Left.Responding != 3 || task.BotScore == nil {
@@ -529,7 +536,7 @@ func TestUnreadThreadsStartARespondingRound(t *testing.T) {
 	p := userPolicy
 	p.Bar.Bot = greptile(4)
 	b := NewBoard(5)
-	task := b.Add("T", p)
+	task, _, _ := b.Add("T", p, false)
 	task.Stage = CIRunning
 	over := threads(&five, Thread{Bot: true})
 	over.Facts.ThreadsOver = true
@@ -651,7 +658,7 @@ func TestAReviewCycleLeavesPeoplesCommentsNew(t *testing.T) {
 	p := userPolicy
 	p.Bar.Bot = greptile(5)
 	b := NewBoard(5)
-	task := b.Add("T", p)
+	task, _, _ := b.Add("T", p, false)
 	task.Stage = CIRunning
 	low := comments(1)
 	low.Facts.Score = &four
@@ -772,7 +779,7 @@ var gated = Policy{
 
 func gatedIn(stage Stage) (*Board, *Task) {
 	b := NewBoard(5)
-	t := b.Add("T", gated)
+	t, _, _ := b.Add("T", gated, false)
 	t.Stage = stage
 	return b, t
 }

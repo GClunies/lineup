@@ -61,8 +61,6 @@ func (s *Scheduler) restore(ctx context.Context, id string, focus bool) (OpenRes
 	}
 	res := OpenResult{TaskView: r.view(), Action: OpenFocused}
 	switch {
-	case r.Stage == lifecycle.Queued:
-		return res, fmt.Errorf("%s has not started", id)
 	case r.Stage == lifecycle.Done && r.WindowID == "":
 		return res, fmt.Errorf("%s is Done and its worktree is gone", id)
 	case r.WindowID != "" && (r.Job != JobExited || r.Stage == lifecycle.Done):

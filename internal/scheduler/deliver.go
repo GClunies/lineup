@@ -150,7 +150,7 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 	}
 	since := r.PendingSince
 	s.update(r.ID, func(rec *Record) {
-		rec.Conversation, rec.WorkerStage = spec.Conversation, stage
+		rec.Conversation, rec.WorkerStage = spec.Conversation, new(stage)
 		// A rerun during a slow open set the prompt again, and the new Worker has
 		// not got it.
 		if fresh && rec.Pending != nil && *rec.Pending == stage && rec.PendingSince.Equal(since) {
@@ -208,7 +208,7 @@ func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.St
 	var was string
 	s.update(r.ID, func(rec *Record) {
 		if claimed = rec.Pending != nil && *rec.Pending == stage && rec.BlockID == r.BlockID; claimed {
-			rec.Pending, rec.WorkerStage = nil, stage
+			rec.Pending, rec.WorkerStage = nil, new(stage)
 			if prompt != "" {
 				was, rec.WorkerState, rec.PendingSince = rec.WorkerState, promptedState, s.now()
 			}

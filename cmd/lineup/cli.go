@@ -22,7 +22,6 @@ import (
 var clientCommands = map[string]func(c scheduler.Client, args []string, out io.Writer) error{
 	"add":     cmdAdd,
 	"next-id": cmdNextID,
-	"start":   cmdStart,
 	"review":  cmdReview,
 	"reviews": cmdReviews,
 	"ls":      cmdLs,
@@ -73,7 +72,7 @@ func cmdAdd(c scheduler.Client, args []string, out io.Writer) error {
 	if err := c.Do(req, &v); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "%s queued in %s: %s\n", v.ID, v.Repo, v.Title)
+	fmt.Fprintf(out, "%s started in %s: %s\n", v.ID, v.Repo, v.Title)
 	return nil
 }
 
@@ -140,28 +139,9 @@ func looksLikeIssue(s string, prefixes []string) bool {
 	return true
 }
 
-func cmdStart(c scheduler.Client, args []string, out io.Writer) error {
-	var over bool
-	fs, err := parse("start", "[--over-cap] <task>", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&over, "over-cap", false, "start once over the WIP cap; only with the user's yes")
-	})
-	if err != nil {
-		return err
-	}
-	if fs.NArg() != 1 {
-		fs.Usage()
-		return errUsage
-	}
-	if err := c.Do(scheduler.Request{Op: "start", Task: fs.Arg(0), OverCap: over}, nil); err != nil {
-		return err
-	}
-	fmt.Fprintf(out, "%s started\n", fs.Arg(0))
-	return nil
-}
-
 // cmdReview adds and starts a review Task for the PR. If the PR has an open
-// review Task, it adds nothing. It starts that Task if it is Queued, runs it
-// again if it stopped for good, and otherwise focuses its tab.
+// review Task, it adds nothing. It runs that Task again if it stopped for
+// good, and otherwise focuses its tab.
 func cmdReview(c scheduler.Client, args []string, out io.Writer) error {
 	if len(args) != 1 {
 		return fmt.Errorf("%w: lineup review <PR URL>", errUsage)
@@ -174,7 +154,7 @@ func cmdReview(c scheduler.Client, args []string, out io.Writer) error {
 	case scheduler.ReviewAdded:
 		fmt.Fprintf(out, "%s reviewing in %s: %s\n", res.ID, res.Repo, res.Title)
 		return nil
-	case scheduler.ReviewStarted, scheduler.ReviewRestarted, scheduler.ReviewReopened:
+	case scheduler.ReviewRestarted, scheduler.ReviewReopened:
 		fmt.Fprintf(out, "%s %s: %s\n", res.ID, res.Action, res.Title)
 		return nil
 	}

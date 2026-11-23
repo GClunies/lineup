@@ -15,7 +15,6 @@ import (
 func (h *harness) working() tab {
 	h.t.Helper()
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	w := h.waitTab("claude working")
 	eventually(h.t, "a live Worker", func() bool { return h.task("ENG-1").Live })
@@ -107,7 +106,7 @@ func TestAskRefusedWithoutWorker(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
 	if err := h.ask("ENG-1", "ok?"); err == nil || err.Error() != "ENG-1 has no live Worker" {
-		t.Fatalf("ask on a Queued task = %v", err)
+		t.Fatalf("ask during setup = %v", err)
 	}
 }
 

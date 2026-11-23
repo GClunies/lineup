@@ -140,13 +140,24 @@ func New(d Deps) (*Scheduler, error) {
 	if err != nil {
 		return nil, err
 	}
+	var removed []*Record
 	for id, data := range raw {
+		data, never, err := migrate(data)
+		if err != nil {
+			return nil, fmt.Errorf("task %s: %w", id, err)
+		}
 		r := &Record{}
 		if err := json.Unmarshal(data, r); err != nil {
 			return nil, fmt.Errorf("task %s: %w", id, err)
 		}
 		s.recs[id] = r
 		s.board.Tasks[id] = &r.Task
+		if never {
+			removed = append(removed, r)
+		}
+	}
+	for _, r := range removed {
+		s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: "remove", From: legacyQueued.name, To: r.Stage.String(), Detail: "never started"})
 	}
 	return s, nil
 }
@@ -651,7 +662,7 @@ func (s *Scheduler) resumeFallback(r *Record, code int) {
 // lostPrompt puts a typed prompt back in Pending when its Worker ended before it
 // reported working on the prompt.
 func (s *Scheduler) lostPrompt(r *Record) {
-	if r.WorkerState == promptedState && r.WorkerStage == r.Stage && r.Pending == nil {
+	if r.WorkerState == promptedState && r.WorkerStage != nil && *r.WorkerStage == r.Stage && r.Pending == nil {
 		s.pend(r, r.Stage)
 	}
 }

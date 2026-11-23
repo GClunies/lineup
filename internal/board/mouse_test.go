@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
-	"github.com/gclunies/lineup/internal/scheduler"
 )
 
 // lineWith is the screen line that shows text, as the user sees it.
@@ -185,20 +184,21 @@ func TestATappedCloseAsksYesOrNoByTap(t *testing.T) {
 	}
 }
 
-func TestATappedStartAtAFullCapAsksByTap(t *testing.T) {
-	f := &fakeClient{errs: map[string]error{"start": errors.New(capFull)}}
-	m := newModel(f, fixture())
-	m, _ = tap(t, m, "ENG-601")
-	m, cmd := tap(t, m, "start")
-	m = run(m, cmd)
+// The skill picker takes keys, so the cap choice opens as a menu only when
+// the user uses the mouse again before the add fails.
+func TestAStartAtAFullCapAsksByTapAfterTheMouse(t *testing.T) {
+	e := startEnv(t)
+	e.sched.errs["add"] = errors.New(capFull)
+	e.press("s")
+	m, cmd := press(e.m, "enter")
+	m = run(wheel(m, tea.MouseButtonWheelDown), cmd)
 	if !shows(m, "start once over the cap") {
 		t.Fatalf("no cap choice to tap:\n%s", ansi.Strip(m.View()))
 	}
 	m, cmd = tap(t, m, "start once over the cap")
 	run(m, cmd)
-	last := f.calls[len(f.calls)-1]
-	if last != (scheduler.Request{Op: "start", Task: "ENG-601", OverCap: true}) {
-		t.Fatalf("last call = %+v, want a start over the cap", last)
+	if last := e.sched.calls[len(e.sched.calls)-1]; last.Op != "add" || !last.OverCap || last.Issue != "ENG-9" {
+		t.Fatalf("last call = %+v, want the add of ENG-9 over the cap", last)
 	}
 }
 

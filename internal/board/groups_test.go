@@ -52,7 +52,7 @@ func layoutEnv(t *testing.T, b config.Board) *workEnv {
 
 // userBoard is the layout that the user asked for.
 var userBoard = config.Board{
-	Order:     []string{"Done", "Needs you", "Working", "Waiting", "Queued", "Ready", "Backlog"},
+	Order:     []string{"Done", "Needs you", "Working", "Waiting", "Ready", "Backlog"},
 	Collapsed: []string{"Backlog"},
 	Hidden:    []string{"Done"},
 }
@@ -62,7 +62,7 @@ func screen(m Model) string { return ansi.Strip(m.View()) }
 func TestBacklogAndDoneStartClosedWithTheirCounts(t *testing.T) {
 	e := groupEnv(t)
 	out := screen(e.m)
-	for _, want := range []string{"NEEDS YOU  2", "BACKLOG  1 …", "READY  2", "ENG-9", "local-1", "QUEUED  1", "WORKING  2", "WAITING  1", "DONE  1 …"} {
+	for _, want := range []string{"NEEDS YOU  2", "BACKLOG  1 …", "READY  2", "ENG-9", "local-1", "WORKING  3", "WAITING  1", "DONE  1 …"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("screen lacks %q:\n%s", want, out)
 		}
@@ -110,8 +110,8 @@ func TestJAndKStopOnEachHeadingExceptNeedsYouAndSkipClosedRows(t *testing.T) {
 		seen = append(seen, e.m.sel)
 		e.press("j")
 	}
-	want := []string{"ENG-588", "ENG-590", "group:Backlog", "group:Ready", "ENG-9", "local-1", "group:Queued", "ENG-601",
-		"group:Working", "WEB-12", "ENG-592", "group:Waiting", "ENG-571", "group:Done", "group:Done", "group:Done"}
+	want := []string{"ENG-588", "ENG-590", "group:Backlog", "group:Ready", "ENG-9", "local-1", "group:Working", "ENG-601",
+		"WEB-12", "ENG-592", "group:Waiting", "ENG-571", "group:Done", "group:Done", "group:Done", "group:Done"}
 	if !slices.Equal(seen, want) {
 		t.Fatalf("j moved through %v, want %v", seen, want)
 	}
@@ -176,7 +176,7 @@ func TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		var tasks []scheduler.TaskView
 		inGroup := map[string][]string{}
-		for _, g := range []string{groupNeedsYou, "Queued", "Working", "Waiting", groupDone} {
+		for _, g := range []string{groupNeedsYou, "Working", "Waiting", groupDone} {
 			for i := range rapid.IntRange(0, 3).Draw(t, "tasks in "+g) {
 				id := fmt.Sprintf("%s-%d", strings.ToUpper(g[:2]), i)
 				tk := tv(id, lifecycle.Working, "data", "t", "", 0)
@@ -253,7 +253,7 @@ func TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce(t *testing.T) {
 func TestTheHeaderDropsTheGroupCounts(t *testing.T) {
 	e := groupEnv(t)
 	h := ansi.Strip(e.m.header())
-	for _, gone := range []string{"working", "waiting", "queued", "ready", "backlog", "◐", "◷"} {
+	for _, gone := range []string{"working", "waiting", "ready", "backlog", "◐", "◷"} {
 		if strings.Contains(h, gone) {
 			t.Errorf("header %q still shows %q", h, gone)
 		}
@@ -280,7 +280,7 @@ func TestTheHeaderFitsEightyColumnsWithTheWipOverflowAndTheReviewCount(t *testin
 }
 
 func TestTheDefaultOrderIsTheDevelopmentCycleAfterNeedsYou(t *testing.T) {
-	want := []string{groupNeedsYou, groupBacklog, groupReady, "Queued", "Working", "Waiting", groupDone}
+	want := []string{groupNeedsYou, groupBacklog, groupReady, "Working", "Waiting", groupDone}
 	if got := newSections(config.Board{}).order; !slices.Equal(got, want) {
 		t.Fatalf("default order %v, want %v", got, want)
 	}
@@ -291,14 +291,14 @@ func TestTheConfiguredOrderSetsTheSectionsOnScreen(t *testing.T) {
 	b.Hidden = nil
 	e := layoutEnv(t, b)
 	out := screen(e.m)
-	inOrder(t, out, "DONE  1\n", "ENG-560", "NEEDS YOU  2", "ENG-588", "WORKING  2", "WAITING  1", "QUEUED  1", "READY  2", "BACKLOG  1 …")
+	inOrder(t, out, "DONE  1\n", "ENG-560", "NEEDS YOU  2", "ENG-588", "WORKING  3", "WAITING  1", "READY  2", "BACKLOG  1 …")
 	var heads []string
 	for _, id := range e.m.rowIDs() {
 		if _, ok := headingName(id); ok {
 			heads = append(heads, id)
 		}
 	}
-	want := []string{"group:Done", "group:Working", "group:Waiting", "group:Queued", "group:Ready", "group:Backlog"}
+	want := []string{"group:Done", "group:Working", "group:Waiting", "group:Ready", "group:Backlog"}
 	if !slices.Equal(heads, want) {
 		t.Fatalf("heading stops %v, want %v", heads, want)
 	}

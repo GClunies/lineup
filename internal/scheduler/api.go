@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"regexp"
@@ -32,6 +33,9 @@ type Request struct {
 	Value   string `json:"value,omitempty"`
 	N       int    `json:"n,omitempty"`
 	OverCap bool   `json:"over_cap,omitempty"`
+	// Set is the configuration that an add overrides for its Task, as lineup
+	// set does, for example skill=pr-explain.
+	Set map[string]string `json:"set,omitempty"`
 	// URL is the PR that a review op names.
 	URL string `json:"url,omitempty"`
 }
@@ -168,8 +172,6 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 			s.publish()
 		})
 		return nil, err
-	case "start":
-		return nil, s.signal(req.Task, lifecycle.Start{OverCap: req.OverCap})
 	case "merge":
 		return nil, s.signal(req.Task, lifecycle.PRMerge{})
 	case "close":
@@ -339,12 +341,14 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 	default:
 		return TaskView{}, errors.New("add needs an Issue or a text")
 	}
-	policy, err := s.d.Config.Policy(r.Repo, nil)
+	// Resolving the overrides checks them, so a bad one fails the add.
+	policy, err := s.d.Config.Policy(r.Repo, req.Set)
 	if err != nil {
 		return TaskView{}, err
 	}
 	var v TaskView
 	err = s.withLoop(func() error {
+		adHoc := 0
 		if r.ID == "" {
 			slug := strings.Trim(notSlug.ReplaceAllString(strings.ToLower(r.Title), "-"), "-")
 			if len(slug) > 40 {
@@ -357,7 +361,7 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 				}
 				r.ID, r.Branch = id, strings.TrimSuffix(id+"-"+slug, "-")
 			} else {
-				r.ID = s.nextID("ah")
+				r.ID, adHoc = s.nextID("ah")
 				r.Branch = "lineup/" + strings.ToLower(r.ID) + "-" + slug
 			}
 		}
@@ -372,16 +376,33 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 				return fmt.Errorf("%s is already on the Board", r.ID)
 			}
 		}
+		t, effects, err := s.board.Add(r.ID, policy, req.OverCap)
+		if err != nil {
+			return err
+		}
+		if adHoc > 0 {
+			s.d.Store.SetSetting("next_id", strconv.Itoa(adHoc+1))
+		}
 		r.RepoLabel = sessionLabel(r.Repo, s.repos())
 		r.Session = r.RepoLabel
-		r.Task = *s.board.Add(r.ID, policy)
+		r.Task = *t
 		s.board.Tasks[r.ID] = &r.Task
+		r.Overrides = maps.Clone(req.Set)
 		s.recs[r.ID] = r
-		s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: "add", To: lifecycle.Queued.String()})
+		s.transition(r, store.Event{Signal: "add", Detail: overrides(req.Set)}, effects)
 		v = r.view()
 		return nil
 	})
 	return v, err
+}
+
+// overrides names the overrides of an add, for example "pr=false skill=x".
+func overrides(set map[string]string) string {
+	var kv []string
+	for _, k := range slices.Sorted(maps.Keys(set)) {
+		kv = append(kv, k+"="+set[k])
+	}
+	return strings.Join(kv, " ")
 }
 
 func (s *Scheduler) withLoop(f func() error) error {
@@ -390,14 +411,15 @@ func (s *Scheduler) withLoop(f func() error) error {
 	return err
 }
 
-// nextID takes the next number of the ad hoc Task counter. Only the loop calls it.
-func (s *Scheduler) nextID(prefix string) string {
+// nextID is the ID that the ad hoc Task counter gives next, and the counter's
+// number in it. The add saves the counter once its Task is on the Board, so a
+// refused add takes no number. Only the loop calls it.
+func (s *Scheduler) nextID(prefix string) (string, int) {
 	n := 1
 	if cur, _ := s.d.Store.Setting("next_id"); cur != "" {
 		n, _ = strconv.Atoi(cur)
 	}
-	s.d.Store.SetSetting("next_id", strconv.Itoa(n+1))
-	return fmt.Sprintf("%s-%d", prefix, n)
+	return fmt.Sprintf("%s-%d", prefix, n), n
 }
 
 // nextLocalID is <prefix>-<n>, with n one more than the highest n of the

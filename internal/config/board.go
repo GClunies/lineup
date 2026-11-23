@@ -13,7 +13,6 @@ var sections = []section{
 	{"needs_you", "Needs you"},
 	{"backlog", "Backlog"},
 	{"ready", "Ready"},
-	{"queued", "Queued"},
 	{"working", "Working"},
 	{"waiting", "Waiting"},
 	{"done", "Done"},

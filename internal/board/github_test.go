@@ -57,7 +57,7 @@ func (g fakeGH) failing(t *testing.T, on bool) {
 	}
 }
 
-// githubEnv is mineEnv with the GitHub Tracker on for octo, and a queued
+// githubEnv is mineEnv with the GitHub Tracker on for octo, and a Working
 // Task that holds octo/sandbox#16. *on turns the Tracker off.
 func githubEnv(t *testing.T) (*workEnv, fakeGH, *bool) {
 	t.Helper()
@@ -69,7 +69,7 @@ func githubEnv(t *testing.T) (*workEnv, fakeGH, *bool) {
 		Backlog: "backlog",
 	}
 	e.m = feed(e.m, boardMsg(scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{
-		tv("octo/sandbox#16", lifecycle.Queued, "sandbox", "Add a GREETING.md", "", 0),
+		tv("octo/sandbox#16", lifecycle.Working, "sandbox", "Add a GREETING.md", "", 0),
 	}}))
 	e.m = openAll(drain(e.m, e.m.loadMine()))
 	e.m.width = 200
@@ -120,7 +120,7 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 		})
 	}
 	out := screen(e.m)
-	inOrder(t, out, "BACKLOG", "octo/sandbox#10", "READY", "octo/sandbox#12", "octo/sandbox#14", "octo/sandbox#11", "QUEUED", "octo/sandbox#16")
+	inOrder(t, out, "BACKLOG", "octo/sandbox#10", "READY", "octo/sandbox#12", "octo/sandbox#14", "octo/sandbox#11", "WORKING", "octo/sandbox#16")
 	for _, want := range []string{"Drop old API keys", "blocked by #12", "unblocked"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("screen lacks %q:\n%s", want, out)
@@ -131,7 +131,7 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 func TestATaskHoldsAGitHubRowOnlyByTheExactID(t *testing.T) {
 	e, _, _ := githubEnv(t)
 	v := e.m.board
-	v.Tasks = append(v.Tasks, tv("Octo/Sandbox#12", lifecycle.Queued, "sandbox", "Split billing ingest", "", 0))
+	v.Tasks = append(v.Tasks, tv("Octo/Sandbox#12", lifecycle.Working, "sandbox", "Split billing ingest", "", 0))
 	e.m = feed(e.m, boardMsg(v))
 	if _, ok := githubRows(e.m)["octo/sandbox#12"]; !ok {
 		t.Fatal("a Task with another case of the ID hid octo/sandbox#12")
@@ -151,8 +151,8 @@ func TestSOnAGitHubRowAddsAndStartsTheIssue(t *testing.T) {
 	e, _, _ := githubEnv(t)
 	e.m.sel = "octo/sandbox#12"
 	e.press("s", "enter")
-	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "start"}) {
-		t.Fatalf("ops %v", got)
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add"}) {
+		t.Fatalf("ops %v, want one add", got)
 	}
 	if a := lastAdd(t, e); a.Issue != "octo/sandbox#12" || a.Kind != scheduler.KindGitHub {
 		t.Fatalf("add %+v", a)

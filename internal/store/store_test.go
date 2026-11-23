@@ -14,7 +14,7 @@ func TestTasksAndEventsSurviveReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	at := time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
-	if err := s.Save("ENG-1", []byte(`{"v":1}`), []Event{{TaskID: "ENG-1", At: at, Signal: "start", From: "Queued", To: "Working"}}); err != nil {
+	if err := s.Save("ENG-1", []byte(`{"v":1}`), []Event{{TaskID: "ENG-1", At: at, Signal: "add", To: "Working"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Save("ENG-1", []byte(`{"v":2}`), []Event{{TaskID: "ENG-1", At: at, Signal: "done", From: "Working", To: "CI running"}}); err != nil {
@@ -41,7 +41,7 @@ func TestTasksAndEventsSurviveReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 2 || events[0].Signal != "start" || events[1].To != "CI running" || !events[0].At.Equal(at) {
+	if len(events) != 2 || events[0].Signal != "add" || events[1].To != "CI running" || !events[0].At.Equal(at) {
 		t.Fatalf("events = %+v", events)
 	}
 	if v, _ := s.Setting("wip_cap"); v != "6" {
