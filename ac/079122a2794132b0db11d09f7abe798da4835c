@@ -1,0 +1,75 @@
+internal/board/github_test.go
+  s_3b28055ecbdc0f::t_3813fa929c368e 128-132
+  s_3b28055ecbdc0f::t_781edd88d4bdc5 134-137
+go.mod
+  s_3b28055ecbdc0f::t_ac3632da1f27a1 12
+internal/board/board_test.go
+  s_3b28055ecbdc0f::t_56e58b5a76dbd5 709
+  s_3b28055ecbdc0f::t_db5c9fe0b98b63 719
+  s_3b28055ecbdc0f::t_e4b9edbec13e69 727
+  s_3b28055ecbdc0f::t_e54e032809396a 423
+  s_3b28055ecbdc0f::t_d883ce3218d95e 732,739,741-742,745-746
+  s_3b28055ecbdc0f::t_daec738f5a8810 763-769,773,775-777
+  s_3b28055ecbdc0f::t_159ccd36c6df3e 784
+  s_3b28055ecbdc0f::t_aca98fe14318db 653-662,664,666-670
+  s_3b28055ecbdc0f::t_d994515b6abe12 665
+  s_3b28055ecbdc0f::t_c10789149d2551 604,607-608
+  s_3b28055ecbdc0f::t_715ee588b003b7 611-614
+  s_3b28055ecbdc0f::t_d2fe75a2def422 609-610
+internal/board/view_test.go
+  s_3b28055ecbdc0f::t_c2aa71c51f4d36 1-4,6-53,56-109,113-114,119-124,195-220,225-230
+  s_3b28055ecbdc0f::t_090c1ef2d5691a 221-224
+  s_3b28055ecbdc0f::t_94cb911b5f0869 125-151,154-182,184-194
+  s_3b28055ecbdc0f::t_023b3e2087042e 183
+  s_3b28055ecbdc0f::t_307986b1ea4991 5
+  s_3b28055ecbdc0f::t_a476efef98f3b7 110-112
+  s_3b28055ecbdc0f::t_20da91ae2e0bbc 115-118
+  s_3b28055ecbdc0f::t_46b02e51c0672c 152-153
+internal/board/view.go
+  s_3b28055ecbdc0f::t_d1cee59236ec23 445,452
+  s_3b28055ecbdc0f::t_57c103c8ad3234 4
+  s_3b28055ecbdc0f::t_579280d31c8069 340-341,343-345,351
+  s_3b28055ecbdc0f::t_c16b2e1c1d2edf 479
+  s_3b28055ecbdc0f::t_d1ce81fc1a9fbb 470
+  s_3b28055ecbdc0f::t_3ab0ac127ab8d3 438
+  s_3b28055ecbdc0f::t_99c6276fd5f162 360-364,369,371,374-402
+  s_3b28055ecbdc0f::t_6d09a802be9861 414-415,417-419,423-424
+  s_3b28055ecbdc0f::t_9c51d33ed659d4 495-496,498-503,507-508,510-514,516
+  s_3b28055ecbdc0f::t_9b0bfbb9c23bb9 359,403
+  s_3b28055ecbdc0f::t_3f1a65041f0af6 156-157,159,167-180,184,187-188,192-224
+  s_3b28055ecbdc0f::t_50d7440c17403f 181-183,185-186,189-191
+  s_fe8d4c1691a132::t_5e6faee922e43d 225
+internal/board/issues.go
+  s_3b28055ecbdc0f::t_22b59903cf3db6 60-70
+internal/board/groups_test.go
+  s_3b28055ecbdc0f::t_08af86441e020d 84
+  s_3b28055ecbdc0f::t_b0594cdacbbe0e 91
+internal/board/filter_test.go
+  s_3b28055ecbdc0f::t_5bdf1fa0c49b1e 21
+internal/board/issues_test.go
+  s_3b28055ecbdc0f::t_4fa3738b7cc6c1 100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ac079122a2794132b0db11d09f7abe798da4835c",
+  "prompts": {},
+  "sessions": {
+    "s_3b28055ecbdc0f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c32c2d84-afbb-49eb-9fa5-8182023a14e3",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_fe8d4c1691a132": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "954196b3-8743-4035-b4ed-db7be336559e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
