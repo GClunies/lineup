@@ -84,7 +84,7 @@ func TestCreateWritesANewIssueInTheBacklog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := os.ReadFile(filepath.Join(s.Dir, is.ID()+".md"))
+	b, _ := os.ReadFile(filepath.Join(s.Dir, is.File()))
 	if !strings.Contains(string(b), "\nstatus: backlog\n") {
 		t.Fatalf("file\n%s\nwant status: backlog", b)
 	}
