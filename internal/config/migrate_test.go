@@ -137,7 +137,7 @@ func TestMigrateKeepsWhatEachCheckoutResolves(t *testing.T) {
 		t.Errorf("roots = %q, want [~/repos]", g.file.Roots)
 	}
 	wantBoard := Board{
-		Order:     []string{"Done", "Needs you", "Up next", "Working", "Waiting", "Backlog", "Follow-up"},
+		Order:     []string{"Done", "Needs you", "Up next", "Working", "Waiting", "Backlog", "Follow-up", "Team"},
 		Collapsed: []string{"Backlog", "Up next"},
 		Hidden:    []string{"Done"},
 	}
@@ -380,7 +380,7 @@ backlog = "later"
 		t.Fatal(err)
 	}
 	wantBoard := Board{
-		Order:     []string{"Needs you", "Up next", "Working", "Follow-up", "Backlog", "Waiting", "Done"},
+		Order:     []string{"Needs you", "Up next", "Working", "Follow-up", "Backlog", "Team", "Waiting", "Done"},
 		Collapsed: []string{"Up next", "Backlog"},
 		Hidden:    []string{"Up next"},
 	}

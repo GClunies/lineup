@@ -995,6 +995,16 @@ func (g *Global) ReposForTeam(teamKey string) []string {
 	return out
 }
 
+// TeamKeys lists the Linear team keys of every teams list, sorted, each once.
+func (g *Global) TeamKeys() []string {
+	var out []string
+	for _, r := range g.file.Repos {
+		out = append(out, r.Teams...)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 // RepoTracker is the Kind of Tracker whose Issues the Repo takes, from its
 // own table, else from its owner/* table, and the Repo's key. tracker "" means
 // that the Repo takes no Issues.

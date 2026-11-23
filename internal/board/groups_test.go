@@ -309,7 +309,7 @@ func TestTheHeaderCountsNoGroupButWorking(t *testing.T) {
 }
 
 func TestTheDefaultOrderIsNeedsYouThenFollowUpThenTheDevelopmentCycle(t *testing.T) {
-	want := []string{groupNeedsYou, "Follow-up", groupBacklog, groupUpNext, "Working", "Waiting", groupDone}
+	want := []string{groupNeedsYou, "Follow-up", groupBacklog, "Team", groupUpNext, "Working", "Waiting", groupDone}
 	if got := newSections(config.Board{}).order; !slices.Equal(got, want) {
 		t.Fatalf("default order %v, want %v", got, want)
 	}

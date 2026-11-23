@@ -14,6 +14,7 @@ The user sees all of their own work on one board, from a captured idea to a merg
 | Linear Issues assigned to the user, in every signed-in workspace | Sync between the Local Tracker and Linear |
 | Local Issues, and a new local status, `backlog` | |
 | The user's own GitHub Issues, while the GitHub Tracker is on | |
+| A Team group: the unassigned Linear Issues of the user's teams | |
 | `s` on an Issue row | A Destination picker in the Orchestrator |
 | `n` captures one line at a Destination, `local` by default | A blocked Issue that starts on its blocker's branch as a stack |
 | `P` promotes a local Issue to Linear | |
@@ -35,6 +36,7 @@ The Board shows the work view only. It has no plan view (ADR 0021) and no review
  Backlog 2
    ENG-620  Split billing ingest                                           backlog    ▂
    LOCAL-9  Retry failed loads before alerting                             backlog
+ Team 12 …
  Up next 3
    ENG-611  Move the retry job                                             unblocked  ▂▄▆
    LOCAL-7  Rename the log flag                                            up next         data
@@ -50,15 +52,16 @@ The Board shows the work view only. It has no plan view (ADR 0021) and no review
  s start   f details   c status   o open the Issue   j/k move   n new Issue   ? all keys
 ```
 
-The header shows `lineup` at the left and the live state at the right. See "The header" below. Each heading shows the group name and its row count. Backlog is open in this picture, and Done is closed. See "Lay out the groups" below. Each row shows a status word, and the strip under the rows shows the selected row, ENG-614. See "The status column and the strip" below. A background band marks the selected row. See "The selected row and titles" below.
+The header shows `lineup` at the left and the live state at the right. See "The header" below. Each heading shows the group name and its row count. Backlog is open in this picture, and Team and Done are closed. See "Lay out the groups" below. Each row shows a status word, and the strip under the rows shows the selected row, ENG-614. See "The status column and the strip" below. A background band marks the selected row. See "The selected row and titles" below.
 
-An Issue row is an Issue of the user's own with no Task on the Board. The Board reads the Issues itself. The Scheduler and its store do not change.
+An Issue row is an Issue with no Task on the Board: an Issue of the user's own, or an unassigned Issue of the user's teams. The Board reads the Issues itself. The Scheduler and its store do not change.
 
 ```
- Linear MyIssues (each workspace) ─┐
- Local Tracker folder ─────────────┼─► Issue rows ─► Up next, Backlog ─► s ─► add + start (Scheduler)
- gh search issues (GitHub Tracker) ┘        ▲
-                                            └─ minus each ID that a Task on the Board holds
+ Linear MyIssues (each workspace) ───┐
+ Linear TeamIssues (each workspace) ─┤
+ Local Tracker folder ───────────────┼─► Issue rows ─► Up next, Backlog, Team ─► s ─► add, which starts (Scheduler)
+ gh search issues (GitHub Tracker) ──┘        ▲
+                                              └─ minus each ID that a Task on the Board holds
 ```
 
 ## The status column and the strip
@@ -72,7 +75,7 @@ Each Task row and Issue row shows one status word in its own column, after the t
 | Any other Task | The Stage: `working`, `CI running`, `CI debug`, `in review`, `responding`, `ready` for Ready to land, or `done` |
 | An Issue with an open blocker | `blocked` |
 | An Issue whose blockers are all done or canceled | `unblocked` |
-| Any other Issue | The group: `up next` or `backlog` |
+| Any other Issue | The group: `up next`, `backlog`, or `team` |
 
 The status column never drops. A Task row in Needs you and a blocked Issue row show the word in pink. The word carries the state without the color, so the Board reads the same with `NO_COLOR=1`.
 
@@ -111,12 +114,19 @@ A Task with no Issue stores the plain title of its text, cut at a word to at mos
 - A GitHub Issue is the user's own when the user is an assignee, or when it has no assignee and the user opened it. A pull request gets no row. `docs/spec/trackers.md` ("The Board") gives the details.
 - The Board shows a GitHub Issue only when a checkout below the roots has the Issue's owner/repo as its Repo key. The match ignores case. `lineup add --repo <repo> owner/repo#n` adds an Issue from any repository.
 - An Issue whose ID a Task on the Board holds has no Issue row. The Task row shows that Issue. Each ID has one form, as the [Trackers spec](trackers.md#case) gives, so an exact match finds the Issue.
-- A row shows the ID, the title, a status word, the priority, and the Repo when it is known. The status word is `blocked`, `unblocked`, `up next`, or `backlog`. The strip names the open blockers of the selected row, as `blocked by <IDs>`. A GitHub row's Repo is the repository name, and the strip names a blocker in the same repository as `#12`.
+- A row shows the ID, the title, a status word, the priority, and the Repo when it is known. The status word is `blocked`, `unblocked`, `up next`, `backlog`, or `team`. The strip names the open blockers of the selected row, as `blocked by <IDs>`. A GitHub row's Repo is the repository name, and the strip names a blocker in the same repository as `#12`.
 - `unblocked` means that the Issue has one or more blockers and that every blocker is done or canceled. A Linear blocker is a "blocks" relation. A local blocker is an entry in `blocked_by`. A GitHub blocker is a `Blocked by #12` line in the body, and it is done when GitHub reports it closed.
 
-The default group order is Needs you, Follow-up, Backlog, Up next, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. Follow-up comes next because its Issues still need the user after their PRs merge. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
+Team holds the open Linear Issues of the user's teams that have no assignee. The teams are the keys of every `teams` list in the config, for example `PD` in `[repos."crexi/data"]`.
 
-Both groups sort in this order:
+- The Board reads each team key in each signed-in workspace. It reads the Issues in the state types `triage`, `backlog`, and `unstarted`. It reads at most 100 Issues for each team, the ones that changed last.
+- An Issue that a Task holds has no Team row. An Issue in My Issues has no Team row either, because the Team list can lag a start.
+- `s` on a Team row starts a Task as on an Up next row. The start assigns the Issue to the user.
+- With no `teams` list, the Board reads no team Issues.
+
+The default group order is Needs you, Follow-up, Backlog, Team, Up next, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. Follow-up comes next because its Issues still need the user after their PRs merge. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
+
+The three Issue groups sort in this order:
 
 1. Issues with no open blocker, then the others.
 2. Priority: urgent, high, medium, low, then no priority. A local or GitHub Issue has no priority.
@@ -125,9 +135,9 @@ Both groups sort in this order:
 
 ### Load and refresh
 
-- The Board paints the Issue rows from the cache of each workspace's My Issues, then fetches them live.
+- The Board paints the Issue rows from the cache of each workspace's My Issues and Team list, then fetches them live.
 - It fetches again every 60 s, and right after a capture, a promote, a start, a status change, or an edit in `$EDITOR`.
-- A failed fetch keeps the rows from the last fetch, and the footer names the workspace that failed.
+- A failed fetch keeps the rows from the last fetch. The footer names the list and the workspace that failed, for example `team Issues in acme: timeout`.
 - The Board reads the Local Tracker folder whatever `local_tracker` says (ADR 0020).
 - The Board reads GitHub Issues at each load while the GitHub Tracker is on, and it has no cache for them. A failed read keeps the GitHub rows from the last read, and the footer shows `GitHub Issues:` and the error. The other rows stay. When the Tracker turns off, the GitHub rows leave.
 
@@ -158,7 +168,7 @@ When a build Task's PR merges, the Task goes to Done. Its Issue can still need t
 | `P` | Nothing | Promote the Issue to Linear. See [Promote](#promote). | Nothing |
 | `n` | Capture a new Issue. It works on every row. See [Capture](#capture). | The same | The same |
 
-One table, `issueKinds` in `internal/board/issuekind.go`, decides the keys of each Kind of row. The footer shows these keys in the order of the table. The keys of a Task row are unchanged. A key that does not apply to the selected row does nothing.
+One table, `issueKinds` in `internal/board/issuekind.go`, decides the keys of each Kind of row. A Team row is a Linear row. The footer shows these keys in the order of the table. The keys of a Task row are unchanged. A key that does not apply to the selected row does nothing.
 
 ### Status change
 
@@ -270,7 +280,7 @@ collapsed = ["backlog"]
 hidden = ["done"]
 ```
 
-The keys of a group are `needs_you`, `follow_up`, `backlog`, `up_next`, `working`, `waiting`, and `done`. A key that is absent takes its default, and an empty list means none. A group that `order` leaves out follows the listed groups, in the default order. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors that name the key, but they do not fail the load, so the Scheduler still starts. The board then uses the default layout and shows the error on its own line, for example `config: board.hidden: unknown section "dun" (default layout)`. No other status message replaces that line, and it stays until the board quits. If `config.Load` fails for any other reason, the board runs with defaults and shows `config: <error>` in the same line. The old keys `ready` and `queued` are errors of this kind, and the message names `lineup config migrate`. That command writes one `up_next` at the place of the first of the two keys in each list, and it drops the other.
+The keys of a group are `needs_you`, `follow_up`, `backlog`, `team`, `up_next`, `working`, `waiting`, and `done`. A key that is absent takes its default, and an empty list means none. A group that `order` leaves out follows the listed groups, in the default order. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors that name the key, but they do not fail the load, so the Scheduler still starts. The board then uses the default layout and shows the error on its own line, for example `config: board.hidden: unknown section "dun" (default layout)`. No other status message replaces that line, and it stays until the board quits. If `config.Load` fails for any other reason, the board runs with defaults and shows `config: <error>` in the same line. The old keys `ready` and `queued` are errors of this kind, and the message names `lineup config migrate`. That command writes one `up_next` at the place of the first of the two keys in each list, and it drops the other.
 
 | Rule | Behavior |
 |---|---|
@@ -278,7 +288,7 @@ The keys of a group are `needs_you`, `follow_up`, `backlog`, `up_next`, `working
 | Needs you | It never closes, and its heading is not a selection stop. |
 | Keys | `j` and `k` move through the headings and the rows of open groups, and skip a hidden group. `enter` on a heading opens or closes the group. The footer reads `enter open` or `enter close`, then `j/k move`. |
 | Order | `order`. The default is the order above. |
-| Closed | `collapsed` starts closed at each board start. The default is Backlog and Done. `enter` or a tap on a heading opens or closes a group for this run only. |
+| Closed | `collapsed` starts closed at each board start. The default is Backlog, Team, and Done. `enter` or a tap on a heading opens or closes a group for this run only. |
 | Hidden | `hidden` groups show no heading and no rows, and `j` and `k` skip them. The header counts do not change. The default is none. The filter finds a row in a hidden group. |
 | `d` | Shows Done if it is hidden, and opens it. Hides Done if it shows. It changes this run only, whatever `hidden` says. |
 | Selection | A Task that moves into a closed group selects that group's heading. Any other lost selection goes to the first row, or to the first heading when every group is closed. |
@@ -300,11 +310,12 @@ With no Up next row, the Board sends no extra toast. The Board does not start th
 |---|---|
 | `internal/localissues` | The `backlog` status. `Create` writes `backlog`. A `Promote` write that sets `canceled` and adds the line to the body. |
 | `internal/github` | `OwnIssues`: the user's own open Issues from two `gh search issues` calls, with each blocker's state from one GraphQL call |
-| `internal/linear` | A `Levels` function that returns the dependency level of each Issue. An `Unblocked` fact on `Issue` from the closed "blocks" relations. |
-| `internal/board` | Issue rows, their load and refresh, the Up next and Backlog groups, the keys table in `issuekind.go`, the description, the status list, the filter in `filter.go`, the capture box, the Destination list, promote, the group headings and the `[board]` layout, the header count, and the free slot toast |
+| `internal/config` | `team` in `[board]`, and `TeamKeys`: the keys of every `teams` list |
+| `internal/linear` | A `Levels` function that returns the dependency level of each Issue. An `Unblocked` fact on `Issue` from the closed "blocks" relations. `TeamIssues`: the unassigned Issues of each team. |
+| `internal/board` | Issue rows, their load and refresh, the Up next, Backlog, and Team groups, the keys table in `issuekind.go`, the description, the status list, the filter in `filter.go`, the capture box, the Destination list, promote, the group headings and the `[board]` layout, the header count, and the free slot toast |
 | `cmd/lineup/wire.go` | The Local Tracker store for the work view, whatever `local_tracker` says |
-| `cmd/lineup/hub.go` | The GitHub Tracker check and the backlog label for the work view |
-| Docs | `GLOSSARY.md` gets Up next, Backlog, Destination, and Promote. `docs/spec/mvp.md` and `docs/spec/trackers.md` name the new groups and the `backlog` status. |
+| `cmd/lineup/hub.go` | The GitHub Tracker check, the backlog label, and the team keys for the work view |
+| Docs | `GLOSSARY.md` gets Up next, Backlog, Team, Destination, and Promote. `docs/spec/mvp.md` and `docs/spec/trackers.md` name the new groups and the `backlog` status. |
 
 ## Delivery
 
@@ -325,6 +336,9 @@ Each PR lands on `main` before the next one starts.
 | Up next sorts unblocked, then priority, then level, then ID | A table test, and a `rapid` property test that the order is total and stable |
 | `unblocked` shows only when every blocker is done or canceled | Table tests for Linear relations and local `blocked_by` |
 | `s` on an Issue row sends `add` with the right Kind, then `start` | A board test that reads the fake client's ops |
+| An unassigned Issue of a team key shows in Team. An Issue that My Issues or a Task holds does not. | Board tests with the fake Linear client |
+| Team sorts as Up next does, and `s` on a Team row sends `add` with Kind `linear` | Board tests that read the screen and the fake client's ops |
+| `TeamIssues` asks once for each team key, for at most 100 Issues with no assignee in the three state types | A client test that reads the requests of a fake server |
 | A local capture writes `status: backlog`. A Linear capture sends the team, the Project, and `AssignToMe`. | Board tests with the fake Linear client and a temporary Local Tracker folder |
 | The default Destination is `local`, even after the user picks a Linear one | A board test that captures twice |
 | Promote changes the local file only after the Linear create succeeds | A board test with a failing fake create |
@@ -334,7 +348,7 @@ Each PR lands on `main` before the next one starts.
 | The selected row, heading, or menu item has a background over the full width of its pane | A board test that reads the background of each cell with a color profile |
 | A title shows as one line with no URL, and a Task with no Issue stores its title cut at a word | Scheduler tests, and a board test that reads the row, the strip, and the menu |
 | `lineup ls --json` shows the stored title | A CLI test |
-| Backlog and Done start closed with their counts, and `enter` on a heading opens or closes the group for this run only | Board tests that read the screen and the footer, and a restart |
+| Backlog, Team, and Done start closed with their counts, and `enter` on a heading opens or closes the group for this run only | Board tests that read the screen and the footer, and a restart |
 | The groups show in the `[board]` order, `collapsed` groups start closed, and `hidden` groups show nothing | Board tests that read the screen at 81 columns |
 | A bad `[board]` table loads with the default layout and an error, and the board shows the error until it quits | Config tests, and a board test that reads the screen after other status messages |
 | `d` shows or hides Done, and opens it when it shows | Board tests that read the screen before and after `d` |

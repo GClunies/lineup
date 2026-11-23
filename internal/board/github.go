@@ -60,5 +60,5 @@ func (g GitHub) load() tea.Msg {
 
 // issueRows makes the Issue rows from every Tracker that the Board reads.
 func (m Model) issueRows(tasks []scheduler.TaskView) []issueRow {
-	return issueRows(m.mine.linearIssues(), m.mine.loc, m.mine.gh, m.opts.GitHub.Backlog, tasks)
+	return issueRows(inWorkspaceOrder(m.mine.lin), inWorkspaceOrder(m.mine.team), m.mine.loc, m.mine.gh, m.opts.GitHub.Backlog, tasks)
 }

@@ -29,6 +29,13 @@ type fakeLinear struct {
 	// statesErr is what TeamStates returns, and setStatusErr what
 	// SetStatusByName returns.
 	statesErr, setStatusErr error
+	// statesFrom is the workspace of each TeamStates call.
+	statesFrom []string
+	// team is what TeamIssues returns, with teamErr. teamKeys holds the
+	// team keys of each TeamIssues call.
+	team     []linear.Issue
+	teamErr  error
+	teamKeys [][]string
 }
 
 // wsLinear is fakeLinear as one workspace sees it.
@@ -44,7 +51,20 @@ func (f wsLinear) Teams(ctx context.Context) ([]linear.Team, error) {
 	return f.fakeLinear.Teams(ctx)
 }
 
+func (f wsLinear) TeamStates(ctx context.Context, team string) ([]linear.State, error) {
+	f.mu.Lock()
+	f.statesFrom = append(f.statesFrom, f.ws)
+	f.mu.Unlock()
+	return f.fakeLinear.TeamStates(ctx, team)
+}
+
 func (f *fakeLinear) MyIssues(context.Context) ([]linear.Issue, error) { return f.issues, nil }
+func (f *fakeLinear) TeamIssues(_ context.Context, keys []string) ([]linear.Issue, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.teamKeys = append(f.teamKeys, keys)
+	return f.team, f.teamErr
+}
 func (f *fakeLinear) Teams(context.Context) ([]linear.Team, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

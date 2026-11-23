@@ -341,6 +341,29 @@ func (c *Client) MyIssues(ctx context.Context) ([]Issue, error) {
 	return issues(ws), err
 }
 
+// TeamIssues lists the Issues of each team that have no assignee, in the
+// state types triage, backlog, and unstarted. It reads the 100 Issues of each
+// team that changed last. On an error it returns the Issues read so far.
+func (c *Client) TeamIssues(ctx context.Context, teamKeys []string) ([]Issue, error) {
+	q := `query($filter: IssueFilter) { issues(first: 100, orderBy: updatedAt, filter: $filter) { nodes { ...IssueFields } } }` + issueFields
+	var out []Issue
+	for _, key := range teamKeys {
+		var res struct {
+			Issues connection[issueWire] `json:"issues"`
+		}
+		filter := map[string]any{
+			"team":     map[string]any{"key": map[string]any{"eq": key}},
+			"assignee": map[string]any{"null": true},
+			"state":    map[string]any{"type": map[string]any{"in": []string{"triage", "backlog", "unstarted"}}},
+		}
+		if err := c.query(ctx, q, map[string]any{"filter": filter}, &res); err != nil {
+			return out, err
+		}
+		out = append(out, issues(res.Issues.Nodes)...)
+	}
+	return out, nil
+}
+
 // Issue reads one Issue, with its description, labels, and attachment links,
 // by identifier such as "ENG-123".
 func (c *Client) Issue(ctx context.Context, identifier string) (Issue, error) {

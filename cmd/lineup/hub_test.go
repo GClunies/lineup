@@ -236,6 +236,17 @@ func TestBoardOptionsReadTheGitHubTracker(t *testing.T) {
 	}
 }
 
+func TestBoardOptionsListTheTeamKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := "[repos.\"crexi/data\"]\ntracker = \"linear\"\nteams = [\"PD\"]\n[repos.\"crexi/web\"]\ntracker = \"linear\"\nteams = [\"WEB\", \"PD\"]\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := boardOptions(path).Teams; !slices.Equal(got, []string{"PD", "WEB"}) {
+		t.Fatalf("Teams %q, want PD and WEB", got)
+	}
+}
+
 func TestOpenHubRenamesTheHubTab(t *testing.T) {
 	old := hubWindow{ID: "w7", Label: "hub"}
 	cases := []struct {

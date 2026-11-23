@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -51,6 +52,22 @@ func vars(into *map[string]any, r func(http.ResponseWriter, *http.Request)) func
 		}
 		_ = json.NewDecoder(req.Body).Decode(&body)
 		*into = body.Variables
+		r(w, req)
+	}
+}
+
+// request is the query and the variables of one request.
+type request struct {
+	Query     string         `json:"query"`
+	Variables map[string]any `json:"variables"`
+}
+
+// record keeps each request, then answers with r.
+func record(into *[]request, r func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, req *http.Request) {
+		var body request
+		_ = json.NewDecoder(req.Body).Decode(&body)
+		*into = append(*into, body)
 		r(w, req)
 	}
 }
@@ -177,6 +194,71 @@ func TestMyIssuesAsksForOpenIssuesAndPages(t *testing.T) {
 	filter, _ := json.Marshal(first["filter"])
 	if string(filter) != `{"state":{"type":{"nin":["completed","canceled"]}}}` || first["after"] != nil || second["after"] != "c1" {
 		t.Errorf("filter %s, after %v then %v", filter, first["after"], second["after"])
+	}
+}
+
+// teamPage is a reply to TeamIssues with the Issues of the IDs. An ID such
+// as "PD-2<PD-9" names an Issue that an open PD-9 blocks.
+func teamPage(ids ...string) map[string]any {
+	nodes := []any{}
+	for _, id := range ids {
+		id, blocker, _ := strings.Cut(id, "<")
+		var rels []any
+		if blocker != "" {
+			rels = append(rels, relation("blocks", strings.ToLower(blocker), "started"))
+		}
+		nodes = append(nodes, map[string]any{"id": "id-" + id, "identifier": id, "state": map[string]any{"type": "backlog"},
+			"inverseRelations": map[string]any{"nodes": rels}})
+	}
+	return data(map[string]any{"issues": map[string]any{"nodes": nodes}})
+}
+
+// TeamIssues asks once for each team: the first 100 Issues of the team that
+// have no assignee, in the state types triage, backlog, and unstarted.
+func TestTeamIssuesAsksEachTeamForItsUnassignedOpenIssues(t *testing.T) {
+	c := signedInFor(t)
+	var sent []request
+	fakeLinear(t, record(&sent, reply(200, teamPage("PD-1", "PD-2<PD-9"))), record(&sent, reply(200, teamPage("DE-7"))))
+	is, err := c.TeamIssues(context.Background(), []string{"PD", "DE"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, x := range is {
+		ids = append(ids, x.Identifier)
+	}
+	if got := strings.Join(ids, " "); got != "PD-1 PD-2 DE-7" {
+		t.Fatalf("Issues %s, want PD-1 PD-2 DE-7", got)
+	}
+	if got := strings.Join(BlockedBy(is[1]), " "); got != "PD-9" {
+		t.Errorf("PD-2 blocked by %q, want PD-9", got)
+	}
+	if len(sent) != 2 {
+		t.Fatalf("%d requests, want one for each team", len(sent))
+	}
+	for i, key := range []string{"PD", "DE"} {
+		filter, _ := sent[i].Variables["filter"].(map[string]any)
+		state, _ := filter["state"].(map[string]any)
+		typ, _ := state["type"].(map[string]any)
+		in, _ := typ["in"].([]any)
+		slices.SortFunc(in, func(a, b any) int { return strings.Compare(fmt.Sprint(a), fmt.Sprint(b)) })
+		got, _ := json.Marshal(filter)
+		want := `{"assignee":{"null":true},"state":{"type":{"in":["backlog","triage","unstarted"]}},"team":{"key":{"eq":"` + key + `"}}}`
+		if string(got) != want {
+			t.Errorf("request %d filter %s, want %s", i, got, want)
+		}
+		if !strings.Contains(sent[i].Query, "issues(first: 100,") {
+			t.Errorf("request %d asks for more or fewer than 100 Issues:\n%s", i, sent[i].Query)
+		}
+	}
+}
+
+func TestTeamIssuesKeepsTheIssuesReadBeforeAnError(t *testing.T) {
+	c := signedInFor(t)
+	fakeLinear(t, reply(200, teamPage("PD-1")), reply(200, map[string]any{"errors": []any{map[string]any{"message": "rate limited"}}}))
+	is, err := c.TeamIssues(context.Background(), []string{"PD", "DE"})
+	if err == nil || !strings.Contains(err.Error(), "rate limited") || len(is) != 1 || is[0].Identifier != "PD-1" {
+		t.Fatalf("got %v, %v, want PD-1 and the error", is, err)
 	}
 }
 
