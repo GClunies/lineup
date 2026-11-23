@@ -6,11 +6,13 @@ cmd/lineup/repo.go
   s_dae4353c4a0fc0::t_be6dd4d107cb32 113,221
   s_dae4353c4a0fc0::t_9b8815e2a4de13 1-90,93-108,114-220,222-227,228,231-275
   s_dae4353c4a0fc0::t_6f67fbfb3b6760 109-112
+  s_dae4353c4a0fc0::t_8187d54182252c 91-92,229-230
 cmd/lineup/service.go
   s_dae4353c4a0fc0::t_5a2d95292e2c3e 281-292,300
 cmd/lineup/repo_test.go
   s_dae4353c4a0fc0::t_6815b635b4d1e8 1-20,22-48,50-104,106-121,123-235
   s_dae4353c4a0fc0::t_e7b3349451f295 21,49
+  s_dae4353c4a0fc0::t_8187d54182252c 105,122
 ---
 {
   "schema_version": "authorship/3.0.0",
