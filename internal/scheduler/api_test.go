@@ -221,6 +221,9 @@ func TestEachOpFindsATaskByItsIDInAnyCase(t *testing.T) {
 	}
 
 	h.do(Request{Op: "add", Issue: "acme/issues#3", Kind: KindGitHub, Repo: "issues"})
+	if _, err := h.s.Handle(context.Background(), Request{Op: "add", Issue: "ACME/issues#3", Kind: KindGitHub, Repo: "issues"}); err == nil || !strings.Contains(err.Error(), "already on the Board") {
+		t.Fatalf("add ACME/issues#3 over acme/issues#3: err = %v, want already on the Board", err)
+	}
 	h.do(Request{Op: "set", Task: "ACME/Issues#3", Key: "skill", Value: "tdd"})
 	if v := h.do(Request{Op: "show", Task: "Acme/ISSUES#3"}).(TaskDetail); v.ID != "acme/issues#3" || v.Skill != "tdd" {
 		t.Fatalf("show Acme/ISSUES#3 = %+v, want acme/issues#3 with the skill tdd", v.TaskView)

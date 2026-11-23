@@ -377,7 +377,7 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 				r.Branch = "lineup/" + strings.ToLower(r.ID) + "-" + slug
 			}
 		}
-		if old, ok := s.recs[r.ID]; ok {
+		if old, ok := s.find(r.ID); ok {
 			if r.Issue != nil && (old.Issue == nil || old.Issue.Tracker() != r.Issue.Tracker()) {
 				return fmt.Errorf("%s is already the ID of another Task: give the %s Issue another ID", r.ID, r.Issue.Tracker())
 			}
