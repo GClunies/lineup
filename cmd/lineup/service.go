@@ -6,10 +6,12 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"text/template"
@@ -277,12 +279,23 @@ func startService() error {
 	return m.start()
 }
 
-func cmdRestart() error {
-	if err := restartScheduler(); err != nil {
+// cmdRestart is lineup restart [scheduler]. With no argument, it then opens
+// each Hub tab again, so each Board runs the installed lineup and the
+// Orchestrator starts a new session. A Scheduler that does not restart
+// leaves the Hub as it is.
+func cmdRestart(args []string, out io.Writer, scheduler func() error, hub func(hubMode) error) error {
+	all := len(args) == 0
+	if !all && !slices.Equal(args, []string{"scheduler"}) {
+		return fmt.Errorf("%w: lineup restart [scheduler]", errUsage)
+	}
+	if err := scheduler(); err != nil {
 		return err
 	}
-	fmt.Println(restarted)
-	return nil
+	fmt.Fprintln(out, restarted)
+	if !all {
+		return nil
+	}
+	return hub(hubFresh)
 }
 
 const restarted = "The Scheduler restarted."

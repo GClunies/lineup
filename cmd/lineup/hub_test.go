@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gclunies/lineup/internal/config"
 	"github.com/gclunies/lineup/internal/github"
@@ -72,7 +73,7 @@ func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 	if !slices.Contains(v.Permissions.Allow, "Edit(//Users/g/.config/lineup/config.toml)") || slices.Contains(v.Permissions.Allow, "Edit(//Users/g/.config/lineup/**)") {
 		t.Errorf("the agent cannot write the config file alone: %+v", v.Permissions)
 	}
-	if !strings.Contains(string(role), "`/Users/g/.config/lineup/config.toml`") || !strings.Contains(string(role), "`lineup restart`") {
+	if !strings.Contains(string(role), "`/Users/g/.config/lineup/config.toml`") || !strings.Contains(string(role), "`lineup restart scheduler`") {
 		t.Errorf("the role does not say how to change the review queues:\n%s", role)
 	}
 	if h := v.Hooks["UserPromptSubmit"]; len(h) != 1 || len(h[0].Hooks) != 2 || h[0].Hooks[0].Command != "'/Users/g/bin/lineup' trackers" || h[0].Hooks[1].Command != "'/Users/g/bin/lineup' ready" {
@@ -276,23 +277,6 @@ func TestOpenHubRenamesTheHubTab(t *testing.T) {
 	}
 }
 
-func TestOpenHubReopensATabWithARetiredAgent(t *testing.T) {
-	for _, c := range []struct {
-		blocks []string
-		want   bool
-	}{
-		{[]string{"BOARD", "ORCHESTRATOR"}, true},
-		{[]string{"LINEAR", "PLANNER"}, true},
-		{[]string{"REVIEWS", "REVIEWER"}, true},
-		{[]string{"BOARD", "LINEUP"}, false},
-		{[]string{"REVIEWS"}, false},
-	} {
-		if got := retired(hubWindow{Blocks: c.blocks}); got != c.want {
-			t.Errorf("retired(%v) = %v, want %v", c.blocks, got, c.want)
-		}
-	}
-}
-
 func TestOpenHubReopensATabThatRexRestoredAsShells(t *testing.T) {
 	w := hubWindow{Blocks: []string{"BOARD", "LINEUP", "shell"}, BlockIDs: []string{"block:board", "block:agent", "block:mine"}}
 	for _, c := range []struct {
@@ -341,7 +325,7 @@ esac`,
 	os.WriteFile(settings, []byte(`{"hooks":{"UserPromptSubmit":[{"hooks":[{"command":"/tmp/lineup-s1 trackers"}]}]}}`), 0o600)
 	os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("an old prompt"), 0o600)
 
-	if err := openHub(); err != nil {
+	if err := openHub(hubRepair); err != nil {
 		t.Fatal(err)
 	}
 	role, want, err := composeAgent(hub.role, hub.settings)
@@ -386,7 +370,7 @@ esac`,
 	t.Setenv("LINEUP_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 
-	if err := openHub(); err != nil {
+	if err := openHub(hubRepair); err != nil {
 		t.Fatal(err)
 	}
 	raw, _ := os.ReadFile(log)
@@ -401,18 +385,30 @@ esac`,
 	}
 }
 
-// fakeHubRex is a rex whose Hub has one lineup tab. Rex restored its BOARD
-// pane as an idle shell, and its LINEUP pane runs a program. It logs each call.
-func fakeHubRex(t *testing.T) string {
+// The blocks of the Hub's lineup tab in fakeHubRex.
+const (
+	restoredBoard = `[{"block_id":"b1","label":"BOARD"},{"block_id":"b2","label":"LINEUP"}]`
+	livePanes     = `[{"block_id":"b3","label":"BOARD"},{"block_id":"b2","label":"LINEUP"}]`
+)
+
+// fakeHubRex is a rex whose Hub has one lineup tab, w2, with blocks, a JSON
+// list. Block b1 holds an idle shell, as a pane does after a Rex restart, and
+// each other block runs a program. An empty blocks means no Hub session. The
+// fake logs each call. lineup runs outside the Hub, and a detach fails the test.
+func fakeHubRex(t *testing.T, blocks string) string {
 	t.Helper()
 	bin := t.TempDir()
 	log := filepath.Join(t.TempDir(), "rex.log")
 	idle := `{"child":{"name":"login","path":"/usr/bin/login"},"foreground":{"name":"zsh","path":"/bin/zsh"},"ancestors":[{"name":"login","path":"/usr/bin/login"}]}`
 	live := `{"child":{"name":"claude","path":"/bin/claude"},"foreground":{"name":"claude","path":"/bin/claude"}}`
+	inspect := `echo '{"windows":[{"window_id":"w2","label":"lineup","layers":[{"blocks":` + blocks + `}]}]}'`
+	if blocks == "" {
+		inspect = `echo "session $4 not found" >&2; exit 1`
+	}
 	for name, body := range map[string]string{
 		"rex": `echo "$@" >> '` + log + `'
 case "$1 $2" in
-"session inspect") echo '{"windows":[{"window_id":"w2","label":"lineup","layers":[{"blocks":[{"block_id":"b1","label":"BOARD"},{"block_id":"b2","label":"LINEUP"}]}]}]}';;
+"session inspect") ` + inspect + `;;
 "block call") if [ "$7" = process ] && [ "$6" = b1 ]; then echo '` + idle + `'; elif [ "$7" = process ]; then echo '` + live + `'; fi;;
 "window new") echo '{"window_id":"w9","block_ids":["b9"]}';;
 "split -s") echo '{"block_ids":["b10"]}';;
@@ -429,33 +425,183 @@ esac`,
 	t.Setenv("LINEUP_STATE_DIR", t.TempDir())
 	t.Setenv("LINEUP_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	t.Setenv("REX_BLOCK", "block:elsewhere")
+	detachHub = func(string, []string, string) error {
+		t.Error("lineup started a detached copy")
+		return nil
+	}
+	t.Cleanup(func() { detachHub = startDetached })
 	return log
 }
 
-func TestOpenHubReopensATabThatARexRestartLeftAsAShell(t *testing.T) {
-	log := fakeHubRex(t)
-	t.Setenv("REX_BLOCK", "block:elsewhere")
-	if err := openHub(); err != nil {
+// claudeSessions is the folder where Claude keeps the Orchestrator's
+// sessions: its agent folder, with each / and . as -, in the projects folder
+// of the profile.
+func claudeSessions() string {
+	agent := filepath.Join(stateDir(), "lineup")
+	return filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "projects", strings.NewReplacer("/", "-", ".", "-").Replace(agent))
+}
+
+// rexCalls reads the fake rex's log.
+func rexCalls(t *testing.T, log string) string {
+	t.Helper()
+	raw, err := os.ReadFile(log)
+	if err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
-	raw, _ := os.ReadFile(log)
-	calls := string(raw)
+	return string(raw)
+}
+
+// reopened reports whether lineup closed the tab w2 and then opened it again.
+func reopened(calls string) bool {
 	closed, opened := strings.Index(calls, "window close -s my-lineup w2"), strings.Index(calls, "window new -s my-lineup lineup")
-	if closed < 0 || opened < closed {
-		t.Fatalf("lineup did not close the restored tab, then open it again:\n%s", calls)
+	return closed >= 0 && opened > closed
+}
+
+func TestOnlyARepairContinuesTheOrchestratorsConversation(t *testing.T) {
+	for _, c := range []struct {
+		name         string
+		mode         hubMode
+		blocks       string
+		wantContinue bool
+	}{
+		{"lineup restart on a live Hub", hubFresh, livePanes, false},
+		{"lineup on a Hub that Rex restored", hubRepair, restoredBoard, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			log := fakeHubRex(t, c.blocks)
+			os.MkdirAll(claudeSessions(), 0o700)
+			os.WriteFile(filepath.Join(claudeSessions(), "s1.jsonl"), []byte("{}\n"), 0o600)
+			if err := openHub(c.mode); err != nil {
+				t.Fatal(err)
+			}
+			calls := rexCalls(t, log)
+			if !reopened(calls) {
+				t.Fatalf("lineup did not close the tab, then open it again:\n%s", calls)
+			}
+			split := calls[strings.Index(calls, "split -s"):]
+			split, _, _ = strings.Cut(split, "\n")
+			if got := strings.HasSuffix(split, " --continue"); got != c.wantContinue {
+				t.Errorf("the agent's command continues the conversation: %v, want %v:\n%s", got, c.wantContinue, split)
+			}
+		})
 	}
 }
 
-func TestOpenHubRefusesToCloseTheTabThatItRunsIn(t *testing.T) {
-	log := fakeHubRex(t)
-	t.Setenv("REX_BLOCK", "b1")
-	err := openHub()
-	if err == nil || !strings.Contains(err.Error(), "run lineup in another tab") {
-		t.Fatalf("openHub = %v, want an error that names another tab", err)
+func TestLineupRebuildsAHubTabWithAMissingOrIdlePane(t *testing.T) {
+	for _, c := range []struct {
+		name, blocks string
+		want         bool
+	}{
+		{"the Board restored as a shell", restoredBoard, true},
+		{"only the agent pane", `[{"block_id":"b2","label":"LINEUP"}]`, true},
+		{"only the Board pane", `[{"block_id":"b3","label":"BOARD"}]`, true},
+		{"an agent from before the one agent", `[{"block_id":"b3","label":"BOARD"},{"block_id":"b4","label":"ORCHESTRATOR"}]`, true},
+		{"both panes live", livePanes, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			log := fakeHubRex(t, c.blocks)
+			if err := openHub(hubRepair); err != nil {
+				t.Fatal(err)
+			}
+			calls := rexCalls(t, log)
+			if got := reopened(calls); got != c.want {
+				t.Errorf("reopened %v, want %v:\n%s", got, c.want, calls)
+			}
+			if !c.want && (strings.Contains(calls, "window close") || strings.Contains(calls, "window new")) {
+				t.Errorf("lineup closed or opened a tab:\n%s", calls)
+			}
+		})
 	}
-	raw, _ := os.ReadFile(log)
-	if strings.Contains(string(raw), "window close") || strings.Contains(string(raw), "window new") {
-		t.Fatalf("lineup closed or opened a tab:\n%s", raw)
+}
+
+func TestLineupReopensTheTabThatItRunsInFromADetachedCopy(t *testing.T) {
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name, blocks, block string
+		mode                hubMode
+		want                []string
+	}{
+		{"lineup in the restored tab", restoredBoard, "b1", hubRepair, []string{"hub"}},
+		{"lineup restart in the Orchestrator's pane", livePanes, "b2", hubFresh, []string{"hub", "--fresh"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			log := fakeHubRex(t, c.blocks)
+			t.Setenv("REX_BLOCK", c.block)
+			var bin, hubLog string
+			var args []string
+			detachHub = func(b string, a []string, l string) error {
+				bin, args, hubLog = b, a, l
+				return nil
+			}
+			if err := openHub(c.mode); err != nil {
+				t.Fatal(err)
+			}
+			if calls := rexCalls(t, log); strings.Contains(calls, "window close") || strings.Contains(calls, "window new") {
+				t.Fatalf("lineup closed or opened a tab itself:\n%s", calls)
+			}
+			if bin != self || !slices.Equal(args, c.want) || hubLog != filepath.Join(stateDir(), "hub.log") {
+				t.Errorf("detached %s %q with the log %s, want %s %q with the log hub.log in the state folder", bin, args, hubLog, self, c.want)
+			}
+		})
+	}
+}
+
+func TestTheDetachedCopyRunsInItsOwnSessionWithoutTheCallersBlock(t *testing.T) {
+	dir := t.TempDir()
+	report := filepath.Join(dir, "report")
+	self := filepath.Join(dir, "lineup")
+	script := "#!/bin/sh\n{ echo \"pid $$\"; echo \"pgid $(ps -o pgid= -p $$)\"; env; } > '" + report + ".tmp'\nmv '" + report + ".tmp' '" + report + "'\necho \"ran $*\"\n"
+	if err := os.WriteFile(self, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("REX_BLOCK", "b2")
+	t.Setenv("LINEUP_STATE_DIR", dir)
+	log := filepath.Join(dir, "state", "hub.log")
+	if err := startDetached(self, []string{"hub", "--fresh"}, log); err != nil {
+		t.Fatal(err)
+	}
+	var out []byte
+	for deadline := time.Now().Add(10 * time.Second); !strings.Contains(string(out), "ran hub --fresh\n"); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the copy wrote no line to its log: %q", out)
+		}
+		out, _ = os.ReadFile(log)
+	}
+	raw, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pid, pgid string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if v, ok := strings.CutPrefix(line, "pid "); ok {
+			pid = v
+		}
+		if v, ok := strings.CutPrefix(line, "pgid "); ok {
+			pgid = strings.TrimSpace(v)
+		}
+		if strings.HasPrefix(line, "REX_BLOCK=") {
+			t.Errorf("the copy got %s", line)
+		}
+	}
+	if pid == "" || pgid != pid {
+		t.Errorf("the copy runs as pid %q in the process group %q, want its own group", pid, pgid)
+	}
+	if !strings.Contains(string(raw), "\nLINEUP_STATE_DIR="+dir+"\n") {
+		t.Errorf("the copy did not get the caller's environment:\n%s", raw)
+	}
+}
+
+func TestLineupRestartOpensNoHubWhenNoneIsOpen(t *testing.T) {
+	log := fakeHubRex(t, "")
+	if err := openHub(hubFresh); err != nil {
+		t.Fatal(err)
+	}
+	if calls := rexCalls(t, log); strings.Contains(calls, "session new") || strings.Contains(calls, "window new") {
+		t.Errorf("lineup restart opened a Hub:\n%s", calls)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/gclunies/lineup/internal/board"
 	"github.com/gclunies/lineup/internal/config"
@@ -144,14 +145,39 @@ func renamed(windows map[string]hubWindow, label string) (hubWindow, bool) {
 	return w, ok
 }
 
-// retiredAgents are the agent blocks of a Hub from before the one agent.
-var retiredAgents = []string{"ORCHESTRATOR", "PLANNER", "REVIEWER"}
+// hubMode is how openHub treats each Hub tab that exists.
+type hubMode int
 
-// retired reports whether w still runs a retired agent. openHub closes such a
-// window and opens the tab again, because it adds no block to a window that
-// exists.
-func retired(w hubWindow) bool {
-	return slices.ContainsFunc(w.Blocks, func(b string) bool { return slices.Contains(retiredAgents, b) })
+const (
+	hubRepair hubMode = iota // lineup: reopen only a broken tab, and the Orchestrator continues its conversation
+	hubFresh                 // lineup restart: reopen every tab, and the Orchestrator starts a new session
+)
+
+// reopens reports whether openHub closes w, the window of t, and opens the tab
+// again. openHub adds no block to a window that exists, so a tab that lacks its
+// Board or agent pane opens again. A tab that still runs an agent from before
+// the one agent lacks its agent pane too.
+func (m hubMode) reopens(w hubWindow, t agentTab, idle func(block string) (bool, error)) bool {
+	return m == hubFresh || !slices.Contains(w.Blocks, t.view) || !slices.Contains(w.Blocks, t.agent) || restored(w, t, idle)
+}
+
+// args are the arguments of lineup hub, the hidden command that a detach of
+// openHub runs in mode m.
+func (m hubMode) args() []string {
+	if m == hubFresh {
+		return []string{"hub", "--fresh"}
+	}
+	return []string{"hub"}
+}
+
+// runHub runs openHub in the mode whose lineup hub arguments are args.
+func runHub(args []string) error {
+	for _, m := range []hubMode{hubRepair, hubFresh} {
+		if slices.Equal(m.args()[1:], args) {
+			return openHub(m)
+		}
+	}
+	return fmt.Errorf("usage: lineup hub [--fresh]")
 }
 
 // restored reports whether the Board or agent pane of t in w holds an idle
@@ -379,8 +405,10 @@ func hubWindows() (map[string]hubWindow, bool, error) {
 }
 
 // openHub starts the Scheduler service, then creates the Hub session or adds
-// back whichever of its tabs is gone. Each Board retries the socket until it is up.
-func openHub() error {
+// back whichever of its tabs is gone. mode says which tabs that exist it opens
+// again. A fresh open creates no Hub session. Each Board retries the socket
+// until it is up.
+func openHub(mode hubMode) error {
 	if _, err := requireTools(); err != nil {
 		return err
 	}
@@ -407,6 +435,10 @@ func openHub() error {
 	windows, exists, err := hubWindows()
 	if err != nil {
 		return err
+	}
+	if !exists && mode == hubFresh {
+		fmt.Println("No Hub is open. Run lineup to open it.")
+		return nil
 	}
 	rc := &rex.Client{}
 	idle := func(block string) (bool, error) { return rc.IdleShell(context.Background(), hubSession, block) }
@@ -448,10 +480,16 @@ func openHub() error {
 			}
 			windows[t.window] = w
 		}
-		if w, ok := windows[t.window]; ok && (retired(w) || restored(w, t, idle)) {
-			// A close of the window would end this lineup before the tab opens again.
+		if w, ok := windows[t.window]; ok && mode.reopens(w, t, idle) {
+			// A close of the window would end this lineup before the tab opens
+			// again, so a copy in its own session runs the whole open again.
 			if slices.Contains(w.BlockIDs, os.Getenv("REX_BLOCK")) {
-				return fmt.Errorf("lineup runs in the %s tab and must reopen it: run lineup in another tab", t.window)
+				log := filepath.Join(stateDir(), "hub.log")
+				if err := detachHub(self, mode.args(), log); err != nil {
+					return err
+				}
+				fmt.Printf("lineup reopens the %s tab from a background process, because this command runs in it. Its log is %s.\n", t.window, log)
+				return nil
 			}
 			if _, err := rexRun("window", "close", "-s", hubSession, w.ID); err != nil {
 				return err
@@ -459,7 +497,7 @@ func openHub() error {
 			delete(windows, t.window)
 		}
 		if _, ok := windows[t.window]; !ok {
-			if err := openAgentTab(t, dir, self, claudeBin, t.window == activeTab); err != nil {
+			if err := openAgentTab(t, dir, self, claudeBin, t.window == activeTab, mode); err != nil {
 				return err
 			}
 		}
@@ -476,11 +514,35 @@ func openHub() error {
 	return nil
 }
 
+// detachHub starts bin with args in a new session, so the close of the
+// caller's tab does not end it. The copy runs in no tab, so it gets no
+// REX_BLOCK. It appends its output to log. Tests replace it.
+var detachHub = startDetached
+
+func startDetached(bin string, args []string, log string) error {
+	if err := os.MkdirAll(filepath.Dir(log), 0o700); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(log, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	cmd := exec.Command(bin, args...)
+	cmd.Stdout, cmd.Stderr = f, f
+	cmd.Env = slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "REX_BLOCK=") })
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return cmd.Process.Release()
+}
+
 // openAgentTab opens the tab, with the agent in dir, the folder that
-// prepareAgent wrote.
-func openAgentTab(t agentTab, dir, self, claudeBin string, focus bool) error {
+// prepareAgent wrote. Only a repair continues the agent's conversation.
+func openAgentTab(t agentTab, dir, self, claudeBin string, focus bool, mode hubMode) error {
 	cmd := agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, t.window)
-	if hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {
+	if mode == hubRepair && hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {
 		cmd = append(cmd, "--continue")
 	}
 	out, err := rexRun(slices.Concat([]string{"window", "new", "-s", hubSession, t.window,
