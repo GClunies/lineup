@@ -54,6 +54,8 @@ type (
 		repos []string
 	}
 	reposMsg struct{ repos []string }
+	// notSetUpMsg names a Repo with no [repos."owner/repo"] table, by its key.
+	notSetUpMsg string
 )
 
 // startRow opens the skill picker for an Issue row.
@@ -130,7 +132,7 @@ func (m Model) repoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // startTask adds the Issue as a Task with its skill, if any, and the add
 // starts the Task. An empty repo lets the Scheduler choose. Without a mapping,
-// the Repo picker opens.
+// the Repo picker opens. A Repo that is not set up starts nothing.
 func (m Model) startTask(r issueRow, repo, skill string) tea.Cmd {
 	req := scheduler.Request{Op: "add", Issue: r.ID, Kind: r.Kind, Repo: repo}
 	if skill != "" {
@@ -139,6 +141,11 @@ func (m Model) startTask(r issueRow, repo, skill string) tea.Cmd {
 	start, need := m.add(req), needRepoMsg{row: r, skill: skill}
 	return func() tea.Msg {
 		msg := start().(opMsg)
+		if msg.err != nil {
+			if _, key, ok := strings.Cut(msg.err.Error(), scheduler.ErrNotSetUp.Error()+": "); ok {
+				return notSetUpMsg(key)
+			}
+		}
 		var ask *scheduler.RepoAsk
 		switch {
 		case repo != "" || msg.err == nil:
@@ -181,6 +188,9 @@ func (m Model) startMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		return m, tea.Batch(m.loadRepos(), m.st.repoIn.Focus()), true
 	case reposMsg:
 		m.st.repos, m.st.repoCur = msg.repos, 0
+		return m, nil, true
+	case notSetUpMsg:
+		m.setStatus(string(msg)+" is not set up. Ask the Orchestrator to set it up", true)
 		return m, nil, true
 	}
 	return m, nil, false
