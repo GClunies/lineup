@@ -1,0 +1,75 @@
+internal/harness/claude/testdata/usage/projects/-repo/c1.jsonl
+  s_59f22b65e91f8e::t_957e556d3987b2 1-9
+internal/harness/claude/testdata/usage/projects/-repo/c1/subagents/agent-a1.jsonl
+  s_59f22b65e91f8e::t_7e473ae1727aba 1-2
+internal/harness/claude/testdata/usage/projects/-resumed/c2.jsonl
+  s_59f22b65e91f8e::t_0e6002fae8da19 1-6
+internal/harness/claude/usage_test.go
+  s_59f22b65e91f8e::t_5b5efc13d77895 1-59
+internal/harness/claude/testdata/usage/projects/-repo/c2.jsonl
+  s_59f22b65e91f8e::t_f4a0482e495b6c 1-3
+internal/harness/claude/claude.go
+  s_59f22b65e91f8e::t_8bf31d73ec3648 86
+  s_59f22b65e91f8e::t_ef6e70b6b5d461 12,49,51-52,55-61,65,69-75,77-85,88
+  s_59f22b65e91f8e::t_aa0c4ef3a00ef0 53-54,76,87
+internal/harness/claude/usage.go
+  s_59f22b65e91f8e::t_d5f57bceaef33f 67
+  s_59f22b65e91f8e::t_1277cc87f6e436 57
+  s_59f22b65e91f8e::t_920f80b4f660e0 101
+  s_59f22b65e91f8e::t_a073533afc10eb 124
+  s_59f22b65e91f8e::t_f3ada740801948 1-56,58-66,68-79,81-91,94-100,102-120,122-123,125-126,128-129
+  s_59f22b65e91f8e::t_46cd5bae3f0551 127
+  s_59f22b65e91f8e::t_14c4c9b11d2566 80
+internal/scheduler/api.go
+  s_59f22b65e91f8e::t_3ddfdc9fedfae7 290,292,294
+  s_59f22b65e91f8e::t_23930065a26e5c 142,148
+  s_59f22b65e91f8e::t_fc702f5766942a 139-141,143-147,149-152,155
+  s_59f22b65e91f8e::t_7fe124139c529a 300
+  s_59f22b65e91f8e::t_50e188528326ef 36-38
+internal/scheduler/scheduler_test.go
+  s_59f22b65e91f8e::t_271b79483b8066 555-561
+  s_59f22b65e91f8e::t_dbe9f5d97fbe8c 577-593
+  s_299a42094fc058::t_1764f2122a82d5 722,1132,1357,2147
+internal/scheduler/record.go
+  s_59f22b65e91f8e::t_0b349c3e5d3f92 316-318
+  s_59f22b65e91f8e::t_c54e63bbf7d7de 319-322
+  s_59f22b65e91f8e::t_95fc0e1d27ac8f 228-239
+  s_59f22b65e91f8e::t_54fb192acec4da 226-227
+internal/scheduler/ports.go
+  s_59f22b65e91f8e::t_71c68e1347d77f 178-181
+cmd/lineup/wire.go
+  s_59f22b65e91f8e::t_45dd098573a565 11
+  s_59f22b65e91f8e::t_521186c382fe5d 328-329
+  s_59f22b65e91f8e::t_5e359d2d1af88b 330-359
+internal/scheduler/usage_test.go
+  s_59f22b65e91f8e::t_d4dda579555f3b 45
+  s_59f22b65e91f8e::t_44f78dca5cb71a 1-44,46-144
+internal/scheduler/api_test.go
+  s_59f22b65e91f8e::t_54faa1069c3e1a 66,142
+internal/scheduler/prefix_test.go
+  s_59f22b65e91f8e::t_f75467f6263b87 44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c70090479745c210c3662f5852b4f3d0f48b2087",
+  "prompts": {},
+  "sessions": {
+    "s_299a42094fc058": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ae0509a01631139d0",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_59f22b65e91f8e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebd739c9-7583-4350-b806-9bd20a91bffe",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
