@@ -1,0 +1,19 @@
+internal/board/issues.go
+  s_fe8d4c1691a132::t_3222f00b774dcf 257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2816cf1c8f92c34edad7cb5e49579318f6048009",
+  "prompts": {},
+  "sessions": {
+    "s_fe8d4c1691a132": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "954196b3-8743-4035-b4ed-db7be336559e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
