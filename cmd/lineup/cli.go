@@ -50,23 +50,41 @@ func parse(name, usage string, args []string, setup func(*flag.FlagSet)) (*flag.
 	return fs, fs.Parse(args)
 }
 
+// cmdAdd adds a Task for an Issue, or an ad hoc Task in a Repo, and the add
+// starts it. Its flags can come before or after the Issue or the text.
 func cmdAdd(c scheduler.Client, args []string, out io.Writer) error {
-	var repo string
-	fs, err := parse("add", "<ISSUE> | --repo <repo> \"<text>\"", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&repo, "repo", "", "the Repo: a folder name such as data, an owner/repo key, or a path")
+	req := scheduler.Request{Op: "add"}
+	fs, err := parse("add", "[--over-cap] [--set key=value]... <ISSUE> | --repo <repo> \"<text>\"", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&req.Repo, "repo", "", "the Repo: a folder name such as data, an owner/repo key, or a path")
+		fs.BoolVar(&req.OverCap, "over-cap", false, "start once over the WIP cap; only with the user's yes")
+		fs.Func("set", "override configuration for the Task, for example skill=pr-explain; repeat it for each key", func(s string) error {
+			k, v, ok := strings.Cut(s, "=")
+			if !ok || k == "" {
+				return errors.New("want key=value")
+			}
+			if req.Set == nil {
+				req.Set = map[string]string{}
+			}
+			req.Set[k] = v
+			return nil
+		})
 	})
-	if err != nil {
-		return err
+	var pos []string
+	for err == nil && fs.NArg() > 0 {
+		pos = append(pos, fs.Arg(0))
+		err = fs.Parse(fs.Args()[1:])
 	}
-	if fs.NArg() != 1 {
+	if err != nil {
+		return errUsage
+	}
+	if len(pos) != 1 {
 		fs.Usage()
 		return errUsage
 	}
-	req := scheduler.Request{Op: "add", Repo: repo}
-	if repo != "" && !looksLikeIssue(fs.Arg(0), repoPrefixes()) {
-		req.Text = fs.Arg(0)
+	if req.Repo != "" && !looksLikeIssue(pos[0], repoPrefixes()) {
+		req.Text = pos[0]
 	} else {
-		req.Issue = fs.Arg(0)
+		req.Issue = pos[0]
 	}
 	var v scheduler.TaskView
 	if err := c.Do(req, &v); err != nil {
