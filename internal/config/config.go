@@ -128,17 +128,18 @@ type repoTable struct {
 	// takes the owner/* table's, and a Repo with none takes no Issues.
 	Tracker string `toml:"tracker"`
 	// Prefix starts the ID of each Local Issue and ad hoc Task of the Repo,
-	// as in hod-3. "" keeps local-<n> and ah-<n>.
+	// as in HOD-3. The file can write it in any case, and Load keeps it in
+	// lower case. "" keeps LOCAL-<n> and AH-<n>.
 	Prefix string `toml:"prefix"`
 }
 
 // ReservedPrefixes start the IDs that lineup gives without a Repo prefix:
-// local-<n> Local Issues, ah-<n> ad hoc Tasks, and pr-<n> review Tasks.
+// LOCAL-<n> Local Issues, AH-<n> ad hoc Tasks, and PR-<n> review Tasks.
 var ReservedPrefixes = []string{"local", "ah", "pr"}
 
-var prefixForm = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+var prefixForm = regexp.MustCompile(`^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`)
 
-// PrefixedRepo is a [repos."owner/repo"] table with a prefix.
+// PrefixedRepo is a [repos."owner/repo"] table with a prefix, in lower case.
 type PrefixedRepo struct {
 	Key    string
 	Prefix string
@@ -319,6 +320,10 @@ func Load(globalPath string) (*Global, error) {
 	if err := decodeStrict(string(data), &g.file); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
+	for key, t := range g.file.Repos {
+		t.Prefix = strings.ToLower(t.Prefix)
+		g.file.Repos[key] = t
+	}
 	if err := g.validate(&g.file.Defaults, "defaults"); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
@@ -435,10 +440,10 @@ func (g *Global) checkRepos() error {
 	return nil
 }
 
-// checkPrefixes refuses a prefix that is not a word of lowercase letters,
-// digits, and dashes, a prefix of an owner/* table, a prefix that two tables
-// share, a reserved prefix, and a prefix that equals a Linear team key in
-// any case. The team keys are those of every teams list, and teamKeys.
+// checkPrefixes refuses a prefix that is not a word of letters, digits, and
+// dashes, a prefix of an owner/* table, a prefix that two tables share, a
+// reserved prefix, and a prefix that equals a Linear team key. Each check
+// ignores case. The team keys are those of every teams list, and teamKeys.
 func (g *Global) checkPrefixes(teamKeys []string) error {
 	teams := map[string]bool{}
 	for _, r := range g.file.Repos {
@@ -455,14 +460,14 @@ func (g *Global) checkPrefixes(teamKeys []string) error {
 		if p == "" {
 			continue
 		}
-		where := fmt.Sprintf("repos.%q: prefix %q", key, p)
+		where := fmt.Sprintf("repos.%q: prefix %q", key, strings.ToUpper(p))
 		switch {
 		case !prefixForm.MatchString(p):
-			return fmt.Errorf("%s must hold only lowercase letters, digits, and dashes, and must start and end with a letter or a digit", where)
+			return fmt.Errorf("%s must hold only letters, digits, and dashes, and must start and end with a letter or a digit", where)
 		case strings.HasSuffix(key, "/*"):
 			return fmt.Errorf("%s needs an owner/repo key, the key of one Repo", where)
 		case slices.Contains(ReservedPrefixes, p):
-			return fmt.Errorf("%s is reserved: lineup uses %s for IDs without a Repo prefix", where, strings.Join(ReservedPrefixes, ", "))
+			return fmt.Errorf("%s is reserved: lineup uses %s for IDs without a Repo prefix", where, strings.ToUpper(strings.Join(ReservedPrefixes, ", ")))
 		case teams[p]:
 			return fmt.Errorf("%s equals a Linear team key, so its IDs would read as Linear IDs", where)
 		}
@@ -942,7 +947,7 @@ func (g *Global) PrefixedRepos() []PrefixedRepo {
 	return out
 }
 
-// Prefixes lists the prefix of each table that has one.
+// Prefixes lists the prefix of each table that has one, in lower case.
 func (g *Global) Prefixes() []string {
 	var out []string
 	for _, r := range g.PrefixedRepos() {
@@ -951,13 +956,14 @@ func (g *Global) Prefixes() []string {
 	return out
 }
 
-// RepoPrefix is the prefix of the Repo's own table, or "".
+// RepoPrefix is the prefix of the Repo's own table, in lower case, or "".
 func (g *Global) RepoPrefix(repoPath string) string {
 	t, _ := g.table(g.keyOf(repoPath))
 	return t.Prefix
 }
 
-// RepoForPrefix is the checkout of the table with the prefix.
+// RepoForPrefix is the checkout of the table with the prefix, which is in
+// lower case.
 func (g *Global) RepoForPrefix(prefix string) (string, bool) {
 	for _, r := range g.PrefixedRepos() {
 		if r.Prefix == prefix {

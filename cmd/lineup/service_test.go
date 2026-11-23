@@ -316,7 +316,7 @@ func TestRestartRefusesAPrefixThatEqualsALinearTeamKey(t *testing.T) {
 	m.ensure()
 	*calls = nil
 	err := m.restart()
-	if err == nil || !strings.Contains(err.Error(), `prefix "hod" equals a Linear team key`) || !strings.Contains(err.Error(), "keeps running on the old config") {
+	if err == nil || !strings.Contains(err.Error(), `prefix "HOD" equals a Linear team key`) || !strings.Contains(err.Error(), "keeps running on the old config") {
 		t.Fatalf("restart: %v, want a refusal that names hod", err)
 	}
 	if len(*calls) != 0 {
@@ -336,7 +336,7 @@ func TestRestartRefusesABadPrefix(t *testing.T) {
 	}
 	m.ensure()
 	*calls = nil
-	if err := m.restart(); err == nil || !strings.Contains(err.Error(), `prefix "ah" is reserved`) {
+	if err := m.restart(); err == nil || !strings.Contains(err.Error(), `prefix "AH" is reserved`) {
 		t.Fatalf("restart: %v, want a refusal that names ah", err)
 	}
 	if len(*calls) != 0 {

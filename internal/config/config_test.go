@@ -993,19 +993,33 @@ prefix = "web-2"
 	}
 }
 
+func TestThePrefixKeyIgnoresCase(t *testing.T) {
+	for _, p := range []string{"SCP", "scp", "Scp"} {
+		g, home := loadFixture(t, "roots = [\"~/repos\"]\n[repos.\"GClunies/lineup\"]\nprefix = \""+p+"\"\n")
+		lineup := filepath.Join(home, "repos/gclunies/lineup")
+		if got := g.RepoPrefix(lineup); got != "scp" {
+			t.Errorf("prefix %q: RepoPrefix = %q, want scp", p, got)
+		}
+		if repo, ok := g.RepoForPrefix("scp"); !ok || repo != lineup {
+			t.Errorf("prefix %q: RepoForPrefix(scp) = %q, %v", p, repo, ok)
+		}
+	}
+}
+
 func TestThePrefixKeyRefusesABadPrefix(t *testing.T) {
 	hod := "[repos.\"GClunies/hod\"]\n"
 	for _, c := range []struct{ body, want string }{
-		{hod + `prefix = "Hod"`, `repos."GClunies/hod": prefix "Hod" must hold only lowercase letters, digits, and dashes`},
-		{hod + `prefix = "hod_1"`, `prefix "hod_1" must hold only lowercase letters, digits, and dashes`},
-		{hod + `prefix = "hod.x"`, `prefix "hod.x" must hold only`},
-		{hod + `prefix = "-hod"`, `prefix "-hod" must hold only`},
-		{hod + "prefix = \"hod\"\n[repos.\"acme/data\"]\nprefix = \"hod\"", `repos."acme/data": prefix "hod" is also the prefix of repos."GClunies/hod"`},
-		{hod + "prefix = \"eng\"\n[repos.\"acme/data\"]\nteams = [\"ENG\"]\ntracker = \"linear\"", `repos."GClunies/hod": prefix "eng" equals a Linear team key`},
-		{hod + `prefix = "local"`, `prefix "local" is reserved`},
-		{hod + `prefix = "ah"`, `prefix "ah" is reserved`},
-		{hod + `prefix = "pr"`, `prefix "pr" is reserved`},
-		{"[repos.\"GClunies/*\"]\nprefix = \"gc\"", `repos."GClunies/*": prefix "gc" needs an owner/repo key, the key of one Repo`},
+		{hod + `prefix = "hod_1"`, `repos."GClunies/hod": prefix "HOD_1" must hold only letters, digits, and dashes`},
+		{hod + `prefix = "hod.x"`, `prefix "HOD.X" must hold only`},
+		{hod + `prefix = "-hod"`, `prefix "-HOD" must hold only`},
+		{hod + "prefix = \"hod\"\n[repos.\"acme/data\"]\nprefix = \"HOD\"", `repos."acme/data": prefix "HOD" is also the prefix of repos."GClunies/hod"`},
+		{hod + "prefix = \"eng\"\n[repos.\"acme/data\"]\nteams = [\"ENG\"]\ntracker = \"linear\"", `repos."GClunies/hod": prefix "ENG" equals a Linear team key`},
+		{hod + "prefix = \"data\"\n[repos.\"acme/data\"]\nteams = [\"DATA\"]\ntracker = \"linear\"", `repos."GClunies/hod": prefix "DATA" equals a Linear team key`},
+		{hod + "prefix = \"DATA\"\n[repos.\"acme/data\"]\nteams = [\"data\"]\ntracker = \"linear\"", `repos."GClunies/hod": prefix "DATA" equals a Linear team key`},
+		{hod + `prefix = "local"`, `prefix "LOCAL" is reserved: lineup uses LOCAL, AH, PR for IDs without a Repo prefix`},
+		{hod + `prefix = "Ah"`, `prefix "AH" is reserved`},
+		{hod + `prefix = "PR"`, `prefix "PR" is reserved`},
+		{"[repos.\"GClunies/*\"]\nprefix = \"gc\"", `repos."GClunies/*": prefix "GC" needs an owner/repo key, the key of one Repo`},
 	} {
 		if err := loadErr(t, c.body+"\n"); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: err = %v, want %q", c.body, err, c.want)
@@ -1019,7 +1033,7 @@ func TestCheckPrefixTeamsRefusesAPrefixThatEqualsATeamKeyInAnyCase(t *testing.T)
 		t.Fatalf("other team keys: %v", err)
 	}
 	err := g.CheckPrefixTeams([]string{"ENG", "HOD"})
-	if err == nil || !strings.Contains(err.Error(), `prefix "hod" equals a Linear team key`) {
+	if err == nil || !strings.Contains(err.Error(), `prefix "HOD" equals a Linear team key`) {
 		t.Fatalf("err = %v, want a refusal that names hod", err)
 	}
 }
