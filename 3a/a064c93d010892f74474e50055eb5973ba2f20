@@ -1,0 +1,21 @@
+internal/board/model.go
+  s_fb56ce352cbfde::t_726c5abeee1074 312-314,317
+internal/board/board_test.go
+  s_fb56ce352cbfde::t_d3c0157936359c 1013-1041
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3aa064c93d010892f74474e50055eb5973ba2f20",
+  "prompts": {},
+  "sessions": {
+    "s_fb56ce352cbfde": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fae7e67-0800-4a66-b7d1-8d3e076d23e4",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
