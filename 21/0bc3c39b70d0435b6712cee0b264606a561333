@@ -1,0 +1,161 @@
+internal/localissues/localissues.go
+  s_62e3808e7f1359::t_0f3481e92339b3 3-5
+  s_62e3808e7f1359::t_e788a2129bae6e 335
+  s_62e3808e7f1359::t_7bf7d943f2e05c 65,72,74
+  s_62e3808e7f1359::t_5b84134c50cc4d 115
+  s_62e3808e7f1359::t_8c911ed0105dbd 50-54
+  s_62e3808e7f1359::t_7163493d9ef764 85-86
+  s_62e3808e7f1359::t_8b7b54c041d326 97
+  s_62e3808e7f1359::t_8f0324bc04b67f 164
+internal/scheduler/scheduler.go
+  s_62e3808e7f1359::t_f7aeb822115fe8 163
+  s_62e3808e7f1359::t_8f52eec4ae9b31 148-152,157-162,164-174
+  s_1818a5989cfcac::t_151c8ebb50a969 175-176
+cmd/lineup/decide.go
+  s_62e3808e7f1359::t_89ac88d7ac878c 121,123,126
+internal/board/promote_test.go
+  s_62e3808e7f1359::t_99a4cae3317b26 19,28,47,60,62,68-69,100,102,121,125
+cmd/lineup/cli_test.go
+  s_62e3808e7f1359::t_97c7c79eecbad9 1-21
+cmd/lineup/agent/CLAUDE.md
+  s_62e3808e7f1359::t_466a58e59e54a2 34
+  s_62e3808e7f1359::t_2ed9d22a809886 30
+  s_62e3808e7f1359::t_7eeefb4069bb8d 46
+  s_62e3808e7f1359::t_a67e092919d988 33
+  s_62e3808e7f1359::t_3fbfbc58de2f1b 64
+  s_62e3808e7f1359::t_6e6e1657159bb0 11
+  s_62e3808e7f1359::t_954bae4450accf 17
+cmd/lineup/rex/lineup.lua
+  s_62e3808e7f1359::t_769b58391bc9b5 220
+internal/scheduler/record_test.go
+  s_62e3808e7f1359::t_d93654c6271811 29-30,32-33,35-36,38-39,41-42,44-45,47-48,50-51,53-54
+internal/scheduler/api_test.go
+  s_62e3808e7f1359::t_8627fb7a0262b0 96-97,101
+cmd/lineup/main.go
+  s_62e3808e7f1359::t_929b27ef0c41bd 31
+  s_62e3808e7f1359::t_c4765c3b483400 33
+cmd/lineup/wire_test.go
+  s_62e3808e7f1359::t_a11aa46eb8b144 261
+  s_62e3808e7f1359::t_e8ae920b5b5f6c 255
+  s_62e3808e7f1359::t_6cacc4c160ccee 57,74-75,92,102,265,280-281,283-284
+internal/config/config_test.go
+  s_62e3808e7f1359::t_16adf282dac15e 970
+cmd/lineup/login_test.go
+  s_62e3808e7f1359::t_523f66ef31268a 54-56
+internal/localissues/localissues_test.go
+  s_62e3808e7f1359::t_bfc22b9f055ad8 209
+  s_62e3808e7f1359::t_a8ac05ce5d3334 218
+  s_62e3808e7f1359::t_528c5df6b2177d 104
+  s_62e3808e7f1359::t_9624ab97de1816 228-232
+cmd/lineup/hub_test.go
+  s_62e3808e7f1359::t_8c7ac3d3dae33f 540
+  s_62e3808e7f1359::t_9362ebf0fd2f73 524
+cmd/lineup/review_test.go
+  s_62e3808e7f1359::t_fd3362c331e76c 418-419
+internal/board/issuekind.go
+  s_62e3808e7f1359::t_59e3694f61f426 190
+internal/scheduler/prefix_test.go
+  s_62e3808e7f1359::t_cda7cd544541fb 41-42,57-58,74,76-79,85,95-97,99-100
+internal/store/store_test.go
+  s_62e3808e7f1359::t_5670ba52ce425b 90-119
+cmd/lineup/agent/local.md
+  s_62e3808e7f1359::t_c9ebce81bf399c 11
+  s_62e3808e7f1359::t_ff7cee2997538c 30
+  s_62e3808e7f1359::t_c8ef3d998ddc0b 4
+  s_62e3808e7f1359::t_34b2eab8988fbb 31
+  s_62e3808e7f1359::t_e36cf8dda7e1d9 33
+  s_62e3808e7f1359::t_7515e53ac23ba1 35
+  s_62e3808e7f1359::t_1e5d7b194b52f4 17
+  s_62e3808e7f1359::t_4eb67b69a8ec14 28
+  s_62e3808e7f1359::t_605e91e3de7d8f 32
+internal/board/capture_test.go
+  s_62e3808e7f1359::t_890661c4a88f50 81-82,103,105,107,111,136,195,221-222,233
+internal/board/groups_test.go
+  s_62e3808e7f1359::t_fbaaddaa69a57d 35,66,114
+  s_62e3808e7f1359::t_adbb2cf9048aa4 204
+internal/scheduler/ports.go
+  s_62e3808e7f1359::t_59235c4a1fdd41 173-176
+  s_62e3808e7f1359::t_1c9bfd1bf27f9c 262
+internal/scheduler/case_test.go
+  s_62e3808e7f1359::t_089a1a3dc36e0b 85
+  s_62e3808e7f1359::t_3db3b1ccb5adc6 1-84,86-114
+internal/board/filter_test.go
+  s_62e3808e7f1359::t_67ba972a6cf5d8 65,71
+internal/scheduler/review_test.go
+  s_62e3808e7f1359::t_77da16c0f0d88d 118,122,142,147-148,154,160,162,165-166,178,187,200,215,218,221,225,230,232,251-252,274,293,304,318,333,339-340,343-344,362,367-368,381,397-398,406-407,412-413,421-424,488,490,492,528,535,537-538,541-542,566,568,580-581,591-592,621,626,630,643-644,656,658-659,662,747-749,787-788,797,807,809,815,964,966,978-979,990-991,1001-1003,1016,1020,1098-1100,1113,1116-1117,1122,1148,1150,1156,1174-1175,1180
+internal/store/store.go
+  s_62e3808e7f1359::t_b851b4ab7888ba 110-127
+internal/board/issues.go
+  s_62e3808e7f1359::t_3d31a578790d79 85-86
+  s_62e3808e7f1359::t_02035582f5b96a 112,117
+  s_62e3808e7f1359::t_5dfae2a158a107 92-93
+internal/scheduler/review.go
+  s_62e3808e7f1359::t_cdb65a1acff137 181,184
+cmd/lineup/hub.go
+  s_62e3808e7f1359::t_72e55864e19d1f 285,290,293-294,296-297,299-301
+cmd/lineup/open_test.go
+  s_62e3808e7f1359::t_03395c6d8af75c 13,23,26-27,29,47-49
+internal/board/issues_test.go
+  s_62e3808e7f1359::t_94d9214849806e 120,126-127,134,224-225,228-230,236,261,280,292,331-332,334,341-342,344,357,395,425,436-437,442,448,454
+  s_62e3808e7f1359::t_34fe954eb386ac 89-97,99
+  s_62e3808e7f1359::t_3cae032d17d0d7 226-227
+internal/scheduler/scheduler_test.go
+  s_62e3808e7f1359::t_39ea210f0a53ce 971,973,975,978-979,981,1332,1340-1341,1343
+  s_62e3808e7f1359::t_5560ad071d3d42 1051,1054,1352-1353,1361,1373,1379,1458,1462,1471,1959,1979-1980
+cmd/lineup/wire.go
+  s_62e3808e7f1359::t_151e6f97168f27 335
+  s_62e3808e7f1359::t_280060225d1fa7 526
+cmd/lineup/cli.go
+  s_62e3808e7f1359::t_8612c9c88eff79 132,135-136
+  s_62e3808e7f1359::t_c8ab1b60153ec1 11
+  s_62e3808e7f1359::t_b637049c9c6a3f 121-122
+  s_62e3808e7f1359::t_972e09246a7be7 153
+  s_fe8d4c1691a132::t_e7c33a889d7b59 137
+internal/scheduler/skip_test.go
+  s_62e3808e7f1359::t_246616c67ec7fa 56,59,63,143,152-153,155-156,175-176,191-192,197-198,205-207,211,219,241,295,300,329,335-336,364-365,367-368,370
+internal/scheduler/api.go
+  s_62e3808e7f1359::t_ee425a9b1254b7 435
+  s_62e3808e7f1359::t_de3943fd006f76 419
+  s_62e3808e7f1359::t_55ec2be536d4cf 130,132
+  s_62e3808e7f1359::t_6eb23fd3bfa1ec 439
+  s_62e3808e7f1359::t_52cf1d904e7da2 374,376
+cmd/lineup/decide_test.go
+  s_62e3808e7f1359::t_646b694d2eefb2 216
+  s_62e3808e7f1359::t_814df6adba1f24 185
+internal/scheduler/queue_test.go
+  s_62e3808e7f1359::t_254518a6b5ca9a 201-204,229,260,277-278,290,299,343-344,351-352,355-357,360,374,379-380,412,417,424,433,435-436,439,454
+internal/board/issuekind_test.go
+  s_62e3808e7f1359::t_4862d32b325715 16,31,68,71,80,107,117,123,125-126,128-129,131,134,136-137,148,150,161,164,219,221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "210bc3c39b70d0435b6712cee0b264606a561333",
+  "prompts": {},
+  "sessions": {
+    "s_1818a5989cfcac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a3fc8e6-5793-4a3f-9e11-3f14d84d32de",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_62e3808e7f1359": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc4c19bf-2d88-4b96-8b28-9396d6a5563c",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_fe8d4c1691a132": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "954196b3-8743-4035-b4ed-db7be336559e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
