@@ -41,7 +41,7 @@ func TestAnAdHocTaskOfAPrefixedRepoTakesThePrefix(t *testing.T) {
 	if v.ID != "HOD-3" {
 		t.Fatalf("ID = %q, want HOD-3, one more than the Local Issue HOD-2", v.ID)
 	}
-	if d, _ := h.s.show("hod-3"); d.Branch != "hod-3-block-linear-writes" {
+	if d, _ := h.s.show(context.Background(), "hod-3"); d.Branch != "hod-3-block-linear-writes" {
 		t.Errorf("branch = %q, want hod-3-block-linear-writes", d.Branch)
 	}
 	h.do(Request{Op: "start", Task: "hod-3"})

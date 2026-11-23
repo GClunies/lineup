@@ -354,6 +354,45 @@ Each Task keeps one Worker for its whole life. The Worker starts with `--session
 - A Worker that exited and left its tab open, as for a side pane, has no live Worker. `open` closes that tab and opens the new one in its place, so the Task's window is the live tab.
 - The Worker keeps the model and effort of Working. `skill` and `command` apply to each Stage, because the prompt carries them.
 
+### Usage
+
+lineup reports what the Worker of each Task spent: four token counts and the agent time. The Claude adapter reads them from the files of the Task's conversation, in the Claude configuration folder that the Repo uses, as in step 6 above:
+
+- `projects/<folder>/<conversation>.jsonl`. A resume from another folder writes a file with the same name in that folder, so the adapter reads the file in each folder.
+- `projects/<folder>/<conversation>/subagents/agent-*.jsonl`, one file for each subagent of the Worker.
+
+The token counts come from `message.usage` in each assistant entry:
+
+| Count | Field |
+|---|---|
+| Input | `input_tokens` |
+| Output | `output_tokens` |
+| Cache write | `cache_creation_input_tokens` |
+| Cache read | `cache_read_input_tokens` |
+
+Claude writes one entry for each content block of a message, and each entry repeats the usage of the whole message. The adapter counts each `message.id` once across all the files. The counts include the subagents.
+
+Agent time is the time that the Worker worked on prompts. Claude ends each turn with an entry of type `system` and subtype `turn_duration`. Its `durationMs` is the length of the turn less the time that Claude waited for the user, for example at a permission prompt. Agent time is the sum of `durationMs` in the conversation's own files. The time between turns does not count, so a wait for the user, CI, or a reviewer adds nothing. A subagent works inside a turn, so its files add no time. A resume can copy entries, so each turn counts once by its `uuid`. A turn adds its time when it ends.
+
+The usage is unknown for a Task with no conversation, and for a Task whose conversation files are gone, for example after Claude's `cleanupPeriodDays`. lineup shows unknown usage as unknown, never as zero.
+
+The detail pane (`f`) and `lineup show` print two lines:
+
+```
+tokens  output 83.6k · input 268 · cache write 634k · cache read 22.4M
+agent time  5h 12m
+```
+
+A count under 1000 shows in full. A larger count shows three significant digits with `k` or `M`. Agent time shows hours and minutes, only minutes under an hour, and only seconds under a minute. Unknown usage prints `usage  unknown`.
+
+`lineup ls --json` and `lineup show --json` give each Task a `usage` object. The object is `null` when the usage is unknown:
+
+```json
+"usage": {"input_tokens": 268, "output_tokens": 83615, "cache_write_tokens": 634187, "cache_read_tokens": 22427257, "agent_seconds": 18752}
+```
+
+The Scheduler reads the files at each request and stores no usage. The read runs apart from the work that updates the Board, so a slow read never delays the Board. Only `lineup show`, the detail pane, and `lineup ls --json` read usage. `lineup ls`, `lineup ready`, and `lineup decide` read none, so the hooks that run on each Orchestrator turn stay fast. `lineup ls --json` runs direnv once for each Repo and reads the files of the Tasks side by side.
+
 ## Configuration
 
 lineup reads all of its configuration from one file, `~/.config/lineup/config.toml`. No file in a Repo configures lineup.
@@ -614,7 +653,7 @@ Backlog and Done start closed, and `[board] collapsed` changes that. `enter` or 
 | `d` | Show or hide Done |
 | `enter` | On a Task row, focus the Task's tab in Rex. If the Task has started and has no live Worker, restore the Worker with `claude --resume`, as `lineup open` does. On a Done Task with no tab, restore the Worker in its kept worktree, or read-only in the main checkout after lineup removed the worktree. The hint reads `restore the Worker`. On a group heading, open or close the group. The hint reads `open` or `close`. |
 | `p` | Show a live preview of the Worker's screen beside the Board |
-| `f` | Show the detail pane at full screen, and back. On an Issue row, the pane shows the Issue's description. |
+| `f` | Show the detail pane at full screen, and back. On a Task row, the pane shows the Task's [usage](#usage). On an Issue row, the pane shows the Issue's description. |
 | `m` | Merge the PR (Ready to land) |
 | `x` | Close the Task, after a confirmation. On a Done Task with a tab, close the tab and remove the worktree, after a confirmation. On a Done Task with no tab, archive it and remove its kept worktree, after a confirmation. |
 | `s` | Start a Queued Task. On an Issue row, open the skill picker, then add the Issue as a Task and start it. The first row of the picker is `just go`, which starts with no skill. The other rows are the skills in `start_skills`. Typed text filters these rows, and a typed name that is not in the list becomes its own row. The picker drops a leading `/`. When no Repo mapping exists, the Repo picker opens next. |
@@ -776,3 +815,6 @@ These facts come from probes on this machine: throwaway Rex sessions, and `gh ap
 | `wt remove` without `-f` fails when the worktree has uncommitted changes | `wt remove --help` |
 | A read-only resume from the main checkout keeps the conversation and writes no file | A session started in folder A was told the word `ZEBRA42`. After A was deleted, a resume from a main checkout with `--disallowedTools=Bash,Edit,Write,NotebookEdit,EnterWorktree` answered `ZEBRA42`. `git status` then showed no new file. |
 | A resume sends `--append-system-prompt` only with `--system-prompt-snapshot off` | `claude -p --resume` with an added code word: the default answered that the system prompt holds no such sentence. With `off`, it quoted the sentence. |
+| Claude writes one transcript entry for each content block of a message, and each entry repeats the usage of the whole message | The main transcript file of Task ah-64: 246 entries with `message.usage` hold 117 distinct `message.id` values. No ID has two different `usage` objects. |
+| The `durationMs` of a `turn_duration` entry leaves out the time that Claude waits for the user | The source of Claude Code 2.1.323: `durationMs` is `Date.now() - turnStartTime - totalPausedMs`, and the pause runs while Claude waits on a permission dialog |
+| One `direnv exec` run takes 0.1 to 0.4 s | `claude.ConfigDir` from Go: 110 to 150 ms in 7 runs for lineup, 195 to 360 ms in 4 runs for a Repo whose `.envrc` runs `uv sync` |

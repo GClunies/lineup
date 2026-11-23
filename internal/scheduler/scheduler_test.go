@@ -550,8 +550,11 @@ type fakeHarness struct {
 	// gone lists the conversations that HasConversation does not find.
 	gone []string
 	// trusted lists each folder that Prepare trusted.
-	trusted []string
-	specs   []WorkerSpec
+	trusted    []string
+	specs      []WorkerSpec
+	usage      map[string]*Usage
+	usageCalls int
+	usageHold  chan struct{}
 }
 
 func (h *fakeHarness) Prepare(_ context.Context, _, worktree string) error {
@@ -565,6 +568,23 @@ func (h *fakeHarness) HasConversation(_ context.Context, w WorkerSpec) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return !slices.Contains(h.gone, w.Conversation)
+}
+
+func (h *fakeHarness) Usage(_ context.Context, ws []WorkerSpec) []*Usage {
+	h.mu.Lock()
+	h.usageCalls++
+	hold := h.usageHold
+	h.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]*Usage, len(ws))
+	for i, w := range ws {
+		out[i] = h.usage[w.Conversation]
+	}
+	return out
 }
 
 func (h *fakeHarness) Prompt(_ context.Context, w WorkerSpec) (string, error) {
@@ -695,7 +715,7 @@ func (h *harness) do(req Request) any {
 
 func (h *harness) task(id string) TaskView {
 	h.t.Helper()
-	d, err := h.s.show(id)
+	d, err := h.s.show(context.Background(), id)
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -1105,7 +1125,7 @@ func TestRecoveryFlagsATaskWhoseTabIsGone(t *testing.T) {
 	if n := h.tabs(); n != 0 {
 		t.Fatalf("recovery opened %d tabs, want none until the user asks", n)
 	}
-	d, _ := h.s.show("ENG-7")
+	d, _ := h.s.show(context.Background(), "ENG-7")
 	if d.Stage != "Working" || d.Group != "Needs you" || d.Tab || d.Live {
 		t.Fatalf("recovered task = %+v", d.TaskView)
 	}
@@ -1330,7 +1350,7 @@ func TestArchiveHidesADoneTaskAndKeepsItsHistory(t *testing.T) {
 	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); len(ids) != 0 {
 		t.Fatalf("board after archive = %v", ids)
 	}
-	d, _ := h.s.show("ENG-1")
+	d, _ := h.s.show(context.Background(), "ENG-1")
 	var archives int
 	for _, e := range d.Events {
 		if e.Signal == "archive" {
@@ -2036,7 +2056,7 @@ func TestResumeFallsBackToSessionID(t *testing.T) {
 	if spec.Stage != lifecycle.Reviewing || spec.Conversation == "" {
 		t.Fatalf("fallback spec = %+v, want a Reviewing start with a conversation, so Command passes --session-id and a prompt", spec)
 	}
-	d, _ := h.s.show("PR-7")
+	d, _ := h.s.show(context.Background(), "PR-7")
 	if d.Stage != lifecycle.Reviewing.String() || d.Note != "#7 reviewing" {
 		t.Fatalf("task = %+v, want Reviewing with no flag", d.TaskView)
 	}
@@ -2057,7 +2077,7 @@ func TestOtherExitDoesNotFallBack(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.reopenAndExit("Error: session ID is already in use")
 	h.still("PR-7", lifecycle.ReviewReady)
-	d, _ := h.s.show("PR-7")
+	d, _ := h.s.show(context.Background(), "PR-7")
 	for _, e := range d.Events {
 		if e.Signal == replacedSignal {
 			t.Fatalf("%s event for another failure: %+v", replacedSignal, d.Events)
@@ -2120,7 +2140,7 @@ func (h *harness) tabs() int {
 
 func (h *harness) events(id string) []string {
 	h.t.Helper()
-	d, err := h.s.show(id)
+	d, err := h.s.show(context.Background(), id)
 	if err != nil {
 		h.t.Fatal(err)
 	}

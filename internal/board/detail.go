@@ -45,6 +45,9 @@ func formatDetail(d scheduler.TaskDetail) string {
 			b.WriteString("  " + line + "\n")
 		}
 	}
+	for _, line := range d.Usage.Lines() {
+		b.WriteString(line + "\n")
+	}
 	b.WriteString("\n")
 	for _, e := range d.Events {
 		fmt.Fprintf(&b, "%s  %-16s %s → %s  %s\n", e.At.Local().Format(time.TimeOnly), e.Signal, e.From, e.To, e.Detail)

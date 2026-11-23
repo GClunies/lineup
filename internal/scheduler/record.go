@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -223,6 +224,62 @@ type TaskView struct {
 	// WorktreeNote says why lineup keeps the Task's worktree. The note ends
 	// with it too, and a Follow-up row, whose note is the Tracker state, adds it.
 	WorktreeNote string `json:"worktree_note,omitempty"`
+	// Usage is nil when it is unknown. Only show, and ls with Usage, read it,
+	// so the Board's watch stream never holds it.
+	Usage *Usage `json:"usage"`
+}
+
+// Usage is what a Task's Worker spent: the tokens of each API message once,
+// its subagents' included, and its agent time. Agent time leaves out the
+// time that the Worker waited for the user.
+type Usage struct {
+	Input        int64 `json:"input_tokens"`
+	Output       int64 `json:"output_tokens"`
+	CacheWrite   int64 `json:"cache_write_tokens"`
+	CacheRead    int64 `json:"cache_read_tokens"`
+	AgentSeconds int64 `json:"agent_seconds"`
+}
+
+// Lines are the usage lines of the detail pane and of lineup show, for
+// example "tokens  output 83.6k · input 268 · cache write 634k · cache read
+// 22.4M" and "agent time  5h 12m". A nil Usage is unknown.
+func (u *Usage) Lines() []string {
+	if u == nil {
+		return []string{"usage  unknown"}
+	}
+	return []string{
+		fmt.Sprintf("tokens  output %s · input %s · cache write %s · cache read %s",
+			tokenCount(u.Output), tokenCount(u.Input), tokenCount(u.CacheWrite), tokenCount(u.CacheRead)),
+		"agent time  " + agentTime(u.AgentSeconds),
+	}
+}
+
+func tokenCount(n int64) string {
+	switch {
+	case n < 1_000:
+		return strconv.FormatInt(n, 10)
+	case n < 9_995:
+		return fmt.Sprintf("%.2fk", float64(n)/1e3)
+	case n < 99_950:
+		return fmt.Sprintf("%.1fk", float64(n)/1e3)
+	case n < 999_500:
+		return fmt.Sprintf("%.0fk", float64(n)/1e3)
+	case n < 9_995_000:
+		return fmt.Sprintf("%.2fM", float64(n)/1e6)
+	case n < 99_950_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1e6)
+	}
+	return fmt.Sprintf("%.0fM", float64(n)/1e6)
+}
+
+func agentTime(s int64) string {
+	switch {
+	case s >= 3600:
+		return fmt.Sprintf("%dh %dm", s/3600, s%3600/60)
+	case s >= 60:
+		return fmt.Sprintf("%dm", s/60)
+	}
+	return fmt.Sprintf("%ds", s)
 }
 
 type BoardView struct {
@@ -297,6 +354,10 @@ func (r *Record) done() doneState {
 		return readOnly
 	}
 	return doneOther
+}
+
+func (r *Record) usageSpec() WorkerSpec {
+	return WorkerSpec{Task: r.ID, Repo: r.Repo, Conversation: r.Conversation}
 }
 
 func (r *Record) view() TaskView {

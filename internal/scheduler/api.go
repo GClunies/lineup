@@ -33,6 +33,8 @@ type Request struct {
 	OverCap bool   `json:"over_cap,omitempty"`
 	// URL is the PR that a review op names.
 	URL string `json:"url,omitempty"`
+	// Usage asks ls for each Task's usage.
+	Usage bool `json:"usage,omitempty"`
 }
 
 type Response struct {
@@ -133,10 +135,23 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 	switch req.Op {
 	case "ls":
 		var v BoardView
-		s.call(func() { v = s.view() })
+		var ws []WorkerSpec
+		s.call(func() {
+			v = s.view()
+			if req.Usage {
+				for _, t := range v.Tasks {
+					ws = append(ws, s.recs[t.ID].usageSpec())
+				}
+			}
+		})
+		if req.Usage {
+			for i, u := range s.d.Harness.Usage(ctx, ws) {
+				v.Tasks[i].Usage = u
+			}
+		}
 		return v, nil
 	case "show":
-		return s.show(req.Task)
+		return s.show(ctx, req.Task)
 	case "add":
 		return s.add(ctx, req)
 	case "next-id":
@@ -271,15 +286,17 @@ func (s *Scheduler) signal(id string, sig lifecycle.Signal) error {
 	return s.with(id, func(r *Record) error { return s.apply(r, sig, "") })
 }
 
-func (s *Scheduler) show(id string) (TaskDetail, error) {
+func (s *Scheduler) show(ctx context.Context, id string) (TaskDetail, error) {
 	var d TaskDetail
+	var w WorkerSpec
 	err := s.with(id, func(r *Record) error {
-		d.TaskView, d.Branch, d.Bar = r.view(), r.Branch, r.checklist()
+		d.TaskView, d.Branch, d.Bar, w = r.view(), r.Branch, r.checklist(), r.usageSpec()
 		return nil
 	})
 	if err != nil {
 		return d, err
 	}
+	d.Usage = s.d.Harness.Usage(ctx, []WorkerSpec{w})[0]
 	d.Events, err = s.d.Store.Events(d.ID)
 	return d, err
 }

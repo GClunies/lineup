@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gclunies/lineup/internal/config"
@@ -322,6 +323,38 @@ func (p harnessPort) HasConversation(ctx context.Context, w scheduler.WorkerSpec
 		return true
 	}
 	return claude.HasConversation(dir, w.Conversation)
+}
+
+// Usage runs direnv once for each Repo, not once for each Task, because each
+// run loads the Repo's .envrc.
+func (p harnessPort) Usage(ctx context.Context, ws []scheduler.WorkerSpec) []*scheduler.Usage {
+	dirs := map[string]func() (string, error){}
+	for _, w := range ws {
+		if dirs[w.Repo] == nil {
+			dirs[w.Repo] = sync.OnceValues(func() (string, error) { return claude.ConfigDir(ctx, w.Repo) })
+		}
+	}
+	out := make([]*scheduler.Usage, len(ws))
+	var wg sync.WaitGroup
+	for i, w := range ws {
+		if w.Conversation == "" {
+			continue
+		}
+		wg.Go(func() {
+			dir, err := dirs[w.Repo]()
+			if err != nil {
+				return
+			}
+			u, err := claude.ReadUsage(dir, w.Conversation)
+			if err != nil || u == nil {
+				return
+			}
+			out[i] = &scheduler.Usage{Input: u.Input, Output: u.Output, CacheWrite: u.CacheWrite, CacheRead: u.CacheRead,
+				AgentSeconds: int64(u.AgentTime / time.Second)}
+		})
+	}
+	wg.Wait()
+	return out
 }
 
 // issueTracker is one Tracker behind the mux.
