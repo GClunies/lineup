@@ -485,6 +485,9 @@ type fakeWorktrees struct {
 	mostInFlight   int
 	// keep makes RemoveReview keep the worktree, as for an unpushed commit.
 	keep bool
+	// dirty makes Remove keep the worktree, as for uncommitted changes.
+	// removed still logs each try.
+	dirty bool
 	// addErr fails the next AddReview call.
 	addErr error
 }
@@ -521,7 +524,16 @@ func (w *fakeWorktrees) Remove(_ context.Context, _, branch string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.removed = append(w.removed, branch)
+	if w.dirty {
+		return fmt.Errorf("%w: %s", ErrUncommitted, branch)
+	}
 	return nil
+}
+
+func (w *fakeWorktrees) setDirty(dirty bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.dirty = dirty
 }
 
 type fakeHarness struct {

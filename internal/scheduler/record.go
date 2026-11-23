@@ -74,9 +74,16 @@ type Record struct {
 	// ReviewedHead is the head that its findings file names.
 	LatestHead   string `json:"latest_head,omitempty"`
 	ReviewedHead string `json:"reviewed_head,omitempty"`
-	// WorktreeKept is true when cleanup kept a review worktree that holds
-	// work that is on no remote.
+	// WorktreeKept is true when lineup kept a worktree that it meant to
+	// remove: a review worktree that holds work that is on no remote, or a
+	// build worktree with uncommitted changes.
 	WorktreeKept bool `json:"worktree_kept,omitempty"`
+	// CloseAtIdle is true from a build Task's merge, with [merged] close_tab
+	// on, until lineup closes its tab.
+	CloseAtIdle bool `json:"close_at_idle,omitempty"`
+	// KeepUntil is when lineup removes the worktree of a Done build Task that
+	// has no tab. Zero means no removal is due.
+	KeepUntil time.Time `json:"keep_until,omitzero"`
 	// Archived hides a Done Task from the Board. Its history stays.
 	Archived bool `json:"archived,omitempty"`
 
@@ -195,6 +202,32 @@ func (r *Record) keptSetupTab() bool { return r.Job == JobExited && !r.hadWorker
 
 func (r *Record) keepsTab() bool { return r.Stage == lifecycle.Done && r.WindowID != "" }
 
+// doneState is where a Done build Task stands with its tab and its worktree.
+// Each state derives from the Record's fields.
+type doneState int
+
+const (
+	// doneOther is any other Task: one that is not Done, a review Task, or a
+	// Done build Task that lineup has nothing to do for.
+	doneOther doneState = iota
+	// closing waits for a Worker that is not busy, then lineup closes the tab.
+	closing
+	// kept has no tab, and lineup removes the worktree at KeepUntil.
+	kept
+)
+
+func (r *Record) done() doneState {
+	switch {
+	case r.Stage != lifecycle.Done || r.Review != nil:
+		return doneOther
+	case r.WindowID != "" && r.CloseAtIdle:
+		return closing
+	case r.WindowID == "" && r.Worktree != "" && !r.KeepUntil.IsZero():
+		return kept
+	}
+	return doneOther
+}
+
 func (r *Record) view() TaskView {
 	v := TaskView{
 		ID: r.ID, Kind: r.Kind, Title: r.Title, Repo: r.RepoLabel,
@@ -279,8 +312,13 @@ func (r *Record) note(pr int) string {
 			lead = append(lead, string(r.Outcome))
 		}
 	}
-	if r.WorktreeKept {
+	switch {
+	case r.WorktreeKept && r.Review == nil:
+		tail = append(tail, "worktree kept: uncommitted changes in "+r.Worktree)
+	case r.WorktreeKept:
 		tail = append(tail, "worktree kept: "+r.Worktree)
+	case r.done() == kept:
+		tail = append(tail, "worktree until "+r.KeepUntil.Format("Jan 2"))
 	}
 	parts := tail
 	if len(lead) > 0 {

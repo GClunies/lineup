@@ -238,7 +238,11 @@ func (p worktreePort) Path(ctx context.Context, repo, branch string) (string, er
 }
 
 func (p worktreePort) Remove(ctx context.Context, repo, branch string) error {
-	return worktree.Remove(ctx, p.bin, repo, branch)
+	err := worktree.Remove(ctx, p.bin, repo, branch)
+	if errors.Is(err, worktree.ErrUncommitted) {
+		return fmt.Errorf("%w: %w", scheduler.ErrUncommitted, err)
+	}
+	return err
 }
 
 func (p worktreePort) AddReview(ctx context.Context, repo string, pr scheduler.ReviewPR) (string, error) {

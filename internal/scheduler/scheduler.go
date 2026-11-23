@@ -171,6 +171,7 @@ func (s *Scheduler) Run(ctx context.Context, events <-chan RexEvent) error {
 			s.onRex(ev)
 		case <-tick.C:
 			s.flagSilentPrompts()
+			s.tidy()
 			go s.poll(ctx, nil)
 		}
 	}
@@ -504,12 +505,35 @@ func (s *Scheduler) cleanup(ctx context.Context, r Record) {
 	// A Task gets a SessionID when setup opens its tab. Setup can fail after
 	// worktrunk made the worktree but before the Record holds its path.
 	case r.Worktree != "" || r.SessionID != "":
-		if err := s.d.Worktrees.Remove(ctx, r.Repo, r.Branch); err != nil {
-			s.d.Log.Error("remove worktree", "task", r.ID, "err", err)
-		} else {
-			s.update(r.ID, func(r *Record) { r.Worktree = "" })
-		}
+		s.removeWorktree(ctx, r)
 	}
+	s.removeSession(ctx, r)
+}
+
+// removeWorktree removes a build Task's worktree. A worktree with uncommitted
+// changes stays, and tidy tries again at each tick until the user commits or
+// discards them. Any other error changes nothing.
+func (s *Scheduler) removeWorktree(ctx context.Context, r Record) {
+	err := s.d.Worktrees.Remove(ctx, r.Repo, r.Branch)
+	switch {
+	case err == nil:
+		s.update(r.ID, func(r *Record) { r.Worktree, r.WorktreeKept, r.KeepUntil = "", false, time.Time{} })
+	case errors.Is(err, ErrUncommitted):
+		s.d.Log.Warn("keep worktree", "task", r.ID, "err", err)
+		s.update(r.ID, func(r *Record) {
+			r.WorktreeKept = true
+			if r.KeepUntil.IsZero() {
+				r.KeepUntil = s.now()
+			}
+		})
+	default:
+		s.d.Log.Error("remove worktree", "task", r.ID, "err", err)
+	}
+}
+
+// removeSession removes the Task's Repo session after the Repo's last
+// started Task, if the session holds no tab.
+func (s *Scheduler) removeSession(ctx context.Context, r Record) {
 	var last bool
 	s.call(func() {
 		last = !slices.ContainsFunc(s.list(), func(o *Record) bool {
@@ -841,7 +865,7 @@ func prURL(p *PRSnapshot) string {
 // gone gets the tab closed flag, and no tab opens until the user asks. A tab
 // that Rex restored as an idle shell after a restart is gone too, and closes.
 // So does a setup tab that Rex kept after worktrunk exited, unless the setup
-// failed.
+// failed. Last, it tidies once, so it needs no tick.
 func (s *Scheduler) recover(ctx context.Context) {
 	live := map[string]map[string]bool{}
 	blocksOf := func(r *Record) (map[string]bool, bool) {
@@ -862,7 +886,8 @@ func (s *Scheduler) recover(ctx context.Context) {
 		}
 		if r.Stage == lifecycle.Done {
 			if r.BlockID == "" {
-				if r.Worktree != "" && !r.WorktreeKept {
+				// A worktree with a removal time is tidy's.
+				if r.Worktree != "" && !r.WorktreeKept && r.KeepUntil.IsZero() {
 					s.apply(r, lifecycle.TabClosed{}, "recovered at start")
 				}
 				continue
@@ -921,6 +946,24 @@ func (s *Scheduler) recover(ctx context.Context) {
 			s.lostPrompt(r)
 			s.apply(r, lifecycle.TabClosed{Waits: r.Pending != nil}, "recovered at start")
 		}
+	}
+	// A worktree whose time ended while the Scheduler was down goes now.
+	s.tidy()
+}
+
+// tidy removes each kept worktree whose time is up. Only the loop calls it.
+func (s *Scheduler) tidy() {
+	for _, r := range s.list() {
+		if r.done() != kept || s.now().Before(r.KeepUntil) {
+			continue
+		}
+		id := r.ID
+		s.enqueue(id, func(ctx context.Context) {
+			// An earlier tick can have queued the same removal.
+			if r, ok := s.snapshot(id); ok && r.done() == kept {
+				s.removeWorktree(ctx, r)
+			}
+		})
 	}
 }
 

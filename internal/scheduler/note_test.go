@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"testing"
+	"time"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
 )
@@ -26,6 +27,16 @@ func TestTheNoteSaysWhatHappensAndWhereTheReviewStands(t *testing.T) {
 	flagged.Flag, flagged.FlagDetail = lifecycle.ReasonDrafts, "2 replies to approve"
 	kept := review(lifecycle.Done, lifecycle.OutcomeReviewed)
 	kept.WorktreeKept, kept.Worktree = true, "/tmp/wt"
+	merged := func(worktree string, until time.Time) *Record {
+		r := build(lifecycle.Done, facts(lifecycle.DecisionApproved, true, pass))
+		r.Outcome, r.Worktree, r.KeepUntil = lifecycle.OutcomeMerged, worktree, until
+		return r
+	}
+	nov14 := time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC)
+	dirty := merged("/tmp/wt", nov14)
+	dirty.WorktreeKept = true
+	keptWithTab := merged("/tmp/wt", nov14)
+	keptWithTab.WindowID = "window:1"
 
 	for _, c := range []struct {
 		name string
@@ -45,6 +56,10 @@ func TestTheNoteSaysWhatHappensAndWhereTheReviewStands(t *testing.T) {
 			r.Outcome = lifecycle.OutcomeMerged
 			return r
 		}(), "#42 merged"},
+		{"build done, worktree kept", merged("/tmp/wt", nov14), "#42 merged · worktree until Nov 14"},
+		{"build done, worktree kept, with a tab", keptWithTab, "#42 merged"},
+		{"build done, worktree removed", merged("", time.Time{}), "#42 merged"},
+		{"build done, uncommitted changes", dirty, "#42 merged · worktree kept: uncommitted changes in /tmp/wt"},
 		{"working with a PR", build(lifecycle.Working, facts(lifecycle.DecisionRequired, false, pass)), "#42 ○ no review yet"},
 		{"working with a PR, approved", build(lifecycle.Working, facts(lifecycle.DecisionApproved, true, pass)), "#42 ✓ approved"},
 		{"working with no PR", &Record{Task: lifecycle.Task{ID: "ENG-1", Stage: lifecycle.Working}}, ""},

@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -104,10 +105,16 @@ type GitHub interface {
 	TeamMembers(ctx context.Context, teams []string) (map[string][]string, error)
 }
 
+// ErrUncommitted is the error of a worktree removal that kept the worktree,
+// because the worktree holds uncommitted changes.
+var ErrUncommitted = errors.New("the worktree has uncommitted changes")
+
 type Worktrees interface {
 	// CreateArgv is the command that creates and sets up the worktree in the Task tab.
 	CreateArgv(repo, branch string) []string
 	Path(ctx context.Context, repo, branch string) (string, error)
+	// Remove removes the branch's worktree. The error wraps ErrUncommitted
+	// when the worktree holds uncommitted changes, and the worktree stays.
 	Remove(ctx context.Context, repo, branch string) error
 	// AddReview fetches the PR into the Repo's main checkout, then adds the
 	// review worktree, detached at the PR's head, if it is missing. It
