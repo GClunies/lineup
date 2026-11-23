@@ -1,0 +1,73 @@
+GLOSSARY.md
+  s_0bbe30b549c9a0::t_f502f7b2b17f26 92
+  s_0bbe30b549c9a0::t_d6f9a11aed3490 100
+  s_0bbe30b549c9a0::t_32f22d68e3258e 110
+docs/product-intent/orchestrator.md
+  s_0bbe30b549c9a0::t_1da1f593447c0a 7
+cmd/lineup/agent/CLAUDE.md
+  s_0bbe30b549c9a0::t_4db46de7aac0e0 3
+  s_0bbe30b549c9a0::t_e330c2f3017e9d 123
+internal/config/layout.go
+  s_0bbe30b549c9a0::t_198dc855cc4b14 9,27,65
+docs/product-intent/tabs.md
+  s_0bbe30b549c9a0::t_a1eee12af64926 75
+  s_0bbe30b549c9a0::t_e1448f09cc11a9 7
+cmd/lineup/hub.go
+  s_0bbe30b549c9a0::t_836a6a876c726e 124,134,136-138,149,152-157
+cmd/lineup/hub_test.go
+  s_0bbe30b549c9a0::t_01f02d6961e8ca 131-132,134,136,252,259-263,277-278,308,346,349-360,363-364,370-381,383-396,400,406,416,469
+cmd/lineup/wire.go
+  s_0bbe30b549c9a0::t_d09e6364eb412d 9,94-117,281-288
+docs/architecture-intent/orchestrator.md
+  s_0bbe30b549c9a0::t_b98ab5a7f8979f 7
+docs/architecture-intent/rex.md
+  s_0bbe30b549c9a0::t_db128662af730d 62,70-76
+docs/architecture-intent/store.md
+  s_0bbe30b549c9a0::t_246e2597445705 30
+docs/product-intent/board.md
+  s_0bbe30b549c9a0::t_48827e64d3cc7c 7,73,75
+docs/product-intent/reviews.md
+  s_0bbe30b549c9a0::t_fdbdfd2f5b7c67 59
+docs/product-intent/workers.md
+  s_0bbe30b549c9a0::t_165e5884c0100c 51,60-63
+internal/rex/client.go
+  s_0bbe30b549c9a0::t_1da5750f76e4d4 29-30,263-264,278,336-359
+internal/rex/client_test.go
+  s_0bbe30b549c9a0::t_7c996ed821771a 8,159-196
+internal/rex/integration_test.go
+  s_0bbe30b549c9a0::t_2c68f65bb3549e 195-199
+internal/scheduler/deliver.go
+  s_0bbe30b549c9a0::t_e621aa434ac3df 176-177
+internal/scheduler/ports.go
+  s_0bbe30b549c9a0::t_5918329c1dd43d 25-28,47-49,122-124,132-134
+internal/scheduler/record.go
+  s_0bbe30b549c9a0::t_726de6e642d870 60-61,63-64
+internal/scheduler/review_test.go
+  s_0bbe30b549c9a0::t_6401e68cb07c00 652-654,798-799,870-872,878-881,905,909-910,917-1013,1129,1132-1150
+internal/scheduler/scheduler.go
+  s_0bbe30b549c9a0::t_1728c957009443 103-104,123,216,996-997
+internal/scheduler/scheduler_test.go
+  s_0bbe30b549c9a0::t_f931b80ac21151 44-46,50,54-58,155-159,173,176-209,211,214-219,558-584
+internal/scheduler/side.go
+  s_0bbe30b549c9a0::t_462ac649d72919 1-164
+internal/worktree/worktree.go
+  s_0bbe30b549c9a0::t_956441f319fa92 11,75-89
+internal/worktree/worktree_test.go
+  s_0bbe30b549c9a0::t_a9eb9cd87b7b5c 6,101-138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6287156b951ae906947e3c8e00683c642a3a14d6",
+  "prompts": {},
+  "sessions": {
+    "s_0bbe30b549c9a0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2d0d4eee-ae46-4a5a-a227-f8eba13a8690",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
