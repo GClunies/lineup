@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -192,6 +193,44 @@ func TestRestartKicksALoadedAgent(t *testing.T) {
 	}
 	if got := strings.Join(*calls, "|"); got != "print gui/501/test.lineup|kickstart -k gui/501/test.lineup" {
 		t.Fatalf("restart ran %q", got)
+	}
+}
+
+func TestRestartWarnsOfTwoCheckoutsWithOneKey(t *testing.T) {
+	root := t.TempDir()
+	a, b := filepath.Join(root, "acme/app"), filepath.Join(root, "old/app")
+	for _, dir := range []string{a, b} {
+		os.MkdirAll(dir, 0o755)
+		for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "git@github.com:acme/app.git"}} {
+			if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %s", args, out)
+			}
+		}
+	}
+	m, calls := testManager(t)
+	m.config = filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(m.config, []byte("roots = [\""+root+"\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr := os.Stderr
+	os.Stderr = w
+	err = m.restart()
+	os.Stderr = stderr
+	w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := io.ReadAll(r)
+	want := "lineup: warning: 2 checkouts have the key acme/app: " + a + " and " + b + ". lineup picks neither for that key until you remove one from the roots.\n"
+	if string(got) != want {
+		t.Errorf("restart wrote %q, want %q", got, want)
+	}
+	if len(*calls) == 0 {
+		t.Error("the warning stopped the restart")
 	}
 }
 

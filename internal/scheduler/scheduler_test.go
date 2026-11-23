@@ -593,7 +593,7 @@ type fakeConfig struct{}
 var testPolicy = lifecycle.Policy{Budgets: lifecycle.Budgets{CIDebug: 3, Responding: 3}}
 
 func (fakeConfig) Policy(string, map[string]string) (lifecycle.Policy, error) { return testPolicy, nil }
-func (fakeConfig) RepoForIssue(Issue) (string, bool)                          { return "/repos/acme/data", true }
+func (fakeConfig) RepoForIssue(Issue) (string, error)                         { return "/repos/acme/data", nil }
 func (fakeConfig) ResolveRepo(name string) (string, error)                    { return "/repos/acme/" + name, nil }
 func (fakeConfig) RepoTrackers(string) []string                               { return nil }
 func (fakeConfig) RepoPrefix(string) string                                   { return "" }
