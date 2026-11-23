@@ -82,8 +82,10 @@ func dumpSettings(t *testing.T, g *Global, home string) settingsDump {
 		_, tracker := g.RepoTracker(path)
 		d.Checkouts[rel] = settings{Resolved: r, Tracker: tracker, Prefix: g.RepoPrefix(path)}
 	}
-	if repo, ok := g.RepoForTeam("PD"); ok {
-		d.TeamPD, _ = filepath.Rel(home, repo)
+	if keys := g.ReposForTeam("PD"); len(keys) == 1 {
+		if repo, ok := g.CheckoutFor(keys[0]); ok {
+			d.TeamPD, _ = filepath.Rel(home, repo)
+		}
 	}
 	return d
 }

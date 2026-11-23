@@ -906,6 +906,9 @@ func applyOverrides(res *Resolved, overrides map[string]string) error {
 	return nil
 }
 
+// ClaudePath is the absolute path of the claude binary.
+func (g *Global) ClaudePath() (string, error) { return g.claudePath() }
+
 // claudePath never asks a login shell: on this machine the login shell finds a broken codex.
 func (g *Global) claudePath() (string, error) {
 	found, err := g.lookPath("claude")
@@ -961,15 +964,16 @@ func (g *Global) tracker(key string) string {
 	return out
 }
 
-// RepoForTeam is the checkout of the [repos."owner/repo"] table whose teams
-// list holds the team.
-func (g *Global) RepoForTeam(teamKey string) (string, bool) {
+// ReposForTeam lists the keys of the [repos."owner/repo"] tables whose teams
+// list holds the team, in any case, sorted.
+func (g *Global) ReposForTeam(teamKey string) []string {
+	var out []string
 	for _, key := range slices.Sorted(maps.Keys(g.file.Repos)) {
-		if slices.Contains(g.file.Repos[key].Teams, teamKey) {
-			return g.CheckoutFor(key)
+		if slices.ContainsFunc(g.file.Repos[key].Teams, func(t string) bool { return strings.EqualFold(t, teamKey) }) {
+			out = append(out, key)
 		}
 	}
-	return "", false
+	return out
 }
 
 // RepoTracker is the Kind of Tracker whose Issues the Repo takes, from its

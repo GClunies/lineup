@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"encoding/json"
 	"maps"
 	"path/filepath"
@@ -34,7 +35,7 @@ func TestAnAddStartsTheTask(t *testing.T) {
 			if spec := h.waitSpecs(1); spec.Task != c.id || spec.Stage != lifecycle.Working {
 				t.Fatalf("first prompt = %s in %s, want %s in Working", spec.Task, spec.Stage, c.id)
 			}
-			d, err := h.s.show(c.id)
+			d, err := h.s.show(context.Background(), c.id)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -64,7 +65,7 @@ func TestAnAddGivesItsOverridesToTheFirstPrompt(t *testing.T) {
 	if spec := h.waitSpecs(1); !maps.Equal(spec.Overrides, set) {
 		t.Fatalf("first prompt overrides = %v, want %v", spec.Overrides, set)
 	}
-	d, err := h.s.show(v.ID)
+	d, err := h.s.show(context.Background(), v.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,7 +7,7 @@ A board and an orchestrator agent that move agent work from a tracker issue to a
 ### Scope
 
 **Repo**:
-A git repository that Tasks run in. A Repo maps to zero or one Tracker workspace and to one or more of its teams.
+A git repository that Tasks run in. A Repo maps to zero or one Tracker workspace and to one or more of its teams. A team can map to more than one Repo. Then lineup picks the Repo of each Issue from the Issue, and asks the user when the Issue does not make one Repo clear.
 _Avoid_: Project, codebase, area
 
 **Repo key**:

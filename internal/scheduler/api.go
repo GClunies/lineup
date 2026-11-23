@@ -46,6 +46,8 @@ type Response struct {
 	OK    bool            `json:"ok"`
 	Error string          `json:"error,omitempty"`
 	Data  json.RawMessage `json:"data,omitempty"`
+	// Ask is set when the error is a RepoAsk.
+	Ask *RepoAsk `json:"ask,omitempty"`
 }
 
 type TaskDetail struct {
@@ -57,6 +59,18 @@ type TaskDetail struct {
 }
 
 var ErrNoRepo = errors.New("no Repo mapping")
+
+// RepoAsk is the error of an add whose Issue fits more than one Repo, when
+// nothing in the Issue picks one. The user picks one of Repos.
+type RepoAsk struct {
+	Issue string   `json:"issue"`
+	Repos []string `json:"repos"`
+}
+
+func (e *RepoAsk) Error() string {
+	return fmt.Sprintf("%s fits more than one Repo, so pick a Repo: %s. Then run lineup add --repo <repo> %s",
+		e.Issue, strings.Join(e.Repos, ", "), e.Issue)
+}
 
 // drafts is the detail of the drafts flag, which the Board's row shows.
 func drafts(n int) string {
@@ -108,6 +122,7 @@ func (s *Scheduler) serveConn(ctx context.Context, conn net.Conn) {
 		resp := Response{OK: err == nil}
 		if err != nil {
 			resp.Error = err.Error()
+			errors.As(err, &resp.Ask)
 		} else if data != nil {
 			resp.Data, _ = json.Marshal(data)
 		}
@@ -352,9 +367,12 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 			return TaskView{}, err
 		}
 		r.Issue, r.ID, r.Title, r.Branch = &is, is.Identifier, is.Title, is.BranchName
-		if r.Repo == "" {
-			if r.Repo, err = s.d.Config.RepoForIssue(is); err != nil {
+		picked := r.Repo != ""
+		if !picked {
+			if r.Repo, err = s.d.Config.RepoForIssue(ctx, is); errors.Is(err, ErrNoRepo) {
 				return TaskView{}, fmt.Errorf("%w: pass a repo", err)
+			} else if err != nil {
+				return TaskView{}, err
 			}
 		}
 		switch key, tracker := s.d.Config.RepoTracker(r.Repo); tracker {
@@ -363,6 +381,11 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 			return TaskView{}, fmt.Errorf("repo has no tracker: %s", key)
 		default:
 			return TaskView{}, fmt.Errorf("%s takes Issues only from its Tracker %s, and %s is a %s Issue", key, tracker, is.Identifier, is.Tracker())
+		}
+		if picked {
+			if err := s.d.Config.PickedRepo(ctx, is, r.Repo); err != nil {
+				return TaskView{}, err
+			}
 		}
 	case r.Text != "":
 		if r.Repo == "" {

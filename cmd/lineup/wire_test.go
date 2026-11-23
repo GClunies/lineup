@@ -114,21 +114,21 @@ func TestAGitHubIssueMapsToTheCheckoutWhoseOriginIsItsRepository(t *testing.T) {
 	checkout := gitCheckout(t, filepath.Join(home, "code", "octo", "sandbox"), "git@github.com:octo/sandbox.git")
 	gitCheckout(t, filepath.Join(home, "repos", "octo", "unlisted"), "git@github.com:octo/unlisted.git")
 	p := configPort{cfg: loadConfig(t, "roots = [\"~/code\"]\n")}
-	if _, err := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "octo/unlisted#2"}); err == nil {
+	if _, err := p.RepoForIssue(context.Background(), scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "octo/unlisted#2"}); err == nil {
 		t.Fatal("a checkout below no root mapped to a Repo")
 	}
-	if repo, err := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "octo/sandbox#2"}); err != nil || repo != checkout {
+	if repo, err := p.RepoForIssue(context.Background(), scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "octo/sandbox#2"}); err != nil || repo != checkout {
 		t.Fatalf("repo %q %v, want %s", repo, err, checkout)
 	}
-	if repo, _ := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "Octo/Sandbox#2"}); repo != checkout {
+	if repo, _ := p.RepoForIssue(context.Background(), scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "Octo/Sandbox#2"}); repo != checkout {
 		t.Fatalf("another spelling of the repository gave %q, want the folder as it is on disk, %s", repo, checkout)
 	}
-	if _, err := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "octo/elsewhere#2"}); !errors.Is(err, scheduler.ErrNoRepo) {
+	if _, err := p.RepoForIssue(context.Background(), scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "octo/elsewhere#2"}); !errors.Is(err, scheduler.ErrNoRepo) {
 		t.Fatalf("an Issue with no checkout: err %v, want ErrNoRepo", err)
 	}
 	clone := gitCheckout(t, filepath.Join(home, "code", "old", "sandbox"), "https://github.com/octo/sandbox")
 	want := "no Repo mapping for octo/sandbox#2: 2 checkouts have the key octo/sandbox: " + checkout + " and " + clone
-	if _, err := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "octo/sandbox#2"}); !errors.Is(err, scheduler.ErrNoRepo) || err.Error() != want {
+	if _, err := p.RepoForIssue(context.Background(), scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "octo/sandbox#2"}); !errors.Is(err, scheduler.ErrNoRepo) || err.Error() != want {
 		t.Fatalf("two clones of the repository: err %v, want %q", err, want)
 	}
 }
@@ -267,20 +267,20 @@ func TestAPrefixedLocalIssueMapsToItsPrefixesRepo(t *testing.T) {
 		t.Fatalf("lookup %+v", is)
 	}
 	p := configPort{cfg: cfg}
-	if repo, err := p.RepoForIssue(is); err != nil || repo != hod {
+	if repo, err := p.RepoForIssue(context.Background(), is); err != nil || repo != hod {
 		t.Fatalf("repo %q %v, want %s from the prefix, as the file names no repo", repo, err, hod)
 	}
 	if got := p.RepoPrefix(hod); got != "hod" {
 		t.Fatalf("RepoPrefix = %q", got)
 	}
 	is.RepoHint = "data"
-	if repo, _ := p.RepoForIssue(is); repo != hod {
+	if repo, _ := p.RepoForIssue(context.Background(), is); repo != hod {
 		t.Fatalf("repo %q, want %s: the prefix names the Repo before the repo field", repo, hod)
 	}
-	if repo, err := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindLocal, Identifier: "LOCAL-1"}); err == nil {
+	if repo, err := p.RepoForIssue(context.Background(), scheduler.Issue{Kind: scheduler.KindLocal, Identifier: "LOCAL-1"}); err == nil {
 		t.Fatalf("LOCAL-1 with no repo field mapped to %q", repo)
 	}
-	if _, err := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindLocal, Identifier: "LOCAL-1", RepoHint: "nope"}); !errors.Is(err, scheduler.ErrNoRepo) || !strings.Contains(err.Error(), "no checkout named nope") {
+	if _, err := p.RepoForIssue(context.Background(), scheduler.Issue{Kind: scheduler.KindLocal, Identifier: "LOCAL-1", RepoHint: "nope"}); !errors.Is(err, scheduler.ErrNoRepo) || !strings.Contains(err.Error(), "no checkout named nope") {
 		t.Fatalf("LOCAL-1 with repo: nope: err %v, want ErrNoRepo that says why", err)
 	}
 }

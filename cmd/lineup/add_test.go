@@ -61,3 +61,14 @@ func TestAddRefusesABadSetAndASecondArgument(t *testing.T) {
 		t.Fatalf("a usage error sent %d requests", n)
 	}
 }
+
+func TestAddThatMustAskListsTheRepos(t *testing.T) {
+	t.Setenv("LINEUP_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	ask := &scheduler.RepoAsk{Issue: "PD-12", Repos: []string{"crexi/backend", "crexi/data"}}
+	sched, _ := fakeScheduler(t, map[string]scheduler.Response{"add": {Error: ask.Error(), Ask: ask}})
+	err := cmdAdd(sched, []string{"PD-12"}, io.Discard)
+	want := "PD-12 fits more than one Repo, so pick a Repo: crexi/backend, crexi/data. Then run lineup add --repo <repo> PD-12"
+	if err == nil || err.Error() != want {
+		t.Fatalf("add: err %v, want %q", err, want)
+	}
+}

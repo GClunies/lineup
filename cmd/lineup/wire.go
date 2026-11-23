@@ -1,12 +1,14 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +20,7 @@ import (
 	"github.com/gclunies/lineup/internal/linear"
 	"github.com/gclunies/lineup/internal/localissues"
 	"github.com/gclunies/lineup/internal/rex"
+	"github.com/gclunies/lineup/internal/route"
 	"github.com/gclunies/lineup/internal/scheduler"
 	"github.com/gclunies/lineup/internal/worktree"
 )
@@ -443,6 +446,14 @@ func (p *trackerPort) issue(ctx context.Context, wsID, identifier string) (linea
 	return c.Issue(ctx, identifier)
 }
 
+func (p *trackerPort) setDescription(ctx context.Context, wsID, issueID, description string) error {
+	c, _, err := p.client(wsID)
+	if err != nil {
+		return err
+	}
+	return c.SetDescription(ctx, issueID, description)
+}
+
 func (p *trackerPort) Lookup(ctx context.Context, identifier string) (scheduler.Issue, error) {
 	wss, err := linear.Workspaces()
 	if err != nil {
@@ -581,6 +592,20 @@ func (l localTracker) Description(_ context.Context, is scheduler.Issue) (string
 type configPort struct {
 	cfg     *config.Global
 	choices *config.RepoChoices
+	// linear reads and writes the Linear Issues whose team is on more than
+	// one Repo.
+	linear linearIssues
+	judge  route.Judge
+}
+
+// linearIssues is the part of trackerPort that the routing of a Linear Issue uses.
+type linearIssues interface {
+	issue(ctx context.Context, wsID, identifier string) (linear.Issue, error)
+	setDescription(ctx context.Context, wsID, issueID, description string) error
+}
+
+func clues(is linear.Issue) route.Clues {
+	return route.Clues{Title: is.Title, Description: is.Description, Labels: is.Labels, Links: is.Links}
 }
 
 func (p configPort) Policy(repo string, overrides map[string]string) (lifecycle.Policy, error) {
@@ -588,7 +613,7 @@ func (p configPort) Policy(repo string, overrides map[string]string) (lifecycle.
 	return res.Policy(), err
 }
 
-func (p configPort) RepoForIssue(is scheduler.Issue) (string, error) {
+func (p configPort) RepoForIssue(ctx context.Context, is scheduler.Issue) (string, error) {
 	noRepo := fmt.Errorf("%w for %s", scheduler.ErrNoRepo, is.Identifier)
 	switch is.Tracker() {
 	case scheduler.KindGitHub:
@@ -618,15 +643,79 @@ func (p configPort) RepoForIssue(is scheduler.Issue) (string, error) {
 		}
 		return repo, nil
 	}
-	if repo, ok := p.cfg.RepoForTeam(is.TeamKey); ok {
-		return repo, nil
-	}
-	if is.ProjectID != "" {
-		if repo, ok, _ := p.choices.Get(is.ProjectID); ok {
-			return repo, nil
+	project := p.projectRepo(is.ProjectID)
+	cands := p.cfg.ReposForTeam(is.TeamKey)
+	if len(cands) == 0 {
+		if project == "" {
+			return "", noRepo
 		}
+		return project, nil
 	}
-	return "", noRepo
+	var full linear.Issue
+	projectKey := ""
+	if project != "" {
+		projectKey, _ = p.cfg.RepoTracker(project)
+	}
+	key, step, err := route.Choose(ctx, route.Inputs{Candidates: cands, Project: projectKey, Judge: p.judge,
+		Clues: func(ctx context.Context) (route.Clues, error) {
+			var err error
+			full, err = p.linear.issue(ctx, is.Workspace, is.Identifier)
+			return clues(full), err
+		}})
+	if err != nil {
+		return "", err
+	}
+	if key == "" {
+		return "", &scheduler.RepoAsk{Issue: is.Identifier, Repos: cands}
+	}
+	repo, ok := p.cfg.CheckoutFor(key)
+	if !ok {
+		why := cmp.Or(p.cfg.KeyClash(key), "no checkout below the roots has the key "+key)
+		return "", fmt.Errorf("%w: %s", noRepo, why)
+	}
+	if step.Writes() {
+		return repo, p.linear.setDescription(ctx, is.Workspace, full.ID, route.WithRepoLine(full.Description, key))
+	}
+	return repo, nil
+}
+
+// projectRepo is the checkout that the user picked for the Linear Project, or "".
+func (p configPort) projectRepo(projectID string) string {
+	if projectID == "" || p.choices == nil {
+		return ""
+	}
+	name, ok, _ := p.choices.Get(projectID)
+	if !ok {
+		return ""
+	}
+	repo, err := p.ResolveRepo(name)
+	if err != nil {
+		return ""
+	}
+	return repo
+}
+
+// PickedRepo writes the Repo line into a Linear Issue whose team is on more
+// than one Repo, when the user picks one of them and the Issue does not
+// already name it.
+func (p configPort) PickedRepo(ctx context.Context, is scheduler.Issue, repo string) error {
+	if is.Tracker() != scheduler.KindLinear {
+		return nil
+	}
+	cands := p.cfg.ReposForTeam(is.TeamKey)
+	key, _ := p.cfg.RepoTracker(repo)
+	i := slices.IndexFunc(cands, func(c string) bool { return strings.EqualFold(c, key) })
+	if len(cands) < 2 || i < 0 {
+		return nil
+	}
+	full, err := p.linear.issue(ctx, is.Workspace, is.Identifier)
+	if err != nil {
+		return err
+	}
+	if route.NamedRepo(clues(full), cands) == cands[i] {
+		return nil
+	}
+	return p.linear.setDescription(ctx, is.Workspace, full.ID, route.WithRepoLine(full.Description, cands[i]))
 }
 
 func (p configPort) RepoTracker(repo string) (string, string) { return p.cfg.RepoTracker(repo) }

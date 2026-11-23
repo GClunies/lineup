@@ -392,13 +392,22 @@ func TestMissingClaudeIsAnError(t *testing.T) {
 	}
 }
 
+func TestATeamCanBeOnMoreThanOneRepo(t *testing.T) {
+	g := load(t, "[repos.\"crexi/data\"]\nteams = [\"PD\"]\ntracker = \"linear\"\n"+
+		"[repos.\"crexi/backend\"]\nteams = [\"pd\", \"ENG\"]\ntracker = \"linear\"\n")
+	for team, want := range map[string][]string{
+		"PD": {"crexi/backend", "crexi/data"}, "eng": {"crexi/backend"}, "NOPE": nil,
+	} {
+		if got := g.ReposForTeam(team); !slices.Equal(got, want) {
+			t.Errorf("ReposForTeam(%q) = %q, want %q", team, got, want)
+		}
+	}
+}
+
 func TestTildeExpansion(t *testing.T) {
 	g, home := loadFixture(t, "roots = [\"~/repos\"]\n[repos.\"crexi/data\"]\nteams = [\"APP\", \"ENG\"]\ntracker = \"linear\"\nwip_cap = 4\n")
-	if repo, ok := g.RepoForTeam("ENG"); !ok || repo != filepath.Join(home, "repos/crexi/data") {
-		t.Errorf("RepoForTeam = %q %v", repo, ok)
-	}
-	if _, ok := g.RepoForTeam("NOPE"); ok {
-		t.Error("unknown team found")
+	if repo, ok := g.CheckoutFor("crexi/data"); !ok || repo != filepath.Join(home, "repos/crexi/data") {
+		t.Errorf("CheckoutFor = %q %v", repo, ok)
 	}
 	r, err := g.Resolve("~/repos/crexi/data", nil)
 	if err != nil {

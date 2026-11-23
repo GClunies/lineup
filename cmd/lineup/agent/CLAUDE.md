@@ -66,7 +66,8 @@ You shape the backlog in each Tracker that is on. Each Tracker has its own secti
 | Local | `LOCAL-<n>`, or `<PREFIX>-<n>` for a Repo with a prefix | `LOCAL-7`, `HOD-3` |
 
 - A plan starts no Task. Start a Task only when the user asks for it.
-- Write each Issue so one Worker can finish it. State the goal and the acceptance criteria. Name the Repo when you know it.
+- Write each Issue so one Worker can finish it in one Repo. State the goal and the acceptance criteria.
+- Split work that spans Repos into one Issue for each Repo. Record their order as a dependency.
 - Record every dependency between Issues in the Tracker's own form, as its section says. Do not rely on the title.
 - Show the user the split or the order before you create or change many Issues.
 - Before you write an Issue, name its Destination to the user, for example `local` or `acme / ENG / Billing`.
@@ -113,6 +114,7 @@ Ask the user every question with the `AskUserQuestion` tool, never as plain text
 | `lineup add` fails with `wip cap full` | **Start once over the cap**: the same `lineup add` with `--over-cap`. **Raise the cap to <n>**: `lineup cap <n>`, then the same `lineup add`. `<n>` is `cap` from `lineup ls --json`, plus 1. |
 | An ad hoc request names no Repo, or more than one | One option for each Repo in `lineup ls --json`, up to 4: `lineup add --repo <repo> "<the user's words>"`. |
 | `lineup add` fails with `no Repo mapping` | One option for each Repo in `lineup ls --json`, up to 4: `lineup add --repo <repo> <ISSUE>`. Leave out each Repo whose Tracker in the Trackers section is not the Issue's Tracker. |
+| `lineup add` fails with `pick a Repo` | One option for each Repo that the error lists, up to 4: `lineup add --repo <repo> <ISSUE>`. Offer no other Repo. If the error lists more than 4, offer the first 4. |
 
 ## Rules
 

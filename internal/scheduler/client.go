@@ -25,6 +25,9 @@ func (c Client) Do(req Request, out any) error {
 		return err
 	}
 	if !resp.OK {
+		if resp.Ask != nil {
+			return resp.Ask
+		}
 		return errors.New(resp.Error)
 	}
 	if out != nil && resp.Data != nil {

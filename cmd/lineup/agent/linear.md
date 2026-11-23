@@ -14,5 +14,7 @@ Use the `linear` CLI. Run `linear auth list` to see the workspaces. The default 
 | Group | "put these in milestone M2" | `linear issue update <issue>`, `linear milestone` |
 | Discuss | "leave a note on ENG-12" | `linear issue comment add ENG-12` |
 
+- Name the one Repo of each Issue with a line `Repo: <owner>/<repo>` in its description, for example `Repo: crexi/data`. When the Issue's team is on more than one Repo, lineup reads this line to pick the Repo.
+- If work spans Repos, split it into one Issue for each Repo. Join the Issues with `blocks` relations, in the order of the work.
 - Never run `linear issue start` or `linear issue pull-request`.
 - You cannot delete Issues. If an Issue must go, tell the user to cancel or delete it in Linear.

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -198,10 +199,15 @@ func TestIssueReadsByIdentifierWithDescription(t *testing.T) {
 	fakeLinear(t, vars(&sent, reply(200, data(map[string]any{"issue": map[string]any{
 		"id": "uuid-1", "identifier": "ENG-123", "title": "T", "description": "line one\n\x1b]52;c;AA\x07line two",
 		"branchName": "ada/eng-123-t", "team": map[string]any{"id": "t1", "key": "ENG"},
+		"labels":      map[string]any{"nodes": []any{map[string]any{"name": "repo:data"}}},
+		"attachments": map[string]any{"nodes": []any{map[string]any{"url": "https://github.com/crexi/data/pull/7"}}},
 	}}))))
 	is, err := c.Issue(context.Background(), "ENG-123")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !slices.Equal(is.Labels, []string{"repo:data"}) || !slices.Equal(is.Links, []string{"https://github.com/crexi/data/pull/7"}) {
+		t.Fatalf("labels %q, links %q", is.Labels, is.Links)
 	}
 	if sent["id"] != "ENG-123" || is.ID != "uuid-1" || is.BranchName != "ada/eng-123-t" || is.Team.Key != "ENG" {
 		t.Fatalf("sent %v, got %+v", sent, is)
@@ -298,6 +304,19 @@ func TestAssignToMeSendsTheViewerID(t *testing.T) {
 	fakeLinear(t, vars(&mutation, reply(200, data(map[string]any{"issueUpdate": map[string]any{"success": true}}))))
 	if err := c.AssignToMe(context.Background(), "issue-10"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSetDescriptionSendsOnlyTheDescription(t *testing.T) {
+	c := signedInFor(t)
+	var mutation map[string]any
+	fakeLinear(t, vars(&mutation, reply(200, data(map[string]any{"issueUpdate": map[string]any{"success": true}}))))
+	if err := c.SetDescription(context.Background(), "issue-9", "Body\n\nRepo: crexi/data"); err != nil {
+		t.Fatal(err)
+	}
+	input, _ := mutation["input"].(map[string]any)
+	if mutation["id"] != "issue-9" || input["description"] != "Body\n\nRepo: crexi/data" || len(input) != 1 {
+		t.Fatalf("mutation %v", mutation)
 	}
 }
 
