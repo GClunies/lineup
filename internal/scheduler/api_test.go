@@ -63,7 +63,7 @@ func TestAskReplacesTheOldQuestion(t *testing.T) {
 	if err := h.ask("ENG-1", "second?"); err != nil {
 		t.Fatal(err)
 	}
-	d, err := h.s.show("ENG-1")
+	d, err := h.s.show(context.Background(), "ENG-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestSteerIsRecordedAsAnEvent(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.working()
 	h.do(Request{Op: "steer", Task: "ENG-1", Text: "use a dual write"})
-	d, err := h.s.show("ENG-1")
+	d, err := h.s.show(context.Background(), "ENG-1")
 	if err != nil {
 		t.Fatal(err)
 	}

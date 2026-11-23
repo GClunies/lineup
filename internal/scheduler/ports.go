@@ -175,6 +175,10 @@ type Harness interface {
 	// resume finds it. A resume of a missing conversation exits after a few seconds,
 	// and Rex then closes the tab with its error.
 	HasConversation(ctx context.Context, w WorkerSpec) bool
+	// Usage is what the conversation of each spec spent, in the order of ws.
+	// An entry is nil when the usage is unknown: the Task has no
+	// conversation, or the Harness holds no transcript of it that it can read.
+	Usage(ctx context.Context, ws []WorkerSpec) []*Usage
 }
 
 // The kinds of Tracker that an Issue can come from.

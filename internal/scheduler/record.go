@@ -223,6 +223,20 @@ type TaskView struct {
 	// WorktreeNote says why lineup keeps the Task's worktree. The note ends
 	// with it too, and a Follow-up row, whose note is the Tracker state, adds it.
 	WorktreeNote string `json:"worktree_note,omitempty"`
+	// Usage is nil when it is unknown. Only show, and ls with Usage, read it,
+	// so the Board's watch stream never holds it.
+	Usage *Usage `json:"usage"`
+}
+
+// Usage is what a Task's Worker spent: the tokens of each API message once,
+// its subagents' included, and its agent time. Agent time leaves out the
+// time that the Worker waited for the user.
+type Usage struct {
+	Input        int64 `json:"input_tokens"`
+	Output       int64 `json:"output_tokens"`
+	CacheWrite   int64 `json:"cache_write_tokens"`
+	CacheRead    int64 `json:"cache_read_tokens"`
+	AgentSeconds int64 `json:"agent_seconds"`
 }
 
 type BoardView struct {
@@ -297,6 +311,13 @@ func (r *Record) done() doneState {
 		return readOnly
 	}
 	return doneOther
+}
+
+// usageSpec is what the Harness needs to read the Task's usage. ls and show
+// copy it on the loop and pass it to the Harness after, because the Harness
+// reads files.
+func (r *Record) usageSpec() WorkerSpec {
+	return WorkerSpec{Task: r.ID, Repo: r.Repo, Conversation: r.Conversation}
 }
 
 func (r *Record) view() TaskView {
