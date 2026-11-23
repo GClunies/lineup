@@ -1,0 +1,66 @@
+internal/board/github.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 5-6,11,27-30,33-35,51-57
+internal/github/testdata/own_assigned.json
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 4-5
+docs/spec/one-board.md
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 32,34,36-37,39-41,43,45,47,49-52,55,66-90,101,103,106,123-138,166,168,244,308-311,320-325
+cmd/lineup/hub.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 579-581
+internal/board/filter_test.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 21
+GLOSSARY.md
+  s_fb56ce352cbfde::t_0dd76373a5830f 88
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 69-72
+internal/board/followup_test.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 1-174
+internal/board/view_test.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 1-230
+internal/board/groups.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 16
+internal/board/board_test.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 423,604,607-614,653-662,664-670,709,719,727,732,739,741-742,745-746,763-769,773,775-777,784,1077-1120
+internal/board/model.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 194-199,514
+internal/board/issues_test.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 100
+internal/github/own_test.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 60
+internal/board/groups_test.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 16,56,84,91,189-195,215,291-292
+internal/board/issues.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 60-70,233-252
+  s_fb56ce352cbfde::t_8774254a8b82d1 253
+internal/config/board.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 14
+internal/config/board_test.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 13,35,50,56-65
+  s_fb56ce352cbfde::t_e98df4ce6b14e8 66-67
+go.mod
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 12
+internal/scheduler/api_test.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 189-210
+internal/board/view.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 4,9,14,157-158,160,168-227,301,342-343,345-347,353,361-366,371,373,376-405,407-414,416-435,444,451,458,463-471,473-480,483-504,506-509,511-522,536-538,541-542,574
+docs/spec/mvp.md
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 472,553,555-557,560-561,563,565-566,568,570-573,578-580,602
+internal/board/github_test.go
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 12,61-63,69-72,99,127-146,148-160
+docs/spec/trackers.md
+  s_fb56ce352cbfde::t_d0af9f24f5cd45 189-190,236
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae1b049fab8347b9b80c2cea9afa526fd4affeb3",
+  "prompts": {},
+  "sessions": {
+    "s_fb56ce352cbfde": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fae7e67-0800-4a66-b7d1-8d3e076d23e4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
