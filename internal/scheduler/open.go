@@ -64,18 +64,22 @@ func (s *Scheduler) restore(ctx context.Context, id string, focus bool) (OpenRes
 	switch {
 	case r.Stage == lifecycle.Queued:
 		return res, fmt.Errorf("%s has not started", id)
-	case r.Stage == lifecycle.Done && r.WindowID == "":
+	case r.Stage == lifecycle.Done && r.WindowID == "" && r.Review != nil:
 		return res, fmt.Errorf("%s is Done and its worktree is gone", id)
 	case r.WindowID != "" && (r.Job != JobExited || r.Stage == lifecycle.Done):
 		if !focus {
 			return res, nil
 		}
 		return res, s.d.Rex.Focus(ctx, r.SessionID, r.WindowID, r.BlockID)
-	case r.Review == nil && r.Worktree == "":
+	case r.Review == nil && r.Worktree == "" && r.Stage != lifecycle.Done:
 		return res, fmt.Errorf("%s has no worktree yet", id)
 	}
 	gone := r.Conversation != "" && !s.d.Harness.HasConversation(ctx, WorkerSpec{Repo: r.Repo, Conversation: r.Conversation})
 	fresh := r.Conversation == "" || gone
+	// A fresh Worker would not know the Task's work, and Done has no prompt.
+	if fresh && r.Stage == lifecycle.Done {
+		return res, fmt.Errorf("%s is Done and Claude no longer holds its conversation", id)
+	}
 	if fresh && r.Stage != lifecycle.ReviewReady && !r.Stage.Agent() {
 		return res, fmt.Errorf("%s has no conversation to restore in %s", id, r.Stage)
 	}

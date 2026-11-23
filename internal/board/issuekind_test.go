@@ -120,7 +120,7 @@ func TestCOnALocalRowWritesTheNewStatusAndTheRowMovesGroup(t *testing.T) {
 	if e.m.mode != modeStatus {
 		t.Fatalf("mode %d, want the status list:\n%s", e.m.mode, v)
 	}
-	inOrder(t, v, "Status of LOCAL-1", "backlog", "▸ todo", "started", "in review", "done", "canceled")
+	inOrder(t, v, "Status of LOCAL-1", "backlog", "▸ todo", "started", "in review", "   done", "canceled")
 	e.press("k", "enter")
 	if is, _ := store.Get("LOCAL-1"); is.Status != localissues.Backlog {
 		t.Fatalf("LOCAL-1 has status %q, want backlog", is.Status)

@@ -124,7 +124,7 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 		})
 	}
 	out := screen(e.m)
-	inOrder(t, out, "BACKLOG", "sandbox#10", "READY", "sandbox#12", "sandbox#14", "sandbox#11", "QUEUED", "sandbox#16")
+	inOrder(t, out, "Backlog 2", "sandbox#10", "Ready 5", "sandbox#12", "sandbox#14", "sandbox#11", "Queued 1", "sandbox#16")
 	if l := lineOf(t, out, "sandbox#11"); !strings.Contains(l, "Drop old API keys") || !strings.Contains(l, "blocked") {
 		t.Errorf("the sandbox#11 row must show its title and blocked: %q", l)
 	}

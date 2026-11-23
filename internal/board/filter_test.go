@@ -41,7 +41,7 @@ func rowLabels(m Model) (ids, labels []string) {
 func TestTheFilterShowsAMatchFromAClosedGroupAndEscRestoresTheRows(t *testing.T) {
 	e := groupEnv(t)
 	before := screen(e.m)
-	if !strings.Contains(before, "BACKLOG  1 …") || strings.Contains(before, "ENG-20 ") {
+	if !strings.Contains(before, "Backlog 1 …") || strings.Contains(before, "ENG-20 ") {
 		t.Fatalf("Backlog does not start closed:\n%s", before)
 	}
 	e.press("/", "eng-20")
@@ -49,7 +49,7 @@ func TestTheFilterShowsAMatchFromAClosedGroupAndEscRestoresTheRows(t *testing.T)
 	if e.m.mode != modeFilter || !strings.Contains(v, "/ eng-20") {
 		t.Fatalf("mode %d, want the filter line:\n%s", e.m.mode, v)
 	}
-	if !strings.Contains(v, "BACKLOG  1\n") || !strings.Contains(v, "ENG-20 ") || strings.Contains(v, "ENG-9 ") || strings.Contains(v, "READY") {
+	if !strings.Contains(v, "Backlog 1\n") || !strings.Contains(v, "ENG-20 ") || strings.Contains(v, "ENG-9 ") || hasHeading(v, "Ready") {
 		t.Fatalf("the filter does not show just ENG-20 in an open Backlog:\n%s", v)
 	}
 	e.press("esc")
@@ -62,10 +62,15 @@ func TestEveryGroupWithAMatchOpensAndItsHeadingCountsTheMatches(t *testing.T) {
 	e := groupEnv(t)
 	e.press("/", "rename")
 	v := screen(e.m)
-	inOrder(t, v, "READY  1\n", "LOCAL-1", "DONE  1\n", "ENG-560")
-	for _, gone := range []string{"ENG-9 ", "ENG-588", "WORKING", "BACKLOG"} {
+	inOrder(t, v, "Ready 1\n", "LOCAL-1", "Done 1\n", "ENG-560")
+	for _, gone := range []string{"ENG-9 ", "ENG-588"} {
 		if strings.Contains(v, gone) {
 			t.Fatalf("the filter shows %q:\n%s", gone, v)
+		}
+	}
+	for _, g := range []string{"Working", "Backlog"} {
+		if hasHeading(v, g) {
+			t.Fatalf("the filter shows the %s heading:\n%s", g, v)
 		}
 	}
 	if got := e.m.rowIDs(); !slices.Equal(got, []string{"LOCAL-1", "ENG-560"}) {

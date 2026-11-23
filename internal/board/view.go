@@ -24,7 +24,7 @@ var (
 	bold    = lipgloss.NewStyle().Bold(true)
 	good    = lipgloss.NewStyle().Foreground(teal)
 	bad     = lipgloss.NewStyle().Foreground(pink)
-	selRow  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e3f1ef"))
+	selRow  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e3f1ef")).Background(lipgloss.Color("#23403d"))
 	headRow = lipgloss.NewStyle().Foreground(teal).Bold(true)
 )
 
@@ -86,28 +86,54 @@ func windowStart(lines []string, h int) int {
 	return min(max(at-h/2, 0), len(lines)-h)
 }
 
+// header shows lineup and its alerts at the left, and the live state at the
+// right. A narrow header drops the live state from the start, and it always
+// keeps the WIP cap.
 func (m Model) header() string {
-	s := " " + bold.Render("lineup") + fmt.Sprintf("  WIP %d/%d", m.board.Started, m.board.Cap)
-	if m.board.OverCap > 0 {
-		s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
-	}
-	s += fmt.Sprintf("   ●%d need you", needsYou(m.board.OfKind(lifecycle.KindBuild).Tasks))
-	if n := needsYou(m.board.OfKind(lifecycle.KindReview).Tasks); n > 0 {
-		s += fmt.Sprintf(" (+%d in reviews)", n)
-	}
+	left := " " + bold.Render("lineup")
 	if m.board.ReviewsPaused {
-		s += "   " + bad.Render("reviews paused")
+		left += "   " + bad.Render("reviews paused")
 	}
 	if !m.online {
-		s += "   " + bad.Render("scheduler offline, showing cache: run lineup restart")
+		left += "   " + bad.Render("scheduler offline, showing cache: run lineup restart")
 	}
-	return ansi.Truncate(s, m.width, "…")
+	live := []string{good.Render("●") + fmt.Sprintf(" %d working", inGroup(m.board.Tasks, lifecycle.GroupWorking))}
+	if n := inGroup(m.board.OfKind(lifecycle.KindReview).Tasks, lifecycle.GroupNeedsYou); n > 0 {
+		live = append(live, fmt.Sprintf("+%d in reviews", n))
+	}
+	wip := fmt.Sprintf("WIP %d/%d", m.board.Started, m.board.Cap)
+	if m.board.OverCap > 0 {
+		wip += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
+	}
+	live = append(live, fmt.Sprintf("%d done since yesterday", m.doneSinceYesterday()), wip)
+	for {
+		right := strings.Join(live, dim.Render(" · "))
+		gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+		if gap >= 2 || len(live) == 1 {
+			return ansi.Truncate(left+strings.Repeat(" ", max(gap, 2))+right, m.width, "…")
+		}
+		live = live[1:]
+	}
 }
 
-func needsYou(tasks []scheduler.TaskView) int {
+func inGroup(tasks []scheduler.TaskView, g lifecycle.Group) int {
 	n := 0
 	for _, t := range tasks {
-		if inNeedsYou(t) {
+		if t.Group == g.String() {
+			n++
+		}
+	}
+	return n
+}
+
+// doneSinceYesterday counts the Tasks that reached Done since 00:00
+// yesterday, local time.
+func (m Model) doneSinceYesterday() int {
+	y, mo, d := m.opts.Now().Local().Date()
+	since := time.Date(y, mo, d-1, 0, 0, 0, 0, time.Local)
+	n := 0
+	for _, at := range m.board.Done {
+		if !at.Before(since) {
 			n++
 		}
 	}
@@ -211,7 +237,7 @@ func (m Model) selection() (title, facts string) {
 		return g, fmt.Sprintf("%d rows", n)
 	}
 	if r, ok := m.currentIssue(); ok {
-		return r.Title, join(boardID(r.ID), r.Group, r.Repo, r.note())
+		return scheduler.PlainTitle(r.Title), join(boardID(r.ID), r.Group, r.Repo, r.note())
 	}
 	t, ok := m.current()
 	if !ok {
@@ -222,7 +248,12 @@ func (m Model) selection() (title, facts string) {
 	if t.PRNumber == 0 || slices.Contains(strings.FieldsFunc(t.Note, func(r rune) bool { return r != '#' && !unicode.IsDigit(r) }), pr) {
 		pr = ""
 	}
-	return t.Title, join(boardID(t.ID), t.Stage, t.Repo, pr, t.Note)
+	// setBoard put a Follow-up row's Tracker state in the place of its note.
+	var kept string
+	if t.Group == groupFollowUp {
+		kept = t.WorktreeNote
+	}
+	return scheduler.PlainTitle(t.Title), join(boardID(t.ID), t.Stage, t.Repo, pr, t.Note, kept)
 }
 
 type hint struct{ key, does string }
@@ -359,7 +390,7 @@ const (
 
 var columns = [numCols]column{
 	colID:     {task: func(_ Model, t scheduler.TaskView) string { return boardID(t.ID) }, issue: func(r issueRow) string { return boardID(r.ID) }},
-	colTitle:  {task: func(_ Model, t scheduler.TaskView) string { return t.Title }, issue: func(r issueRow) string { return r.Title }},
+	colTitle:  {task: func(_ Model, t scheduler.TaskView) string { return scheduler.PlainTitle(t.Title) }, issue: func(r issueRow) string { return scheduler.PlainTitle(r.Title) }},
 	colStatus: {task: func(_ Model, t scheduler.TaskView) string { return taskStatus(t) }, issue: issueRow.status},
 	colTail:   {drop: 3, task: func(m Model, t scheduler.TaskView) string { return m.age(t) }, issue: issueRow.priorityText},
 	colRepo:   {drop: 2, task: func(_ Model, t scheduler.TaskView) string { return t.Repo }, issue: func(r issueRow) string { return r.Repo }},
@@ -515,22 +546,24 @@ func (m Model) rowLines(w int) []rowLine {
 			}
 			cs := style
 			if i == colStatus && r.alert {
-				cs = bad
+				cs = bad.Inherit(style)
 			}
 			parts = append(parts, cs.Render(pad(c, ws[i])))
 		}
 		return ansi.Truncate(style.Render(" "+marker)+strings.Join(parts, style.Render("  ")), w, "…")
 	}
-	// A heading shows the group's count, and a closed group's mark.
+	// A heading shows the group's name, its count in the dim style, and a
+	// closed group's mark.
 	heading := func(g string, n int) string {
-		s := fmt.Sprintf(" %s  %d", strings.ToUpper(g), n)
+		count := fmt.Sprintf(" %d", n)
 		if !m.open(g) {
-			s += " …"
+			count += " …"
 		}
-		if m.sel == headingKey(g) {
-			return selRow.Render(ansi.Truncate("▸"+s[1:], w, "…"))
+		if m.sel != headingKey(g) {
+			return ansi.Truncate(headRow.Render(" "+g)+dim.Render(count), w, "…")
 		}
-		return headRow.Render(ansi.Truncate(s, w, "…"))
+		name := "▸" + g
+		return ansi.Truncate(selRow.Render(name)+dim.Inherit(selRow).Render(pad(count, max(w-lipgloss.Width(name), 0))), w, "…")
 	}
 	var out []rowLine
 	for _, g := range groups {
@@ -557,7 +590,7 @@ func (m Model) row(sel bool, text string) string {
 	if !sel {
 		return ansi.Truncate("   "+text, m.width, "…")
 	}
-	return selRow.Render(ansi.Truncate(" ▸ "+text, m.width, "…"))
+	return selRow.Render(pad(" ▸ "+text, m.width))
 }
 
 func pad(s string, w int) string {

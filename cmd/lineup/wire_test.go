@@ -284,3 +284,16 @@ func TestAPrefixedLocalIssueMapsToItsPrefixesRepo(t *testing.T) {
 		t.Fatalf("LOCAL-1 with repo: nope: err %v, want ErrNoRepo that says why", err)
 	}
 }
+
+// The Scheduler keeps a dirty worktree and tries again, so the port names
+// that error in the Scheduler's terms.
+func TestTheWorktreePortNamesUncommittedChanges(t *testing.T) {
+	dir := gitCheckout(t, filepath.Join(t.TempDir(), "eng-1"), "git@github.com:umbrella/data.git")
+	os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("draft\n"), 0o644)
+	wt := filepath.Join(t.TempDir(), "wt")
+	list := `{"items":[{"branch":"eng-1","worktree":{"path":"` + dir + `"}}]}`
+	os.WriteFile(wt, []byte("#!/bin/sh\necho '"+list+"'\n"), 0o755)
+	if err := (worktreePort{wt}).Remove(context.Background(), t.TempDir(), "eng-1"); !errors.Is(err, scheduler.ErrUncommitted) {
+		t.Fatalf("Remove of a dirty worktree: err = %v, want scheduler.ErrUncommitted", err)
+	}
+}

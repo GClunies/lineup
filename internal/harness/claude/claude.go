@@ -167,6 +167,14 @@ func SessionFlags(name string) []string {
 	return []string{"--name", name}
 }
 
+// readOnlyDenied are the tools that write files. A Worker without them still
+// reads the Repo.
+const readOnlyDenied = "Bash,Edit,Write,NotebookEdit,EnterWorktree"
+
+// readOnlyPrompt tells a Worker that resumes after lineup removed its
+// worktree why it can no longer change files.
+const readOnlyPrompt = "lineup removed this Task's worktree. You now run in the Repo's main checkout, with no tool that writes files. Answer the user's questions about the Task."
+
 // NoConversation is what `claude --resume` prints, and exits 1, when the
 // conversation file is gone.
 const NoConversation = "No conversation found"
@@ -179,8 +187,9 @@ const NoConversation = "No conversation found"
 // runs no direnv, so the command sets CLAUDE_CONFIG_DIR itself. addDirs are
 // folders outside the Worker's own that it reads with no permission prompt.
 // Every Worker can run `lineup ask` with no prompt, because the user's own
-// allow list can be empty.
-func Command(bin, configDir string, st config.StageConfig, conversation, name, prompt string, addDirs ...string) ([]string, map[string]string) {
+// allow list can be empty. A readOnly Worker has no tool that writes files,
+// so it cannot run `lineup ask` either.
+func Command(bin, configDir string, st config.StageConfig, conversation, name, prompt string, readOnly bool, addDirs ...string) ([]string, map[string]string) {
 	argv := []string{bin}
 	if st.Model != "" {
 		argv = append(argv, "--model", st.Model)
@@ -197,8 +206,15 @@ func Command(bin, configDir string, st config.StageConfig, conversation, name, p
 	if name != "" {
 		argv = append(argv, SessionFlags(name)...)
 	}
-	// --allowedTools and --add-dir take many values, so a separate value would also take the prompt.
-	argv = append(argv, "--allowedTools=Bash(lineup ask:*)")
+	// --allowedTools, --disallowedTools, and --add-dir take many values, so a
+	// separate value would also take the prompt.
+	if readOnly {
+		// A resume sends the system prompt that the conversation recorded
+		// first, so the added text reaches the Worker only with no snapshot.
+		argv = append(argv, "--disallowedTools="+readOnlyDenied, "--system-prompt-snapshot", "off", "--append-system-prompt", readOnlyPrompt)
+	} else {
+		argv = append(argv, "--allowedTools=Bash(lineup ask:*)")
+	}
 	for _, d := range addDirs {
 		argv = append(argv, "--add-dir="+d)
 	}

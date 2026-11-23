@@ -365,7 +365,7 @@ func TestOverCapHeaderAndOffline(t *testing.T) {
 	m := newModel(&fakeClient{}, v)
 	m.width = 160
 	h := m.header()
-	for _, w := range []string{"WIP 4/5", "+1 over", "●2 need you"} {
+	for _, w := range []string{"WIP 4/5", "+1 over"} {
 		if !strings.Contains(h, w) {
 			t.Errorf("header %q lacks %q", h, w)
 		}
@@ -382,7 +382,7 @@ func TestTheHeaderShowsThatReviewsArePaused(t *testing.T) {
 		v.ReviewsPaused = paused
 		m := newModel(&fakeClient{}, v)
 		m.width = 200
-		if got := strings.Contains(ansi.Strip(m.header()), "WIP 4/5   ●2 need you   reviews paused"); got != paused {
+		if got := strings.HasPrefix(ansi.Strip(m.header()), " lineup   reviews paused  "); got != paused {
 			t.Errorf("paused %v: the header %q shows reviews paused: %v", paused, ansi.Strip(m.header()), got)
 		}
 	}
@@ -398,7 +398,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 	v.Tasks = append(v.Tasks, rtv("R-3", lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour))
 	m := New(v, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }, Status: log.record})
 	m.width, m.height = 160, 30
-	if out := m.View(); strings.Contains(out, "R-3") || !strings.Contains(m.header(), "●2 need you") {
+	if out := m.View(); strings.Contains(out, "R-3") || headingCount(ansi.Strip(out), "Working") != 2 {
 		t.Fatalf("the work board shows the review Task:\n%s", out)
 	}
 	m, _ = press(m, "j", "j", "j", "j", "j", "j", "j")
@@ -420,7 +420,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 func TestAgeAndRows(t *testing.T) {
 	m := openAll(newModel(&fakeClient{}, fixture()))
 	out := m.View()
-	for _, w := range []string{"NEEDS YOU", "WORKING", "WAITING", "QUEUED", "DONE", "12m", "1d", "today", "done"} {
+	for _, w := range []string{"Needs you 2", "Working 2", "Waiting 1", "Queued 1", "Done 1", "12m", "1d", "today", "done"} {
 		if !strings.Contains(out, w) {
 			t.Errorf("view lacks %q", w)
 		}
@@ -429,8 +429,8 @@ func TestAgeAndRows(t *testing.T) {
 
 func TestTheHeaderNamesNoViewAndADigitDoesNothing(t *testing.T) {
 	m := newModel(&fakeClient{}, fixture())
-	if h := ansi.Strip(m.header()); !strings.HasPrefix(h, " lineup  WIP 4/5   ●2 need you") {
-		t.Fatalf("header %q, want lineup, then the WIP cap, then the Needs you count", h)
+	if h := ansi.Strip(m.header()); !strings.HasPrefix(h, " lineup  ") || !strings.HasSuffix(h, "WIP 4/5") {
+		t.Fatalf("header %q, want lineup, then the live state that ends with the WIP cap", h)
 	}
 	for _, k := range []string{"1", "2", "3"} {
 		before := m.View()
@@ -891,13 +891,91 @@ func TestTheHeaderCountsTheReviewTasksThatNeedYou(t *testing.T) {
 	}
 	v := fixture()
 	v.Tasks = append(v.Tasks, flagged("R-3"), flagged("R-5"), rtv("R-4", lifecycle.Reviewing, "data#8 Fix the map", urlBase, time.Hour))
-	if h := header(v); !strings.Contains(h, "●2 need you (+2 in reviews)") {
+	if h := header(v); !strings.Contains(h, "+2 in reviews") {
 		t.Errorf("header %q, want the 2 review Tasks that need you", h)
 	}
 	quiet := fixture()
 	quiet.Tasks = append(quiet.Tasks, rtv("R-4", lifecycle.Reviewing, "data#8 Fix the map", urlBase, time.Hour))
-	if h := header(quiet); strings.Contains(h, "(+") {
+	if h := header(quiet); strings.Contains(h, "in reviews") {
 		t.Errorf("no review Task needs you, but the header shows a count: %q", h)
+	}
+}
+
+// headerBoard is a Board at 9:00 local time on 23 Nov 2026, 80 columns wide.
+// 5 of 12 WIP slots are started and 1 more is over the cap. A build Task and
+// a review Task work, 2 build Tasks and 3 review Tasks need the user, and 4
+// Tasks reached Done since 00:00 yesterday and 1 before.
+func headerBoard() Model {
+	day := func(d, h, min int) time.Time { return time.Date(2026, 11, d, h, min, 0, 0, time.Local) }
+	v := scheduler.BoardView{Cap: 12, Started: 5, OverCap: 1,
+		Done: []time.Time{day(21, 23, 59), day(22, 0, 0), day(22, 13, 0), day(23, 0, 30), day(23, 8, 0)},
+		Tasks: []scheduler.TaskView{
+			tv("ENG-1", lifecycle.Working, "data", "Backfill events", "", time.Hour),
+			rtv("pr-2", lifecycle.Reviewing, "data#2 Fix the map", urlBase, time.Hour),
+			tv("ENG-3", lifecycle.ReadyToLand, "data", "Ship", "#3", time.Hour),
+			tv("ENG-4", lifecycle.ReadyToLand, "data", "Ship more", "#4", time.Hour),
+			rtv("pr-5", lifecycle.ReviewReady, "data#5 Fix the tooltip", urlBase, time.Hour),
+			rtv("pr-6", lifecycle.ReviewReady, "data#6 Fix the legend", urlBase, time.Hour),
+			rtv("pr-7", lifecycle.ReviewReady, "data#7 Fix the axis", urlBase, time.Hour),
+		}}
+	m := New(v, Options{Client: &fakeClient{}, Now: func() time.Time { return day(23, 9, 0) }})
+	m.online, m.width = true, 80
+	return m
+}
+
+// The header shows lineup at the left and the live state at the right. A
+// narrow header drops the live state from the start and keeps the WIP cap.
+func TestTheHeaderShowsTheLiveStateAtTheRight(t *testing.T) {
+	gap := func(n int) string { return strings.Repeat(" ", n) }
+	for _, c := range []struct {
+		width int
+		want  string
+	}{
+		{100, " lineup" + gap(22) + "● 2 working · +3 in reviews · 4 done since yesterday · WIP 5/12 +1 over"},
+		{80, " lineup" + gap(2) + "● 2 working · +3 in reviews · 4 done since yesterday · WIP 5/12 +1 over"},
+		{79, " lineup" + gap(15) + "+3 in reviews · 4 done since yesterday · WIP 5/12 +1 over"},
+		{65, " lineup" + gap(17) + "4 done since yesterday · WIP 5/12 +1 over"},
+		{30, " lineup" + gap(7) + "WIP 5/12 +1 over"},
+		{20, " lineup  WIP 5/12 +…"},
+	} {
+		m := headerBoard()
+		m.width = c.width
+		h := m.header()
+		if got := ansi.Strip(h); got != c.want {
+			t.Errorf("at %d columns the header is\n%q, want\n%q", c.width, got, c.want)
+		}
+		if w := lipgloss.Width(h); w != c.width {
+			t.Errorf("at %d columns the header is %d cells wide", c.width, w)
+		}
+	}
+}
+
+func TestTheHeaderCountsTheTasksDoneSinceMidnightYesterday(t *testing.T) {
+	m := headerBoard()
+	if h := ansi.Strip(m.header()); !strings.Contains(h, " 4 done since yesterday ") {
+		t.Errorf("on 23 Nov the header is %q, want 4 Tasks done since 00:00 on 22 Nov", h)
+	}
+	m.opts.Now = func() time.Time { return time.Date(2026, 11, 24, 0, 0, 0, 0, time.Local) }
+	if h := ansi.Strip(m.header()); !strings.Contains(h, " 2 done since yesterday ") {
+		t.Errorf("at 00:00 on 24 Nov the header is %q, want 2 Tasks done since 00:00 on 23 Nov", h)
+	}
+}
+
+func TestTheHeaderKeepsItsAlertsAtEightyColumns(t *testing.T) {
+	const paused, offline = "reviews paused", "scheduler offline, showing cache: run lineup restart"
+	for _, c := range []struct {
+		paused, offline bool
+		want            string
+	}{
+		{true, false, " lineup   " + paused + strings.Repeat(" ", 15) + "4 done since yesterday · WIP 5/12 +1 over"},
+		{false, true, " lineup   " + offline + "  WIP 5/12 +1 over"},
+		{true, true, " lineup   " + paused + "   " + offline + "…"},
+	} {
+		m := headerBoard()
+		m.board.ReviewsPaused, m.online = c.paused, !c.offline
+		if got := ansi.Strip(m.header()); got != c.want {
+			t.Errorf("paused %v, offline %v: the header is\n%q, want\n%q", c.paused, c.offline, got, c.want)
+		}
 	}
 }
 
@@ -1021,6 +1099,35 @@ func TestEnterRestoresAClosedWorker(t *testing.T) {
 	}
 	if m2.status != "open ENG-700 ok · restored" {
 		t.Fatalf("status = %q", m2.status)
+	}
+}
+
+// A Done build Task with no tab keeps its conversation, in its kept worktree
+// or read-only in the main checkout, so enter restores its Worker.
+func TestEnterRestoresTheWorkerOfADoneBuildTaskWithNoTab(t *testing.T) {
+	f := &fakeClient{open: scheduler.OpenResult{Action: scheduler.OpenRestored}}
+	v := fixture()
+	kept := tv("ENG-702", lifecycle.Done, "data", "Add billing model", "#42 merged · worktree until Nov 14", time.Hour)
+	kept.Live, kept.Outcome = false, "merged"
+	review := rtv("pr-7", lifecycle.Done, "Fix the tooltip", urlBase, time.Hour)
+	review.Live = false
+	v.Tasks = append(v.Tasks, kept, review)
+	m := newModel(f, v)
+	m.sel = "pr-7"
+	if strings.Contains(m.footer(), "restore the Worker") {
+		t.Fatalf("footer = %q, want no restore for a Done review", m.footer())
+	}
+	m.sel = "ENG-702"
+	if !strings.Contains(m.footer(), "enter restore the Worker") || !strings.Contains(m.footer(), "x archive") {
+		t.Fatalf("footer = %q, want the restore and archive hints", m.footer())
+	}
+	m2, cmd := press(m, "enter")
+	if cmd == nil {
+		t.Fatal("enter sent nothing")
+	}
+	run(m2, cmd)
+	if len(f.calls) != 1 || f.calls[0].Op != "open" || f.calls[0].Task != "ENG-702" {
+		t.Fatalf("calls = %+v, want one open of ENG-702", f.calls)
 	}
 }
 

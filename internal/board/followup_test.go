@@ -7,7 +7,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -61,7 +60,7 @@ func TestADoneTaskShowsInFollowUpUntilItsTrackerClosesTheIssue(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			m := feed(shippedBoard(&fakeClient{}, c.id), c.open)
 			out := screen(m)
-			if !strings.Contains(out, "FOLLOW-UP  1\n") || strings.Contains(out, "DONE") {
+			if !strings.Contains(out, "Follow-up 1\n") || hasHeading(out, "Done") {
 				t.Fatalf("want %s in an open Follow-up and no Done:\n%s", c.id, out)
 			}
 			if l := lineOf(t, out, boardID(c.id)); !strings.Contains(l, c.note) || strings.Contains(l, "merged") {
@@ -73,10 +72,10 @@ func TestADoneTaskShowsInFollowUpUntilItsTrackerClosesTheIssue(t *testing.T) {
 			m = openAll(feed(m, c.closed))
 			m.sel = c.id
 			out = screen(m)
-			if strings.Contains(out, "FOLLOW-UP") {
+			if hasHeading(out, "Follow-up") {
 				t.Fatalf("Follow-up shows after the Tracker closed the Issue:\n%s", out)
 			}
-			inOrder(t, out, "DONE  1\n", boardID(c.id))
+			inOrder(t, out, "Done 1\n", boardID(c.id))
 			if l := lineOf(t, out, boardID(c.id)); !strings.Contains(l, "done") {
 				t.Errorf("row %q, want the status done", l)
 			}
@@ -96,7 +95,7 @@ func TestEachOpenTrackerStateKeepsADoneTaskInFollowUp(t *testing.T) {
 			t.Fatalf("local status %q has no case", st)
 		}
 	}
-	inFollowUp := func(m Model) bool { return strings.Contains(screen(m), "FOLLOW-UP") }
+	inFollowUp := func(m Model) bool { return hasHeading(screen(m), "Follow-up") }
 	for typ, want := range linearOpen {
 		is := waitingForQA("PD-1")
 		is.State.Type = typ
@@ -126,11 +125,11 @@ func TestAFollowUpRowAddsNothingToTheNeedsYouCount(t *testing.T) {
 	v.Tasks = append(v.Tasks, shipped("PD-1"))
 	m = feed(m, mineIssuesMsg{ws: acme, issues: []linear.Issue{waitingForQA("PD-1")}, live: true})
 	m = show(m, v)
-	if out := screen(m); !strings.Contains(out, "FOLLOW-UP  1\n") {
+	if out := screen(m); !strings.Contains(out, "Follow-up 1\n") {
 		t.Fatalf("PD-1 is not in Follow-up:\n%s", out)
 	}
-	if h := ansi.Strip(m.header()); !strings.Contains(h, "●2 need you") {
-		t.Errorf("header %q, want the 2 Tasks in Needs you and not the Follow-up row", h)
+	if got := headingCount(screen(m), "Needs you"); got != 2 {
+		t.Errorf("the Needs you heading counts %d, want the 2 Tasks in Needs you and not the Follow-up row", got)
 	}
 	if got := log.take(); len(got) != 0 {
 		t.Errorf("the Board reported %v, want no report, because a Follow-up row does not need the user", got)
@@ -153,7 +152,7 @@ func TestAFollowUpRowKeepsTheAgeAndTheXOfADoneTask(t *testing.T) {
 			m := feed(newModel(f, scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{done}}),
 				mineIssuesMsg{ws: acme, issues: []linear.Issue{waitingForQA("PD-1")}, live: true})
 			out := screen(m)
-			inOrder(t, out, "FOLLOW-UP  1\n", "PD-1")
+			inOrder(t, out, "Follow-up 1\n", "PD-1")
 			if l := lineOf(t, out, "PD-1"); !strings.Contains(l, "today") {
 				t.Errorf("row %q, want the age %q of a Task that ended today", l, "today")
 			}
@@ -170,5 +169,21 @@ func TestAFollowUpRowKeepsTheAgeAndTheXOfADoneTask(t *testing.T) {
 				t.Fatalf("calls %+v, want one %s of PD-1", f.calls, c.op)
 			}
 		})
+	}
+}
+
+// A Follow-up row's strip names the Tracker state, then the note of a worktree
+// that lineup keeps, so the Board still shows why the worktree stays.
+func TestAFollowUpRowKeepsTheWorktreeNoteInTheStrip(t *testing.T) {
+	const kept = "worktree kept: uncommitted changes in /wt/PD-1"
+	task := shipped("PD-1")
+	task.Note, task.WorktreeNote = "#12 merged · "+kept, kept
+	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{task}})
+	m = feed(m, mineIssuesMsg{ws: acme, issues: []linear.Issue{waitingForQA("PD-1")}, live: true})
+	if l := lineOf(t, screen(m), boardID("PD-1")); !strings.Contains(l, "Waiting for QA") || strings.Contains(l, "worktree") {
+		t.Errorf("row %q, want the status word Waiting for QA alone", l)
+	}
+	if f := footerAt(m, 120); !strings.Contains(f, " · Waiting for QA · "+kept) {
+		t.Errorf("the strip must name the Tracker state, then %q:\n%s", kept, f)
 	}
 }

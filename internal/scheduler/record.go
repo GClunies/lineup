@@ -74,9 +74,16 @@ type Record struct {
 	// ReviewedHead is the head that its findings file names.
 	LatestHead   string `json:"latest_head,omitempty"`
 	ReviewedHead string `json:"reviewed_head,omitempty"`
-	// WorktreeKept is true when cleanup kept a review worktree that holds
-	// work that is on no remote.
+	// WorktreeKept is true when lineup kept a worktree that it meant to
+	// remove: a review worktree that holds work that is on no remote, or a
+	// build worktree with uncommitted changes.
 	WorktreeKept bool `json:"worktree_kept,omitempty"`
+	// CloseAtIdle is true from a build Task's merge, with [merged] close_tab
+	// on, until lineup closes its tab.
+	CloseAtIdle bool `json:"close_at_idle,omitempty"`
+	// KeepUntil is when lineup removes the worktree of a Done build Task that
+	// has no tab. Zero means no removal is due.
+	KeepUntil time.Time `json:"keep_until,omitzero"`
 	// Archived hides a Done Task from the Board. Its history stays.
 	Archived bool `json:"archived,omitempty"`
 
@@ -121,6 +128,59 @@ func (r *Record) tabLabel() string {
 	return strings.TrimRightFunc(string(head), func(c rune) bool { return unicode.IsSpace(c) || unicode.IsPunct(c) }) + "…"
 }
 
+// titleTail is what a title loses from its end.
+const titleTail = " :,;-–—("
+
+// PlainTitle is s as one line with no URL. It is the first line of s that
+// keeps a word when its URLs and a trailing titleTail go, with its words
+// joined by one space. A title that is only URLs keeps its first line.
+func PlainTitle(s string) string {
+	first := ""
+	for _, line := range strings.Split(s, "\n") {
+		if first == "" {
+			first = strings.TrimSpace(line)
+		}
+		words := strings.Fields(line)
+		var kept []string
+		for i, w := range words {
+			if !urlWord(w, i == len(words)-1) {
+				kept = append(kept, w)
+			}
+		}
+		if t := strings.TrimRight(strings.Join(kept, " "), titleTail); t != "" {
+			return t
+		}
+	}
+	return first
+}
+
+// urlWord reports whether the word w is a URL. A cut can leave the last word
+// of a line as the start of "https://" or "http://", as in "https:/".
+func urlWord(w string, last bool) bool {
+	if strings.Contains(w, "://") || strings.HasPrefix(w, "www.") {
+		return true
+	}
+	return last && len(w) >= 4 && (strings.HasPrefix("https://", w) || strings.HasPrefix("http://", w))
+}
+
+// textTitleWidth is the most runes that the title of a Task with no Issue holds.
+const textTitleWidth = 60
+
+// textTitle is the title of a Task with no Issue: the PlainTitle of its text,
+// cut at a word to textTitleWidth runes. A first word that is longer is cut
+// inside the word.
+func textTitle(text string) string {
+	t := []rune(PlainTitle(text))
+	if len(t) <= textTitleWidth {
+		return string(t)
+	}
+	head := string(t[:textTitleWidth])
+	if i := strings.LastIndexFunc(head, unicode.IsSpace); i > 0 && !unicode.IsSpace(t[textTitleWidth]) {
+		head = head[:i]
+	}
+	return strings.TrimRight(head, titleTail)
+}
+
 // HubSession is the Rex session of the Hub. The Scheduler removes a Repo
 // session after its last Task, so no Repo session may take this name.
 const HubSession = "my-lineup"
@@ -160,6 +220,9 @@ type TaskView struct {
 	Since      time.Time      `json:"since"`
 	Live       bool           `json:"live"`
 	Tab        bool           `json:"tab,omitempty"`
+	// WorktreeNote says why lineup keeps the Task's worktree. The note ends
+	// with it too, and a Follow-up row, whose note is the Tracker state, adds it.
+	WorktreeNote string `json:"worktree_note,omitempty"`
 }
 
 type BoardView struct {
@@ -171,6 +234,10 @@ type BoardView struct {
 	// Skips are the PRs that the user holds out of every review queue.
 	Skips []github.Skip `json:"skips,omitempty"`
 	Tasks []TaskView    `json:"tasks"`
+	// Done is the time that each Task reached Done in the last 48 hours,
+	// archived Tasks included, so that the header counts the Tasks done since
+	// yesterday.
+	Done []time.Time `json:"done,omitempty"`
 }
 
 // OfKind is the view with only the Tasks of Kind k. Each Hub tab shows one Kind.
@@ -195,6 +262,43 @@ func (r *Record) keptSetupTab() bool { return r.Job == JobExited && !r.hadWorker
 
 func (r *Record) keepsTab() bool { return r.Stage == lifecycle.Done && r.WindowID != "" }
 
+// keepsWork reports whether a Done Task keeps its tab, or a Done build Task
+// its worktree, which the user's close removes.
+func (r *Record) keepsWork() bool {
+	return r.Stage == lifecycle.Done && (r.WindowID != "" || r.Review == nil && r.Worktree != "")
+}
+
+// doneState is where a Done build Task stands with its tab and its worktree.
+// Each state derives from the Record's fields.
+type doneState int
+
+const (
+	// doneOther is any other Task: one that is not Done, a review Task, or a
+	// Done build Task that lineup has nothing to do for.
+	doneOther doneState = iota
+	// closing waits for a Worker that is not busy, then lineup closes the tab.
+	closing
+	// kept has no tab, and lineup removes the worktree at KeepUntil.
+	kept
+	// readOnly has no tab and no worktree. open resumes its conversation in
+	// the Repo's main checkout, with no tool that writes files.
+	readOnly
+)
+
+func (r *Record) done() doneState {
+	switch {
+	case r.Stage != lifecycle.Done || r.Review != nil:
+		return doneOther
+	case r.WindowID != "" && r.CloseAtIdle:
+		return closing
+	case r.WindowID == "" && r.Worktree != "" && !r.KeepUntil.IsZero():
+		return kept
+	case r.WindowID == "" && r.Worktree == "" && r.Conversation != "":
+		return readOnly
+	}
+	return doneOther
+}
+
 func (r *Record) view() TaskView {
 	v := TaskView{
 		ID: r.ID, Kind: r.Kind, Title: r.Title, Repo: r.RepoLabel,
@@ -202,6 +306,7 @@ func (r *Record) view() TaskView {
 		Flag: string(r.Flag), FlagDetail: r.FlagDetail, Outcome: string(r.Outcome),
 		OverCap: r.OverCap, Worktree: r.Worktree, Since: r.StageSince,
 		Live: r.Job == JobWorker, Tab: r.WindowID != "", Skill: r.Overrides["skill"],
+		WorktreeNote: r.worktreeNote(),
 	}
 	if v.Repo == "" { // a Record from before RepoLabel, when the session was the Repo's label
 		v.Repo = r.Session
@@ -279,14 +384,27 @@ func (r *Record) note(pr int) string {
 			lead = append(lead, string(r.Outcome))
 		}
 	}
-	if r.WorktreeKept {
-		tail = append(tail, "worktree kept: "+r.Worktree)
+	if w := r.worktreeNote(); w != "" {
+		tail = append(tail, w)
 	}
 	parts := tail
 	if len(lead) > 0 {
 		parts = append([]string{strings.Join(lead, " ")}, tail...)
 	}
 	return strings.Join(parts, " · ")
+}
+
+// worktreeNote says why lineup keeps the Task's worktree, or "" when it keeps none.
+func (r *Record) worktreeNote() string {
+	switch {
+	case r.WorktreeKept && r.Review == nil:
+		return "worktree kept: uncommitted changes in " + r.Worktree
+	case r.WorktreeKept:
+		return "worktree kept: " + r.Worktree
+	case r.done() == kept:
+		return "worktree until " + r.KeepUntil.Format("Jan 2")
+	}
+	return ""
 }
 
 // checklist is the Landing bar's checklist for a started Task whose PR a

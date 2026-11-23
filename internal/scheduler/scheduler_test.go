@@ -31,6 +31,8 @@ type tab struct {
 	blockGone bool
 	// shell marks a tab that Rex restored as an idle shell after a restart.
 	shell bool
+	// program is the state that Rex reads from the tab's program now.
+	program string
 	// keep marks a tab that stays open after its program exits, and exited
 	// marks that exit with code.
 	keep, exited bool
@@ -244,7 +246,14 @@ func (f *fakeRex) LastExit(_ context.Context, _, block string) (int, bool, error
 	return 0, false, nil
 }
 
-func (f *fakeRex) ProgramStatus(context.Context, string, string) (Status, error) {
+func (f *fakeRex) ProgramStatus(_ context.Context, _, block string) (Status, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, t := range f.tabs {
+		if t.BlockID == block {
+			return Status{State: t.program}, nil
+		}
+	}
 	return Status{}, nil
 }
 func (f *fakeRex) Focus(_ context.Context, _, _, block string) error {
@@ -485,6 +494,9 @@ type fakeWorktrees struct {
 	mostInFlight   int
 	// keep makes RemoveReview keep the worktree, as for an unpushed commit.
 	keep bool
+	// dirty makes Remove keep the worktree, as for uncommitted changes.
+	// removed still logs each try.
+	dirty bool
 	// addErr fails the next AddReview call.
 	addErr error
 }
@@ -521,7 +533,16 @@ func (w *fakeWorktrees) Remove(_ context.Context, _, branch string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.removed = append(w.removed, branch)
+	if w.dirty {
+		return fmt.Errorf("%w: %s", ErrUncommitted, branch)
+	}
 	return nil
+}
+
+func (w *fakeWorktrees) setDirty(dirty bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.dirty = dirty
 }
 
 type fakeHarness struct {
@@ -1345,12 +1366,67 @@ func TestDoneTasksAgeOffTheBoard(t *testing.T) {
 	}
 }
 
+// The view holds the time that each Task reached Done in the last 48 hours,
+// an archived Task included, so that the Board can count the Tasks done since
+// 00:00 yesterday.
+func TestTheViewHoldsTheTimeOfEachTaskDoneInTheLast48Hours(t *testing.T) {
+	c := &clock{t: time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)}
+	seed := func(st *store.Store) {
+		for _, x := range []struct {
+			id       string
+			stage    lifecycle.Stage
+			age      time.Duration
+			archived bool
+		}{
+			{"ENG-1", lifecycle.Done, time.Hour, false},
+			{"ENG-2", lifecycle.Done, 20 * time.Hour, true},
+			{"ENG-3", lifecycle.Done, 30 * time.Hour, false},
+			{"ENG-4", lifecycle.Done, 47 * time.Hour, false},
+			{"ENG-5", lifecycle.Done, 72 * time.Hour, false},
+			{"ENG-6", lifecycle.Queued, time.Hour, false},
+		} {
+			r := Record{Task: lifecycle.Task{ID: x.id, Stage: x.stage, Policy: testPolicy}, Title: x.id,
+				StageSince: c.now().Add(-x.age), Archived: x.archived}
+			data, _ := json.Marshal(r)
+			st.Save(r.ID, data, nil)
+		}
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, func(d *Deps) { d.Now = c.now })
+	v := h.do(Request{Op: "ls"}).(BoardView)
+	var ages []time.Duration
+	for _, at := range v.Done {
+		ages = append(ages, c.now().Sub(at))
+	}
+	slices.Sort(ages)
+	if want := []time.Duration{time.Hour, 20 * time.Hour, 30 * time.Hour, 47 * time.Hour}; !slices.Equal(ages, want) {
+		t.Errorf("the view holds Done times %v ago, want %v", ages, want)
+	}
+	if ids := boardIDs(v); slices.Contains(ids, "ENG-2") {
+		t.Errorf("board = %v, want no archived ENG-2", ids)
+	}
+}
+
 func TestTaskWithNoIssueGetsAnAhID(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})
 	h.do(Request{Op: "add", Repo: "web", Text: "Second"})
 	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); !slices.Equal(ids, []string{"AH-1", "AH-2"}) {
 		t.Fatalf("board = %v, want AH-1 and AH-2", ids)
+	}
+}
+
+func TestATaskWithNoIssueTakesAPlainTitleCutAtAWord(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	for _, c := range []struct{ text, want string }{
+		{"Start a sessions to explore the ideas and UI here:\n- https://x.com/abc\n- more", "Start a sessions to explore the ideas and UI here"},
+		{"Move the nightly export job off the legacy pricing tables and onto the new views", "Move the nightly export job off the legacy pricing tables"},
+		{"Rename the config options, the flags, and the env variables: then the docs", "Rename the config options, the flags, and the env variables"},
+		{strings.Repeat("é", 70), strings.Repeat("é", 60)},
+	} {
+		v := h.do(Request{Op: "add", Repo: "web", Text: c.text}).(TaskView)
+		if got := h.task(v.ID).Title; got != c.want {
+			t.Errorf("text %q: title %q, want %q", c.text, got, c.want)
+		}
 	}
 }
 
@@ -1820,14 +1896,18 @@ func TestOpenRefusesATaskWithNothingToOpen(t *testing.T) {
 	if err := h.openFails("ENG-9"); !errors.Is(err, lifecycle.ErrUnknownTask) {
 		t.Fatalf("unknown: %v", err)
 	}
-	h, worker := doneWithATab(t)
-	h.do(Request{Op: "close", Task: "ENG-1"})
-	eventually(t, "the worktree removed", func() bool { return len(h.worktreesRemoved()) == 1 })
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
-	if err := h.openFails("ENG-1"); err.Error() != "ENG-1 is Done and its worktree is gone" {
-		t.Fatalf("done: %v", err)
+	h = newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	h.waitTabRecorded("claude reviewing", "PR-7")
+	merged := openPR(7, "h1")
+	merged.State = "MERGED"
+	h.gh.setReview(merged)
+	eventually(t, "the review tab closed", func() bool { v := h.task("PR-7"); return v.Stage == "Done" && !v.Tab })
+	if err := h.openFails("PR-7"); err.Error() != "PR-7 is Done and its worktree is gone" {
+		t.Fatalf("done review: %v", err)
 	}
-	if n := len(h.rex.open("claude working")); n != 0 {
+	if n := len(h.rex.open("claude reviewing")); n != 0 {
 		t.Fatalf("open left %d Worker tabs", n)
 	}
 }

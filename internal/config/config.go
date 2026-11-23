@@ -31,6 +31,11 @@ const (
 	defaultModel        = "claude-opus-5-5"
 	defaultEffort       = "high"
 	defaultReviewCycles = 3
+	// defaultKeepWorktreeDays equals the days that a Done Task stays on the Board.
+	defaultKeepWorktreeDays = 7
+	// maxKeepWorktreeDays is how long Claude keeps a conversation, so that a
+	// Worker resumed in a kept worktree still finds its conversation.
+	maxKeepWorktreeDays = 30
 )
 
 // trackerEvents are the lifecycle events that a Tracker map can name.
@@ -176,7 +181,32 @@ type globalFile struct {
 		Slots  *int        `toml:"slots"`
 		Queues []queueFile `toml:"queues"`
 	} `toml:"review"`
-	Board boardFile `toml:"board"`
+	Board  boardFile  `toml:"board"`
+	Merged mergedFile `toml:"merged"`
+}
+
+// mergedFile is the [merged] table: what lineup does with a build Task's tab
+// and worktree after its PR merges.
+type mergedFile struct {
+	CloseTab         bool `toml:"close_tab"`
+	KeepWorktreeDays *int `toml:"keep_worktree_days"`
+}
+
+func (f mergedFile) days() int {
+	if f.KeepWorktreeDays == nil {
+		return defaultKeepWorktreeDays
+	}
+	return *f.KeepWorktreeDays
+}
+
+func (f mergedFile) check() error {
+	switch d := f.days(); {
+	case d < 0:
+		return fmt.Errorf("merged.keep_worktree_days: %d must be 0 or more", d)
+	case d > maxKeepWorktreeDays:
+		return fmt.Errorf("merged.keep_worktree_days: %d is more than %d, the days that Claude keeps a conversation", d, maxKeepWorktreeDays)
+	}
+	return nil
 }
 
 // PRFilter picks pull requests. Its keys are named after GitHub's search
@@ -282,6 +312,16 @@ func (g *Global) ReviewQueues() []ReviewQueue {
 	return out
 }
 
+// CloseMergedTab reports whether lineup closes a build Task's tab when its PR
+// merges, once the Worker is idle.
+func (g *Global) CloseMergedTab() bool { return g.file.Merged.CloseTab }
+
+// KeepWorktree is how long lineup keeps a merged build Task's worktree after
+// it closes the Task's tab.
+func (g *Global) KeepWorktree() time.Duration {
+	return time.Duration(g.file.Merged.days()) * 24 * time.Hour
+}
+
 // LocalIssuesDir is the Local Tracker's folder.
 func (g *Global) LocalIssuesDir() string {
 	if d := strings.TrimSpace(g.file.LocalIssuesDir); d != "" {
@@ -358,6 +398,9 @@ func Load(globalPath string) (*Global, error) {
 		}
 	}
 	if err := validateReview(g.file.Review.Queues, g.file.Review.Slots); err != nil {
+		return nil, fmt.Errorf("%s: %w", globalPath, err)
+	}
+	if err := g.file.Merged.check(); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	if g.board, g.boardErr = resolveBoard(g.file.Board); g.boardErr != nil {

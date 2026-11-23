@@ -27,7 +27,7 @@ A review queue fills itself. Agents start the reviews of the PRs that need the u
                      in its own tab of the Rex session "reviews"
 ```
 
-- A review Task is a Task. It runs in its own tab in the `reviews` Rex session. The Board lists no review Task. Its header counts the review Tasks that need the user, as `(+1 in reviews)`. A review Task gives no alert. The user sees it in the Rex sidebar and answers it in its tab. See [ADR 0025](../adr/0025-review-tasks-give-no-alert.md).
+- A review Task is a Task. It runs in its own tab in the `reviews` Rex session. The Board lists no review Task. Its header counts the review Tasks that need the user, as `+1 in reviews`. A review Task gives no alert. The user sees it in the Rex sidebar and answers it in its tab. See [ADR 0025](../adr/0025-review-tasks-give-no-alert.md).
 - A review Task never writes to the PR that it reviews. lineup makes no GitHub write for it. The Worker writes to GitHub only after the user decides each finding, through `pr-review`.
 
 ## Filters

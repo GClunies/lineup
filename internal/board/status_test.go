@@ -92,8 +92,8 @@ func TestTheBoardReportsTheBuildTasksThatNeedYouAtStart(t *testing.T) {
 	} {
 		log := &statusLog{}
 		m := New(c.v, Options{Client: &fakeClient{}, Status: log.record})
-		if h := ansi.Strip(m.header()); !strings.Contains(h, fmt.Sprintf("●%d need you", c.want)) {
-			t.Fatalf("%s: header %q, want the count %d that the Board reports", c.name, h, c.want)
+		if got := headingCount(screen(m), "Needs you"); got != c.want {
+			t.Fatalf("%s: the Needs you heading counts %d, want the count %d that the Board reports", c.name, got, c.want)
 		}
 		if got := log.take(); len(got) != 0 {
 			t.Fatalf("%s: New reported %v, want the report to wait for Init", c.name, got)
@@ -178,8 +178,9 @@ func TestTheBoardDoesNotReportTheReviewTasksThatNeedYou(t *testing.T) {
 	v := fixture()
 	v.Tasks = append(v.Tasks, rtv("R-1", lifecycle.ReviewReady, "data#7 Fix the tooltip", urlBase, 0), asking)
 	m := New(v, Options{Client: &fakeClient{}, Status: log.record})
-	if h := ansi.Strip(m.header()); !strings.Contains(h, "●2 need you (+2 in reviews)") {
-		t.Fatalf("header %q, want 2 build Tasks and 2 review Tasks that need the user", h)
+	m.online = true
+	if h := ansi.Strip(m.header()); !strings.Contains(h, "+2 in reviews") || headingCount(screen(m), "Needs you") != 2 {
+		t.Fatalf("header %q, want 2 review Tasks that need the user, and the Needs you heading 2 build Tasks:\n%s", h, screen(m))
 	}
 	m.Init()
 	if got := log.take(); !slices.Equal(got, []int{2}) {

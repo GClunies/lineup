@@ -2,6 +2,8 @@
 
 [ADR 0022](0022-the-users-review-closes-the-review-tab.md) makes one exception: the user's review closes the tab of a review Task.
 
+[ADR 0033](0033-lineup-closes-a-merged-tab-when-the-user-turns-it-on.md) amends this rule. With `[merged] close_tab` on, lineup closes a merged build Task's tab when its Worker is idle. It removes the worktree some days later.
+
 Only the user closes a Task's tab. A Task ends when its PR merges, the user closes it, the user submits a review, or the PR closes. It then goes to Done and keeps its tab and its worktree. We chose this because the user wants control of Rex tabs. Before this change, the Scheduler closed the tab and removed the worktree at Done. A tab with a running Worker and unread output then disappeared when a PR merged.
 
 A Done Task's tab that the user closes removes the Task's worktree. It also removes the Repo session if that session holds no other tab. An explicit close does the same: `x` or `lineup close` on a Done Task, and `lineup archive` on a Done Task with a tab. A Done Task with an open tab stays on the Board past the 7-day age-off.
