@@ -1,0 +1,47 @@
+docs/product-intent/trackers.md
+  s_3dbe2a0be51313::t_fe57ed1c904314 31
+internal/scheduler/scheduler_test.go
+  s_3dbe2a0be51313::t_536ecd2e0f004c 2013-2050
+internal/scheduler/record_test.go
+  s_3dbe2a0be51313::t_97c2a1f776ba99 74
+  s_3dbe2a0be51313::t_1d907b9c5b3de2 25-33
+  s_3dbe2a0be51313::t_5ad81a82909a36 75
+docs/product-intent/workers.md
+  s_3dbe2a0be51313::t_79250a4ad7e821 59
+  s_3dbe2a0be51313::t_a7e52b018252e5 57
+internal/scheduler/add_test.go
+  s_3dbe2a0be51313::t_32a522d663e89b 34-38,41-42
+  s_3dbe2a0be51313::t_d42a81bee27b76 22,25-27
+  s_42ed9e806a4615::t_396c2c4666988d 43
+docs/product-intent/tabs.md
+  s_3dbe2a0be51313::t_3a991bfb28135c 15
+internal/scheduler/record.go
+  s_3dbe2a0be51313::t_4cfa9a977db375 114
+  s_3dbe2a0be51313::t_1b5656ac6ad0ec 109-111,113,115-116
+  s_3dbe2a0be51313::t_b4851fdf2f62f3 123
+  s_3dbe2a0be51313::t_5f322ad7896028 130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3af37365ecd6c7fc90b85113c565bfa8e092451f",
+  "prompts": {},
+  "sessions": {
+    "s_3dbe2a0be51313": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dfa9d962-802b-495b-b528-c6eac2b2f3db",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_42ed9e806a4615": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "854ddd4a-5137-4106-bc62-dbf704a711d4",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
