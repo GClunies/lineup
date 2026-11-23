@@ -39,8 +39,6 @@ The Board shows the work view only. It has no plan view (ADR 0021) and no review
    ENG-611              data  Move the retry job       unblocked        △2
    local-7                    Rename the log flag
    ENG-614              data  Drop old API keys        blocked by ENG-610  △3
- QUEUED  1
-   ah-9                 data  Evaluate the ADR
  WORKING  1
    ENG-592 data  Fix flaky test           #4655 ○ no review yet · fixing CI     1m
  WAITING  1
@@ -73,7 +71,7 @@ An Issue row is an Issue of the user's own with no Task on the Board. The Board 
 - A row shows the ID, the Repo when it is known, the title, a note, and the priority. The note is `blocked by <IDs>`, `unblocked`, or empty. A GitHub row's Repo is the repository name, and its note names a blocker in the same repository as `#12`.
 - `unblocked` means that the Issue has one or more blockers and that every blocker is done or canceled. A Linear blocker is a "blocks" relation. A local blocker is an entry in `blocked_by`. A GitHub blocker is a `Blocked by #12` line in the body, and it is done when GitHub reports it closed.
 
-The default group order is Needs you, Backlog, Ready, Queued, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
+The default group order is Needs you, Backlog, Ready, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
 
 Both groups sort in this order:
 
@@ -190,12 +188,12 @@ A long Backlog or Done group can push Ready and Working off a 24-row pane. The b
 
 ```toml
 [board]
-order = ["done", "needs_you", "working", "waiting", "queued", "ready", "backlog"]
+order = ["done", "needs_you", "working", "waiting", "ready", "backlog"]
 collapsed = ["backlog"]
 hidden = ["done"]
 ```
 
-The keys of a group are `needs_you`, `backlog`, `ready`, `queued`, `working`, `waiting`, and `done`. A key that is absent takes its default, and an empty list means none. A group that `order` leaves out follows the listed groups, in the default order. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors that name the key, but they do not fail the load, so the Scheduler still starts. The board then uses the default layout and shows the error on its own line, for example `config: board.hidden: unknown section "dun" (default layout)`. No other status message replaces that line, and it stays until the board quits. If `config.Load` fails for any other reason, the board runs with defaults and shows `config: <error>` in the same line.
+The keys of a group are `needs_you`, `backlog`, `ready`, `working`, `waiting`, and `done`. A key that is absent takes its default, and an empty list means none. A group that `order` leaves out follows the listed groups, in the default order. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors that name the key, but they do not fail the load, so the Scheduler still starts. The board then uses the default layout and shows the error on its own line, for example `config: board.hidden: unknown section "dun" (default layout)`. No other status message replaces that line, and it stays until the board quits. If `config.Load` fails for any other reason, the board runs with defaults and shows `config: <error>` in the same line. The old key `queued` is not an error. A list that names it loads with a warning that names the key, and the board keeps the rest of the layout.
 
 | Rule | Behavior |
 |---|---|

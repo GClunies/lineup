@@ -4,7 +4,7 @@ Status: built. This spec adds review queues and review Tasks. The decisions behi
 
 ## Goal
 
-A review queue fills itself. Agents start the reviews of the PRs that need the user before the user arrives. A queued review writes nothing to GitHub until the user decides every finding.
+A review queue fills itself. Agents start the reviews of the PRs that need the user before the user arrives. A review that a queue starts writes nothing to GitHub until the user decides every finding.
 
 ## Scope
 
@@ -125,7 +125,7 @@ On every full poll, after it reads Task PRs, the Scheduler fills each queue that
 
 1. Search every queue, each in its own GraphQL call, at the same time. Only one fill runs at a time. A fill that is due while another runs is skipped. If a search fails, the fill logs the error and starts nothing. Without the PRs of an earlier queue, a later queue can take a PR that the earlier queue owns.
 2. In one call on the loop goroutine, rank each queue's candidates in config order. Drop each skipped PR. Drop from a queue each PR that an earlier queue ranked, so each PR has one owner.
-3. In the same call, for each queue in config order: start its Queued review Tasks first, then add and start a review Task for each top-ranked candidate. Stop when the queue's started count reaches its `slots`, or when the started count of all queues reaches `review.slots`.
+3. In the same call, for each queue in config order: add and start a review Task for each top-ranked candidate. Stop when the queue's started count reaches its `slots`, or when the started count of all queues reaches `review.slots`.
 4. Start at most one review Task in each Repo per fill, because each start fetches into the Repo's main checkout.
 
 Each fill is idempotent. The candidate check, the count, the add, and the start happen in one loop call, so a second fill in the same state starts nothing.
@@ -144,13 +144,12 @@ The Scheduler reads the queues and their slots when it starts. After a change to
 
 A review Task is a Task with Kind `review`. Its ID has the form `pr-<number>`, for example `pr-4955`. If a Task with that ID for another repository's PR is live or keeps its tab, the ID adds the repository's name, for example `pr-4955-web`. A new review of a PR whose review Task is Done takes the same ID. The Task keeps the PR's repository, number, URL, and head commit, and the queue that started it. Its title is `<repo>#<number> <PR title>`. It has no branch. A review that the user starts with `lineup review` has no queue.
 
-`lineup review` reads the URL as `owner/repo#number`. If a review Task for that PR is open, it adds nothing. It starts that Task if it is Queued. It restores the Task's Worker if the Worker closed in Review ready, or in Reviewing with the flag `tab closed`. It runs the Task again if the Task stopped for good, for example after a failed setup. If the Task runs, it focuses the Task's tab. It refuses a PR from a fork, and a PR that is closed or merged.
+`lineup review` reads the URL as `owner/repo#number`. If a review Task for that PR is open, it adds nothing. It restores the Task's Worker if the Worker closed in Review ready, or in Reviewing with the flag `tab closed`. It runs the Task again if the Task stopped for good, for example after a failed setup. If the Task runs, it focuses the Task's tab. It refuses a PR from a fork, and a PR that is closed or merged.
 
 ### Stages
 
 | Stage | Owner | Board group | Counts toward |
 |---|---|---|---|
-| Queued | user | Queued | nothing |
 | Reviewing | agent | Working | its queue's slots |
 | Review ready | user | Needs you | its queue's slots |
 | Done | none | Done | nothing |
@@ -161,7 +160,7 @@ A review Task never enters a Stage of a build Task, and a build Task never enter
 
 | From | Signal | To |
 |---|---|---|
-| Queued | `start`, and the queue has a free slot, or the Task has no queue | Reviewing |
+| (none) | the add, and the queue has a free slot, or the Task has no queue | Reviewing |
 | Reviewing | `done` or a question, and the findings file exists | Review ready |
 | Reviewing | `done`, and no findings file exists | Reviewing, with the Needs you flag `stopped` |
 | Reviewing | a question, and no findings file exists | Reviewing, with the Needs you flag `question` |

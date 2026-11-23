@@ -81,7 +81,7 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The top of the `lineup` tab, above the Orchestrator. It lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
+The top of the `lineup` tab, above the Orchestrator. It lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Backlog, Ready, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:
@@ -113,7 +113,7 @@ _Avoid_: Provider, runner, vendor
 ### Lifecycle
 
 **Stage**:
-The place in the lifecycle where a Task waits, with exactly one owner: an agent, CI, other reviewers, or the user. The Stages are Queued, Working, CI running, CI debug, In review, Responding, Ready to land, and Done. Each agent Stage is a new prompt to the Task's one Worker, not a new Worker.
+The place in the lifecycle where a Task waits, with exactly one owner: an agent, CI, other reviewers, or the user. The Stages are Working, CI running, CI debug, In review, Responding, Ready to land, and Done. Each agent Stage is a new prompt to the Task's one Worker, not a new Worker.
 _Avoid_: Status, state, column, phase
 
 **Stage contract**:
