@@ -579,9 +579,13 @@ func boardOptions(path string) board.Options {
 		Login:   func() (string, bool, error) { return github.TrackerLogin(stateDir()) },
 		Backlog: g.GitHubBacklogLabel(),
 	}
-	var berr error
-	if opts.Board, berr = g.Board(); berr != nil {
+	b, warnings, berr := g.Board()
+	opts.Board = b
+	switch {
+	case berr != nil:
 		opts.ConfigErr = "config: " + berr.Error() + " (default layout)"
+	case len(warnings) > 0:
+		opts.ConfigErr = "config: " + strings.Join(warnings, "; ")
 	}
 	return opts
 }
