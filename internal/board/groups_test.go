@@ -52,7 +52,7 @@ func layoutEnv(t *testing.T, b config.Board) *workEnv {
 
 // userBoard is the layout that the user asked for.
 var userBoard = config.Board{
-	Order:     []string{"Done", "Needs you", "Working", "Waiting", "Queued", "Ready", "Backlog"},
+	Order:     []string{"Done", "Needs you", "Follow-up", "Working", "Waiting", "Queued", "Ready", "Backlog"},
 	Collapsed: []string{"Backlog"},
 	Hidden:    []string{"Done"},
 }
@@ -279,8 +279,8 @@ func TestTheHeaderFitsEightyColumnsWithTheWipOverflowAndTheReviewCount(t *testin
 	}
 }
 
-func TestTheDefaultOrderIsTheDevelopmentCycleAfterNeedsYou(t *testing.T) {
-	want := []string{groupNeedsYou, groupBacklog, groupReady, "Queued", "Working", "Waiting", groupDone}
+func TestTheDefaultOrderIsNeedsYouThenFollowUpThenTheDevelopmentCycle(t *testing.T) {
+	want := []string{groupNeedsYou, "Follow-up", groupBacklog, groupReady, "Queued", "Working", "Waiting", groupDone}
 	if got := newSections(config.Board{}).order; !slices.Equal(got, want) {
 		t.Fatalf("default order %v, want %v", got, want)
 	}
