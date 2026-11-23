@@ -42,7 +42,7 @@ func TestAgentArgvUnsetsAnEmptyConfigDir(t *testing.T) {
 }
 
 func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
-	role, settings, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup", nil, nil)
+	role, settings, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup", "/Users/g/.claude/projects/-Users-g-state-lineup", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestTheAgentLearnsWhichTrackersAreOnAtEachPrompt(t *testing.T) {
 }
 
 func TestAgentRoleLeavesNeedsYouToThePalette(t *testing.T) {
-	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup", nil, nil)
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup", "/Users/g/.claude/projects/-Users-g-state-lineup", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +328,7 @@ esac`,
 	if err := openHub(hubRepair); err != nil {
 		t.Fatal(err)
 	}
-	role, want, err := composeAgent(hub.role, hub.settings)
+	role, want, err := composeAgent(dir, hub.role, hub.settings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -605,6 +605,35 @@ func TestLineupRestartOpensNoHubWhenNoneIsOpen(t *testing.T) {
 	}
 }
 
+func TestTheOrchestratorCanReadItsEarlierSessions(t *testing.T) {
+	fakeHubRex(t, livePanes)
+	if err := openHub(hubRepair); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(stateDir(), "lineup")
+	role, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
+	_, section, ok := strings.Cut(string(role), "\n## Earlier sessions\n")
+	section, _, _ = strings.Cut(section, "\n## ")
+	if !ok || !strings.Contains(section, "`"+claudeSessions()+"`") || !strings.Contains(section, "`lineup restart`") {
+		t.Errorf("the role does not name the folder of the earlier sessions:\n%s", section)
+	}
+	settings, _ := os.ReadFile(filepath.Join(dir, ".claude", "settings.json"))
+	var v struct {
+		Permissions struct{ Allow []string } `json:"permissions"`
+	}
+	if err := json.Unmarshal(settings, &v); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(v.Permissions.Allow, "Read(/"+claudeSessions()+"/**)") {
+		t.Errorf("the settings do not allow a read of the earlier sessions: %q", v.Permissions.Allow)
+	}
+	for _, rule := range v.Permissions.Allow {
+		if strings.HasPrefix(rule, "Edit(") && strings.Contains(rule, "/projects/") {
+			t.Errorf("the settings allow %s", rule)
+		}
+	}
+}
+
 // trackerConfig writes a config with three checkouts: data takes Linear
 // Issues from its owner's table, hod takes local Issues, and web takes none.
 func trackerConfig(t *testing.T) (path, hod, data string) {
@@ -644,7 +673,7 @@ func TestTheRoleNamesEachRepoTableAndItsTracker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", cfg.TrackedRepos(), cfg.PrefixedRepos())
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", "/Users/g/.claude/projects/-Users-g-state-lineup", cfg.TrackedRepos(), cfg.PrefixedRepos())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -667,7 +696,7 @@ func TestTheRoleNamesEachRepoTableAndItsTracker(t *testing.T) {
 		t.Errorf("the no Repo mapping row offers Repos of other Trackers:\n%s", questions)
 	}
 
-	none, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", nil, nil)
+	none, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", "/Users/g/.claude/projects/-Users-g-state-lineup", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -686,7 +715,7 @@ func TestTheRoleNamesEachRepoPrefixAndItsFileRule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", cfg.TrackedRepos(), cfg.PrefixedRepos())
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", "/Users/g/.claude/projects/-Users-g-state-lineup", cfg.TrackedRepos(), cfg.PrefixedRepos())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -704,7 +733,7 @@ func TestTheRoleNamesEachRepoPrefixAndItsFileRule(t *testing.T) {
 	if !strings.Contains(local, "run `lineup next-id <repo>`") {
 		t.Errorf("the Local section does not name lineup next-id:\n%s", local)
 	}
-	open, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", nil, nil)
+	open, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", "/Users/g/.claude/projects/-Users-g-state-lineup", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

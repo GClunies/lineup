@@ -77,7 +77,8 @@ const agentSettings = `{
       "Read(/{{issues}}/**)",
       "Edit(/{{issues}}/**)",
       "Read(/{{config}})",
-      "Edit(/{{config}})"
+      "Edit(/{{config}})",
+      "Read(/{{sessions}}/**)"
     ],
     "deny": [
       "Bash(linear issue start:*)",
@@ -112,8 +113,9 @@ type agentTab struct {
 	role                []byte
 	settings            string
 	bg                  string // agent pane background
-	// compose, if set, fills in role and settings when the Hub writes them.
-	compose func(role []byte, settings string) ([]byte, string, error)
+	// compose, if set, fills in role and settings when the Hub writes them
+	// into dir, the agent's folder.
+	compose func(dir string, role []byte, settings string) ([]byte, string, error)
 }
 
 // agentTabs are in Hub tab order.
@@ -219,7 +221,7 @@ func prepareAgent(t agentTab) (string, error) {
 	role, settings := t.role, t.settings
 	if t.compose != nil {
 		var err error
-		if role, settings, err = t.compose(role, settings); err != nil {
+		if role, settings, err = t.compose(dir, role, settings); err != nil {
 			return "", err
 		}
 	}
@@ -274,8 +276,9 @@ func trackersLine(on trackersOn) string {
 }
 
 // composeAgent adds the Tracker sections, and fills in the Local Tracker's
-// folder, the config file, and the path of lineup.
-func composeAgent(role []byte, settings string) ([]byte, string, error) {
+// folder, the config file, the path of lineup, and the folder of the agent's
+// earlier sessions. dir is the agent's folder.
+func composeAgent(dir string, role []byte, settings string) ([]byte, string, error) {
 	cfg, err := config.Load(configPath())
 	if err != nil {
 		return nil, "", err
@@ -284,7 +287,7 @@ func composeAgent(role []byte, settings string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	return agentFiles(role, settings, cfg.LocalIssuesDir(), configPath(), self, cfg.TrackedRepos(), cfg.PrefixedRepos())
+	return agentFiles(role, settings, cfg.LocalIssuesDir(), configPath(), self, sessionsDir(os.Getenv("CLAUDE_CONFIG_DIR"), dir), cfg.TrackedRepos(), cfg.PrefixedRepos())
 }
 
 // trackersSection names each table that sets a tracker, and its Tracker.
@@ -328,15 +331,17 @@ func prefixesSection(prefixed []config.PrefixedRepo) []byte {
 	return []byte(b.String())
 }
 
-func agentFiles(role []byte, settings, issuesDir, configFile, self string, tracked []config.TrackedRepo, prefixed []config.PrefixedRepo) ([]byte, string, error) {
+func agentFiles(role []byte, settings, issuesDir, configFile, self, sessions string, tracked []config.TrackedRepo, prefixed []config.PrefixedRepo) ([]byte, string, error) {
 	out := slices.Concat(role, linearSection, githubSection, localSection, trackersSection(tracked), prefixesSection(prefixed))
 	out = bytes.ReplaceAll(out, []byte("{{issues}}"), []byte(issuesDir))
 	out = bytes.ReplaceAll(out, []byte("{{config}}"), []byte(configFile))
+	out = bytes.ReplaceAll(out, []byte("{{sessions}}"), []byte(sessions))
 	// The rules write /{{issues}}, as a rule path that starts with // is
 	// absolute in Claude Code settings.
 	for k, v := range map[string]string{
 		"{{issues}}": filepath.ToSlash(issuesDir), "{{config}}": filepath.ToSlash(configFile),
 		"{{configDir}}": filepath.ToSlash(filepath.Dir(configFile)), "{{lineup}}": self,
+		"{{sessions}}": filepath.ToSlash(sessions),
 	} {
 		q, err := json.Marshal(v)
 		if err != nil {
@@ -588,13 +593,18 @@ func agentArgv(configDir, claudeBin, name string) []string {
 // hasConversation reports whether Claude has a conversation for dir to
 // continue. Without one, `claude --continue` exits at once.
 func hasConversation(configDir, dir string) bool {
+	found, _ := filepath.Glob(filepath.Join(sessionsDir(configDir, dir), "*.jsonl"))
+	return len(found) > 0
+}
+
+// sessionsDir is the folder where Claude, on the profile configDir, keeps
+// the sessions of the folder dir, one JSONL file for each session.
+func sessionsDir(configDir, dir string) string {
 	if configDir == "" {
 		home, _ := os.UserHomeDir()
 		configDir = filepath.Join(home, ".claude")
 	}
-	slug := strings.NewReplacer("/", "-", ".", "-").Replace(dir)
-	found, _ := filepath.Glob(filepath.Join(configDir, "projects", slug, "*.jsonl"))
-	return len(found) > 0
+	return filepath.Join(configDir, "projects", strings.NewReplacer("/", "-", ".", "-").Replace(dir))
 }
 
 func firstBlock(out []byte) (string, error) {
