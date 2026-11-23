@@ -242,9 +242,9 @@ type Config interface {
 	// ResolveRepo turns a name such as "data", an owner/repo key, or a path
 	// into a Repo's main checkout.
 	ResolveRepo(name string) (string, error)
-	// RepoTrackers lists the Kinds of Tracker that the Repo is locked to. nil
-	// means that the Repo takes Issues of every Tracker.
-	RepoTrackers(repo string) []string
+	// RepoTracker is the Kind of Tracker whose Issues the Repo takes, or ""
+	// for a Repo that takes none, and the Repo's owner/repo key.
+	RepoTracker(repo string) (key, tracker string)
 	// RepoForGitHub picks the checkout below the roots whose origin is the
 	// GitHub repository owner/name. ok is false when none is.
 	RepoForGitHub(slug string) (repo string, ok bool)

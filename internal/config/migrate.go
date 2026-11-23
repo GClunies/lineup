@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,28 +16,21 @@ import (
 )
 
 // Migrate rewrites the config file at path from [[repos]] tables and layer
-// keys at the top level to roots, [defaults], and [repos."<key>"] tables. It
-// writes the old file to <path>.bak first, and puts the old file back when
-// the new one does not load. It returns a line for the user.
+// keys at the top level to roots, [defaults], and [repos."<key>"] tables,
+// and from trackers lists to tracker keys. It writes the old file to
+// <path>.bak first, and puts the old file back when the new one does not
+// load. It returns a line for the user.
 func Migrate(path string) (string, error) {
 	old, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
-	why, err := oldForm(string(old))
+	text, err := migrateFile(string(old))
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", path, err)
 	}
-	if why == "" {
-		return fmt.Sprintf("%s has no [[repos]] tables and no layer keys at the top level, so lineup changed nothing.", path), nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	text, err := migrateText(string(old), home)
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", path, err)
+	if text == string(old) {
+		return fmt.Sprintf("%s has no [[repos]] tables, no layer keys at the top level, and no trackers lists, so lineup changed nothing.", path), nil
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -67,6 +61,145 @@ func Migrate(path string) (string, error) {
 		return "", fmt.Errorf("the migrated file did not load, so lineup put the old file back: %w", err)
 	}
 	return fmt.Sprintf("Rewrote %s. The old file is %s.bak. Run lineup restart to load the new file.", path, path), nil
+}
+
+// migrateFile is the text of the config file after the migration.
+func migrateFile(text string) (string, error) {
+	var raw map[string]any
+	md, err := toml.Decode(text, &raw)
+	if err != nil {
+		return "", err
+	}
+	_, oldRepos := raw["repos"].([]map[string]any)
+	if oldRepos || slices.ContainsFunc(md.Keys(), func(k toml.Key) bool { return slices.Contains(layerKeys, k[0]) }) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		if text, err = migrateText(text, home); err != nil {
+			return "", err
+		}
+	}
+	return migrateTrackers(text)
+}
+
+// migrateTrackers rewrites each trackers list as a tracker key, and adds
+// tracker = "linear" to a Repo with teams and no Tracker, as its teams map
+// Linear Issues to it. A list of more than one Tracker fails, as a Repo
+// takes Issues from one Tracker.
+func migrateTrackers(text string) (string, error) {
+	var raw struct {
+		Repos map[string]map[string]any `toml:"repos"`
+	}
+	if _, err := toml.Decode(text, &raw); err != nil {
+		return "", err
+	}
+	// set holds the tracker that replaces each trackers list.
+	set := map[string]string{}
+	for _, key := range slices.Sorted(maps.Keys(raw.Repos)) {
+		list, ok := raw.Repos[key]["trackers"]
+		if !ok {
+			continue
+		}
+		items, _ := list.([]any)
+		var kind string
+		if len(items) == 1 {
+			kind, _ = items[0].(string)
+		}
+		if kind == "" {
+			return "", fmt.Errorf("repos.%q: trackers holds %d Trackers, but a Repo takes Issues from one Tracker: write tracker = \"<kind>\" in place of the list by hand", key, len(items))
+		}
+		set[key] = kind
+	}
+	// tracked holds the lower-case key of each table with a tracker.
+	tracked := map[string]bool{}
+	for key, t := range raw.Repos {
+		if _, ok := t["tracker"]; ok || set[key] != "" {
+			tracked[strings.ToLower(key)] = true
+		}
+	}
+	added := map[string]bool{}
+	for key, t := range raw.Repos {
+		owner, _, _ := strings.Cut(strings.ToLower(key), "/")
+		if _, teams := t["teams"]; teams && !tracked[strings.ToLower(key)] && !tracked[owner+"/*"] {
+			added[key] = true
+		}
+	}
+	if len(set) == 0 && len(added) == 0 {
+		return text, nil
+	}
+	items, err := parseItems(text)
+	if err != nil {
+		return "", err
+	}
+	var out []item
+	table := ""
+	for _, it := range items {
+		if it.kind == '[' {
+			table = repoTableKey(it.lines[it.above])
+		}
+		if it.kind != '=' {
+			out = append(out, it)
+			continue
+		}
+		indent := indentOf(it.lines[it.above])
+		switch kind, ok := set[table]; {
+		case it.first == "trackers" && ok:
+			line := indent + "tracker = " + strconv.Quote(kind) + " " + trailingComment(it.lines[len(it.lines)-1])
+			it.lines = append(slices.Clone(it.lines[:it.above]), strings.TrimRight(line, " "))
+			delete(set, table)
+		case it.first == "teams" && added[table]:
+			out = append(out, it)
+			it = item{lines: []string{indent + `tracker = "linear"`}, kind: '='}
+			delete(added, table)
+		}
+		out = append(out, it)
+	}
+	for _, key := range slices.Sorted(maps.Keys(set)) {
+		return "", fmt.Errorf("repos.%q: lineup config migrate finds the trackers list outside the table's own header: write tracker = %q by hand", key, set[key])
+	}
+	for _, key := range slices.Sorted(maps.Keys(added)) {
+		return "", fmt.Errorf(`repos.%q: lineup config migrate finds the teams list outside the table's own header: write tracker = "linear" by hand`, key)
+	}
+	return joinItems(out), nil
+}
+
+func indentOf(line string) string { return line[:len(line)-len(strings.TrimLeft(line, " \t"))] }
+
+// repoTableKey is the key of a [repos."<key>"] header, or "" for any other
+// header, a sub-table of a Repo's table included.
+func repoTableKey(header string) string {
+	name, _, array, _ := splitHeader(header)
+	head, rest := firstKey(name)
+	rest = strings.TrimLeft(rest, " \t")
+	if array || head != "repos" || !strings.HasPrefix(rest, ".") {
+		return ""
+	}
+	key, after := firstKey(rest[1:])
+	if strings.TrimSpace(after) != "" {
+		return ""
+	}
+	return key
+}
+
+// trailingComment is the comment at the end of a line, from its #, or "".
+func trailingComment(line string) string {
+	var quote byte
+	for i := 0; i < len(line); i++ {
+		switch {
+		case quote != 0:
+			if quote == '"' && line[i] == '\\' {
+				i++
+			} else if line[i] == quote {
+				quote = 0
+			}
+		case line[i] == '"' || line[i] == '\'':
+			quote = line[i]
+		case line[i] == '#':
+			return line[i:]
+		}
+	}
+	return ""
 }
 
 // oldRepo is a [[repos]] table.

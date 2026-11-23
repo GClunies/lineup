@@ -593,7 +593,7 @@ func (p configPort) RepoForIssue(is scheduler.Issue) (string, error) {
 	return "", noRepo
 }
 
-func (p configPort) RepoTrackers(repo string) []string { return p.cfg.RepoTrackers(repo) }
+func (p configPort) RepoTracker(repo string) (string, string) { return p.cfg.RepoTracker(repo) }
 
 func (p configPort) RepoPrefix(repo string) string { return p.cfg.RepoPrefix(repo) }
 

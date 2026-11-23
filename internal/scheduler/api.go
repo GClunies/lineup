@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -51,9 +50,6 @@ type TaskDetail struct {
 }
 
 var ErrNoRepo = errors.New("no Repo mapping")
-
-// ErrLockedRepo refuses an Issue whose Tracker is not on its Repo's trackers list.
-var ErrLockedRepo = errors.New("locked Repo")
 
 // drafts is the detail of the drafts flag, which the Board's row shows.
 func drafts(n int) string {
@@ -324,9 +320,12 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 				return TaskView{}, fmt.Errorf("%w: pass a repo", err)
 			}
 		}
-		if ts := s.d.Config.RepoTrackers(r.Repo); ts != nil && !slices.Contains(ts, is.Tracker()) {
-			return TaskView{}, fmt.Errorf("%w: %s takes only Issues of the trackers %s, and %s is a %s Issue",
-				ErrLockedRepo, r.Repo, strings.Join(ts, ", "), is.Identifier, is.Tracker())
+		switch key, tracker := s.d.Config.RepoTracker(r.Repo); tracker {
+		case is.Tracker():
+		case "":
+			return TaskView{}, fmt.Errorf("repo has no tracker: %s", key)
+		default:
+			return TaskView{}, fmt.Errorf("%s takes Issues only from its Tracker %s, and %s is a %s Issue", key, tracker, is.Identifier, is.Tracker())
 		}
 	case r.Text != "":
 		if r.Repo == "" {

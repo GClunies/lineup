@@ -124,8 +124,9 @@ var layerKeys = []string{"wip_cap", "poll_interval", "budgets", "review_bot", "l
 type repoTable struct {
 	layer
 	Teams []string `toml:"teams"`
-	// Trackers locks the Repo to these Kinds of Tracker. nil means every Tracker.
-	Trackers []string `toml:"trackers"`
+	// Tracker is the one Kind of Tracker whose Issues the Repo takes. ""
+	// takes the owner/* table's, and a Repo with none takes no Issues.
+	Tracker string `toml:"tracker"`
 	// Prefix starts the ID of each Local Issue and ad hoc Task of the Repo,
 	// as in hod-3. "" keeps local-<n> and ah-<n>.
 	Prefix string `toml:"prefix"`
@@ -143,14 +144,13 @@ type PrefixedRepo struct {
 	Prefix string
 }
 
-// TrackerKinds are the names that a trackers list can hold, one for each
-// Kind of Tracker.
+// TrackerKinds are the values of tracker, one for each Kind of Tracker.
 var TrackerKinds = []string{"linear", "github", "local"}
 
-// LockedRepo is a [repos."<key>"] table with a trackers list.
-type LockedRepo struct {
-	Key      string
-	Trackers []string
+// TrackedRepo is a [repos."<key>"] table that sets tracker.
+type TrackedRepo struct {
+	Key     string
+	Tracker string
 }
 
 type linearWorkspace struct {
@@ -362,7 +362,8 @@ func Load(globalPath string) (*Global, error) {
 }
 
 // oldForm says why the text needs lineup config migrate: its [[repos]]
-// tables, or the first layer key at the top level. "" means neither.
+// tables, the first layer key at the top level, or the first trackers list.
+// "" means none of them.
 func oldForm(text string) (string, error) {
 	var raw map[string]any
 	md, err := toml.Decode(text, &raw)
@@ -375,6 +376,12 @@ func oldForm(text string) (string, error) {
 	for _, k := range md.Keys() {
 		if slices.Contains(layerKeys, k[0]) {
 			return k[0] + " belongs in [defaults]. Run lineup config migrate to move it", nil
+		}
+	}
+	repos, _ := raw["repos"].(map[string]any)
+	for _, key := range slices.Sorted(maps.Keys(repos)) {
+		if t, _ := repos[key].(map[string]any); t["trackers"] != nil {
+			return fmt.Sprintf("repos.%q: the trackers list is gone, as a Repo takes Issues from one Tracker. Run lineup config migrate to rewrite it as tracker", key), nil
 		}
 	}
 	return "", nil
@@ -391,7 +398,7 @@ func splitKey(key string) (owner, repo string, ok bool) {
 }
 
 // checkRepos checks the key of each [repos."<key>"] table, and its layer,
-// teams, and trackers keys.
+// teams, and tracker keys.
 func (g *Global) checkRepos() error {
 	seen := map[string]string{}
 	for _, key := range slices.Sorted(maps.Keys(g.file.Repos)) {
@@ -408,8 +415,8 @@ func (g *Global) checkRepos() error {
 		if err := g.validate(&t.layer, where); err != nil {
 			return err
 		}
-		if err := checkTrackers(t.Trackers); err != nil {
-			return fmt.Errorf("%s: %w", where, err)
+		if t.Tracker != "" && !slices.Contains(TrackerKinds, t.Tracker) {
+			return fmt.Errorf("%s: tracker %q is not a Tracker: use %s", where, t.Tracker, strings.Join(TrackerKinds, ", "))
 		}
 		if len(t.Teams) == 0 {
 			continue
@@ -417,24 +424,12 @@ func (g *Global) checkRepos() error {
 		if repo == "*" {
 			return fmt.Errorf("%s: teams maps Linear teams to one Repo, so it needs an owner/repo key", where)
 		}
-		if ts := g.trackers(key); ts != nil && !slices.Contains(ts, "linear") {
-			return fmt.Errorf("%s: teams maps Linear teams to the Repo, so trackers must hold linear", where)
-		}
-	}
-	return nil
-}
-
-func checkTrackers(trackers []string) error {
-	if trackers == nil {
-		return nil
-	}
-	kinds := strings.Join(TrackerKinds, ", ")
-	if len(trackers) == 0 {
-		return fmt.Errorf("trackers must name at least one of %s", kinds)
-	}
-	for j, t := range trackers {
-		if !slices.Contains(TrackerKinds, t) {
-			return fmt.Errorf("trackers[%d] %q is not a Tracker: use %s", j, t, kinds)
+		switch tr := g.tracker(key); tr {
+		case "linear":
+		case "":
+			return fmt.Errorf(`%s: teams maps Linear teams to the Repo, so the Repo needs tracker = "linear". Run lineup config migrate to add it`, where)
+		default:
+			return fmt.Errorf("%s: teams maps Linear teams to the Repo, so its tracker must be linear, not %s", where, tr)
 		}
 	}
 	return nil
@@ -907,16 +902,14 @@ func (g *Global) tables(key string) []repoTable {
 	return out
 }
 
-// trackers is the trackers list of the Repo key's own table, else of its
-// owner/* table. nil means every Tracker.
-func (g *Global) trackers(key string) []string {
-	var out []string
+// tracker is the tracker of the Repo key's own table, else of its owner/*
+// table. "" means that the Repo takes no Issues.
+func (g *Global) tracker(key string) string {
+	out := ""
 	for _, t := range g.tables(key) {
-		if t.Trackers != nil {
-			out = t.Trackers
-		}
+		out = cmp.Or(t.Tracker, out)
 	}
-	return slices.Clone(out)
+	return out
 }
 
 // RepoForTeam is the checkout of the [repos."owner/repo"] table whose teams
@@ -930,9 +923,13 @@ func (g *Global) RepoForTeam(teamKey string) (string, bool) {
 	return "", false
 }
 
-// RepoTrackers is the trackers list of the Repo's own table, else of its
-// owner/* table. nil means that the Repo takes every Tracker.
-func (g *Global) RepoTrackers(repoPath string) []string { return g.trackers(g.keyOf(repoPath)) }
+// RepoTracker is the Kind of Tracker whose Issues the Repo takes, from its
+// own table, else from its owner/* table, and the Repo's key. tracker "" means
+// that the Repo takes no Issues.
+func (g *Global) RepoTracker(repoPath string) (key, tracker string) {
+	key = g.keyOf(repoPath)
+	return key, g.tracker(key)
+}
 
 // PrefixedRepos lists the tables with a prefix, sorted by key.
 func (g *Global) PrefixedRepos() []PrefixedRepo {
@@ -970,22 +967,22 @@ func (g *Global) RepoForPrefix(prefix string) (string, bool) {
 	return "", false
 }
 
-// LockedRepos lists the tables with a trackers list, sorted by key.
-func (g *Global) LockedRepos() []LockedRepo {
-	var out []LockedRepo
+// TrackedRepos lists the tables that set tracker, sorted by key.
+func (g *Global) TrackedRepos() []TrackedRepo {
+	var out []TrackedRepo
 	for _, key := range slices.Sorted(maps.Keys(g.file.Repos)) {
-		if ts := g.file.Repos[key].Trackers; ts != nil {
-			out = append(out, LockedRepo{Key: key, Trackers: slices.Clone(ts)})
+		if tr := g.file.Repos[key].Tracker; tr != "" {
+			out = append(out, TrackedRepo{Key: key, Tracker: tr})
 		}
 	}
 	return out
 }
 
-// CheckoutsFor lists the checkouts that take Tasks for Issues of the kind.
+// CheckoutsFor lists the checkouts whose Tracker is the kind.
 func (g *Global) CheckoutsFor(kind string) []string {
 	var out []string
 	for _, c := range g.Checkouts() {
-		if ts := g.trackers(c.Key); ts == nil || slices.Contains(ts, kind) {
+		if g.tracker(c.Key) == kind {
 			out = append(out, c.Path)
 		}
 	}

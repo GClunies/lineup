@@ -595,8 +595,10 @@ var testPolicy = lifecycle.Policy{Budgets: lifecycle.Budgets{CIDebug: 3, Respond
 func (fakeConfig) Policy(string, map[string]string) (lifecycle.Policy, error) { return testPolicy, nil }
 func (fakeConfig) RepoForIssue(Issue) (string, error)                         { return "/repos/acme/data", nil }
 func (fakeConfig) ResolveRepo(name string) (string, error)                    { return "/repos/acme/" + name, nil }
-func (fakeConfig) RepoTrackers(string) []string                               { return nil }
-func (fakeConfig) RepoPrefix(string) string                                   { return "" }
+func (fakeConfig) RepoTracker(repo string) (string, string) {
+	return "acme/" + filepath.Base(repo), KindLinear
+}
+func (fakeConfig) RepoPrefix(string) string { return "" }
 func (fakeConfig) RepoForGitHub(slug string) (string, bool) {
 	if strings.EqualFold(slug, "acme/data") {
 		return "/repos/acme/data", true
@@ -1419,40 +1421,56 @@ func TestAddPassesTheBrowsersKindToTheTracker(t *testing.T) {
 	}
 }
 
-// lockedConfig locks /repos/acme/data, the Repo of every mapping, to the Local Tracker.
-type lockedConfig struct{ fakeConfig }
+// trackerConfig gives /repos/acme/data, the Repo of every mapping, the Local
+// Tracker, and /repos/acme/web no Tracker.
+type trackerConfig struct{ fakeConfig }
 
-func (lockedConfig) RepoTrackers(repo string) []string {
+func (trackerConfig) RepoTracker(repo string) (string, string) {
+	key := "acme/" + filepath.Base(repo)
 	if repo == "/repos/acme/data" {
-		return []string{KindLocal}
+		return key, KindLocal
 	}
-	return nil
+	return key, ""
 }
 
-func TestAddRefusesAnIssueOfATrackerThatItsRepoIsNotLockedTo(t *testing.T) {
-	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Config = lockedConfig{} })
+func TestAddRefusesAnIssueOfAnotherTrackerThanItsRepos(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Config = trackerConfig{} })
 	for _, req := range []Request{
 		{Op: "add", Issue: "ENG-1"},
 		{Op: "add", Issue: "acme/data#3", Kind: KindGitHub},
 		{Op: "add", Issue: "ENG-2", Repo: "data"},
 	} {
 		_, err := h.s.Handle(context.Background(), req)
-		if !errors.Is(err, ErrLockedRepo) {
-			t.Fatalf("add %s: err = %v, want ErrLockedRepo", req.Issue, err)
+		if err == nil {
+			t.Fatalf("add %s: no error, want a refusal", req.Issue)
 		}
-		for _, want := range []string{"/repos/acme/data", "trackers local", req.Issue} {
+		for _, want := range []string{"acme/data", "its Tracker local", req.Issue, "is a " + cmp.Or(req.Kind, KindLinear) + " Issue"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("add %s: error %q does not name %q", req.Issue, err, want)
 			}
 		}
 	}
 	h.do(Request{Op: "add", Issue: "local-1", Kind: KindLocal})
-	h.do(Request{Op: "add", Issue: "ENG-3", Repo: "web"})
 	h.do(Request{Op: "add", Repo: "data", Text: "tidy the README"})
 	ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView))
 	slices.Sort(ids)
-	if want := []string{"ENG-3", "ah-1", "local-1"}; !slices.Equal(ids, want) {
+	if want := []string{"ah-1", "local-1"}; !slices.Equal(ids, want) {
 		t.Fatalf("Tasks = %v, want %v", ids, want)
+	}
+}
+
+func TestARepoWithNoTrackerTakesOnlyAdHocTasks(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Config = trackerConfig{} })
+	for _, req := range []Request{
+		{Op: "add", Issue: "ENG-3", Repo: "web"},
+		{Op: "add", Issue: "local-2", Kind: KindLocal, Repo: "web"},
+	} {
+		if _, err := h.s.Handle(context.Background(), req); err == nil || err.Error() != "repo has no tracker: acme/web" {
+			t.Fatalf("add %s --repo web: err = %v, want repo has no tracker: acme/web", req.Issue, err)
+		}
+	}
+	if v := h.do(Request{Op: "add", Repo: "web", Text: "tidy the README"}).(TaskView); v.Repo != "web" {
+		t.Fatalf("the ad hoc Task %+v, want it in web", v)
 	}
 }
 

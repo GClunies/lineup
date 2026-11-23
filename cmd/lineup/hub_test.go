@@ -447,31 +447,32 @@ func TestOpenHubRefusesToCloseTheTabThatItRunsIn(t *testing.T) {
 	}
 }
 
-// lockedConfig writes a config with two checkouts, hod locked to the Local
-// Tracker and data open to every Tracker.
-func lockedConfig(t *testing.T) (path, hod, data string) {
+// trackerConfig writes a config with three checkouts: data takes Linear
+// Issues from its owner's table, hod takes local Issues, and web takes none.
+func trackerConfig(t *testing.T) (path, hod, data string) {
 	t.Helper()
 	root := t.TempDir()
 	hod = gitCheckout(t, filepath.Join(root, "hod"), "git@github.com:GClunies/hod.git")
 	data = gitCheckout(t, filepath.Join(root, "data"), "git@github.com:crexi/data.git")
+	gitCheckout(t, filepath.Join(root, "web"), "git@github.com:acme/web.git")
 	path = filepath.Join(root, "config.toml")
-	body := "roots = [\"" + root + "\"]\n\n[repos.\"GClunies/hod\"]\ntrackers = [\"local\"]\n"
+	body := "roots = [\"" + root + "\"]\n\n[repos.\"crexi/*\"]\ntracker = \"linear\"\n\n[repos.\"GClunies/hod\"]\ntracker = \"local\"\n"
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return path, hod, data
 }
 
-func TestTheRepoPickerOffersALockedRepoOnlyForItsTrackers(t *testing.T) {
-	path, hod, data := lockedConfig(t)
+func TestTheRepoPickerOffersARepoOnlyForItsTracker(t *testing.T) {
+	path, hod, data := trackerConfig(t)
 	opts := boardOptions(path)
 	if opts.ConfigErr != "" {
 		t.Fatal(opts.ConfigErr)
 	}
 	for kind, want := range map[string][]string{
 		scheduler.KindLinear: {data},
-		scheduler.KindGitHub: {data},
-		scheduler.KindLocal:  {data, hod},
+		scheduler.KindGitHub: nil,
+		scheduler.KindLocal:  {hod},
 	} {
 		if got := opts.Repos(kind); !slices.Equal(got, want) {
 			t.Errorf("Repos(%s) = %q, want %q", kind, got, want)
@@ -479,42 +480,46 @@ func TestTheRepoPickerOffersALockedRepoOnlyForItsTrackers(t *testing.T) {
 	}
 }
 
-func TestTheRoleNamesEachLockedRepoAndItsTrackers(t *testing.T) {
-	path, _, _ := lockedConfig(t)
+func TestTheRoleNamesEachRepoTableAndItsTracker(t *testing.T) {
+	path, _, _ := trackerConfig(t)
 	cfg, err := config.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", cfg.LockedRepos(), cfg.PrefixedRepos())
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", cfg.TrackedRepos(), cfg.PrefixedRepos())
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, locked, ok := strings.Cut(string(raw), "\n## Locked Repos\n")
+	_, section, ok := strings.Cut(string(raw), "\n## Trackers\n")
 	if !ok {
-		t.Fatalf("the role has no Locked Repos section:\n%s", raw)
+		t.Fatalf("the role has no Trackers section:\n%s", raw)
 	}
-	locked, _, _ = strings.Cut(locked, "\n## ")
-	for _, want := range []string{"| `GClunies/hod` | `local` |", "Plan the Issues of a locked Repo only in its Trackers", "`trackers` key of its `[repos.\"<owner>/<repo>\"]` table", path} {
-		if !strings.Contains(locked, want) {
-			t.Errorf("the Locked Repos section has no %q:\n%s", want, locked)
+	section, _, _ = strings.Cut(section, "\n## ")
+	for _, want := range []string{
+		"| `GClunies/hod` | `local` |", "| `crexi/*` | `linear` |",
+		"`tracker` key of its `[repos.\"<owner>/<repo>\"]` table", "The Repo's own table wins over the owner's table.",
+		"Plan the Issues of a Repo only in its Tracker", "A Repo with no `tracker` takes no Issues. It takes only ad hoc Tasks", path,
+	} {
+		if !strings.Contains(section, want) {
+			t.Errorf("the Trackers section has no %q:\n%s", want, section)
 		}
 	}
 	_, questions, _ := strings.Cut(string(raw), "\n## Questions\n")
-	if !strings.Contains(questions, "Leave out each Repo that the Locked Repos section locks to other Trackers") {
-		t.Errorf("the no Repo mapping row offers locked Repos:\n%s", questions)
+	if !strings.Contains(questions, "Leave out each Repo whose Tracker in the Trackers section is not the Issue's Tracker") {
+		t.Errorf("the no Repo mapping row offers Repos of other Trackers:\n%s", questions)
 	}
 
-	open, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", nil, nil)
+	none, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(open), "No Repo is locked.") {
-		t.Errorf("a config with no lock gives no plain Locked Repos section")
+	if !strings.Contains(string(none), "No table sets a tracker, so no Repo takes Issues.") {
+		t.Errorf("a config with no tracker gives no plain Trackers section")
 	}
 }
 
 func TestTheRoleNamesEachRepoPrefixAndItsFileRule(t *testing.T) {
-	path, _, _ := lockedConfig(t)
+	path, _, _ := trackerConfig(t)
 	body, _ := os.ReadFile(path)
 	if err := os.WriteFile(path, append(body, "prefix = \"hod\"\n"...), 0o600); err != nil {
 		t.Fatal(err)
@@ -523,7 +528,7 @@ func TestTheRoleNamesEachRepoPrefixAndItsFileRule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", cfg.LockedRepos(), cfg.PrefixedRepos())
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", path, "/Users/g/bin/lineup", cfg.TrackedRepos(), cfg.PrefixedRepos())
 	if err != nil {
 		t.Fatal(err)
 	}

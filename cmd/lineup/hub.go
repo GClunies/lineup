@@ -258,26 +258,26 @@ func composeAgent(role []byte, settings string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	return agentFiles(role, settings, cfg.LocalIssuesDir(), configPath(), self, cfg.LockedRepos(), cfg.PrefixedRepos())
+	return agentFiles(role, settings, cfg.LocalIssuesDir(), configPath(), self, cfg.TrackedRepos(), cfg.PrefixedRepos())
 }
 
-// lockedReposSection names each locked Repo and its Trackers.
-func lockedReposSection(locked []config.LockedRepo) []byte {
+// trackersSection names each table that sets a tracker, and its Tracker.
+func trackersSection(tracked []config.TrackedRepo) []byte {
 	var b strings.Builder
-	b.WriteString("\n## Locked Repos\n\n")
-	if len(locked) == 0 {
-		b.WriteString("No Repo is locked. Each Repo takes Tasks for the Issues of every Tracker.\n")
-		return []byte(b.String())
+	b.WriteString("\n## Trackers\n\n")
+	b.WriteString("Each Repo takes Issues from one Tracker. The `tracker` key of its `[repos.\"<owner>/<repo>\"]` table in `{{config}}` names it. " +
+		"The `tracker` key of a `[repos.\"<owner>/*\"]` table names it for each Repo of the owner. The Repo's own table wins over the owner's table.\n\n")
+	if len(tracked) == 0 {
+		b.WriteString("No table sets a tracker, so no Repo takes Issues.\n")
+	} else {
+		b.WriteString("| Repo | Tracker |\n|---|---|\n")
+		for _, r := range tracked {
+			fmt.Fprintf(&b, "| `%s` | `%s` |\n", r.Key, r.Tracker)
+		}
 	}
-	b.WriteString("A locked Repo takes Tasks only for the Issues of its Trackers. The `trackers` key of its `[repos.\"<owner>/<repo>\"]` table in `{{config}}` sets the lock. " +
-		"The `trackers` key of a `[repos.\"<owner>/*\"]` table locks each Repo of the owner whose own table has no `trackers` key.\n\n")
-	b.WriteString("| Repo | Trackers |\n|---|---|\n")
-	for _, r := range locked {
-		fmt.Fprintf(&b, "| `%s` | `%s` |\n", r.Key, strings.Join(r.Trackers, "`, `"))
-	}
-	b.WriteString("\n- Plan the Issues of a locked Repo only in its Trackers. Never write an Issue for it in another Tracker.\n" +
-		"- `lineup add` refuses an Issue of another Tracker for a locked Repo. Never pass a locked Repo with `--repo` for such an Issue.\n" +
-		"- An ad hoc Task, from `lineup add --repo`, can use a locked Repo.\n")
+	b.WriteString("\n- Plan the Issues of a Repo only in its Tracker. Never write an Issue for it in another Tracker.\n" +
+		"- `lineup add` refuses an Issue of another Tracker. Never pass a Repo with `--repo` for an Issue of another Tracker.\n" +
+		"- A Repo with no `tracker` takes no Issues. It takes only ad hoc Tasks, from `lineup add --repo`.\n")
 	return []byte(b.String())
 }
 
@@ -301,8 +301,8 @@ func prefixesSection(prefixed []config.PrefixedRepo) []byte {
 	return []byte(b.String())
 }
 
-func agentFiles(role []byte, settings, issuesDir, configFile, self string, locked []config.LockedRepo, prefixed []config.PrefixedRepo) ([]byte, string, error) {
-	out := slices.Concat(role, linearSection, githubSection, localSection, lockedReposSection(locked), prefixesSection(prefixed))
+func agentFiles(role []byte, settings, issuesDir, configFile, self string, tracked []config.TrackedRepo, prefixed []config.PrefixedRepo) ([]byte, string, error) {
+	out := slices.Concat(role, linearSection, githubSection, localSection, trackersSection(tracked), prefixesSection(prefixed))
 	out = bytes.ReplaceAll(out, []byte("{{issues}}"), []byte(issuesDir))
 	out = bytes.ReplaceAll(out, []byte("{{config}}"), []byte(configFile))
 	// The rules write /{{issues}}, as a rule path that starts with // is

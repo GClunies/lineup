@@ -12,11 +12,16 @@ import (
 )
 
 // prefixConfig gives /repos/acme/hod the prefix hod and /repos/acme/web the
-// prefix web. Every other Repo has none.
+// prefix web, and each of them the Local Tracker. Every other Repo has no
+// prefix.
 type prefixConfig struct{ fakeConfig }
 
 func (prefixConfig) RepoPrefix(repo string) string {
 	return map[string]string{"/repos/acme/hod": "hod", "/repos/acme/web": "web"}[repo]
+}
+
+func (prefixConfig) RepoTracker(repo string) (string, string) {
+	return "acme/" + filepath.Base(repo), KindLocal
 }
 
 // fakeLocal is the highest n of each prefix among the Local Issue files.

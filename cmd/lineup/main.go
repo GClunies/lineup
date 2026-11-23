@@ -25,7 +25,8 @@ const usage = `usage: lineup [command]
   lineup logout github         stop using GitHub Issues as a Tracker
   lineup trackers              name the Trackers that are on
   lineup config migrate        rewrite the config file from [[repos]] tables to roots
-                               and [repos."owner/repo"] tables
+                               and [repos."owner/repo"] tables, and from trackers
+                               lists to tracker keys
 
   lineup add <ISSUE>           put an Issue on the Board: ENG-614, owner/repo#12, local-7, or hod-3
   lineup add --repo <repo> "<text>"

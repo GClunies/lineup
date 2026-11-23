@@ -252,7 +252,7 @@ func TestAPrefixedLocalIssueMapsToItsPrefixesRepo(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	hod := gitCheckout(t, filepath.Join(home, "repos", "gclunies", "hod"), "git@github.com:gclunies/hod.git")
-	cfg := loadConfig(t, "roots = [\"~/repos\"]\n[repos.\"gclunies/hod\"]\ntrackers = [\"local\"]\nprefix = \"hod\"\n")
+	cfg := loadConfig(t, "roots = [\"~/repos\"]\n[repos.\"gclunies/hod\"]\ntracker = \"local\"\nprefix = \"hod\"\n")
 	l := localTracker{s: localissues.Store{Dir: t.TempDir(), Prefixes: cfg.Prefixes()}}
 	if err := os.WriteFile(filepath.Join(l.s.Dir, "hod-3.md"), []byte("---\ntitle: Block Linear writes\nstatus: todo\n---\n"), 0o644); err != nil {
 		t.Fatal(err)

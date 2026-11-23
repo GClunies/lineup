@@ -162,7 +162,7 @@ func TestTheRepoPickerFiltersAndRemembersTheRepoOfTheProject(t *testing.T) {
 }
 
 // The Repo picker asks for the Repos of the row's Kind, so it offers no Repo
-// that is locked to other Trackers.
+// of another Tracker.
 func TestTheRepoPickerAsksForTheReposOfTheRowsKind(t *testing.T) {
 	e := startEnv(t)
 	e.sched.errs["add"] = errors.New(noMapping + " for ENG-9: pass a repo")
