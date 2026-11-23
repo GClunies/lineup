@@ -777,10 +777,10 @@ func splitCall(calls string) string {
 // (PROD-TABS-018).
 func TestTheLayoutSetsTheSplitOfTheHubTab(t *testing.T) {
 	for _, l := range []struct{ name, config, want string }{
-		{"no config file", "", "--split left --ratio 30"},
-		{"left", "[layout]\nagent_side = \"left\"\nagent_size = 40\n", "--split left --ratio 40"},
+		{"no config file", "", "--split left --ratio 50"},
+		{"left", "[layout]\nagent_side = \"left\"\nagent_size = 35\n", "--split left --ratio 35"},
 		{"right", "[layout]\nagent_side = \"right\"\nagent_size = 25\n", "--split right --ratio 25"},
-		{"top", "[layout]\nagent_side = \"top\"\nagent_size = 50\n", "--split above --ratio 50"},
+		{"top", "[layout]\nagent_side = \"top\"\nagent_size = 60\n", "--split above --ratio 60"},
 		{"bottom", "[layout]\nagent_side = \"bottom\"\nagent_size = 90\n", "--split below --ratio 90"},
 	} {
 		for _, tab := range []struct {

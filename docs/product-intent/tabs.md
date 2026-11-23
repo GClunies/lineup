@@ -4,7 +4,7 @@ This document states the current intended experience for where Tasks live in Rex
 
 ## PROD-TABS-001: The Hub is one tab with the Board and the Orchestrator
 
-The Hub is the Rex session `my-lineup`, with one tab, `lineup`. The tab holds the Board and the Orchestrator's `LINEUP` pane, which has its own background color. By default, the `LINEUP` pane takes the left 30% of the width, and the Board takes the rest. `lineup` opens the Hub and creates the session when it is missing. `lineup` also brings a Hub of an older form to this layout and keeps the Orchestrator's conversation. The Scheduler has no tab.
+The Hub is the Rex session `my-lineup`, with one tab, `lineup`. The tab holds the Board and the Orchestrator's `LINEUP` pane, which has its own background color. By default, the `LINEUP` pane takes the left half of the tab, and the Board takes the right half. `lineup` opens the Hub and creates the session when it is missing. `lineup` also brings a Hub of an older form to this layout and keeps the Orchestrator's conversation. The Scheduler has no tab.
 
 ## PROD-TABS-002: Each Repo has its own Rex session
 
@@ -72,4 +72,4 @@ When `lineup` or `lineup restart` must reopen the Hub tab that it runs in, a bac
 
 ## PROD-TABS-018: The config file sets the split of the Hub tab
 
-`agent_side` in the `[layout]` table puts the `LINEUP` pane on the `left`, `right`, `top`, or `bottom` of the `lineup` tab, and the Board takes the other side. `agent_size` gives the pane 10 to 90 percent of the width for `left` or `right`, or of the height for `top` or `bottom`. The defaults are `left` and 30. A new Hub tab and a reopened Hub tab both use the table. A bad value stops the config load.
+`agent_side` in the `[layout]` table puts the `LINEUP` pane on the `left`, `right`, `top`, or `bottom` of the `lineup` tab, and the Board takes the other side. `agent_size` gives the pane 10 to 90 percent of the width for `left` or `right`, or of the height for `top` or `bottom`. The defaults are `left` and 50. A new Hub tab and a reopened Hub tab both use the table. A bad value stops the config load.

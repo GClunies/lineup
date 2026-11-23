@@ -39,10 +39,10 @@ type layoutFile struct {
 	AgentSize *int       `toml:"agent_size"`
 }
 
-// resolve is the table's layout, by default left and 30. The error names
+// resolve is the table's layout, by default left and 50. The error names
 // the bad key.
 func (f layoutFile) resolve() (Layout, error) {
-	l := Layout{AgentSide: AgentLeft, AgentSize: 30}
+	l := Layout{AgentSide: AgentLeft, AgentSize: 50}
 	if s := f.AgentSide; s != nil {
 		if !slices.Contains(agentSides, *s) {
 			names := make([]string, len(agentSides))

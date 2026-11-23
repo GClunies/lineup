@@ -1092,8 +1092,8 @@ func TestBadMergedConfigFailsAtLoad(t *testing.T) {
 	}
 }
 
-func TestTheLayoutPutsTheAgentOnTheLeftAtThirtyPercentByDefault(t *testing.T) {
-	want := Layout{AgentSide: AgentLeft, AgentSize: 30}
+func TestTheLayoutPutsTheAgentOnTheLeftHalfByDefault(t *testing.T) {
+	want := Layout{AgentSide: AgentLeft, AgentSize: 50}
 	g, err := Load(filepath.Join(t.TempDir(), "none.toml"))
 	if err != nil {
 		t.Fatal(err)
@@ -1112,9 +1112,9 @@ func TestTheLayoutSetsTheSideAndTheSizeOfTheAgentPane(t *testing.T) {
 	for text, want := range map[string]Layout{
 		"[layout]\nagent_side = \"left\"\nagent_size = 10\n":   {AgentSide: AgentLeft, AgentSize: 10},
 		"[layout]\nagent_side = \"right\"\nagent_size = 90\n":  {AgentSide: AgentRight, AgentSize: 90},
-		"[layout]\nagent_side = \"top\"\n":                     {AgentSide: AgentTop, AgentSize: 30},
+		"[layout]\nagent_side = \"top\"\n":                     {AgentSide: AgentTop, AgentSize: 50},
 		"[layout]\nagent_side = \"bottom\"\nagent_size = 45\n": {AgentSide: AgentBottom, AgentSize: 45},
-		"[layout]\nagent_size = 50\n":                          {AgentSide: AgentLeft, AgentSize: 50},
+		"[layout]\nagent_size = 60\n":                          {AgentSide: AgentLeft, AgentSize: 60},
 	} {
 		if got := load(t, text).Layout(); got != want {
 			t.Errorf("%q: %+v, want %+v", text, got, want)
