@@ -1091,3 +1091,46 @@ func TestBadMergedConfigFailsAtLoad(t *testing.T) {
 		}
 	}
 }
+
+func TestTheLayoutPutsTheAgentOnTheLeftHalfByDefault(t *testing.T) {
+	want := Layout{AgentSide: AgentLeft, AgentSize: 50}
+	g, err := Load(filepath.Join(t.TempDir(), "none.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := g.Layout(); got != want {
+		t.Errorf("no file: %+v, want %+v", got, want)
+	}
+	for name, text := range map[string]string{"no table": "start_skills = [\"a\"]\n", "an empty table": "[layout]\n"} {
+		if got := load(t, text).Layout(); got != want {
+			t.Errorf("%s: %+v, want %+v", name, got, want)
+		}
+	}
+}
+
+func TestTheLayoutSetsTheSideAndTheSizeOfTheAgentPane(t *testing.T) {
+	for text, want := range map[string]Layout{
+		"[layout]\nagent_side = \"left\"\nagent_size = 10\n":   {AgentSide: AgentLeft, AgentSize: 10},
+		"[layout]\nagent_side = \"right\"\nagent_size = 90\n":  {AgentSide: AgentRight, AgentSize: 90},
+		"[layout]\nagent_side = \"top\"\n":                     {AgentSide: AgentTop, AgentSize: 50},
+		"[layout]\nagent_side = \"bottom\"\nagent_size = 45\n": {AgentSide: AgentBottom, AgentSize: 45},
+		"[layout]\nagent_size = 60\n":                          {AgentSide: AgentLeft, AgentSize: 60},
+	} {
+		if got := load(t, text).Layout(); got != want {
+			t.Errorf("%q: %+v, want %+v", text, got, want)
+		}
+	}
+}
+
+func TestBadLayoutFailsAtLoad(t *testing.T) {
+	for text, want := range map[string]string{
+		"[layout]\nagent_side = \"middle\"\n": `layout.agent_side: "middle" is not one of left, right, top, bottom`,
+		"[layout]\nagent_size = 9\n":          "layout.agent_size: 9 is not between 10 and 90",
+		"[layout]\nagent_size = 91\n":         "layout.agent_size: 91 is not between 10 and 90",
+		"[layout]\nagent_pane = \"left\"\n":   "unknown keys: layout.agent_pane",
+	} {
+		if err := loadErr(t, text); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err %v, want %q", text, err, want)
+		}
+	}
+}

@@ -774,3 +774,74 @@ func TestConfigMigrateRewritesTheConfigFile(t *testing.T) {
 		t.Errorf("lineup config with no sub-command: %v, want a usage error", err)
 	}
 }
+
+// splitCall is the rex split call that opened the agent pane, or "".
+func splitCall(calls string) string {
+	for _, line := range strings.Split(calls, "\n") {
+		if strings.HasPrefix(line, "split -s") {
+			return line
+		}
+	}
+	return ""
+}
+
+// The [layout] table sets the split of a new Hub tab and of a reopened one
+// (PROD-TABS-018).
+func TestTheLayoutSetsTheSplitOfTheHubTab(t *testing.T) {
+	for _, l := range []struct{ name, config, want string }{
+		{"no config file", "", "--split left --ratio 50"},
+		{"left", "[layout]\nagent_side = \"left\"\nagent_size = 35\n", "--split left --ratio 35"},
+		{"right", "[layout]\nagent_side = \"right\"\nagent_size = 25\n", "--split right --ratio 25"},
+		{"top", "[layout]\nagent_side = \"top\"\nagent_size = 60\n", "--split above --ratio 60"},
+		{"bottom", "[layout]\nagent_side = \"bottom\"\nagent_size = 90\n", "--split below --ratio 90"},
+	} {
+		for _, tab := range []struct {
+			name, blocks string
+			mode         hubMode
+		}{
+			{"a new Hub", "", hubRepair},
+			{"lineup restart", livePanes, hubFresh},
+			{"a tab that Rex restored", restoredBoard, hubRepair},
+		} {
+			t.Run(l.name+" in "+tab.name, func(t *testing.T) {
+				log := fakeHubRex(t, tab.blocks)
+				if l.config != "" {
+					if err := os.WriteFile(os.Getenv("LINEUP_CONFIG"), []byte(l.config), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := openHub(tab.mode); err != nil {
+					t.Fatal(err)
+				}
+				calls := rexCalls(t, log)
+				want := "split -s my-lineup -b b9 " + l.want + " --focus=false "
+				if got := splitCall(calls); !strings.HasPrefix(got, want) {
+					t.Errorf("the agent pane opened with %q, want %q:\n%s", got, want, calls)
+				}
+			})
+		}
+	}
+}
+
+func TestABadLayoutStopsLineupBeforeItChangesTheHub(t *testing.T) {
+	for _, c := range []struct{ name, blocks string }{
+		{"no Hub", ""},
+		{"a tab that Rex restored", restoredBoard},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			log := fakeHubRex(t, c.blocks)
+			if err := os.WriteFile(os.Getenv("LINEUP_CONFIG"), []byte("[layout]\nagent_side = \"middle\"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := openHub(hubRepair); err == nil || !strings.Contains(err.Error(), "layout.agent_side") {
+				t.Fatalf("openHub = %v, want an error that names layout.agent_side", err)
+			}
+			calls := rexCalls(t, log)
+			for _, change := range []string{"session new", "window close", "window new", "split"} {
+				if strings.Contains(calls, change) {
+					t.Errorf("lineup ran rex %s on a bad layout:\n%s", change, calls)
+				}
+			}
+		})
+	}
+}
