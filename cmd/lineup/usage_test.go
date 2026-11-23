@@ -10,7 +10,6 @@ import (
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
-// spent is the usage of ah-64 on 22 Nov 2026.
 var spent = scheduler.Usage{Input: 268, Output: 83615, CacheWrite: 634187, CacheRead: 22427257, AgentSeconds: 18752}
 
 func TestLineupShowPrintsTheUsage(t *testing.T) {
@@ -52,8 +51,6 @@ func TestLineupLsJSONPrintsEachTasksUsage(t *testing.T) {
 	}
 }
 
-// Hooks run lineup ready and lineup decide on each Orchestrator turn, so
-// they never ask the Scheduler to read transcripts.
 func TestOnlyLineupLsJSONAsksForUsage(t *testing.T) {
 	for _, c := range []struct {
 		name string

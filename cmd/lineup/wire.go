@@ -326,7 +326,7 @@ func (p harnessPort) HasConversation(ctx context.Context, w scheduler.WorkerSpec
 }
 
 // Usage runs direnv once for each Repo, not once for each Task, because each
-// run loads the Repo's .envrc. It reads the transcripts side by side.
+// run loads the Repo's .envrc.
 func (p harnessPort) Usage(ctx context.Context, ws []scheduler.WorkerSpec) []*scheduler.Usage {
 	dirs := map[string]func() (string, error){}
 	for _, w := range ws {

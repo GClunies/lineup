@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-// serve answers on a socket, as lineup serve does, and returns its client.
 func (h *harness) serve() Client {
 	h.t.Helper()
 	dir, err := os.MkdirTemp("", "lu") // a socket path must be short
@@ -29,13 +28,10 @@ func (h *harness) serve() Client {
 	return c
 }
 
-// spent is the usage of ENG-1's conversation. ENG-2 has none.
 var spent = Usage{Input: 280, Output: 87911, CacheWrite: 638890, CacheRead: 23340576, AgentSeconds: 1112}
 
 const spentJSON = `{"input_tokens":280,"output_tokens":87911,"cache_write_tokens":638890,"cache_read_tokens":23340576,"agent_seconds":1112}`
 
-// usageBoard holds ENG-1, a Working Task whose transcript the Harness reads,
-// and ENG-2, a Queued Task with no conversation.
 func usageBoard(t *testing.T) *harness {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.working()
@@ -49,7 +45,6 @@ func usageBoard(t *testing.T) *harness {
 	return h
 }
 
-// lsUsage is the usage JSON of each Task that ls prints.
 func lsUsage(t *testing.T, c Client, req Request) map[string]string {
 	t.Helper()
 	var v struct{ Tasks []map[string]json.RawMessage }
@@ -107,7 +102,6 @@ func TestShowGivesTheTaskItsUsage(t *testing.T) {
 	}
 }
 
-// A slow transcript read does not hold the loop, so the Board's view goes on.
 func TestAUsageReadDoesNotHoldTheLoop(t *testing.T) {
 	h := usageBoard(t)
 	hold := make(chan struct{})

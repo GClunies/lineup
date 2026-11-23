@@ -19,7 +19,6 @@ type Usage struct {
 	AgentTime time.Duration
 }
 
-// tokens is the usage of one API message.
 type tokens struct {
 	Input      int64 `json:"input_tokens"`
 	Output     int64 `json:"output_tokens"`
@@ -27,7 +26,6 @@ type tokens struct {
 	CacheRead  int64 `json:"cache_read_input_tokens"`
 }
 
-// entry is the part of a transcript line that usage reads.
 type entry struct {
 	Type       string `json:"type"`
 	Subtype    string `json:"subtype"`
@@ -82,15 +80,11 @@ func ReadUsage(configDir, id string) (*Usage, error) {
 	return &u, nil
 }
 
-// tally holds each message's tokens by its ID, and each turn's duration by
-// the ID of its entry.
 type tally struct {
 	messages map[string]tokens
 	turns    map[string]time.Duration
 }
 
-// read adds the entries of one file. Only a main file, the conversation's
-// own, adds turns.
 func (t tally) read(path string, main bool) error {
 	f, err := os.Open(path)
 	if err != nil {

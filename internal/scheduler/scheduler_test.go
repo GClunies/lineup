@@ -550,15 +550,11 @@ type fakeHarness struct {
 	// gone lists the conversations that HasConversation does not find.
 	gone []string
 	// trusted lists each folder that Prepare trusted.
-	trusted []string
-	specs   []WorkerSpec
-	// usage is what Usage gives for each conversation. Any other conversation
-	// has unknown usage.
-	usage map[string]*Usage
-	// usageCalls counts the calls of Usage.
+	trusted    []string
+	specs      []WorkerSpec
+	usage      map[string]*Usage
 	usageCalls int
-	// usageHold makes Usage wait for the channel to close.
-	usageHold chan struct{}
+	usageHold  chan struct{}
 }
 
 func (h *fakeHarness) Prepare(_ context.Context, _, worktree string) error {

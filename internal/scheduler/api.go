@@ -33,8 +33,7 @@ type Request struct {
 	OverCap bool   `json:"over_cap,omitempty"`
 	// URL is the PR that a review op names.
 	URL string `json:"url,omitempty"`
-	// Usage asks ls for each Task's usage. The hooks that run lineup ready
-	// and lineup decide on each Orchestrator turn leave it out.
+	// Usage asks ls for each Task's usage.
 	Usage bool `json:"usage,omitempty"`
 }
 

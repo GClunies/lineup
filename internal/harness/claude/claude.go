@@ -53,7 +53,7 @@ func HasConversation(configDir, id string) bool {
 }
 
 // conversationFiles lists the files of the conversation and of its subagents
-// in the profile folder, "" for ~/.claude. A conversation is the file
+// in the profile folder. A conversation is the file
 // projects/<folder>/<id>.jsonl, and the folder name comes from the Worker's
 // own folder, so it matches any folder. A resume from another folder writes
 // a file there with the same ID. A subagent writes

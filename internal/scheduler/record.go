@@ -254,8 +254,6 @@ func (u *Usage) Lines() []string {
 	}
 }
 
-// tokenCount is n in full under 1000, and otherwise n in three significant
-// digits with k or M. Each bound is the first n that rounds to one more digit.
 func tokenCount(n int64) string {
 	switch {
 	case n < 1_000:
@@ -274,8 +272,6 @@ func tokenCount(n int64) string {
 	return fmt.Sprintf("%.0fM", float64(n)/1e6)
 }
 
-// agentTime is the time in hours and minutes, in minutes under an hour, and
-// in seconds under a minute.
 func agentTime(s int64) string {
 	switch {
 	case s >= 3600:
@@ -360,9 +356,6 @@ func (r *Record) done() doneState {
 	return doneOther
 }
 
-// usageSpec is what the Harness needs to read the Task's usage. ls and show
-// copy it on the loop and pass it to the Harness after, because the Harness
-// reads files.
 func (r *Record) usageSpec() WorkerSpec {
 	return WorkerSpec{Task: r.ID, Repo: r.Repo, Conversation: r.Conversation}
 }
