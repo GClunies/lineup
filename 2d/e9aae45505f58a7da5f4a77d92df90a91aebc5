@@ -1,0 +1,115 @@
+internal/board/filter_test.go
+  s_62e3808e7f1359::t_1297a029d3d66f 65
+  s_59f22b65e91f8e::t_b8fe51622bfe72 44,52,66,71-75
+internal/board/groups_test.go
+  s_62e3808e7f1359::t_ae371d88e0d0a1 100
+  s_59f22b65e91f8e::t_3f0decf559c15c 5,7,65-96,110,122,136,153,175,296,299,304,323,341,362-363,378,383,385,392,396,400,421
+internal/board/issues_test.go
+  s_62e3808e7f1359::t_cebcb6bc0adc3c 280
+internal/board/view_test.go
+  s_62e3808e7f1359::t_72aee972022570 280-333
+  s_62e3808e7f1359::t_af68519375e511 9,12,233-279,334-347
+internal/scheduler/merged_test.go
+  s_62e3808e7f1359::t_8e800abdfc52c8 30-50,305-311
+  s_62e3808e7f1359::t_e27f5b10cb0b7a 265-297,321-330
+  s_62e3808e7f1359::t_9925d4bf473863 1-29,51-264,298-304,312-320,331-400
+internal/board/issuekind_test.go
+  s_62e3808e7f1359::t_0bf3af8e004c68 123
+internal/board/capture_test.go
+  s_62e3808e7f1359::t_0c1ebabecf593b 80,111
+  s_59f22b65e91f8e::t_8f095a53e09374 64,69,76
+GLOSSARY.md
+  s_62e3808e7f1359::t_78afeefbde1c19 50,88
+cmd/lineup/ls_test.go
+  s_62e3808e7f1359::t_4dc1257445de26 1-27
+cmd/lineup/review_test.go
+  s_62e3808e7f1359::t_94b38e89725734 129-151,157
+cmd/lineup/rex/lineup.lua
+  s_62e3808e7f1359::t_f169ad82367ed3 83-89,206
+cmd/lineup/serve.go
+  s_62e3808e7f1359::t_0aa9c51e6c70f3 114-125
+cmd/lineup/wire.go
+  s_62e3808e7f1359::t_8009aebe84294b 241-245,278,304-305,314
+cmd/lineup/wire_test.go
+  s_62e3808e7f1359::t_8a22ac332d3d64 287-299
+docs/adr/0017-the-user-closes-every-task-tab.md
+  s_62e3808e7f1359::t_646e72875ded7d 5-6
+docs/adr/0033-lineup-closes-a-merged-tab-when-the-user-turns-it-on.md
+  s_62e3808e7f1359::t_1a1cea29827e89 1-27
+docs/spec/mvp.md
+  s_62e3808e7f1359::t_ea437c9e221343 15,106,108-109,314-316,348-353,391,496-523,615,619,632,686,690,773-778
+docs/spec/one-board.md
+  s_59f22b65e91f8e::t_f3cc9d5aff1fc4 31,33,35,38,42,44,46,48,55,91-103,138,150,178,180,238-256,258,260,262,279,333-338,346
+docs/spec/reviews.md
+  s_62e3808e7f1359::t_48cddff235d25b 30
+internal/board/board_test.go
+  s_62e3808e7f1359::t_fe677ca3659feb 368,385,401,423,432-433,894,899,904-981,1105-1133
+internal/board/followup_test.go
+  s_62e3808e7f1359::t_dc1bed3c45b2c8 63,75,78,98,128,131-132,155,174-189
+internal/board/github_test.go
+  s_62e3808e7f1359::t_ce974ee6b18952 127
+internal/board/model.go
+  s_62e3808e7f1359::t_570becf7cccef1 318-320,323
+internal/board/mouse.go
+  s_62e3808e7f1359::t_1a78e815c1416e 10-11,70,72
+internal/board/mouse_test.go
+  s_62e3808e7f1359::t_0c868aef58ffd8 94,96,98,100
+internal/board/status_test.go
+  s_62e3808e7f1359::t_ea3b5d46f91792 95-96,181-183
+internal/board/view.go
+  s_62e3808e7f1359::t_d7384a9d017cfd 27,89-91,93,95,98-115,119,122-136,240,251-256,393,549,555-556,558,560,562-563,565-566,593
+internal/config/config.go
+  s_62e3808e7f1359::t_a804cec3e5c592 34-38,184-209,315-324,403-405
+internal/config/config_test.go
+  s_62e3808e7f1359::t_123b3cb4a5ad09 1040-1065
+internal/harness/claude/claude.go
+  s_62e3808e7f1359::t_bb19b5dee5ec58 170-177,190-192,209-217
+internal/harness/claude/claude_test.go
+  s_62e3808e7f1359::t_306e28b0b8c366 180,185,313,324,331-353,357,362
+internal/scheduler/api.go
+  s_62e3808e7f1359::t_8a24f46d3ae2c5 186,351,384-386
+internal/scheduler/deliver.go
+  s_62e3808e7f1359::t_e133c8f6977880 90,113,124-125,129-134,176-179
+internal/scheduler/note_test.go
+  s_62e3808e7f1359::t_ea984c13ba42e8 5,30-39,59-62,79-90
+internal/scheduler/open.go
+  s_62e3808e7f1359::t_6d9e98640a9a0c 67,74,79-82
+internal/scheduler/ports.go
+  s_62e3808e7f1359::t_2b869fae721ee9 6,108-111,116-117,131-134,159-162
+internal/scheduler/record.go
+  s_62e3808e7f1359::t_88fe90554847c3 77-79,81-86,131-183,223-225,237-240,265-301,309,387-388,397-409
+internal/scheduler/record_test.go
+  s_62e3808e7f1359::t_e6a0e00d62ac36 71-91
+internal/scheduler/scheduler.go
+  s_62e3808e7f1359::t_3cbe96fe33cd7d 56-60,202,247-249,280-294,529-530,545-546,548-550,558,560-586,918-919,940-941,946-959,986,1012-1052,1083-1084,1087-1090,1094-1097
+internal/scheduler/scheduler_test.go
+  s_62e3808e7f1359::t_e15bf475884d26 34-35,249-256,497-499,536-538,542-547,1369-1408,1418-1432,1899-1910
+internal/worktree/worktree.go
+  s_62e3808e7f1359::t_a21b6b409db5d0 18-21,74-76,82-88
+internal/worktree/worktree_test.go
+  s_62e3808e7f1359::t_6e751c0eab43d0 5,90-117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2de9aae45505f58a7da5f4a77d92df90a91aebc5",
+  "prompts": {},
+  "sessions": {
+    "s_59f22b65e91f8e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebd739c9-7583-4350-b806-9bd20a91bffe",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_62e3808e7f1359": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc4c19bf-2d88-4b96-8b28-9396d6a5563c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
