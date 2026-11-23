@@ -1,12 +1,16 @@
 internal/board/issues.go
   s_fe8d4c1691a132::t_bccd4ee2990718 89-90
+  s_fe8d4c1691a132::t_e2667d19e53c4b 21-22,27,86-88
 cmd/lineup/hub_test.go
   s_fe8d4c1691a132::t_ac7ac87031a987 241
 internal/board/team_test.go
   s_fe8d4c1691a132::t_0dd08eb3b00dac 117-121
   s_fe8d4c1691a132::t_0a73d51c0d7a6e 101-102
+  s_fe8d4c1691a132::t_e5e819fad14b7c 71
+  s_fe8d4c1691a132::t_2e85f627b172f9 56-63,85
 internal/board/view.go
   s_fe8d4c1691a132::t_07ae022cd7b121 635
+  s_fe8d4c1691a132::t_d584d816bc82b1 634
 ---
 {
   "schema_version": "authorship/3.0.0",
