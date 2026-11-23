@@ -100,6 +100,8 @@ type Scheduler struct {
 	// members holds the logins of the queues' author teams, read at membersAt.
 	members   map[string][]string
 	membersAt time.Time
+	// sideChecks holds each Task whose side pane check waits on its lane.
+	sideChecks map[string]bool
 }
 
 type orphan struct {
@@ -118,7 +120,7 @@ func New(d Deps) (*Scheduler, error) {
 		d: d, inbox: make(chan func()), board: lifecycle.NewBoard(d.DefaultCap),
 		recs: map[string]*Record{}, lanes: map[string]chan func(context.Context){},
 		watchers: map[chan BoardView]struct{}{}, orphans: map[string][]orphan{},
-		repoLocks: map[string]*sync.Mutex{},
+		repoLocks: map[string]*sync.Mutex{}, sideChecks: map[string]bool{},
 	}
 	s.board.SharedSlots = d.Slots
 	for _, q := range d.Queues {
@@ -211,6 +213,7 @@ func (s *Scheduler) Run(ctx context.Context, events <-chan RexEvent) error {
 		case <-tick.C:
 			s.flagSilentPrompts()
 			s.tidy()
+			s.checkSides()
 			go s.poll(ctx, nil)
 		}
 	}
@@ -516,21 +519,6 @@ func (s *Scheduler) replay(id string) (replaced bool, steers []string) {
 		}
 	}
 	return replaced, steers
-}
-
-// openSide runs argv in a side pane beside the Worker. A failed split leaves
-// the Worker running.
-func (s *Scheduler) openSide(ctx context.Context, id, session, block, worktree string, argv []string) {
-	side, err := s.d.Rex.Split(ctx, session, block, worktree, argv)
-	if err != nil {
-		s.d.Log.Warn("side pane", "task", id, "err", err)
-		return
-	}
-	s.update(id, func(r *Record) {
-		if r.BlockID == block {
-			r.SideBlockID = side
-		}
-	})
 }
 
 // sessionEmpty reports whether a session holds no tabs. The user, or another
@@ -1005,10 +993,8 @@ func (s *Scheduler) recover(ctx context.Context) {
 		if live && !restored {
 			if r.Job == JobWorker {
 				s.readStatus(ctx, r)
-				if !blocks[r.SideBlockID] {
-					id, session, block, worktree, argv := r.ID, r.SessionID, r.BlockID, r.Worktree, r.sideCommand()
-					s.enqueue(id, func(ctx context.Context) { s.openSide(ctx, id, session, block, worktree, argv) })
-				}
+				id := r.ID
+				s.enqueue(id, func(ctx context.Context) { s.recoverSide(ctx, id) })
 			}
 			continue
 		}

@@ -48,7 +48,7 @@ After lineup removes the worktree of a Done build Task, `lineup open` and `enter
 
 ## PROD-WORKER-012: Each Worker tab shows the change beside the Worker
 
-Each Worker tab holds a side pane to the right of the Worker, half of the tab wide. The Worker keeps the focus. A build Task's pane shows the worktree's changes since the branch left the default branch, and updates live. A review Task's pane shows the PR's GitHub page in RexWeb, else the PR's diff in `hunk`. lineup opens the pane at each start and restore, and at its own start beside a live Worker that lost it. A close of the pane alone changes nothing on the Task. A failed split leaves the Worker without a pane.
+Each Worker tab holds a side pane to the right of the Worker, in the Task's own worktree. The pane opens half of the tab wide, and the Worker keeps the focus. A build Task's pane shows the worktree's changes since the branch left the default branch, and updates live. After a rebase or a merge of the default branch, the pane shows the changes since the new base within one poll. A review Task's pane shows the PR's GitHub page in RexWeb, else the PR's diff in `hunk`. A close of the pane alone changes nothing on the Task.
 
 ## PROD-WORKER-013: lineup shows what each Worker spent
 
@@ -57,3 +57,7 @@ lineup shows what the Worker of each Task spent: input, output, cache write, and
 ## PROD-WORKER-014: The name of each Worker names its Task
 
 lineup names each Worker after its tab label, which starts with the Task ID, or with `<repo>#<n>` for a GitHub Issue. So Claude's prompt box, its resume picker, and the terminal title show which Task each Worker works on.
+
+## PROD-WORKER-015: A Worker tab never holds a second side pane
+
+lineup opens a Worker's side pane at each start and restore of the Worker. At its own start, lineup finds the side panes in each live Worker's tab, keeps one, and closes the others. A plain split where the user started `hunk` counts as a side pane too. lineup replaces the kept pane when it shows another worktree or base, and opens one when none is left. When the Task's worktree is gone, its pane closes. A failed split leaves the Worker without a pane.
