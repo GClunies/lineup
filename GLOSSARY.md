@@ -70,6 +70,10 @@ _Avoid_: Ideas, inbox
 The Board group of the Done build Tasks whose Issues their Trackers still hold open, for example a Linear Issue in "Waiting for QA". The row's note is the Tracker state. When the Tracker closes the Issue, the row moves to Done.
 _Avoid_: Post-merge, awaiting QA
 
+**Team**:
+The Board group of the open Linear Issues of the user's teams that have no assignee, in a triage, backlog, or unstarted state. The teams are the keys of every `teams` list. `s` on a Team row assigns the Issue to the user and starts its Task.
+_Avoid_: Pool, unassigned
+
 **Destination**:
 Where a new Issue goes: the Local Tracker, or one Linear workspace, team, and optional Project. A capture defaults to the Local Tracker.
 _Avoid_: Target, location
@@ -85,7 +89,7 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The top of the `lineup` tab, above the Orchestrator. It lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Follow-up, Backlog, Up next, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless it still keeps its tab or its worktree.
+The top of the `lineup` tab, above the Orchestrator. It lists the build Tasks, the user's own Issues that have no Task, and the unassigned Issues of the user's teams, grouped as Needs you, Follow-up, Backlog, Team, Up next, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless it still keeps its tab or its worktree.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:

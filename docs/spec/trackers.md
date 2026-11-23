@@ -198,7 +198,7 @@ The description, in Markdown.
 
 ## The Board
 
-The work view shows the user's own Linear Issues, the local Issues, and the user's own GitHub Issues as Issue rows. `docs/spec/one-board.md` describes the rows and their keys.
+The work view shows the user's own Linear Issues, the unassigned Linear Issues of the user's teams, the local Issues, and the user's own GitHub Issues as Issue rows. `docs/spec/one-board.md` describes the rows and their keys.
 
 The Board reads GitHub Issues only while the GitHub Tracker is on. It checks `github.json` at each load, so a `lineup login github` or `lineup logout github` shows within 60 s. An open GitHub Issue is the user's own when either rule is true:
 
