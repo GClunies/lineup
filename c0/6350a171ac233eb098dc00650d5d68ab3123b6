@@ -1,0 +1,30 @@
+docs/spec/one-board.md
+  s_3b28055ecbdc0f::t_4f43f211fa1606 101
+  s_3b28055ecbdc0f::t_b46917cc332fc5 148,150
+  s_3b28055ecbdc0f::t_4ec21c891ccf81 298-303
+  s_3b28055ecbdc0f::t_1e407a53081398 55
+  s_3b28055ecbdc0f::t_8c452e749e47a3 32,34,36-37,39-41,43,45,47,49-52
+  s_3b28055ecbdc0f::t_10fda1bd9398c3 66-87,89
+  s_3b28055ecbdc0f::t_0e79be6062679b 88
+docs/spec/mvp.md
+  s_3b28055ecbdc0f::t_b3baccf9acf7b6 517,519-521,524-525,527,529-530,532,534-537
+  s_3b28055ecbdc0f::t_70f92a6451764e 542-544
+internal/board/view_test.go
+  s_3b28055ecbdc0f::t_bd6382ca063e5d 54-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c06350a171ac233eb098dc00650d5d68ab3123b6",
+  "prompts": {},
+  "sessions": {
+    "s_3b28055ecbdc0f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c32c2d84-afbb-49eb-9fa5-8182023a14e3",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
