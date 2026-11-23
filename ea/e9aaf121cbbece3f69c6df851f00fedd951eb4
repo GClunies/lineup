@@ -1,0 +1,152 @@
+cmd/lineup/agent/local.md
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 4,11,17,28,30-33,35
+internal/scheduler/add_test.go
+  s_1818a5989cfcac::t_da150c2776efbd 25
+  s_1818a5989cfcac::t_75eaf247317ad8 24
+cmd/lineup/review_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 441-442
+internal/config/config.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 132-134,136-137,142,145,147,153,156-159,364-367,414-415,430-435,450,467-468,476-481,487-490,507,510,514,954-957,959,961,975-981,994,1003,1009-1010,1020-1022,1024-1025,1031,1035
+internal/board/model.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 58
+internal/scheduler/api.go
+  s_1818a5989cfcac::t_dff8f1865885a3 378
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 135,137,245-259,263,265,286,343-348,376,382,442,458,462
+internal/scheduler/queue_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 183-186,211,242,259-260,272,281,325-326,333-334,337-339,342,356,361-362,394,399,406,415,417-418,421,436
+internal/scheduler/ports.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 187-190,205-213,269-271,276
+cmd/lineup/rex/lineup.lua
+  s_1818a5989cfcac::t_f746dfb6c1b119 223
+cmd/lineup/wire.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 338,529,599
+docs/spec/mvp.md
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 239,389,396,404,428,435-436,442,444,573
+cmd/lineup/decide_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 186,217
+internal/board/issues_test.go
+  s_1818a5989cfcac::t_fbca2d6415cb36 280,292
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 89-99,120,126-127,134,224-230,236,261,331-332,334,341-342,344,357,395,425,436-437,442,448,454
+cmd/lineup/open_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 13,23,26-27,29,47-49
+internal/store/store_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 90-119
+docs/spec/trackers.md
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 62,64-78,88,90,93-95,97,100-108,112,116,122,124,126,129,136,138,140,174,181,192,196,259-261
+internal/scheduler/merged_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 30-31,34,36,39,46-47,50,265-266,271,279-281,286,293-297,305-308,311,321,325,329-330
+cmd/lineup/cli.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 11,138-139,149,152-153
+  s_1818a5989cfcac::t_779640463a258b 154
+internal/board/issuekind_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 16,31,68,71,80,107,117,123,125-126,128-129,131,134,136-137,148,150,161,164,219,221
+internal/localissues/localissues_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 87,104,209,218,228-232
+internal/scheduler/api_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 95-96,100,202,210-237
+  s_1818a5989cfcac::t_44f189a564133a 238
+internal/scheduler/scheduler.go
+  s_1818a5989cfcac::t_59748beb8307ec 158-162
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 173-190
+  s_dae4353c4a0fc0::t_73231da5e232dc 191-192
+internal/scheduler/review.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 182,185
+internal/board/issues.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 85-86,92-93,112,117
+internal/store/store.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 110-127
+internal/config/migrate.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 8,19-22,28,32-33,66-218
+  s_1818a5989cfcac::t_2d6562f3fdd373 219
+internal/config/migrate_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 59,82-83,224-225,254-314,319
+docs/spec/one-board.md
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 37,40,113,177,224,324
+internal/board/groups_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 37,238
+  s_1818a5989cfcac::t_e700a5c48d64ed 100,148
+cmd/lineup/hub_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 450-452,457,459,466-467,474-475,483-484,489,493,495,497-504,508-509,512,516-517,522,524,531,540
+internal/board/followup_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 56,107,111
+internal/board/start_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 170
+internal/board/issuekind.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 190
+internal/board/board_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 611,618,622,1101-1102,1119,1122,1135
+cmd/lineup/hub.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 261,264-265,267-276,278-280,285,290,293-294,296-297,299-301,305-306
+internal/scheduler/scheduler_test.go
+  s_1818a5989cfcac::t_4e7dd2cd5072d5 1091
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 621-628,990,992,994,997-998,1000,1378,1386-1387,1389,1438-1439,1472,1478,1528-1530,1532-1533,1535,1537,1540-1541,1548-1549,1551,1557,1561,1566-1580,1919,1923-1924,2055,2075-2076
+internal/board/promote_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 19,28,47,60,62,68-69,100,102,121,125
+cmd/lineup/main.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 28-29,34
+  s_1818a5989cfcac::t_e1927577b5bc59 32-33
+cmd/lineup/agent/CLAUDE.md
+  s_1818a5989cfcac::t_f0572ed6c0bc5e 11,48
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 17,30,33-34,66,115
+internal/board/filter_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 65,76
+internal/board/capture_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 81-82,103,105,107,111,136,195,221-222,233
+cmd/lineup/wire_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 57,74-75,92,102,255,261,265,280-281,283-284
+cmd/lineup/service_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 292,295,301,319,339
+internal/scheduler/case_test.go
+  s_1818a5989cfcac::t_ad8f43c2a55b6d 98,100,107
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 1-97,99,101-106,108-111
+cmd/lineup/login_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 54-56
+internal/board/view_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 21,23,27,41,103,107,109,137,141,204,227,280,287-290,328,333
+internal/scheduler/review_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 118,122,142,147-148,154,160,162,165-166,178,187,200,215,218,221,225,230,232,251-252,274,293,304,318,333,339-340,343-344,357,373-374,382-383,388-389,397-400,464,466,468,503,510,512-513,516-517,541,543,555-556,566-567,596,601,605,618-619,631,633-634,637,721-723,761-762,771,781,783,789,935,937,949-950,961-962,972-974,987,991,1069-1071,1084,1087-1088,1093,1118,1120,1126,1144-1145,1150
+cmd/lineup/decide.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 121,123,126
+internal/config/testdata/migrate/before.json
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 46,98,150,202,248,294,340
+internal/scheduler/record_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 29-30,32-33,35-36,38-39,41-42,44-45,47-48,50-51,53-54
+internal/scheduler/skip_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 56,59,63,143,152-153,155-156,175-176,191-192,197-198,205-207,211,219,241,295,300,329,335-336,364-365,367-368,370
+docs/spec/reviews.md
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 145
+internal/localissues/localissues.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 3-5,50-54,65,72,74,85-86,97,115,164,335
+internal/scheduler/open.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 31-33,37,39
+internal/config/config_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 210,396,897,901,903,906,908-914,916-917,920-922,924-931,933-934,939,941-945,952-960,967,970,996-1008,1012-1022,1036
+GLOSSARY.md
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 21-23,54,58
+internal/scheduler/prefix_test.go
+  s_1818a5989cfcac::t_fe2882dc6dbf9b 15-16,23-26,41-42,56-57,73,75-78,84,94-96,98-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eae9aaf121cbbece3f69c6df851f00fedd951eb4",
+  "prompts": {},
+  "sessions": {
+    "s_1818a5989cfcac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a3fc8e6-5793-4a3f-9e11-3f14d84d32de",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_dae4353c4a0fc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a7909f97-d7e4-4e97-b846-f43f4021cdf8",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
