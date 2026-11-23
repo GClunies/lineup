@@ -4,6 +4,7 @@ docs/product-intent/service.md
   s_d440eb60b482fc::t_8834bd4ff2ca2a 7
 docs/product-intent/tabs.md
   s_d440eb60b482fc::t_1d48ddb85e8b2e 55-56,62-64,66-68,70-71
+  s_d440eb60b482fc::t_26e11156ebd055 60-61,65,69
 docs/product-intent/orchestrator.md
   s_d440eb60b482fc::t_4216da16b046d2 11
   s_d440eb60b482fc::t_801b396888a2fe 47
@@ -14,11 +15,14 @@ cmd/lineup/hub.go
   s_d440eb60b482fc::t_a4d1ee3d2f767c 491
   s_d440eb60b482fc::t_40692b8ffffd0a 48-49
   s_d440eb60b482fc::t_c73a53dca996c8 548
+  s_d440eb60b482fc::t_44697311289086 161
 CLAUDE.md
   s_d440eb60b482fc::t_7fd4e4b4157c8c 20
 docs/architecture-intent/orchestrator.md
   s_d440eb60b482fc::t_34219f74d0db26 34
   s_d440eb60b482fc::t_dc73b87893739b 28
+cmd/lineup/service.go
+  s_d440eb60b482fc::t_f239bb639e7087 284
 ---
 {
   "schema_version": "authorship/3.0.0",
