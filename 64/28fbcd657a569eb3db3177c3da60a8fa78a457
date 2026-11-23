@@ -1,0 +1,22 @@
+internal/config/migrate.go
+  s_62e3808e7f1359::t_09c00f59c9b427 164-179
+internal/config/migrate_test.go
+  s_62e3808e7f1359::t_fd67dd57805a5b 262,266-267
+  s_62e3808e7f1359::t_01f11147857a1f 281,286-287
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6428fbcd657a569eb3db3177c3da60a8fa78a457",
+  "prompts": {},
+  "sessions": {
+    "s_62e3808e7f1359": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc4c19bf-2d88-4b96-8b28-9396d6a5563c",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
