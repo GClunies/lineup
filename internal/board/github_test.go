@@ -131,6 +131,10 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 	if l := lineOf(t, out, "sandbox#14"); !strings.Contains(l, "unblocked") {
 		t.Errorf("the sandbox#14 row must show unblocked: %q", l)
 	}
+	e.m.sel = "octo/sandbox#11"
+	if f := footerAt(e.m, 200); !strings.Contains(f, "\n sandbox#11 · Ready · sandbox · blocked by #12\n") {
+		t.Errorf("the strip must name the blocker as #12:\n%s", f)
+	}
 }
 
 func TestAGitHubRowNeedsACheckoutWithItsRepoKeyInAnyCase(t *testing.T) {

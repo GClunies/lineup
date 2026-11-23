@@ -97,7 +97,7 @@ func TestATaskHidesOnlyTheIssueWithItsExactID(t *testing.T) {
 		if got := rowIDs(m.issues); !slices.Equal(got, []string{c.kept}) {
 			t.Errorf("Task %s: Issue rows %v, want only %s", c.task, got, c.kept)
 		}
-		out := ansi.Strip(m.View())
+		out := bodyOf(m)
 		if n := strings.Count(out, c.task); n != 1 {
 			t.Errorf("Task %s shows %d times, want once as the Task row:\n%s", c.task, n, out)
 		}

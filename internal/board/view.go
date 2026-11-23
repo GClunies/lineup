@@ -153,15 +153,74 @@ func (m Model) modeFooter() string {
 		switch {
 		case len(m.menu.items) > 0:
 			s = dim.Render(" tap an action, or j/k and enter   esc back")
-		case m.status != "" && m.statusE:
-			s = bad.Render(" " + m.status)
+		case !m.detail:
+			return m.strip()
 		case m.status != "":
-			s = good.Render(" " + m.status)
+			s = m.message()
 		default:
 			s = hintBar(m.width, m.boardHints())
 		}
 	}
 	return ansi.Truncate(s, m.width, "…")
+}
+
+// message is the Board message, in the bad style when it is an error.
+func (m Model) message() string {
+	if m.statusE {
+		return bad.Render(" " + m.status)
+	}
+	return good.Render(" " + m.status)
+}
+
+// strip is the footer under the rows: a rule, the title and the facts of the
+// selection, the Board message while it is set, and the key hints. The title
+// and the facts wrap, so that they show in full.
+func (m Model) strip() string {
+	w := max(m.width-1, 1)
+	lines := []string{dim.Render(" " + strings.Repeat("─", w))}
+	wrap := func(s string, style lipgloss.Style) {
+		if s == "" {
+			return
+		}
+		for _, l := range strings.Split(ansi.Wrap(s, w, ""), "\n") {
+			lines = append(lines, style.Render(" "+l))
+		}
+	}
+	title, facts := m.selection()
+	wrap(title, bold)
+	wrap(facts, lipgloss.NewStyle())
+	if m.status != "" {
+		lines = append(lines, ansi.Truncate(m.message(), m.width, "…"))
+	}
+	lines = append(lines, ansi.Truncate(hintBar(m.width, m.boardHints()), m.width, "…"))
+	return strings.Join(lines, "\n")
+}
+
+// selection is the title and the facts that the strip shows for the selected
+// row or heading. Both are empty when nothing is selected.
+func (m Model) selection() (title, facts string) {
+	join := func(fs ...string) string {
+		return strings.Join(slices.DeleteFunc(fs, func(f string) bool { return f == "" }), " · ")
+	}
+	if g, ok := headingName(m.sel); ok {
+		n := len(m.groupIDs(g))
+		if n == 1 {
+			return g, "1 row"
+		}
+		return g, fmt.Sprintf("%d rows", n)
+	}
+	if r, ok := m.currentIssue(); ok {
+		return r.Title, join(boardID(r.ID), r.Group, r.Repo, r.note())
+	}
+	t, ok := m.current()
+	if !ok {
+		return "", ""
+	}
+	pr := ""
+	if n := fmt.Sprintf("#%d", t.PRNumber); t.PRNumber != 0 && !strings.HasPrefix(t.Note, n) {
+		pr = n
+	}
+	return t.Title, join(boardID(t.ID), t.Stage, t.Repo, pr, t.Note)
 }
 
 type hint struct{ key, does string }

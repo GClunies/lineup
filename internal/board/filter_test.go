@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
 	"pgregory.net/rapid"
 )
 
@@ -19,7 +18,7 @@ func (e *workEnv) typeText(s string) {
 // screenIDs lists the Task and Issue IDs on the screen, top to bottom.
 func screenIDs(m Model, known []string) []string {
 	var ids []string
-	for _, l := range strings.Split(ansi.Strip(m.View()), "\n") {
+	for _, l := range strings.Split(bodyOf(m), "\n") {
 		f := strings.Fields(strings.TrimPrefix(strings.TrimSpace(l), "▸"))
 		if len(f) > 0 && slices.Contains(known, f[0]) {
 			ids = append(ids, f[0])

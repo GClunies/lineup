@@ -601,10 +601,17 @@ func TestSpeedBudget(t *testing.T) {
 	}
 }
 
+// footerAt is every line under the rows at the width, as the user sees it.
 func footerAt(m Model, width int) string {
 	m.width = width
-	lines := strings.Split(m.View(), "\n")
-	return ansi.Strip(lines[len(lines)-1])
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	return strings.Join(lines[2+m.bodyHeight():], "\n")
+}
+
+// bodyOf is the screen above the footer: the header and the rows.
+func bodyOf(m Model) string {
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	return strings.Join(lines[:2+m.bodyHeight()], "\n")
 }
 
 // The footer names the keys that work on the selected Task, and "? all keys"
@@ -643,15 +650,24 @@ func TestFooterShowsTheKeysForTheSelection(t *testing.T) {
 	}
 }
 
-func TestStatusGivesWayToHintsOnTheNextKey(t *testing.T) {
-	m := newModel(&fakeClient{}, fixture())
-	m.setStatus("start ENG-601 ok", false)
-	if f := footerAt(m, 100); !strings.Contains(f, "start ENG-601 ok") {
-		t.Fatalf("status not shown: %q", f)
+// The message of an action shows above the key hints, so both show at once.
+// The next key clears the message.
+func TestTheMessageShowsWithTheHintsUntilTheNextKey(t *testing.T) {
+	f := &fakeClient{}
+	m := exampleBoard()
+	m.client, m.sel = f, "ah-64"
+	m, cmd := press(m, "enter")
+	m = run(m, cmd)
+	if got := f.ops(); !slices.Equal(got, []string{"open"}) {
+		t.Fatalf("enter sent %v, want open", got)
 	}
-	m, _ = press(m, "j")
-	if f := footerAt(m, 100); !strings.HasSuffix(f, "? all keys") {
-		t.Fatalf("hints did not come back: %q", f)
+	lines := strings.Split(footerAt(m, 95), "\n")
+	if n := len(lines); n < 2 || lines[n-2] != " open ah-64 ok" || !strings.HasSuffix(lines[n-1], "? all keys") {
+		t.Fatalf("the strip must show the message, then the hints:\n%s", strings.Join(lines, "\n"))
+	}
+	m, _ = press(m, "k")
+	if f := footerAt(m, 95); strings.Contains(f, "open ah-64 ok") || !strings.HasSuffix(f, "? all keys") {
+		t.Fatalf("the next key must clear the message and keep the hints:\n%s", f)
 	}
 }
 
