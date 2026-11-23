@@ -118,9 +118,7 @@ fragment F on PullRequest {
     ... on StatusContext { context state }
   } } } } } }
   baseRef {
-    refUpdateRule { requiredStatusCheckContexts }
-    rules(first: 50) { nodes { type repositoryRuleset { enforcement }
-      parameters { ... on RequiredStatusChecksParameters { requiredStatusChecks { context } } } } }
+    ` + refRules + `
     target { ... on Commit { statusCheckRollup { state } } }
   }
   reviewThreads(first: 50) { totalCount nodes { isResolved
@@ -242,22 +240,7 @@ type gqlPR struct {
 		} `json:"nodes"`
 	} `json:"head"`
 	BaseRef *struct {
-		RefUpdateRule *struct {
-			RequiredStatusCheckContexts []string `json:"requiredStatusCheckContexts"`
-		} `json:"refUpdateRule"`
-		Rules struct {
-			Nodes []struct {
-				Type              string `json:"type"`
-				RepositoryRuleset *struct {
-					Enforcement string `json:"enforcement"`
-				} `json:"repositoryRuleset"`
-				Parameters struct {
-					RequiredStatusChecks []struct {
-						Context string `json:"context"`
-					} `json:"requiredStatusChecks"`
-				} `json:"parameters"`
-			} `json:"nodes"`
-		} `json:"rules"`
+		gqlRefRules
 		Target struct {
 			StatusCheckRollup *gqlRollup `json:"statusCheckRollup"`
 		} `json:"target"`
@@ -299,6 +282,32 @@ type gqlPR struct {
 			SubmittedAt time.Time  `json:"submittedAt"`
 		} `json:"nodes"`
 	} `json:"reviews"`
+}
+
+// refRules asks for a branch's rules, as gqlRefRules reads them.
+const refRules = `refUpdateRule { requiredStatusCheckContexts }
+    rules(first: 50) { nodes { type repositoryRuleset { enforcement }
+      parameters { ... on RequiredStatusChecksParameters { requiredStatusChecks { context } } } } }`
+
+// gqlRefRules are the rules of a branch: its classic branch protection, as
+// any reader sees it, and the rules of each ruleset.
+type gqlRefRules struct {
+	RefUpdateRule *struct {
+		RequiredStatusCheckContexts []string `json:"requiredStatusCheckContexts"`
+	} `json:"refUpdateRule"`
+	Rules struct {
+		Nodes []struct {
+			Type              string `json:"type"`
+			RepositoryRuleset *struct {
+				Enforcement string `json:"enforcement"`
+			} `json:"repositoryRuleset"`
+			Parameters struct {
+				RequiredStatusChecks []struct {
+					Context string `json:"context"`
+				} `json:"requiredStatusChecks"`
+			} `json:"parameters"`
+		} `json:"nodes"`
+	} `json:"rules"`
 }
 
 type gqlAuthor struct {
