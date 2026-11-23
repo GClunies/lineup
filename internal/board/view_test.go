@@ -321,3 +321,27 @@ func TestTheSelectionHasABackgroundOverTheFullWidth(t *testing.T) {
 		}
 	}
 }
+
+// A title shows as one line with no URL in the row, the strip, and the menu
+// of a tap.
+func TestARowShowsItsTitleAsOneLineWithNoURL(t *testing.T) {
+	adHoc := tv("ah-64", lifecycle.Working, "lineup", "Start a sessions to explore the ideas and UI here:\n- https:/", "", 5*time.Hour)
+	issue := mineIssue("ENG-900", "unstarted", 2)
+	issue.Title = "Read the notes at https://x.com/abc\nand more"
+	m := feed(newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{adHoc}}),
+		mineIssuesMsg{ws: linear.Workspace{ID: "w1", Name: "Crexi"}, live: true, issues: []linear.Issue{issue}})
+	for id, want := range map[string]string{"ah-64": "Start a sessions to explore the ideas and UI here", "ENG-900": "Read the notes at"} {
+		m.sel = id
+		out := screen(m)
+		if l := lineOf(t, out, id); !strings.Contains(l, want) || strings.Contains(l, "http") || strings.Contains(l, want+":") {
+			t.Errorf("%s: row %q, want the title %q", id, l, want)
+		}
+		if got := strip(m, 100); len(got) < 2 || got[1] != " "+want {
+			t.Errorf("%s: strip %q, want the title %q", id, got, want)
+		}
+		menu, _ := tap(t, m, id)
+		if got := strings.Split(screen(menu), "\n")[2]; got != " "+id+"  "+want {
+			t.Errorf("%s: the menu title is %q, want %q", id, got, id+"  "+want)
+		}
+	}
+}

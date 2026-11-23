@@ -1368,6 +1368,21 @@ func TestTaskWithNoIssueGetsAnAhID(t *testing.T) {
 	}
 }
 
+func TestATaskWithNoIssueTakesAPlainTitleCutAtAWord(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	for _, c := range []struct{ text, want string }{
+		{"Start a sessions to explore the ideas and UI here:\n- https://x.com/abc\n- more", "Start a sessions to explore the ideas and UI here"},
+		{"Move the nightly export job off the legacy pricing tables and onto the new views", "Move the nightly export job off the legacy pricing tables"},
+		{"Rename the config options, the flags, and the env variables: then the docs", "Rename the config options, the flags, and the env variables"},
+		{strings.Repeat("é", 70), strings.Repeat("é", 60)},
+	} {
+		v := h.do(Request{Op: "add", Repo: "web", Text: c.text}).(TaskView)
+		if got := h.task(v.ID).Title; got != c.want {
+			t.Errorf("text %q: title %q, want %q", c.text, got, c.want)
+		}
+	}
+}
+
 func TestTaskWithNoIssueOpensInItsRepoSession(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})

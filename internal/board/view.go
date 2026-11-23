@@ -211,7 +211,7 @@ func (m Model) selection() (title, facts string) {
 		return g, fmt.Sprintf("%d rows", n)
 	}
 	if r, ok := m.currentIssue(); ok {
-		return r.Title, join(boardID(r.ID), r.Group, r.Repo, r.note())
+		return scheduler.PlainTitle(r.Title), join(boardID(r.ID), r.Group, r.Repo, r.note())
 	}
 	t, ok := m.current()
 	if !ok {
@@ -227,7 +227,7 @@ func (m Model) selection() (title, facts string) {
 	if t.Group == groupFollowUp {
 		kept = t.WorktreeNote
 	}
-	return t.Title, join(boardID(t.ID), t.Stage, t.Repo, pr, t.Note, kept)
+	return scheduler.PlainTitle(t.Title), join(boardID(t.ID), t.Stage, t.Repo, pr, t.Note, kept)
 }
 
 type hint struct{ key, does string }
@@ -364,7 +364,7 @@ const (
 
 var columns = [numCols]column{
 	colID:     {task: func(_ Model, t scheduler.TaskView) string { return boardID(t.ID) }, issue: func(r issueRow) string { return boardID(r.ID) }},
-	colTitle:  {task: func(_ Model, t scheduler.TaskView) string { return t.Title }, issue: func(r issueRow) string { return r.Title }},
+	colTitle:  {task: func(_ Model, t scheduler.TaskView) string { return scheduler.PlainTitle(t.Title) }, issue: func(r issueRow) string { return scheduler.PlainTitle(r.Title) }},
 	colStatus: {task: func(_ Model, t scheduler.TaskView) string { return taskStatus(t) }, issue: issueRow.status},
 	colTail:   {drop: 3, task: func(m Model, t scheduler.TaskView) string { return m.age(t) }, issue: issueRow.priorityText},
 	colRepo:   {drop: 2, task: func(_ Model, t scheduler.TaskView) string { return t.Repo }, issue: func(r issueRow) string { return r.Repo }},
