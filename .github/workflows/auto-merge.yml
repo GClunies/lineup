@@ -10,16 +10,20 @@ name: Auto-merge
 # owner's, so the merge is credited to the owner. GitHub then deletes the
 # merged branch under the delete-branch-on-merge setting, which it skips for
 # a merge by github-actions[bot].
+#
+# GitHub runs no workflow for a PR that has a merge conflict, so a PR that
+# opens with one gets no run at its open. The job also runs on each push,
+# until auto-merge is armed, so the push that resolves the conflict arms it.
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, synchronize]
 
 permissions:
   contents: read
 
 jobs:
   enable:
-    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'synchronize' || github.event.pull_request.auto_merge == null) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
