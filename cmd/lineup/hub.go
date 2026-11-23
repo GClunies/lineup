@@ -121,15 +121,15 @@ type agentTab struct {
 
 // agentTabs are in Hub tab order.
 var agentTabs = []agentTab{
-	{"lineup", "BOARD", "LINEUP", []string{"board"}, agentRole, agentSettings, "#1b2733", composeAgent},
+	{hubSession, "BOARD", "LINEUP", []string{"board"}, agentRole, agentSettings, "#1b2733", composeAgent},
 }
 
 // activeTab is the tab that a new Hub opens on.
-const activeTab = "lineup"
+const activeTab = hubSession
 
-// formerLabels are the labels that a Hub tab had before a rename, by its
-// label now.
-var formerLabels = map[string]string{"lineup": "hub"}
+// formerLabels are the labels that a Hub tab had before a rename, newest
+// first, by its label now.
+var formerLabels = map[string][]string{hubSession: {"lineup", "hub"}}
 
 // retiredTabs are the labels of tabs that no longer exist. Their windows hold
 // a board with no agent, or a former agent, so openHub closes them.
@@ -140,12 +140,15 @@ var retiredTabs = []string{"orchestrate", "plan", "review"}
 // that runs there. openHub keeps a window that it does not know, so a new tab
 // beside the old one would run a second agent.
 func renamed(windows map[string]hubWindow, label string) (hubWindow, bool) {
-	old, ok := formerLabels[label]
-	if _, now := windows[label]; !ok || now {
+	if _, now := windows[label]; now {
 		return hubWindow{}, false
 	}
-	w, ok := windows[old]
-	return w, ok
+	for _, old := range formerLabels[label] {
+		if w, ok := windows[old]; ok {
+			return w, true
+		}
+	}
+	return hubWindow{}, false
 }
 
 // hubMode is how openHub treats each Hub tab that exists.
