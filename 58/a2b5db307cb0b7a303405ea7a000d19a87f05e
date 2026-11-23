@@ -69,10 +69,16 @@ docs/spec/one-board.md
   s_fe8d4c1691a132::t_6bbd6024ac0a89 39,55
   s_fe8d4c1691a132::t_82ecbc1d517661 117
   s_fe8d4c1691a132::t_ed9fce9447a573 78
+  s_fe8d4c1691a132::t_1d1212880b84e0 127
+  s_fe8d4c1691a132::t_6905ee373160a9 340
+  s_fe8d4c1691a132::t_413063035aeba9 62
+  s_fe8d4c1691a132::t_8dd5393085f16a 283
 GLOSSARY.md
   s_fe8d4c1691a132::t_69fcd3b2d92427 73-76
+  s_fe8d4c1691a132::t_88a8e92ca90ff8 92
 docs/spec/mvp.md
   s_fe8d4c1691a132::t_284ba966fec0d5 655
+  s_fe8d4c1691a132::t_bf6e4c8f8e60f3 523,651
 docs/spec/trackers.md
   s_fe8d4c1691a132::t_38043ee61bf0de 201
 ---
