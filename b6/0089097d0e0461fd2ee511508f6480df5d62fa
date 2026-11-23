@@ -1,0 +1,59 @@
+docs/spec/mvp.md
+  s_1818a5989cfcac::t_6be95b7cbed23c 94
+  s_1818a5989cfcac::t_f8f371269bd819 567
+  s_1818a5989cfcac::t_4607d8fd1be93f 602
+  s_1818a5989cfcac::t_162b74c49aa3ea 611
+  s_1818a5989cfcac::t_b64fc5bd8c9f8e 650
+  s_1818a5989cfcac::t_60456112885f40 649
+  s_1818a5989cfcac::t_1f577534ee244f 582
+  s_1818a5989cfcac::t_0c9c34cee2609e 63-64
+  s_1818a5989cfcac::t_305bad9e32033c 659
+  s_1818a5989cfcac::t_ad1230b90218b1 311-312
+  s_1818a5989cfcac::t_5600807d69682d 319-324,327
+  s_1818a5989cfcac::t_fe70828aecf4d8 468
+  s_1818a5989cfcac::t_ef47bf560f896e 354
+  s_1818a5989cfcac::t_b57ad649a01033 473
+cmd/lineup/hub_test.go
+  s_1818a5989cfcac::t_0f6ffb1580605e 97
+  s_1818a5989cfcac::t_dae9a262d665f3 162
+docs/spec/reviews.md
+  s_1818a5989cfcac::t_d63662a1350227 147
+  s_1818a5989cfcac::t_eccec6e54eae21 7
+  s_1818a5989cfcac::t_2c62ad5018a097 163
+  s_1818a5989cfcac::t_7f6f1b9cb6a4f4 128
+cmd/lineup/agent/CLAUDE.md
+  s_1818a5989cfcac::t_72094112526b2b 3
+  s_1818a5989cfcac::t_eb7957408440c7 9
+  s_1818a5989cfcac::t_eff49806281d90 14
+  s_1818a5989cfcac::t_e1c08b7ccded94 12
+  s_1818a5989cfcac::t_8ae5a95af9342a 10
+  s_1818a5989cfcac::t_5883d08c162b29 84-85
+  s_1818a5989cfcac::t_0520fce5653d70 36-37
+  s_1818a5989cfcac::t_867f8483aa323c 11
+  s_1818a5989cfcac::t_a8aa5786e78b29 13
+  s_1818a5989cfcac::t_422b5b59dfbefe 48
+  s_1818a5989cfcac::t_172e4029b77bc5 113
+GLOSSARY.md
+  s_1818a5989cfcac::t_d0e8ec787253a0 84
+  s_1818a5989cfcac::t_c9c2800e6e78ce 116
+docs/spec/one-board.md
+  s_1818a5989cfcac::t_af598229879fd9 191
+  s_1818a5989cfcac::t_ee9be0c23b6f79 196
+  s_1818a5989cfcac::t_afefb1d177efa1 74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b60089097d0e0461fd2ee511508f6480df5d62fa",
+  "prompts": {},
+  "sessions": {
+    "s_1818a5989cfcac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a3fc8e6-5793-4a3f-9e11-3f14d84d32de",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
