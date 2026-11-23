@@ -47,7 +47,7 @@ A PR that the user holds out of every review queue, at every head, until the use
 _Avoid_: Mute, snooze, ignore, hide
 
 **Task**:
-One unit of work on the Board, in exactly one Repo, done by one Worker in one isolated tab and worktree. A Task links to zero or one Issue, and it ends when its PR merges or the user closes it. A Task that ends goes to Done and keeps its tab and worktree. Only the user closes a Task's tab.
+One unit of work on the Board, in exactly one Repo, done by one Worker in one isolated tab and worktree. A Task links to zero or one Issue, and it ends when its PR merges or the user closes it. A Task that ends goes to Done. A build Task then keeps its tab and worktree until the user closes the tab. If the user turns it on, lineup closes a merged build Task's tab when its Worker is idle, and removes the worktree some days later. A review Task closes its tab at each end.
 _Avoid_: Job, thread, card, item
 
 **Ad hoc Task**:
@@ -81,7 +81,7 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The top of the `lineup` tab, above the Orchestrator. It lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless its tab is still open.
+The top of the `lineup` tab, above the Orchestrator. It lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless it still keeps its tab or its worktree.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:
