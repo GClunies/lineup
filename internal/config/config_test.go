@@ -418,6 +418,25 @@ func TestTildeExpansion(t *testing.T) {
 	}
 }
 
+func TestTeamKeysListEveryTeamsKeyOnceInOrder(t *testing.T) {
+	g := load(t, `
+[repos."crexi/web"]
+tracker = "linear"
+teams = ["PD", "WEB"]
+[repos."crexi/data"]
+tracker = "linear"
+teams = ["PD", "DE"]
+[repos."acme/api"]
+wip_cap = 2
+`)
+	if got, want := g.TeamKeys(), []string{"DE", "PD", "WEB"}; !slices.Equal(got, want) {
+		t.Errorf("TeamKeys = %q, want %q", got, want)
+	}
+	if got := load(t, "").TeamKeys(); len(got) != 0 {
+		t.Errorf("TeamKeys with no teams lists = %q, want none", got)
+	}
+}
+
 func TestLinearStatus(t *testing.T) {
 	g := load(t, `
 [linear.acme.status.ENG]

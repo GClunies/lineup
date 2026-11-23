@@ -13,6 +13,7 @@ var sections = []section{
 	{"needs_you", "Needs you"},
 	{"follow_up", "Follow-up"},
 	{"backlog", "Backlog"},
+	{"team", "Team"},
 	{"up_next", "Up next"},
 	{"working", "Working"},
 	{"waiting", "Waiting"},
@@ -83,7 +84,7 @@ func headings(name string, keys []string, banned string) ([]string, error) {
 }
 
 func resolveBoard(f boardFile) (Board, error) {
-	collapsed := []string{"backlog", "done"}
+	collapsed := []string{"backlog", "team", "done"}
 	if f.Collapsed != nil {
 		collapsed = *f.Collapsed
 	}

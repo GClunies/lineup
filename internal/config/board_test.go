@@ -10,8 +10,8 @@ import (
 
 func TestBoardDefaults(t *testing.T) {
 	want := Board{
-		Order:     []string{"Needs you", "Follow-up", "Backlog", "Up next", "Working", "Waiting", "Done"},
-		Collapsed: []string{"Backlog", "Done"},
+		Order:     []string{"Needs you", "Follow-up", "Backlog", "Team", "Up next", "Working", "Waiting", "Done"},
+		Collapsed: []string{"Backlog", "Team", "Done"},
 		Hidden:    []string{},
 	}
 	missing, err := Load(filepath.Join(t.TempDir(), "none.toml"))
@@ -32,9 +32,21 @@ order = ["done", "needs_you", "working", "waiting", "up_next", "backlog"]
 hidden = ["done"]
 `)
 	want := Board{
-		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Up next", "Backlog", "Follow-up"},
-		Collapsed: []string{"Backlog", "Done"},
+		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Up next", "Backlog", "Follow-up", "Team"},
+		Collapsed: []string{"Backlog", "Team", "Done"},
 		Hidden:    []string{"Done"},
+	}
+	if got, err := g.Board(); err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("board %+v, %v, want %+v", got, err, want)
+	}
+}
+
+func TestBoardTakesTheTeamSectionInEachList(t *testing.T) {
+	g := load(t, "[board]\norder = [\"team\", \"up_next\"]\ncollapsed = [\"team\"]\nhidden = [\"team\"]\n")
+	want := Board{
+		Order:     []string{"Team", "Up next", "Needs you", "Follow-up", "Backlog", "Working", "Waiting", "Done"},
+		Collapsed: []string{"Team"},
+		Hidden:    []string{"Team"},
 	}
 	if got, err := g.Board(); err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("board %+v, %v, want %+v", got, err, want)
@@ -47,7 +59,7 @@ func TestBoardEmptyCollapsedMeansNoneAndOrderKeepsTheRest(t *testing.T) {
 	if got := b.Collapsed; len(got) != 0 {
 		t.Fatalf("collapsed %v, want none", got)
 	}
-	want := []string{"Waiting", "Up next", "Needs you", "Follow-up", "Backlog", "Working", "Done"}
+	want := []string{"Waiting", "Up next", "Needs you", "Follow-up", "Backlog", "Team", "Working", "Done"}
 	if got := b.Order; !slices.Equal(got, want) {
 		t.Fatalf("order %v, want %v", got, want)
 	}
@@ -56,7 +68,7 @@ func TestBoardEmptyCollapsedMeansNoneAndOrderKeepsTheRest(t *testing.T) {
 func TestBoardTakesFollowUpInEveryList(t *testing.T) {
 	g := load(t, "[board]\norder = [\"waiting\", \"follow_up\"]\ncollapsed = [\"follow_up\"]\nhidden = [\"follow_up\", \"done\"]\n")
 	want := Board{
-		Order:     []string{"Waiting", "Follow-up", "Needs you", "Backlog", "Up next", "Working", "Done"},
+		Order:     []string{"Waiting", "Follow-up", "Needs you", "Backlog", "Team", "Up next", "Working", "Done"},
 		Collapsed: []string{"Follow-up"},
 		Hidden:    []string{"Follow-up", "Done"},
 	}
