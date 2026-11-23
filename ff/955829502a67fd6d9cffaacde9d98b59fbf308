@@ -1,0 +1,41 @@
+docs/architecture-intent/rex.md
+  s_d440eb60b482fc::t_5e77a1adaa132e 63-69
+docs/product-intent/service.md
+  s_d440eb60b482fc::t_8834bd4ff2ca2a 7
+docs/product-intent/tabs.md
+  s_d440eb60b482fc::t_1d48ddb85e8b2e 55-67
+docs/product-intent/orchestrator.md
+  s_d440eb60b482fc::t_4216da16b046d2 11
+  s_d440eb60b482fc::t_801b396888a2fe 47
+  s_d440eb60b482fc::t_eb37521a0ac054 48-51
+docs/product-intent/configuration.md
+  s_d440eb60b482fc::t_2915982bfee716 31
+cmd/lineup/hub.go
+  s_d440eb60b482fc::t_4c060b81da08b9 161
+  s_d440eb60b482fc::t_a4d1ee3d2f767c 491
+  s_d440eb60b482fc::t_40692b8ffffd0a 48-49
+  s_d440eb60b482fc::t_c73a53dca996c8 548
+CLAUDE.md
+  s_d440eb60b482fc::t_7fd4e4b4157c8c 20
+docs/architecture-intent/orchestrator.md
+  s_d440eb60b482fc::t_34219f74d0db26 34
+  s_d440eb60b482fc::t_dc73b87893739b 28
+cmd/lineup/service.go
+  s_d440eb60b482fc::t_15bdbdf30c4890 284
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ff955829502a67fd6d9cffaacde9d98b59fbf308",
+  "prompts": {},
+  "sessions": {
+    "s_d440eb60b482fc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cb0d5ef4-b485-4777-8905-3cde5f189000",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
