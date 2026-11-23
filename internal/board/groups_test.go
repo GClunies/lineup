@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -61,10 +62,19 @@ var userBoard = config.Board{
 
 func screen(m Model) string { return ansi.Strip(m.View()) }
 
-// hasHeading reports whether the screen shows the heading of group g.
-func hasHeading(out, g string) bool {
-	return regexp.MustCompile(`(?m)^[ ▸]` + regexp.QuoteMeta(g) + ` \d+`).MatchString(out)
+// headingCount is the count in the heading of group g on screen, or 0 when
+// the screen shows no heading of g.
+func headingCount(out, g string) int {
+	m := regexp.MustCompile(`(?m)^[ ▸]` + regexp.QuoteMeta(g) + ` (\d+)`).FindStringSubmatch(out)
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(m[1])
+	return n
 }
+
+// hasHeading reports whether the screen shows the heading of group g.
+func hasHeading(out, g string) bool { return headingCount(out, g) > 0 }
 
 func TestEachHeadingIsTheGroupNameInSentenceCaseAndItsCount(t *testing.T) {
 	e := groupEnv(t)
@@ -283,32 +293,18 @@ func TestRowIDsHoldEachHeadingAndTheRowsOfOpenGroupsOnce(t *testing.T) {
 	})
 }
 
-func TestTheHeaderDropsTheGroupCounts(t *testing.T) {
+func TestTheHeaderCountsNoGroupButWorking(t *testing.T) {
 	e := groupEnv(t)
 	h := ansi.Strip(e.m.header())
-	for _, gone := range []string{"working", "waiting", "queued", "ready", "backlog", "◐", "◷"} {
+	for _, gone := range []string{"need you", "waiting", "queued", "ready", "backlog", "◐", "◷"} {
 		if strings.Contains(h, gone) {
 			t.Errorf("header %q still shows %q", h, gone)
 		}
 	}
-	for _, want := range []string{"WIP 4/5", "●2 need you"} {
+	for _, want := range []string{"● 2 working", "WIP 4/5"} {
 		if !strings.Contains(h, want) {
 			t.Errorf("header %q lacks %q", h, want)
 		}
-	}
-}
-
-func TestTheHeaderFitsEightyColumnsWithTheWipOverflowAndTheReviewCount(t *testing.T) {
-	v := fixture()
-	v.OverCap = 1
-	flagged := rtv("R-3", lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour)
-	flagged.Flag, flagged.Group = "question", "Needs you"
-	v.Tasks = append(v.Tasks, flagged)
-	m := newModel(&fakeClient{}, v)
-	m.width = 80
-	h := ansi.Strip(m.header())
-	if !strings.Contains(h, "WIP 4/5 +1 over   ●2 need you (+1 in reviews)") || strings.Contains(h, "…") {
-		t.Fatalf("header %q is cut at 80 columns", h)
 	}
 }
 

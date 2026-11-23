@@ -234,6 +234,10 @@ type BoardView struct {
 	// Skips are the PRs that the user holds out of every review queue.
 	Skips []github.Skip `json:"skips,omitempty"`
 	Tasks []TaskView    `json:"tasks"`
+	// Done is the time that each Task reached Done in the last 48 hours,
+	// archived Tasks included, so that the header counts the Tasks done since
+	// yesterday.
+	Done []time.Time `json:"done,omitempty"`
 }
 
 // OfKind is the view with only the Tasks of Kind k. Each Hub tab shows one Kind.

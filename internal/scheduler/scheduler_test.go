@@ -1359,6 +1359,46 @@ func TestDoneTasksAgeOffTheBoard(t *testing.T) {
 	}
 }
 
+// The view holds the time that each Task reached Done in the last 48 hours,
+// an archived Task included, so that the Board can count the Tasks done since
+// 00:00 yesterday.
+func TestTheViewHoldsTheTimeOfEachTaskDoneInTheLast48Hours(t *testing.T) {
+	c := &clock{t: time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)}
+	seed := func(st *store.Store) {
+		for _, x := range []struct {
+			id       string
+			stage    lifecycle.Stage
+			age      time.Duration
+			archived bool
+		}{
+			{"ENG-1", lifecycle.Done, time.Hour, false},
+			{"ENG-2", lifecycle.Done, 20 * time.Hour, true},
+			{"ENG-3", lifecycle.Done, 30 * time.Hour, false},
+			{"ENG-4", lifecycle.Done, 47 * time.Hour, false},
+			{"ENG-5", lifecycle.Done, 72 * time.Hour, false},
+			{"ENG-6", lifecycle.Queued, time.Hour, false},
+		} {
+			r := Record{Task: lifecycle.Task{ID: x.id, Stage: x.stage, Policy: testPolicy}, Title: x.id,
+				StageSince: c.now().Add(-x.age), Archived: x.archived}
+			data, _ := json.Marshal(r)
+			st.Save(r.ID, data, nil)
+		}
+	}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, func(d *Deps) { d.Now = c.now })
+	v := h.do(Request{Op: "ls"}).(BoardView)
+	var ages []time.Duration
+	for _, at := range v.Done {
+		ages = append(ages, c.now().Sub(at))
+	}
+	slices.Sort(ages)
+	if want := []time.Duration{time.Hour, 20 * time.Hour, 30 * time.Hour, 47 * time.Hour}; !slices.Equal(ages, want) {
+		t.Errorf("the view holds Done times %v ago, want %v", ages, want)
+	}
+	if ids := boardIDs(v); slices.Contains(ids, "ENG-2") {
+		t.Errorf("board = %v, want no archived ENG-2", ids)
+	}
+}
+
 func TestTaskWithNoIssueGetsAnAhID(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Repo: "web", Text: "Fix map tooltip"})

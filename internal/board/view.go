@@ -86,28 +86,54 @@ func windowStart(lines []string, h int) int {
 	return min(max(at-h/2, 0), len(lines)-h)
 }
 
+// header shows lineup and its alerts at the left, and the live state at the
+// right. A narrow header drops the live state from the start, and it always
+// keeps the WIP cap.
 func (m Model) header() string {
-	s := " " + bold.Render("lineup") + fmt.Sprintf("  WIP %d/%d", m.board.Started, m.board.Cap)
-	if m.board.OverCap > 0 {
-		s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
-	}
-	s += fmt.Sprintf("   ●%d need you", needsYou(m.board.OfKind(lifecycle.KindBuild).Tasks))
-	if n := needsYou(m.board.OfKind(lifecycle.KindReview).Tasks); n > 0 {
-		s += fmt.Sprintf(" (+%d in reviews)", n)
-	}
+	left := " " + bold.Render("lineup")
 	if m.board.ReviewsPaused {
-		s += "   " + bad.Render("reviews paused")
+		left += "   " + bad.Render("reviews paused")
 	}
 	if !m.online {
-		s += "   " + bad.Render("scheduler offline, showing cache: run lineup restart")
+		left += "   " + bad.Render("scheduler offline, showing cache: run lineup restart")
 	}
-	return ansi.Truncate(s, m.width, "…")
+	live := []string{good.Render("●") + fmt.Sprintf(" %d working", inGroup(m.board.Tasks, lifecycle.GroupWorking))}
+	if n := inGroup(m.board.OfKind(lifecycle.KindReview).Tasks, lifecycle.GroupNeedsYou); n > 0 {
+		live = append(live, fmt.Sprintf("+%d in reviews", n))
+	}
+	wip := fmt.Sprintf("WIP %d/%d", m.board.Started, m.board.Cap)
+	if m.board.OverCap > 0 {
+		wip += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
+	}
+	live = append(live, fmt.Sprintf("%d done since yesterday", m.doneSinceYesterday()), wip)
+	for {
+		right := strings.Join(live, dim.Render(" · "))
+		gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+		if gap >= 2 || len(live) == 1 {
+			return ansi.Truncate(left+strings.Repeat(" ", max(gap, 2))+right, m.width, "…")
+		}
+		live = live[1:]
+	}
 }
 
-func needsYou(tasks []scheduler.TaskView) int {
+func inGroup(tasks []scheduler.TaskView, g lifecycle.Group) int {
 	n := 0
 	for _, t := range tasks {
-		if inNeedsYou(t) {
+		if t.Group == g.String() {
+			n++
+		}
+	}
+	return n
+}
+
+// doneSinceYesterday counts the Tasks that reached Done since 00:00
+// yesterday, local time.
+func (m Model) doneSinceYesterday() int {
+	y, mo, d := m.opts.Now().Local().Date()
+	since := time.Date(y, mo, d-1, 0, 0, 0, 0, time.Local)
+	n := 0
+	for _, at := range m.board.Done {
+		if !at.Before(since) {
 			n++
 		}
 	}

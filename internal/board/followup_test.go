@@ -7,7 +7,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -129,8 +128,8 @@ func TestAFollowUpRowAddsNothingToTheNeedsYouCount(t *testing.T) {
 	if out := screen(m); !strings.Contains(out, "Follow-up 1\n") {
 		t.Fatalf("PD-1 is not in Follow-up:\n%s", out)
 	}
-	if h := ansi.Strip(m.header()); !strings.Contains(h, "●2 need you") {
-		t.Errorf("header %q, want the 2 Tasks in Needs you and not the Follow-up row", h)
+	if got := headingCount(screen(m), "Needs you"); got != 2 {
+		t.Errorf("the Needs you heading counts %d, want the 2 Tasks in Needs you and not the Follow-up row", got)
 	}
 	if got := log.take(); len(got) != 0 {
 		t.Errorf("the Board reported %v, want no report, because a Follow-up row does not need the user", got)
