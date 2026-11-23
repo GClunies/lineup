@@ -53,6 +53,11 @@ type Deps struct {
 	// PromptWait is how long a Stage prompt waits on a Worker that has sent no
 	// status before the Task gets a flag. 0 means a minute.
 	PromptWait time.Duration
+	// CloseMergedTab is [merged] close_tab: lineup closes a merged build
+	// Task's tab once its Worker is not busy, and keeps the worktree for
+	// KeepWorktree.
+	CloseMergedTab bool
+	KeepWorktree   time.Duration
 }
 
 type RexEventKind int
@@ -216,6 +221,9 @@ func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error 
 	}
 	if r.Stage != from {
 		r.StageSince = s.now()
+		if r.Stage == lifecycle.Done {
+			s.markMerged(r)
+		}
 	}
 	for _, e := range effects {
 		if p, ok := e.(lifecycle.PromptWorker); ok {
@@ -244,6 +252,21 @@ func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error 
 		s.replayPR(r)
 	}
 	return nil
+}
+
+// markMerged readies a build Task that just merged for tidy, when [merged]
+// close_tab is on. A tab closes once the Worker is not busy. With no tab, the
+// worktree's days start now.
+func (s *Scheduler) markMerged(r *Record) {
+	if !s.d.CloseMergedTab || r.Review != nil || r.Outcome != lifecycle.OutcomeMerged {
+		return
+	}
+	switch {
+	case r.WindowID != "":
+		r.CloseAtIdle = true
+	case r.Worktree != "":
+		r.KeepUntil = s.now().Add(s.d.KeepWorktree)
+	}
 }
 
 // replayPR applies the stored PR's pr-seen, so a Task that enters CI running
@@ -480,8 +503,8 @@ func (s *Scheduler) sessionEmpty(ctx context.Context, session string) bool {
 
 // closeTab forgets the Task's tab before it closes it, so the tab's close is
 // not read as the user's. Only the user's own act reaches it: a close, an
-// archive, a rerun of a failed setup, or a restore of a tab that Rex kept
-// after its program exited.
+// archive, a rerun of a failed setup, a restore of a tab that Rex kept after
+// its program exited, or [merged] close_tab, which the user turned on.
 func (s *Scheduler) closeTab(ctx context.Context, r Record) {
 	if r.WindowID == "" {
 		return
@@ -496,8 +519,12 @@ func (s *Scheduler) closeTab(ctx context.Context, r Record) {
 	}
 }
 
-// cleanup runs only when the user ends the Task.
+// cleanup runs only when the user ends the Task. The user's act removes the
+// worktree at once, so lineup no longer closes the tab itself.
 func (s *Scheduler) cleanup(ctx context.Context, r Record) {
+	if r.CloseAtIdle {
+		s.update(r.ID, func(r *Record) { r.CloseAtIdle = false })
+	}
 	s.closeTab(ctx, r)
 	switch {
 	case r.Review != nil:
@@ -892,7 +919,14 @@ func (s *Scheduler) recover(ctx context.Context) {
 				}
 				continue
 			}
-			if blocks, ok := blocksOf(r); ok && !blocks[r.BlockID] {
+			blocks, ok := blocksOf(r)
+			switch {
+			case !ok || blocks[r.BlockID]:
+			case r.CloseAtIdle:
+				// The user did not close the tab that lineup waited to close.
+				s.forgetTab(r)
+				s.keepWorktree(r, "recovered at start: ")
+			default:
 				s.tabClosedByUser(r, "recovered at start")
 			}
 			continue
@@ -951,20 +985,36 @@ func (s *Scheduler) recover(ctx context.Context) {
 	s.tidy()
 }
 
-// tidy removes each kept worktree whose time is up. Only the loop calls it.
+// tidy closes the tab of each merged Task whose Worker is not busy, and
+// removes each kept worktree whose time is up. Only the loop calls it.
 func (s *Scheduler) tidy() {
 	for _, r := range s.list() {
-		if r.done() != kept || s.now().Before(r.KeepUntil) {
-			continue
-		}
 		id := r.ID
-		s.enqueue(id, func(ctx context.Context) {
-			// An earlier tick can have queued the same removal.
-			if r, ok := s.snapshot(id); ok && r.done() == kept {
-				s.removeWorktree(ctx, r)
-			}
-		})
+		switch {
+		case r.done() == closing && !r.workerWorking():
+			s.keepWorktree(r, "")
+			rec := *r
+			s.enqueue(id, func(ctx context.Context) {
+				s.closeTab(ctx, rec)
+				s.removeSession(ctx, rec)
+			})
+		case r.done() == kept && !s.now().Before(r.KeepUntil):
+			s.enqueue(id, func(ctx context.Context) {
+				// An earlier tick can have queued the same removal.
+				if r, ok := s.snapshot(id); ok && r.done() == kept {
+					s.removeWorktree(ctx, r)
+				}
+			})
+		}
 	}
+}
+
+// keepWorktree starts the days of a merged Task's worktree, after lineup
+// closed its tab or Rex lost it.
+func (s *Scheduler) keepWorktree(r *Record, detail string) {
+	r.CloseAtIdle, r.KeepUntil = false, s.now().Add(s.d.KeepWorktree)
+	s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: "merged-tab-closed", From: r.Stage.String(), To: r.Stage.String(),
+		Detail: detail + "worktree kept until " + r.KeepUntil.Format(time.RFC3339)})
 }
 
 // list returns the Records in a stable order: oldest first.
@@ -995,13 +1045,14 @@ func cmpString(a, b string) int {
 	return 0
 }
 
-// doneShownFor is how long a Done Task with no tab stays on the Board.
+// doneShownFor is how long a Done Task that keeps no tab and no worktree
+// stays on the Board.
 const doneShownFor = 7 * 24 * time.Hour
 
 func (s *Scheduler) view() BoardView {
 	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap(), ReviewsPaused: s.paused, Skips: s.skips}
 	for _, r := range s.list() {
-		if r.Stage == lifecycle.Done && (r.Archived || !r.keepsTab() && s.now().Sub(r.StageSince) > doneShownFor) {
+		if r.Stage == lifecycle.Done && (r.Archived || !r.keepsWork() && s.now().Sub(r.StageSince) > doneShownFor) {
 			continue
 		}
 		v.Tasks = append(v.Tasks, r.view())

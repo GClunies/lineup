@@ -202,6 +202,12 @@ func (r *Record) keptSetupTab() bool { return r.Job == JobExited && !r.hadWorker
 
 func (r *Record) keepsTab() bool { return r.Stage == lifecycle.Done && r.WindowID != "" }
 
+// keepsWork reports whether a Done Task keeps its tab, or a Done build Task
+// its worktree, which the user's close removes.
+func (r *Record) keepsWork() bool {
+	return r.Stage == lifecycle.Done && (r.WindowID != "" || r.Review == nil && r.Worktree != "")
+}
+
 // doneState is where a Done build Task stands with its tab and its worktree.
 // Each state derives from the Record's fields.
 type doneState int
