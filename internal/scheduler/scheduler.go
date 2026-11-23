@@ -892,7 +892,8 @@ func prURL(p *PRSnapshot) string {
 // gone gets the tab closed flag, and no tab opens until the user asks. A tab
 // that Rex restored as an idle shell after a restart is gone too, and closes.
 // So does a setup tab that Rex kept after worktrunk exited, unless the setup
-// failed. Last, it tidies once, so it needs no tick.
+// failed. A merged Task's tab that lineup waits to close reads its Worker's
+// status. Last, it tidies once, so it needs no tick.
 func (s *Scheduler) recover(ctx context.Context) {
 	live := map[string]map[string]bool{}
 	blocksOf := func(r *Record) (map[string]bool, bool) {
@@ -921,9 +922,15 @@ func (s *Scheduler) recover(ctx context.Context) {
 			}
 			blocks, ok := blocksOf(r)
 			switch {
-			case !ok || blocks[r.BlockID]:
+			case !ok, blocks[r.BlockID] && !r.CloseAtIdle:
+			case blocks[r.BlockID] && !s.idleShell(ctx, r):
+				// The Worker can have gone idle while the Scheduler was down.
+				if r.Job == JobWorker {
+					s.readStatus(ctx, r)
+				}
 			case r.CloseAtIdle:
-				// The user did not close the tab that lineup waited to close.
+				// Rex lost the tab that lineup waited to close, or restored it
+				// as an idle shell. The user did not close it.
 				s.forgetTab(r)
 				s.keepWorktree(r, "recovered at start: ")
 			default:
@@ -953,9 +960,7 @@ func (s *Scheduler) recover(ctx context.Context) {
 		restored := live && (spentSetup || s.idleShell(ctx, r))
 		if live && !restored {
 			if r.Job == JobWorker {
-				if st, err := s.d.Rex.ProgramStatus(ctx, r.SessionID, r.BlockID); err == nil && st.State != "" {
-					s.onRex(RexEvent{Kind: EvStatus, BlockID: r.BlockID, Status: st})
-				}
+				s.readStatus(ctx, r)
 				if !blocks[r.SideBlockID] {
 					id, session, block, worktree, argv := r.ID, r.SessionID, r.BlockID, r.Worktree, r.sideCommand()
 					s.enqueue(id, func(ctx context.Context) { s.openSide(ctx, id, session, block, worktree, argv) })
@@ -983,6 +988,13 @@ func (s *Scheduler) recover(ctx context.Context) {
 	}
 	// A worktree whose time ended while the Scheduler was down goes now.
 	s.tidy()
+}
+
+// readStatus applies the program status that Rex reads from the Worker's tab now.
+func (s *Scheduler) readStatus(ctx context.Context, r *Record) {
+	if st, err := s.d.Rex.ProgramStatus(ctx, r.SessionID, r.BlockID); err == nil && st.State != "" {
+		s.onRex(RexEvent{Kind: EvStatus, BlockID: r.BlockID, Status: st})
+	}
 }
 
 // tidy closes the tab of each merged Task whose Worker is not busy, and

@@ -231,18 +231,38 @@ func TestTheUsersCloseOfAClosingTabRemovesTheWorktreeAtOnce(t *testing.T) {
 	}
 }
 
-// Rex lost the tab while the Scheduler was down, so the user did not close it,
-// and the worktree stays for its days.
-func TestATabThatRexLostWhileTheTaskWaitedKeepsTheWorktree(t *testing.T) {
-	seed := func(st *store.Store) {
-		r := Record{Task: lifecycle.Task{ID: "ENG-lost", Stage: lifecycle.Done, Outcome: lifecycle.OutcomeMerged, Policy: testPolicy},
-			Title: "ENG-lost", Session: "data", SessionID: "session:data", WindowID: "window:ENG-lost", BlockID: "block:ENG-lost",
-			Job: JobWorker, WorkerState: "working", CloseAtIdle: true, Repo: "/repos/acme/data", Branch: "b-ENG-lost",
-			Worktree: "/worktrees/b-ENG-lost", Conversation: "conversation-ENG-lost", StageSince: time.Now()}
+// seedMergedTab stores a merged build Task with a Worker tab, whose Worker
+// last reported state. With closing, lineup waits to close the tab.
+func seedMergedTab(id, state string, closing bool) func(*store.Store) {
+	return func(st *store.Store) {
+		r := Record{Task: lifecycle.Task{ID: id, Stage: lifecycle.Done, Outcome: lifecycle.OutcomeMerged, Policy: testPolicy},
+			Title: id, Session: "data", SessionID: "session:data", WindowID: "window:" + id, BlockID: "block:" + id,
+			Job: JobWorker, WorkerState: state, CloseAtIdle: closing, Repo: "/repos/acme/data", Branch: "b-" + id,
+			Worktree: "/worktrees/b-" + id, Conversation: "conversation-" + id, StageSince: time.Now()}
 		data, _ := json.Marshal(r)
 		st.Save(r.ID, data, nil)
 	}
-	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, closeMerged(newClock(), 7*24*time.Hour))
+}
+
+// liveWorker adds the live Worker tab of the Task id, whose program Rex reads
+// as state.
+func liveWorker(id, state string) func(*Deps) {
+	return func(d *Deps) {
+		rex := d.Rex.(*fakeRex)
+		rex.tabs = append(rex.tabs, &tab{Window: Window{"session:data", "window:" + id, "block:" + id}, argv: []string{"claude"}, program: state})
+	}
+}
+
+func (f *fakeRex) closedWindow(window string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Contains(f.calls, "close "+window)
+}
+
+// Rex lost the tab while the Scheduler was down, so the user did not close it,
+// and the worktree stays for its days.
+func TestATabThatRexLostWhileTheTaskWaitedKeepsTheWorktree(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedMergedTab("ENG-lost", "working", true), closeMerged(newClock(), 7*24*time.Hour))
 	eventually(t, "the lost tab forgotten", func() bool { return !h.task("ENG-lost").Tab })
 	time.Sleep(100 * time.Millisecond)
 	if got := h.worktreesRemoved(); len(got) != 0 {
@@ -250,6 +270,46 @@ func TestATabThatRexLostWhileTheTaskWaitedKeepsTheWorktree(t *testing.T) {
 	}
 	if v := h.task("ENG-lost"); v.Note != "merged · worktree until Nov 14" {
 		t.Fatalf("note = %q, want the worktree kept until Nov 14", v.Note)
+	}
+}
+
+// Rex restored the tab as an idle shell, so lineup's Worker is gone. The
+// shell closes, and the worktree stays for its days.
+func TestAClosingTabThatRexRestoredAsAShellClosesAndKeepsTheWorktree(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedMergedTab("ENG-shell", "working", true),
+		restoredTabs("ENG-shell"), closeMerged(newClock(), 7*24*time.Hour))
+	eventually(t, "the restored shell closed", func() bool { return h.rex.closedWindow("window:ENG-shell") })
+	time.Sleep(100 * time.Millisecond)
+	if got := h.worktreesRemoved(); len(got) != 0 {
+		t.Fatalf("removed %v, want the worktree kept", got)
+	}
+	if v := h.task("ENG-shell"); v.Tab || v.Worktree == "" || v.Note != "merged · worktree until Nov 14" {
+		t.Fatalf("task = %+v, want no tab and the worktree kept until Nov 14", v)
+	}
+}
+
+// The Worker went idle while the Scheduler was down, so its tab closes at start.
+func TestAClosingTabWhoseWorkerWentIdleWhileTheSchedulerWasDownCloses(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedMergedTab("ENG-idle", "working", true),
+		liveWorker("ENG-idle", "idle"), closeMerged(newClock(), 7*24*time.Hour))
+	eventually(t, "the idle Worker's tab closed", func() bool { return h.rex.closedWindow("window:ENG-idle") })
+	eventually(t, "the closed tab to leave the Task", func() bool { return !h.task("ENG-idle").Tab })
+	if v := h.task("ENG-idle"); v.Worktree == "" || v.Note != "merged · worktree until Nov 14" {
+		t.Fatalf("task = %+v, want the worktree kept until Nov 14", v)
+	}
+}
+
+// A Done Task that lineup does not wait to close keeps a restored shell for
+// the user, with close_tab on too.
+func TestADoneTaskThatIsNotClosingKeepsItsRestoredShell(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedMergedTab("ENG-kept", "idle", false),
+		restoredTabs("ENG-kept"), closeMerged(newClock(), 7*24*time.Hour))
+	h.still("ENG-kept", lifecycle.Done)
+	if h.rex.closedWindow("window:ENG-kept") {
+		t.Fatal("lineup closed the tab of a Done Task that it does not wait to close")
+	}
+	if v := h.task("ENG-kept"); !v.Tab || v.Worktree == "" {
+		t.Fatalf("task = %+v, want its tab and worktree kept", v)
 	}
 }
 

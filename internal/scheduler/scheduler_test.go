@@ -31,6 +31,8 @@ type tab struct {
 	blockGone bool
 	// shell marks a tab that Rex restored as an idle shell after a restart.
 	shell bool
+	// program is the state that Rex reads from the tab's program now.
+	program string
 	// keep marks a tab that stays open after its program exits, and exited
 	// marks that exit with code.
 	keep, exited bool
@@ -244,7 +246,14 @@ func (f *fakeRex) LastExit(_ context.Context, _, block string) (int, bool, error
 	return 0, false, nil
 }
 
-func (f *fakeRex) ProgramStatus(context.Context, string, string) (Status, error) {
+func (f *fakeRex) ProgramStatus(_ context.Context, _, block string) (Status, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, t := range f.tabs {
+		if t.BlockID == block {
+			return Status{State: t.program}, nil
+		}
+	}
 	return Status{}, nil
 }
 func (f *fakeRex) Focus(_ context.Context, _, _, block string) error {
