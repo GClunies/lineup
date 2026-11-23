@@ -3,6 +3,7 @@ package worktree
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,6 +95,44 @@ func TestCreatePathRemove(t *testing.T) {
 	}
 	if _, err := os.Stat(wt); !os.IsNotExist(err) {
 		t.Errorf("worktree still there: %v", err)
+	}
+}
+
+func TestDiffBaseFollowsTheDefaultBranch(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin")
+	sh(t, root, "git", "init", "-q", "-b", "trunk", origin)
+	commit(t, origin, "first")
+	first := strings.TrimSpace(sh(t, origin, "git", "rev-parse", "HEAD"))
+	clone := filepath.Join(root, "clone")
+	sh(t, root, "git", "clone", "-q", origin, clone)
+	sh(t, clone, "git", "switch", "-q", "-c", "feat")
+	commit(t, clone, "feat")
+	if base, err := DiffBase(ctx, clone); err != nil || base != first {
+		t.Fatalf("DiffBase = %q, %v, want the branch point %s on origin/trunk", base, err, first)
+	}
+
+	commit(t, origin, "second")
+	second := strings.TrimSpace(sh(t, origin, "git", "rev-parse", "HEAD"))
+	sh(t, clone, "git", "fetch", "-q")
+	sh(t, clone, "git", "-c", "user.name=t", "-c", "user.email=t@t", "rebase", "-q", "origin/trunk")
+	if base, err := DiffBase(ctx, clone); err != nil || base != second {
+		t.Fatalf("after a rebase DiffBase = %q, %v, want the new head of origin/trunk %s", base, err, second)
+	}
+
+	// With no origin/HEAD, the base is the merge-base with origin/main.
+	sh(t, clone, "git", "remote", "set-head", "origin", "-d")
+	sh(t, clone, "git", "update-ref", "refs/remotes/origin/main", first)
+	if base, err := DiffBase(ctx, clone); err != nil || base != first {
+		t.Fatalf("with no origin/HEAD DiffBase = %q, %v, want the merge-base with origin/main %s", base, err, first)
+	}
+
+	if _, err := DiffBase(ctx, filepath.Join(root, "gone")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("DiffBase of a missing folder: err = %v, want fs.ErrNotExist", err)
+	}
+	if _, err := DiffBase(ctx, root); err == nil || errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("DiffBase of a folder that is no worktree: err = %v, want a git error", err)
 	}
 }
 
