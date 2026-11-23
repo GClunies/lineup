@@ -1,0 +1,39 @@
+internal/harness/claude/testdata/usage/projects/-repo/c1.jsonl
+  s_59f22b65e91f8e::t_957e556d3987b2 1-9
+internal/harness/claude/testdata/usage/projects/-repo/c1/subagents/agent-a1.jsonl
+  s_59f22b65e91f8e::t_7e473ae1727aba 1-2
+internal/harness/claude/testdata/usage/projects/-resumed/c2.jsonl
+  s_59f22b65e91f8e::t_0e6002fae8da19 1-6
+internal/harness/claude/usage_test.go
+  s_59f22b65e91f8e::t_5b5efc13d77895 1-59
+internal/harness/claude/testdata/usage/projects/-repo/c2.jsonl
+  s_59f22b65e91f8e::t_f4a0482e495b6c 1-3
+internal/harness/claude/claude.go
+  s_59f22b65e91f8e::t_8bf31d73ec3648 86
+  s_59f22b65e91f8e::t_ef6e70b6b5d461 12,49,51-52,55-61,65,69-75,77-85,88
+  s_59f22b65e91f8e::t_aa0c4ef3a00ef0 53-54,76,87
+internal/harness/claude/usage.go
+  s_59f22b65e91f8e::t_d5f57bceaef33f 67
+  s_59f22b65e91f8e::t_1277cc87f6e436 57
+  s_59f22b65e91f8e::t_920f80b4f660e0 100
+  s_59f22b65e91f8e::t_a073533afc10eb 123
+  s_59f22b65e91f8e::t_f3ada740801948 1-56,58-66,68-79,81-99,101-122,124-125,127-128
+  s_59f22b65e91f8e::t_46cd5bae3f0551 126
+  s_59f22b65e91f8e::t_14c4c9b11d2566 80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "580d279308f0e4985cc2d22ec9d10f66ba682532",
+  "prompts": {},
+  "sessions": {
+    "s_59f22b65e91f8e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebd739c9-7583-4350-b806-9bd20a91bffe",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
