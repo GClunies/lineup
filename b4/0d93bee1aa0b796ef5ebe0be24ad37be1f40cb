@@ -7,6 +7,7 @@ docs/spec/mvp.md
   s_62e3808e7f1359::t_2e52bb5ae93565 425
   s_62e3808e7f1359::t_a3847d39a0bb90 379
   s_62e3808e7f1359::t_f6980f6c048f1a 411
+  s_62e3808e7f1359::t_e67d92af38a6a9 528
 docs/spec/trackers.md
   s_62e3808e7f1359::t_8999b06ecd719f 62
   s_62e3808e7f1359::t_390b41784f6d27 100-108
@@ -29,6 +30,7 @@ docs/spec/one-board.md
   s_62e3808e7f1359::t_c1d26c3f95e4c4 295
   s_62e3808e7f1359::t_7933a2ae9ae2e7 102
   s_62e3808e7f1359::t_dd9bedcd6cd300 213
+  s_62e3808e7f1359::t_99aeb0b2da4d81 37,40,43,166
 docs/spec/reviews.md
   s_62e3808e7f1359::t_049c6b246cad38 145
 GLOSSARY.md
