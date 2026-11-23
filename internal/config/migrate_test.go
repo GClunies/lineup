@@ -259,9 +259,12 @@ func TestMigrateRewritesATrackersListOfOneTrackerAsTracker(t *testing.T) {
   trackers = ["local"] # only local
 prefix = "hod"
 
+
 [repos."crexi/data"]
 teams = ["PD"]
 wip_cap = 2
+
+# the end
 `
 	path := write(t, filepath.Join(t.TempDir(), "config.toml"), old)
 	msg, err := Migrate(path)
@@ -275,10 +278,13 @@ wip_cap = 2
   tracker = "local" # only local
 prefix = "hod"
 
+
 [repos."crexi/data"]
 teams = ["PD"]
 tracker = "linear"
 wip_cap = 2
+
+# the end
 `
 	if got, _ := os.ReadFile(path); string(got) != want {
 		t.Errorf("migrated file:\n%s\nwant\n%s", got, want)

@@ -161,7 +161,22 @@ func migrateTrackers(text string) (string, error) {
 	for _, key := range slices.Sorted(maps.Keys(added)) {
 		return "", fmt.Errorf(`repos.%q: lineup config migrate finds the teams list outside the table's own header: write tracker = "linear" by hand`, key)
 	}
-	return joinItems(out), nil
+	return keepLayout(out, text), nil
+}
+
+// keepLayout is the text of the items with each line as it was, blank lines
+// included, and the final newline only if text has one.
+func keepLayout(items []item, text string) string {
+	var b strings.Builder
+	for _, it := range items {
+		for _, l := range it.lines {
+			b.WriteString(l + "\n")
+		}
+	}
+	if !strings.HasSuffix(text, "\n") {
+		return strings.TrimSuffix(b.String(), "\n")
+	}
+	return b.String()
 }
 
 func indentOf(line string) string { return line[:len(line)-len(strings.TrimLeft(line, " \t"))] }
