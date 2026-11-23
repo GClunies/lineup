@@ -1809,14 +1809,18 @@ func TestOpenRefusesATaskWithNothingToOpen(t *testing.T) {
 	if err := h.openFails("ENG-9"); !errors.Is(err, lifecycle.ErrUnknownTask) {
 		t.Fatalf("unknown: %v", err)
 	}
-	h, worker := doneWithATab(t)
-	h.do(Request{Op: "close", Task: "ENG-1"})
-	eventually(t, "the worktree removed", func() bool { return len(h.worktreesRemoved()) == 1 })
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
-	if err := h.openFails("ENG-1"); err.Error() != "ENG-1 is Done and its worktree is gone" {
-		t.Fatalf("done: %v", err)
+	h = newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	h.waitTabRecorded("claude reviewing", "pr-7")
+	merged := openPR(7, "h1")
+	merged.State = "MERGED"
+	h.gh.setReview(merged)
+	eventually(t, "the review tab closed", func() bool { v := h.task("pr-7"); return v.Stage == "Done" && !v.Tab })
+	if err := h.openFails("pr-7"); err.Error() != "pr-7 is Done and its worktree is gone" {
+		t.Fatalf("done review: %v", err)
 	}
-	if n := len(h.rex.open("claude working")); n != 0 {
+	if n := len(h.rex.open("claude reviewing")); n != 0 {
 		t.Fatalf("open left %d Worker tabs", n)
 	}
 }

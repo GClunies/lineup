@@ -271,3 +271,70 @@ func TestAMergedReviewIgnoresCloseTab(t *testing.T) {
 		t.Fatalf("task = %+v, want the review ended as before", v)
 	}
 }
+
+func TestOpenResumesAKeptWorkerInItsWorktree(t *testing.T) {
+	h, _ := mergeWith(t, "idle", closeMerged(newClock(), 7*24*time.Hour))
+	first := h.waitSpecs(1)
+	h.waitTabClosedByLineup()
+	if res := h.open("ENG-1"); res.Action != OpenRestored {
+		t.Fatalf("open = %+v, want restored", res)
+	}
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	if worktree := filepath.Join(h.wt.root, "eng-1-billing"); resumed.cwd != worktree {
+		t.Fatalf("resumed tab cwd = %s, want the worktree %s", resumed.cwd, worktree)
+	}
+	if spec := h.lastSpec(); spec.ReadOnly {
+		t.Fatalf("spec = %+v, want a Worker that writes", spec)
+	}
+	eventually(t, "the side pane beside the Worker", func() bool {
+		return slices.ContainsFunc(h.rex.allSplits(), func(s split) bool { return s.anchor == resumed.BlockID })
+	})
+	eventually(t, "the restored tab recorded", func() bool { return h.task("ENG-1").Tab })
+}
+
+func TestAfterItsDaysOpenResumesTheWorkerReadOnlyInTheMainCheckout(t *testing.T) {
+	c := newClock()
+	h, _ := mergeWith(t, "idle", closeMerged(c, 7*24*time.Hour))
+	first := h.waitSpecs(1)
+	h.waitTabClosedByLineup()
+	c.add(7 * 24 * time.Hour)
+	eventually(t, "the worktree removed", func() bool { return h.task("ENG-1").Worktree == "" })
+	if res := h.open("ENG-1"); res.Action != OpenRestored {
+		t.Fatalf("open = %+v, want restored", res)
+	}
+	resumed := h.waitTab("claude --resume " + first.Conversation)
+	if resumed.cwd != "/repos/acme/data" {
+		t.Fatalf("resumed tab cwd = %s, want the main checkout", resumed.cwd)
+	}
+	if spec := h.lastSpec(); !spec.ReadOnly {
+		t.Fatalf("spec = %+v, want a read-only Worker", spec)
+	}
+	h.hn.mu.Lock()
+	trusted := slices.Clone(h.hn.trusted)
+	h.hn.mu.Unlock()
+	if !slices.Contains(trusted, "/repos/acme/data") {
+		t.Fatalf("trusted %v, want the main checkout", trusted)
+	}
+	eventually(t, "the restored tab recorded", func() bool { return h.task("ENG-1").Tab })
+	time.Sleep(50 * time.Millisecond)
+	if slices.ContainsFunc(h.rex.allSplits(), func(s split) bool { return s.anchor == resumed.BlockID }) {
+		t.Fatal("a side pane opened beside the read-only Worker, but it has no worktree to show")
+	}
+}
+
+// A Done Task never gets a fresh Worker: a new conversation would not know the Task.
+func TestOpenRefusesADoneTaskWhoseConversationIsGone(t *testing.T) {
+	h, _ := mergeWith(t, "idle", closeMerged(newClock(), 7*24*time.Hour))
+	first := h.waitSpecs(1)
+	h.waitTabClosedByLineup()
+	h.hn.mu.Lock()
+	h.hn.gone = []string{first.Conversation}
+	h.hn.mu.Unlock()
+	tabs := h.tabs()
+	if err := h.openFails("ENG-1"); err.Error() != "ENG-1 is Done and Claude no longer holds its conversation" {
+		t.Fatalf("open: %v", err)
+	}
+	if h.tabs() != tabs {
+		t.Fatalf("%d tabs, want %d: a refused open opens no tab", h.tabs(), tabs)
+	}
+}

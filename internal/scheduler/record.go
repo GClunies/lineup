@@ -220,6 +220,9 @@ const (
 	closing
 	// kept has no tab, and lineup removes the worktree at KeepUntil.
 	kept
+	// readOnly has no tab and no worktree. open resumes its conversation in
+	// the Repo's main checkout, with no tool that writes files.
+	readOnly
 )
 
 func (r *Record) done() doneState {
@@ -230,6 +233,8 @@ func (r *Record) done() doneState {
 		return closing
 	case r.WindowID == "" && r.Worktree != "" && !r.KeepUntil.IsZero():
 		return kept
+	case r.WindowID == "" && r.Worktree == "" && r.Conversation != "":
+		return readOnly
 	}
 	return doneOther
 }

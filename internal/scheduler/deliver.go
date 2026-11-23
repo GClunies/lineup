@@ -110,6 +110,7 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 		}
 	}
 	spec := s.spec(r, stage)
+	spec.ReadOnly = r.done() == readOnly
 	var prompt string
 	if fresh {
 		spec.Conversation = uuid.NewV4().String()
@@ -120,10 +121,17 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 		}
 	}
 	folder := r.Worktree
-	if r.Review != nil {
+	switch {
+	case r.Review != nil:
 		// The PR's code never becomes the Worker's folder: its .claude
 		// settings and hooks would run.
 		folder = r.Repo
+	case spec.ReadOnly:
+		folder = r.Repo
+		if err := s.d.Harness.Prepare(ctx, r.Repo, r.Repo); err != nil {
+			s.fail(r.ID, "trust the main checkout", err)
+			return false
+		}
 	}
 	argv, env, err := s.d.Harness.Command(ctx, spec, prompt)
 	if err != nil {
@@ -165,7 +173,10 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 			s.d.Log.Warn("close the setup block", "task", r.ID, "err", err)
 		}
 	}
-	s.openSide(ctx, r.ID, w.SessionID, w.BlockID, r.Worktree, r.sideCommand())
+	// The side pane shows the worktree's changes, and a read-only Worker has no worktree.
+	if !spec.ReadOnly {
+		s.openSide(ctx, r.ID, w.SessionID, w.BlockID, r.Worktree, r.sideCommand())
+	}
 	return true
 }
 
