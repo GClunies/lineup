@@ -225,7 +225,7 @@ func TestRestartWarnsOfTwoCheckoutsWithOneKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := io.ReadAll(r)
-	want := "lineup: warning: 2 checkouts have the key acme/app: " + a + " and " + b + ". lineup picks neither for that key until you remove one from the roots.\n"
+	want := "lineup: warning: 2 checkouts have the key acme/app: " + a + " and " + b + ". lineup picks none of them for that key until only one is left below the roots.\n"
 	if string(got) != want {
 		t.Errorf("restart wrote %q, want %q", got, want)
 	}

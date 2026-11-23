@@ -578,7 +578,7 @@ func (p configPort) RepoForIssue(is scheduler.Issue) (string, error) {
 		}
 		repo, err := p.ResolveRepo(is.RepoHint)
 		if err != nil {
-			return "", noRepo
+			return "", fmt.Errorf("%w: %v", noRepo, err)
 		}
 		return repo, nil
 	}

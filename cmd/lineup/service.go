@@ -216,7 +216,7 @@ func (m manager) restart() error {
 		return fmt.Errorf("the Scheduler keeps running on the old config: %w", err)
 	}
 	for _, c := range cfg.KeyClashes() {
-		fmt.Fprintf(os.Stderr, "lineup: warning: %s. lineup picks neither for that key until you remove one from the roots.\n", c)
+		fmt.Fprintf(os.Stderr, "lineup: warning: %s. lineup picks none of them for that key until only one is left below the roots.\n", c)
 	}
 	started, err := m.ensure()
 	if err != nil || started { // a kickstart now would kill the new Scheduler as it starts

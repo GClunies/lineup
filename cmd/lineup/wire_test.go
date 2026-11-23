@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/gclunies/lineup/internal/config"
@@ -278,5 +279,8 @@ func TestAPrefixedLocalIssueMapsToItsPrefixesRepo(t *testing.T) {
 	}
 	if repo, err := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindLocal, Identifier: "local-1"}); err == nil {
 		t.Fatalf("local-1 with no repo field mapped to %q", repo)
+	}
+	if _, err := p.RepoForIssue(scheduler.Issue{Kind: scheduler.KindLocal, Identifier: "local-1", RepoHint: "nope"}); !errors.Is(err, scheduler.ErrNoRepo) || !strings.Contains(err.Error(), "no checkout named nope") {
+		t.Fatalf("local-1 with repo: nope: err %v, want ErrNoRepo that says why", err)
 	}
 }
