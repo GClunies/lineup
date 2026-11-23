@@ -146,6 +146,10 @@ type WorkerSpec struct {
 	// conversation gets them, because a resumed one has them already.
 	Restart bool
 	Steers  []string
+	// ReadOnly is true for the Worker of a Done build Task whose worktree
+	// lineup removed. It runs in the Repo's main checkout with no tool that
+	// writes files.
+	ReadOnly bool
 }
 
 type Harness interface {
