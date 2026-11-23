@@ -1,0 +1,23 @@
+internal/worktree/worktree_test.go
+  s_fb56ce352cbfde::t_2016a2454bf595 90-117
+  s_fb56ce352cbfde::t_266abbb20c99cc 5
+internal/worktree/worktree.go
+  s_fb56ce352cbfde::t_67c0e79ccdfee5 74-76,82-88
+  s_fb56ce352cbfde::t_f45cc2621db8ef 18-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2ff9bd0e997597385fc446c34c947a6ff1d9ea74",
+  "prompts": {},
+  "sessions": {
+    "s_fb56ce352cbfde": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fae7e67-0800-4a66-b7d1-8d3e076d23e4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
