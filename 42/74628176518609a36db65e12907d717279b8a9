@@ -1,0 +1,55 @@
+docs/adr/0033-lineup-closes-a-merged-tab-when-the-user-turns-it-on.md
+  s_fb56ce352cbfde::t_4008ec3d2fc118 11
+  s_fb56ce352cbfde::t_34d06fc393c869 1-10,12-21,23-25,27
+  s_fb56ce352cbfde::t_8f9eb0b72e8c5d 22
+  s_fb56ce352cbfde::t_fa13a0bdeed769 26
+docs/spec/mvp.md
+  s_fb56ce352cbfde::t_dbe2c171bae904 106,108-109
+  s_fb56ce352cbfde::t_0dc3d965b591b6 513
+  s_fb56ce352cbfde::t_7964d69f04595a 764-767
+  s_fb56ce352cbfde::t_243528aadf84bb 15
+  s_fb56ce352cbfde::t_32037376657f37 348-350,352-353
+  s_fb56ce352cbfde::t_f090997d4c2871 316
+  s_fb56ce352cbfde::t_b94bf0276cd01b 610
+  s_fb56ce352cbfde::t_3da98b1ec21e0d 515
+  s_fb56ce352cbfde::t_860e5505e94dce 351
+  s_fb56ce352cbfde::t_32cef8635415c5 493-512,514,516-519
+  s_fb56ce352cbfde::t_9ef54877e32b79 681
+  s_fb56ce352cbfde::t_11cf2057038d4b 314
+  s_fb56ce352cbfde::t_3d55c398b8da99 768-769
+  s_fb56ce352cbfde::t_563faaeec81709 623
+  s_fb56ce352cbfde::t_31c3bf15c99f9d 390
+  s_fb56ce352cbfde::t_d160b5d1d29321 606
+  s_fb56ce352cbfde::t_00b32d250009f6 677
+  s_62e3808e7f1359::t_03d85cde057cd5 315,520
+docs/adr/0017-the-user-closes-every-task-tab.md
+  s_fb56ce352cbfde::t_91324e9c2af558 6
+  s_fb56ce352cbfde::t_0b3c888d1b2f06 5
+GLOSSARY.md
+  s_fb56ce352cbfde::t_a548e9ae39d946 84
+  s_fb56ce352cbfde::t_9f049614ec2820 50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4274628176518609a36db65e12907d717279b8a9",
+  "prompts": {},
+  "sessions": {
+    "s_62e3808e7f1359": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc4c19bf-2d88-4b96-8b28-9396d6a5563c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_fb56ce352cbfde": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fae7e67-0800-4a66-b7d1-8d3e076d23e4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
