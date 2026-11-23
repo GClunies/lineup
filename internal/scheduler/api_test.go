@@ -2,6 +2,8 @@ package scheduler
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -166,5 +168,21 @@ func TestAskDraftsFlagsARespondingTaskWithTheCount(t *testing.T) {
 		if v := h.task("ENG-1"); v.Stage != "Responding" || v.Group != "Needs you" || v.Flag != "drafts" || v.FlagDetail != want {
 			t.Fatalf("task after %d drafts = %+v", n, v)
 		}
+	}
+}
+
+// clashConfig maps no Issue to a Repo, because two checkouts have its key.
+type clashConfig struct{ fakeConfig }
+
+func (clashConfig) RepoForIssue(is Issue) (string, error) {
+	return "", fmt.Errorf("%w for %s: 2 checkouts have the key acme/data: /a and /b", ErrNoRepo, is.Identifier)
+}
+
+func TestAddKeepsWhyAnIssueHasNoRepo(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Config = clashConfig{} })
+	_, err := h.s.Handle(context.Background(), Request{Op: "add", Issue: "ENG-1"})
+	want := "no Repo mapping for ENG-1: 2 checkouts have the key acme/data: /a and /b: pass a repo"
+	if !errors.Is(err, ErrNoRepo) || err == nil || err.Error() != want {
+		t.Fatalf("add: err %v, want %q", err, want)
 	}
 }

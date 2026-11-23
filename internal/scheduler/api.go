@@ -320,9 +320,8 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 		}
 		r.Issue, r.ID, r.Title, r.Branch = &is, is.Identifier, is.Title, is.BranchName
 		if r.Repo == "" {
-			var ok bool
-			if r.Repo, ok = s.d.Config.RepoForIssue(is); !ok {
-				return TaskView{}, fmt.Errorf("%w for %s: pass a repo", ErrNoRepo, is.Identifier)
+			if r.Repo, err = s.d.Config.RepoForIssue(is); err != nil {
+				return TaskView{}, fmt.Errorf("%w: pass a repo", err)
 			}
 		}
 		if ts := s.d.Config.RepoTrackers(r.Repo); ts != nil && !slices.Contains(ts, is.Tracker()) {

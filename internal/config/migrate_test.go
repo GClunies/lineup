@@ -12,13 +12,11 @@ import (
 	"testing"
 )
 
-// fixtureCheckouts are the checkouts below the fixture's ~/repos, by path
-// from the home folder, with their origin URL. "" is a checkout with no
-// origin. Two checkouts have the origin crexi/data, and two have the folder
-// name de-interview-exercise.
+// fixtureCheckouts are the main checkouts below the fixture's ~/repos, by
+// path from the home folder, with their origin URL. "" is a checkout with no
+// origin. Two checkouts have the folder name de-interview-exercise.
 var fixtureCheckouts = map[string]string{
 	"repos/crexi/data":                      "git@github.com:crexi/data.git",
-	"repos/crexi/data.review-pr-1":          "git@github.com:crexi/data.git",
 	"repos/crexi/web":                       "https://github.com/crexi/web.git",
 	"repos/crexi/de-interview-exercise":     "git@github.com:crexi/de-interview-exercise.git",
 	"repos/crexi-dev/de-interview-exercise": "git@github.com:crexi-dev/de-interview-exercise.git",
@@ -27,8 +25,9 @@ var fixtureCheckouts = map[string]string{
 	"repos/gclunies/brain":                  "",
 }
 
-// fixtureHome makes a home folder with the fixture checkouts, sets HOME to
-// it, and returns it.
+// fixtureHome makes a home folder with the fixture checkouts and the linked
+// worktree repos/crexi/data.review-pr-1 of crexi/data, sets HOME to it, and
+// returns it.
 func fixtureHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
@@ -43,6 +42,7 @@ func fixtureHome(t *testing.T) string {
 			gitRun(t, dir, "remote", "add", "origin", url)
 		}
 	}
+	gitRun(t, filepath.Join(home, "repos/crexi/data"), "worktree", "add", "-q", "--orphan", "-b", "review-pr-1", filepath.Join(home, "repos/crexi/data.review-pr-1"))
 	return home
 }
 
@@ -209,15 +209,17 @@ wip_cap = 1
 func TestMigrateRefusesWhatNoTableCanReplace(t *testing.T) {
 	home := fixtureHome(t)
 	gitCheckout(t, home, "deep/a/b/c", "")
+	gitCheckout(t, home, "clone/data", "git@github.com:crexi/data.git")
 	for text, want := range map[string]string{
-		"[[repos]]\nmatch = \"~/repos/gclunies/*\"\nwip_cap = 2\n":                                                                     `the checkouts that the [[repos]] glob "~/repos/gclunies/*" matches have more than one owner (local, GClunies)`,
-		"[[repos]]\nmatch = \"~/repos/*/data\"\nwip_cap = 2\n":                                                                         `the [[repos]] glob "~/repos/*/data" is not <folder>/*`,
-		"[[repos]]\nmatch = \"~/nothing/*\"\nwip_cap = 2\n":                                                                            `the [[repos]] glob "~/nothing/*" matches no checkout`,
-		"[[repos]]\nmatch = \"~/repos/crexi\"\nwip_cap = 2\n":                                                                          `the [[repos]] match "~/repos/crexi" is not a git checkout`,
-		"[[repos]]\nmatch = \"~/repos/crexi/data\"\nwip_cap = 2\n[[repos]]\nmatch = \"~/repos/crexi/data.review-pr-1\"\nwip_cap = 3\n": `the [[repos]] matches "~/repos/crexi/data" and "~/repos/crexi/data.review-pr-1" both become [repos."crexi/data"]`,
-		"[[repos]]\nmatch = \"~/deep/*/*/*\"\n":                                                                                        "which is more than two folders below the roots ~/deep",
-		"[[repos]]\nmatch = \"~/repos/crexi/data\"\nteams = [\"\"\"PD\"\"\"]\n":                                                        "line 3: lineup config migrate cannot move a multi-line string",
-		"poll_interval = '''10s'''\n":                                                                                                  "line 1: lineup config migrate cannot move a multi-line string",
+		"[[repos]]\nmatch = \"~/repos/gclunies/*\"\nwip_cap = 2\n":                                                   `the checkouts that the [[repos]] glob "~/repos/gclunies/*" matches have more than one owner (local, GClunies)`,
+		"[[repos]]\nmatch = \"~/repos/*/data\"\nwip_cap = 2\n":                                                       `the [[repos]] glob "~/repos/*/data" is not <folder>/*`,
+		"[[repos]]\nmatch = \"~/nothing/*\"\nwip_cap = 2\n":                                                          `the [[repos]] glob "~/nothing/*" matches no checkout`,
+		"[[repos]]\nmatch = \"~/repos/crexi\"\nwip_cap = 2\n":                                                        `the [[repos]] match "~/repos/crexi" is not a main git checkout`,
+		"[[repos]]\nmatch = \"~/repos/crexi/data\"\nwip_cap = 2\n[[repos]]\nmatch = \"~/clone/data\"\nwip_cap = 3\n": `the [[repos]] matches "~/repos/crexi/data" and "~/clone/data" both become [repos."crexi/data"]`,
+		"[[repos]]\nmatch = \"~/repos/crexi/data.review-pr-1\"\nwip_cap = 2\n":                                       `the [[repos]] match "~/repos/crexi/data.review-pr-1" is not a main git checkout`,
+		"[[repos]]\nmatch = \"~/deep/*/*/*\"\n":                                                                      "which is more than two folders below the roots ~/deep",
+		"[[repos]]\nmatch = \"~/repos/crexi/data\"\nteams = [\"\"\"PD\"\"\"]\n":                                      "line 3: lineup config migrate cannot move a multi-line string",
+		"poll_interval = '''10s'''\n":                                                                                "line 1: lineup config migrate cannot move a multi-line string",
 	} {
 		path := write(t, filepath.Join(t.TempDir(), "config.toml"), text)
 		_, err := Migrate(path)

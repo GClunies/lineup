@@ -552,35 +552,45 @@ func (p configPort) Policy(repo string, overrides map[string]string) (lifecycle.
 	return res.Policy(), err
 }
 
-func (p configPort) RepoForIssue(is scheduler.Issue) (string, bool) {
+func (p configPort) RepoForIssue(is scheduler.Issue) (string, error) {
+	noRepo := fmt.Errorf("%w for %s", scheduler.ErrNoRepo, is.Identifier)
 	switch is.Tracker() {
 	case scheduler.KindGitHub:
 		slug, _, err := github.ParseIssueID(is.Identifier)
 		if err != nil {
-			return "", false
+			return "", noRepo
 		}
-		return p.RepoForGitHub(slug)
+		if repo, ok := p.RepoForGitHub(slug); ok {
+			return repo, nil
+		}
+		if c := p.cfg.KeyClash(slug); c != "" {
+			return "", fmt.Errorf("%w: %s", noRepo, c)
+		}
+		return "", noRepo
 	case scheduler.KindLocal:
 		if prefix, _, ok := scheduler.SplitID(is.Identifier); ok {
 			if repo, ok := p.cfg.RepoForPrefix(prefix); ok {
-				return repo, true
+				return repo, nil
 			}
 		}
 		if is.RepoHint == "" {
-			return "", false
+			return "", noRepo
 		}
 		repo, err := p.ResolveRepo(is.RepoHint)
-		return repo, err == nil
+		if err != nil {
+			return "", fmt.Errorf("%w: %v", noRepo, err)
+		}
+		return repo, nil
 	}
 	if repo, ok := p.cfg.RepoForTeam(is.TeamKey); ok {
-		return repo, true
+		return repo, nil
 	}
 	if is.ProjectID != "" {
 		if repo, ok, _ := p.choices.Get(is.ProjectID); ok {
-			return repo, true
+			return repo, nil
 		}
 	}
-	return "", false
+	return "", noRepo
 }
 
 func (p configPort) RepoTrackers(repo string) []string { return p.cfg.RepoTrackers(repo) }

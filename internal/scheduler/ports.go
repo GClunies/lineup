@@ -236,8 +236,9 @@ type Tracker interface {
 
 type Config interface {
 	Policy(repo string, overrides map[string]string) (lifecycle.Policy, error)
-	// RepoForIssue picks the Repo that the Issue maps to. ok is false when no mapping exists.
-	RepoForIssue(is Issue) (repo string, ok bool)
+	// RepoForIssue picks the Repo that the Issue maps to. The error wraps
+	// ErrNoRepo when no mapping exists, and says why.
+	RepoForIssue(is Issue) (repo string, err error)
 	// ResolveRepo turns a name such as "data", an owner/repo key, or a path
 	// into a Repo's main checkout.
 	ResolveRepo(name string) (string, error)

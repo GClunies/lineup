@@ -493,7 +493,7 @@ func TestLocalTrackerOn(t *testing.T) {
 	}
 }
 
-func TestCheckoutsAreTheGitFoldersBelowTheRoots(t *testing.T) {
+func TestCheckoutsAreTheMainCheckoutsBelowTheRoots(t *testing.T) {
 	g, home := loadFixture(t, "roots = [\"~/repos\", \"~/solo\"]\n")
 	gitRun(t, filepath.Join(home, "repos/gclunies/lineup"), "worktree", "add", "-q", "--orphan", "-b", "wt", filepath.Join(home, "repos/gclunies/lineup.wt"))
 	gitCheckout(t, home, "solo", "https://github.com/o/solo")
@@ -508,17 +508,15 @@ func TestCheckoutsAreTheGitFoldersBelowTheRoots(t *testing.T) {
 	want := []string{
 		"repos/crexi-dev/de-interview-exercise crexi-dev/de-interview-exercise",
 		"repos/crexi/data crexi/data",
-		"repos/crexi/data.review-pr-1 crexi/data",
 		"repos/crexi/de-interview-exercise crexi/de-interview-exercise",
 		"repos/crexi/web crexi/web",
 		"repos/gclunies/brain local/brain",
 		"repos/gclunies/hod GClunies/hod",
 		"repos/gclunies/lineup GClunies/lineup",
-		"repos/gclunies/lineup.wt GClunies/lineup",
 		"solo o/solo",
 	}
 	if !slices.Equal(got, want) {
-		t.Fatalf("Checkouts =\n%s\nwant\n%s\n(a root can be a checkout, a git worktree is one, and the walk skips dot folders, the inside of a checkout, and a third level)",
+		t.Fatalf("Checkouts =\n%s\nwant\n%s\n(a root can be a checkout, a linked worktree is none, and the walk skips dot folders, the inside of a checkout, and a third level)",
 			strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	if got := load(t, "").Checkouts(); len(got) != 0 {
@@ -527,6 +525,44 @@ func TestCheckoutsAreTheGitFoldersBelowTheRoots(t *testing.T) {
 	gitCheckout(t, home, "repos/acme/notes", "")
 	if n := len(g.Checkouts()); n != len(want)+1 {
 		t.Errorf("a new clone must show up at once: %d checkouts, want %d", n, len(want)+1)
+	}
+}
+
+func TestLinkedWorktreesAreNoCheckouts(t *testing.T) {
+	root := t.TempDir()
+	main, clone := filepath.Join(root, "acme/app"), filepath.Join(root, "old/app")
+	gitCheckout(t, root, "acme/app", "git@github.com:acme/app.git")
+	gitCheckout(t, root, "old/app", "https://github.com/acme/app")
+	gitRun(t, main, "worktree", "add", "-q", "--orphan", "-b", "one", filepath.Join(root, "acme/app.one"))
+	gitRun(t, main, "worktree", "add", "-q", "--orphan", "-b", "two", filepath.Join(root, "two"))
+	gitCheckout(t, root, "two/inner", "git@github.com:acme/inner.git")
+	g := load(t, fmt.Sprintf("roots = [%q]\n", root))
+	var got []string
+	for _, c := range g.Checkouts() {
+		got = append(got, c.Path+" "+c.Key)
+	}
+	if want := []string{main + " acme/app", clone + " acme/app"}; !slices.Equal(got, want) {
+		t.Fatalf("Checkouts = %q, want %q (the walk skips each linked worktree and does not go into it)", got, want)
+	}
+	clash := "2 checkouts have the key acme/app: " + main + " and " + clone
+	if got := g.KeyClashes(); !slices.Equal(got, []string{clash}) {
+		t.Errorf("KeyClashes = %q, want [%q]", got, clash)
+	}
+	if _, err := g.FindCheckout("acme/app"); err == nil || err.Error() != clash+": pass a path" {
+		t.Errorf("FindCheckout(acme/app): err = %v, want %q", err, clash+": pass a path")
+	}
+	if path, ok := g.CheckoutFor("acme/app"); ok {
+		t.Errorf("CheckoutFor(acme/app) = %q, want none of two checkouts", path)
+	}
+	if path, err := g.FindCheckout(main); err != nil || path != main {
+		t.Errorf("FindCheckout(%s) = %q %v, want the path", main, path, err)
+	}
+	os.RemoveAll(clone)
+	if got := g.KeyClashes(); len(got) != 0 {
+		t.Errorf("one checkout left: KeyClashes = %q, want none", got)
+	}
+	if path, ok := g.CheckoutFor("acme/app"); !ok || path != main {
+		t.Errorf("one checkout left: CheckoutFor(acme/app) = %q %v, want %s", path, ok, main)
 	}
 }
 
@@ -549,7 +585,7 @@ func TestTheKeyOfACheckoutIsItsGitHubOrigin(t *testing.T) {
 	}
 }
 
-func TestCheckoutForPicksTheCheckoutNamedLikeTheRepo(t *testing.T) {
+func TestCheckoutForIsTheOneCheckoutOfTheKey(t *testing.T) {
 	g, home := loadFixture(t, "roots = [\"~/repos\"]\n")
 	gitCheckout(t, home, "repos/acme/one", "git@github.com:acme/app.git")
 	gitCheckout(t, home, "repos/acme/two", "git@github.com:acme/app.git")
@@ -587,10 +623,11 @@ func TestFindCheckoutTakesAPathAKeyOrAFolderName(t *testing.T) {
 	for name, want := range map[string]string{
 		"de-interview-exercise": "2 checkouts named de-interview-exercise: pass crexi-dev/de-interview-exercise or crexi/de-interview-exercise",
 		"nope":                  "no checkout named nope below roots ~/repos: add its parent folder to roots or pass a path",
-		"acme/app": "2 checkouts have the origin acme/app and none is named app: pass a path, " +
-			filepath.Join(home, "repos/acme/one") + " or " + filepath.Join(home, "repos/acme/two"),
-		"crexi/nope":    filepath.Join(home, "repos/crexi/nope") + " is not a git checkout",
-		"~/repos/crexi": filepath.Join(home, "repos/crexi") + " is not a git checkout",
+		"acme/app": "2 checkouts have the key acme/app: " +
+			filepath.Join(home, "repos/acme/one") + " and " + filepath.Join(home, "repos/acme/two") + ": pass a path",
+		"crexi/nope":                     filepath.Join(home, "repos/crexi/nope") + " is not a main git checkout",
+		"~/repos/crexi":                  filepath.Join(home, "repos/crexi") + " is not a main git checkout",
+		"~/repos/crexi/data.review-pr-1": filepath.Join(home, "repos/crexi/data.review-pr-1") + " is not a main git checkout",
 	} {
 		if _, err := g.FindCheckout(name); err == nil || err.Error() != want {
 			t.Errorf("FindCheckout(%s): err = %v, want %q", name, err, want)
