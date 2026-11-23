@@ -12,7 +12,7 @@ The MVP is complete when this sequence works with no manual step other than the 
 2. A Worker does the Task in the background. If the skill or the user asks for a plan first, the Worker shows it to the user in its own tab.
 3. Workers implement the change, fix CI, and answer review comments.
 4. The user merges the PR from the Board.
-5. The Task goes to Done and keeps its tab and worktree. When the user closes the tab, the Scheduler removes the worktree.
+5. The Task goes to Done and keeps its tab and worktree. When the user closes the tab, the Scheduler removes the worktree. With [`close_tab`](#merged-tasks) on, the Scheduler closes a merged Task's tab when its Worker is idle, and removes the worktree some days later.
 
 ## Scope
 
@@ -104,8 +104,10 @@ A Responding round that pushes nothing meets its contract when the latest poll s
 | Ready to land | `pr-merge` (user key `m`) | Done, marked merged |
 | Any Stage | `pr-merged` outside lineup, for example by a person or by GitHub auto-merge | Done, marked merged |
 | Any Stage except Done | `task-closed` (user key `x`, confirmed) | Done, marked closed. The Scheduler closes the tab and removes the worktree. |
-| Done | `task-closed` (user key `x` on a Done Task with a tab, confirmed) | Done, with the same outcome. The Scheduler closes the tab and removes the worktree. |
+| Done | `task-closed`: `x` (confirmed), `lineup close`, or `lineup archive` on a Done Task that keeps its tab or its worktree | Done, with the same outcome. The Scheduler closes the tab and removes the worktree. |
 | Done | `tab-closed`: the user closed the Task's tab in Rex | Done, with the same outcome. The Scheduler removes the worktree, and the Repo session if it holds no other tab. |
+| Done, merged, with [`close_tab`](#merged-tasks) on and a tab | The check at each poll finds the Worker idle | Done, with the same outcome. The Scheduler closes the tab, and the Repo session if it holds no other tab. It keeps the worktree for `keep_worktree_days`. |
+| Done, with no tab and a kept worktree | The check at each poll or at start finds that `keep_worktree_days` passed | Done, with the same outcome. The Scheduler removes the worktree. |
 
 `pr-seen` is a level Signal. The poll sends it for each open build PR at each poll, after the other GitHub Signals. It carries the PR's current facts. A second `pr-seen` with the same facts changes nothing. A Task that is already where its first gap leads stays there.
 
@@ -312,7 +314,9 @@ When the Scheduler loads the store, each stored Task in Queued becomes Done with
 
 Recovery also runs after a Rex server restart. The Scheduler reads the Rex server's instance id every 5 s. When the id changes, every Worker is gone, so the Scheduler exits. launchd starts it again. Startup recovery flags each Task whose Worker is gone. The user restores each one with `lineup open <task>` or with `enter` on its row.
 
-Rex brings back each tab after its restart, with the same IDs, but as a login shell with no program. Recovery reads each tab's process with `rex block call process`. A tab that holds only an idle login shell counts as gone, and recovery closes it. A tab where the user started a program in that shell counts as live. Recovery reads no process for a Done Task, so its tab stays until the user closes it.
+Rex brings back each tab after its restart, with the same IDs, but as a login shell with no program. Recovery reads each tab's process with `rex block call process`. A tab that holds only an idle login shell counts as gone, and recovery closes it. A tab where the user started a program in that shell counts as live. Recovery reads no process for a Done Task, so its tab stays until the user closes it. A merged Task whose tab waits for an idle Worker is the exception. If its tab holds an idle shell, recovery closes the tab and keeps the worktree. Otherwise recovery reads the Worker's program status, so a Worker that went idle while the Scheduler was down lets the tab close.
+
+At its end, recovery runs the check that the Scheduler runs at each poll. So a worktree whose `keep_worktree_days` passed while the Scheduler was down goes before the first poll. Recovery can find a merged Task whose tab is gone while the Task waits for an idle Worker. The user did not close that tab, so recovery keeps the worktree for `keep_worktree_days` from the start.
 
 ## Start a Task
 
@@ -350,8 +354,12 @@ Each Task keeps one Worker for its whole life. The Worker starts with `--session
 - A Worker whose tab is gone leaves the Task flagged `tab closed`. A prompt that is due then stays pending, and the flag names its Stage. Nothing opens a tab.
 - Only a Task's first Worker opens a tab with no ask from the user. A Task that has had a Worker never gets a tab from a prompt, whether or not it holds a conversation.
 - `lineup open <task>` restores the Worker. A live tab comes to the front. A Task with no tab gets a new tab in the Worker's folder that runs `claude --resume <conversation>`, with a new side pane, and the flag clears. A prompt that waited arrives at the restored Worker's first `idle`. The restore types nothing else, because the Stage prompt reached the Worker before the tab closed.
-- A Task with no conversation, or whose conversation file is gone, gets a fresh Worker with the Stage prompt. The prompt says that this is a restart, and it quotes every steer that the user sent to the Task, in order.
-- `open` refuses a Done Task that has no tab, with `<task> is Done and its worktree is gone`. It refuses a Task in a Stage that waits for others when no conversation is left to resume.
+- A Task with no conversation, or whose conversation file is gone, gets a fresh Worker with the Stage prompt. The prompt says that this is a restart, and it quotes every steer that the user sent to the Task, in order. A Done Task never gets a fresh Worker.
+- `open` refuses a Done review Task that has no tab, with `<task> is Done and its worktree is gone`. It refuses a Task in a Stage that waits for others when no conversation is left to resume.
+- A Done build Task with no tab resumes its conversation. While its worktree exists, `open` restores the Worker in the worktree, with a new side pane, as for any Task.
+- After the worktree is gone, `open` resumes the Worker read-only in the Repo's main checkout. The Claude adapter trusts the main checkout first. The Worker starts with `--disallowedTools=Bash,Edit,Write,NotebookEdit,EnterWorktree` and without `--allowedTools=Bash(lineup ask:*)`, so it has no tool that writes files. `--append-system-prompt` tells it that lineup removed the worktree, and that it answers the user's questions. `--system-prompt-snapshot off` makes the resume send that text, because a resume otherwise sends the system prompt that the conversation recorded first. The tab has no side pane, because the side pane shows the worktree's changes.
+- If Claude no longer holds the conversation of a Done build Task, `open` refuses with `<task> is Done and Claude no longer holds its conversation`.
+- A Done Task that `open` restored keeps its new tab until the user closes it. That close removes the worktree at once, if the worktree still exists.
 - A Worker that exited and left its tab open, as for a side pane, has no live Worker. `open` closes that tab and opens the new one in its place, so the Task's window is the live tab.
 - The Worker keeps the model and effort of Working. `skill` and `command` apply to each Stage, because the prompt carries them.
 
@@ -388,7 +396,7 @@ trackers = ["local"]
 prefix = "hod"
 ```
 
-The top level holds the keys that apply once: `roots`, `start_skills`, `linear_client_id`, `[linear.*]`, `[github.labels]`, `local_tracker`, `local_issues_dir`, `[review]`, and `[board]`.
+The top level holds the keys that apply once: `roots`, `start_skills`, `linear_client_id`, `[linear.*]`, `[github.labels]`, `local_tracker`, `local_issues_dir`, `[review]`, `[board]`, and `[merged]`.
 
 `[defaults]` holds each key that a Repo can override: `wip_cap`, `poll_interval`, `[budgets]`, `[review_bot]`, `[landing_bar]`, and `[stage.*]`. A layer key at the top level stops the load, for example with `wip_cap belongs in [defaults]. Run lineup config migrate to move it`.
 
@@ -470,7 +478,7 @@ collapsed = ["backlog"]
 hidden = ["done"]
 ```
 
-`order` lists the groups, first to last. A group that it leaves out follows the listed ones, in the default order: `needs_you`, `backlog`, `ready`, `working`, `waiting`, `done`. `collapsed` lists the groups that start closed. Its default is `backlog` and `done`. `hidden` lists the groups that the Board does not show. Its default is none. A key that is absent takes its default, and an empty list means none. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors, but they do not fail the load. The Scheduler starts, and the Board uses the default layout. The Board shows the error on its own line until it quits, for example `config: board.hidden: unknown section "dun" (default layout)`. If the load fails for any other reason, the Board runs with defaults and shows `config: <error>` the same way. The key `queued` named a group that lineup no longer has. A list that names it loads with a warning that names the key, and the Board keeps the rest of the layout.
+`order` lists the groups, first to last. A group that it leaves out follows the listed ones, in the default order: `needs_you`, `follow_up`, `backlog`, `ready`, `working`, `waiting`, `done`. `collapsed` lists the groups that start closed. Its default is `backlog` and `done`. `hidden` lists the groups that the Board does not show. Its default is none. A key that is absent takes its default, and an empty list means none. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors, but they do not fail the load. The Scheduler starts, and the Board uses the default layout. The Board shows the error on its own line until it quits, for example `config: board.hidden: unknown section "dun" (default layout)`. If the load fails for any other reason, the Board runs with defaults and shows `config: <error>` the same way. The key `queued` named a group that lineup no longer has. A list that names it loads with a warning that names the key, and the Board keeps the rest of the layout.
 
 `linear_client_id` is a top-level key. Put it above the first `[table]`, or TOML reads it as part of that table. Leave it out to sign in through lineup's own Linear OAuth app, which any workspace can use. To use your own app, register an OAuth app in Linear with the redirect URI `http://localhost:47821/callback` and no client credentials. Then set its client ID here.
 
@@ -490,6 +498,34 @@ min_review_score = 4
 ```
 
 The Scheduler finds the `claude` path on PATH when it resolves the configuration. A `harness` key is an error until a second Harness exists. Rex starts commands through the login shell, which can resolve a name to a different binary than the Scheduler sees.
+
+### Merged Tasks
+
+`[merged]` is a top-level table. It sets what lineup does with a build Task after its PR merges. A review Task ignores it, because each end of a review Task closes its tab ([ADR 0024](../adr/0024-every-review-end-closes-the-review-tab.md)). See [ADR 0033](../adr/0033-lineup-closes-a-merged-tab-when-the-user-turns-it-on.md).
+
+```toml
+[merged]
+close_tab = true          # close a merged Task's tab when its Worker is idle
+keep_worktree_days = 3    # remove the worktree 3 days after the tab closes
+```
+
+| Key | Value | Default |
+|---|---|---|
+| `close_tab` | `true`: lineup closes a merged build Task's tab when its Worker is idle, and keeps the worktree. `false`: the Task keeps its tab and worktree until the user closes the tab. | `false` |
+| `keep_worktree_days` | The days that lineup keeps the worktree after it closes the tab, from 0 to 30. With 0, lineup removes the worktree when it closes the tab. | 7 |
+
+The rules for `close_tab`:
+
+- The Worker is idle when it reports `idle` or `done`, or when it has exited. While the Worker works, waits for the user, reports an error, or has not reported a status yet, the tab stays.
+- The days count from the tab's close. If the Task has no tab at the merge, they count from the merge.
+- lineup marks a Task at its merge. A Task that merged before the Scheduler started with `close_tab` on keeps its tab.
+- The Scheduler checks at each poll and once at its start. A worktree whose days ended while the Scheduler was stopped goes at the next start.
+- When lineup closes the tab, it also removes the Repo session if that session holds no other tab.
+- While lineup keeps the worktree, the Task stays on the Board with the note `worktree until <date>`, for example `worktree until Jan 2`. On a Follow-up row, the strip shows this note after the Tracker state. `lineup open` and `enter` restore the Worker, as [Start a Task](#start-a-task) describes.
+
+lineup never removes a worktree that has uncommitted changes. Before it runs `wt remove`, it runs `git status --porcelain` in the worktree. If the output is not empty, lineup keeps the worktree, and the Task's note reads `worktree kept: uncommitted changes in <path>`. lineup tries again at each poll, and removes the worktree after the user commits or discards the changes. This rule also holds when the user closes a tab, with `close_tab` on or off.
+
+A negative `keep_worktree_days` is an error. A value over 30 is an error that names the limit, for example `merged.keep_worktree_days: 31 is more than 30, the days that Claude keeps a conversation`. Claude deletes a conversation after `cleanupPeriodDays`, 30 days by default. After that, `lineup open` has no conversation to resume. The default of 7 equals the Board's age-off for a Done Task. The Scheduler reads `[merged]` when it starts, so run `lineup restart` after a change.
 
 ### Linear status map
 
@@ -523,26 +559,32 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
 
 ```
  lineup  WIP 4/5   ●3 need you (+1 in reviews)
- ─────────────────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU  3
- ▸ ENG-590 data   Add billing model          stopped      12m
-   ENG-588 data   Backfill events           permission: Bash(make deploy)   3m
-   ENG-580 data   Retry failed loads        drafts: 2 replies to approve    1m
+   ENG-590  Add billing model                                             stopped     12m  data
+   ENG-588  Backfill events                                               permission  3m   data
+   ENG-580  Retry failed loads                                            drafts      1m   data
  BACKLOG  7 …
  READY  2
-   ENG-611        Move the retry job        unblocked    ▂▄▆
-   local-7 data   Rename the log flag
+   ENG-611  Move the retry job                                            unblocked   ▂▄▆
+   local-7  Rename the log flag                                           ready            data
  WORKING  2
-   WEB-12  web    Fix map tooltip           #4650 ○ no review yet · answering review    5m
-   ENG-592 data   Fix flaky test            #4655 ○ no review yet · fixing CI           1m
+   WEB-12   Fix map tooltip                                               responding  5m   web
+   ENG-592  Fix flaky test                                                CI debug    1m   data
  WAITING  1
-   ENG-571 data   Rate limit login          #4636 ● commented · 1 open thread · optional failed: lint  1d
+ ▸ ENG-571  Rate limit login                                              in review   1d   data
  DONE  1 …
+ ──────────────────────────────────────────────────────────────────────────────────────────────
+ Rate limit login
+ ENG-571 · In review · data · #4636 ● commented · 1 open thread · optional failed: lint
+ enter go to the Worker   p preview   f details   x close   j/k move   n new Issue   ? all keys
 ```
 
 The header shows the WIP cap and the count of the build Tasks that need the user. It counts the review Tasks that need the user in parentheses, when there are any: `(+1 in reviews)`. It has no count for the other groups, because each group heading shows its own count. The header also shows `reviews paused` while the review queues are paused, and a warning when the Scheduler is offline. At 80 columns, the header with `+1 over` and the review count fits.
 
-A row has no Stage column. The group heading says who must act, and the note says what happens. The note of a build Task with a PR starts with the PR number and where the PR stands with its reviewers. Then it says what happens now, or the next gap that the Landing bar has. The approval gap never shows, because the review state already says it.
+Each row shows a status word after the title. A Task in Needs you with a flag shows the reason of the flag, for example `stopped` or `PR closed`. Any other Task shows its Stage, for example `working` or `in review`. An Issue row shows `blocked`, `unblocked`, `ready`, or `backlog`. `docs/spec/one-board.md` lists every status word.
+
+The strip under the rows shows the selected row: the full title, then the ID, the Stage, the Repo, the PR number, and the full note. The strip also shows the Board message and the key hints at the same time. The note says what happens. The note of a build Task with a PR starts with the PR number and where the PR stands with its reviewers. Then it says what happens now, or the next gap that the Landing bar has. The approval gap never shows, because the review state already says it.
 
 | Review state | When |
 |---|---|
@@ -564,7 +606,7 @@ A review Task shows `#N reviewing`, `#N review ready` with `· head moved` when 
 
 Reviews by bots do not count as a person's review.
 
-The groups are Needs you, Backlog, Ready, Working, Waiting, and Done. By default they show in that order: Needs you comes first, and the other groups follow the development cycle. The `[board]` table in the global file changes the order. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
+The groups are Needs you, Follow-up, Backlog, Ready, Working, Waiting, and Done. By default they show in that order: Needs you and Follow-up come first, and the other groups follow the development cycle. The `[board]` table in the global file changes the order. Follow-up holds the Done build Tasks whose Issues are still open in their Trackers. `docs/spec/one-board.md` ("Follow-up") gives the rule for each Tracker. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
 
 Each group with at least one row has a heading that shows the group name and its row count, for example `BACKLOG  7`. A heading is a row that the user can select, except the Needs you heading. `j` and `k` stop on each heading and skip the rows of a closed group. `enter` on a heading opens or closes the group. A closed group shows its heading with a `…` mark and hides its rows, as `BACKLOG  7 …` does. Needs you never closes. This keeps a long Backlog or Done group from pushing Ready and Working off the screen.
 
@@ -574,11 +616,11 @@ Backlog and Done start closed, and `[board] collapsed` changes that. `enter` or 
 |---|---|
 | `j` `k` | Move the selection through the group headings and the rows of open groups |
 | `d` | Show or hide Done |
-| `enter` | On a Task row, focus the Task's tab in Rex. If the Task has started and has no live Worker, restore the Worker with `claude --resume`, as `lineup open` does. The hint reads `restore the Worker`. On a group heading, open or close the group. The hint reads `open` or `close`. |
+| `enter` | On a Task row, focus the Task's tab in Rex. If the Task has started and has no live Worker, restore the Worker with `claude --resume`, as `lineup open` does. On a Done Task with no tab, restore the Worker in its kept worktree, or read-only in the main checkout after lineup removed the worktree. The hint reads `restore the Worker`. On a group heading, open or close the group. The hint reads `open` or `close`. |
 | `p` | Show a live preview of the Worker's screen beside the Board |
 | `f` | Show the detail pane at full screen, and back. On an Issue row, the pane shows the Issue's description. |
 | `m` | Merge the PR (Ready to land) |
-| `x` | Close the Task, after a confirmation. On a Done Task with a tab, close the tab and remove the worktree, after a confirmation. On a Done Task with no tab, archive it, after a confirmation. |
+| `x` | Close the Task, after a confirmation. On a Done Task with a tab, close the tab and remove the worktree, after a confirmation. On a Done Task with no tab, archive it and remove its kept worktree, after a confirmation. |
 | `s` | On an Issue row, open the skill picker, then add the Issue as a Task, which starts it. The first row of the picker is `just go`, which starts with no skill. The other rows are the skills in `start_skills`. Typed text filters these rows, and a typed name that is not in the list becomes its own row. The picker drops a leading `/`. When no Repo mapping exists, the Repo picker opens next. |
 | `c` | On an Issue row, change the status. A Linear row lists the workflow states of its team, and a local row lists the local statuses. |
 | `o` | Open the PR or the Issue in the browser. A local Issue opens in `$EDITOR`. |
@@ -591,7 +633,7 @@ Backlog and Done start closed, and `[board] collapsed` changes that. `enter` or 
 
 The Board also works by mouse or touch, for example from Rex on a phone. A tap on a group heading opens or closes the group. A tap on a Task or Issue row selects the row and opens a menu of its actions, the same actions that the footer hints name. A tap on an action runs it as its key does, and `back` closes the menu. When a tapped action asks yes or no, as a close does, or hits the WIP cap, the question is a menu too. A tap on the detail pane goes back. The scroll wheel moves the selection, as `j` and `k` do.
 
-A Task that ends keeps its tab and worktree. Only the user closes the tab: with `x` or `lineup close <task>` on the Done Task, with the tab's own close in Rex, or with `lineup archive <task>`. A Done Task leaves the Board when the user archives it. It also leaves 7 days after it ends, but only if its tab is closed. A Done Task with an open tab stays on the Board. The Scheduler refuses `lineup add` for a Done Task's ID while that Task keeps its tab. The Scheduler keeps the Task and its events, so `lineup show <task>` still finds it. To put an archived Issue back on the Board, run `lineup add` again.
+A Task that ends keeps its tab and worktree. With [`close_tab`](#merged-tasks) on, lineup closes a merged build Task's tab when its Worker is idle, and keeps the worktree for `keep_worktree_days`. The user's own close removes the worktree at once: `x` or `lineup close <task>` on the Done Task, the tab's own close in Rex, or `lineup archive <task>`. A Done Task leaves the Board when the user archives it. It also leaves 7 days after it ends, but only if it keeps no tab and no worktree. A Done Task with an open tab or a kept worktree stays on the Board. The Scheduler refuses `lineup add` for a Done Task's ID while that Task keeps its tab, with `<task> is Done and keeps its tab: close its tab first with lineup close <task>`. While the Task keeps only its worktree, the refusal reads `<task> is Done and keeps its worktree: remove it first with lineup close <task>`. The Scheduler keeps the Task and its events, so `lineup show <task>` still finds it. To put an archived Issue back on the Board, run `lineup add` again.
 
 ## Orchestrator
 
@@ -645,11 +687,11 @@ Each time that `lineup` opens the Hub, it writes `lineup.lua` beside Rex's `init
 |---|---|
 | What Needs Me… | Lists the Tasks of `lineup decide`. Then it lists the choices of the Task that the user picks. A lone Open the tab runs with no second question. For Answer here, it asks for the user's words. Then it runs `lineup decide <task> <choice>`. |
 | Tell a Worker… | Lists the Tasks with a live Worker, asks for the user's words, and runs `lineup steer`. |
-| Go to a Task… | Lists the Tasks on the Board, except a Done Task with no tab, and runs `lineup open`. |
+| Go to a Task… | Lists the Tasks on the Board, except a Done review Task with no tab, and runs `lineup open`. A Done build Task with no tab resumes its Worker, as `enter` on the Board does. |
 | Start a Task… | Asks for an Issue, for example `ENG-614`, `owner/repo#12`, or `local-7`. Then it runs `lineup add`, which starts the Task. |
 | Start an Ad Hoc Task… | Lists the Repos of the build Tasks on the Board. The user can type another Repo. It asks for the job, then runs `lineup add --repo`. |
 | Review a PR… | Asks for a PR URL and runs `lineup review`. |
-| Close a Task… | Lists the Tasks of Go to a Task…, asks again, and runs `lineup close`. |
+| Close a Task… | Lists the Tasks on the Board, except a Done Task with no tab, asks again, and runs `lineup close`. |
 | Archive Done Tasks… | Lists the Done Tasks with no item ticked, and runs `lineup archive` for each ticked one. |
 | Run a Stage Again… | Lists the started Tasks, then the agent Stages of the Task's Kind, the current Stage first. Then it runs `lineup rerun`. |
 | Set the WIP Cap… | Asks for the cap, with the current cap in the field, and runs `lineup cap`. |
@@ -732,3 +774,9 @@ These facts come from probes on this machine: throwaway Rex sessions, and `gh ap
 | `refUpdateRule` does not show a ruleset's required checks. `rules` does, by branch name, with no PR number. | The poll's GraphQL query against GClunies/lineup#9: `refUpdateRule` is `null`, and an `ACTIVE` `REQUIRED_STATUS_CHECKS` rule names `test`. `internal/github/testdata/ruleset.json`. |
 | A review thread's first comment tells a bot from a person: its author's `__typename` is `Bot` or `User` | The poll's GraphQL query against cli/cli#12942: 7 threads that bots opened and 4 that users opened. `internal/github/testdata/threads.json`. |
 | A reply in a review thread makes a `COMMENTED` review with an empty body. A review bot's review has a body and the author `__typename` `Bot`. | The poll's GraphQL query against cli/cli#12942: of 8 reviews, 5 had an empty body, and Copilot's 2 had `Bot` authors. `internal/github/testdata/feedback.json` is a trimmed copy. |
+| With `--disallowedTools=Edit,Write,NotebookEdit,Bash`, Claude has no Bash, Monitor, or Edit tool and writes no file. A subagent that it starts has no write tool either. | `claude -p` 2.1.323 in a throwaway git repo, asked to create `probe.txt` by any means |
+| `--permission-mode plan` is not a hard block. Claude wrote no file only because the model declined. | The same probe |
+| `claude --resume <id>` resumes a conversation from another folder, also after the first folder is deleted | A session started in folder A answered `ALPHA`. A resume from folder B, then a resume from folder C after A was deleted, both answered `ALPHA`. |
+| `wt remove` without `-f` fails when the worktree has uncommitted changes | `wt remove --help` |
+| A read-only resume from the main checkout keeps the conversation and writes no file | A session started in folder A was told the word `ZEBRA42`. After A was deleted, a resume from a main checkout with `--disallowedTools=Bash,Edit,Write,NotebookEdit,EnterWorktree` answered `ZEBRA42`. `git status` then showed no new file. |
+| A resume sends `--append-system-prompt` only with `--system-prompt-snapshot off` | `claude -p --resume` with an added code word: the default answered that the system prompt holds no such sentence. With `off`, it quoted the sentence. |

@@ -7,6 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/gclunies/lineup/internal/scheduler"
 )
 
 // menu lists choices one per line, so that a tap picks one. A tap on a row
@@ -65,9 +67,9 @@ func (m Model) tapRow(x, y int) (tea.Model, tea.Cmd) {
 	}
 	title := id
 	if t, ok := m.current(); ok {
-		title += "  " + t.Title
+		title += "  " + scheduler.PlainTitle(t.Title)
 	} else if r, ok := m.currentIssue(); ok {
-		title += "  " + r.Title
+		title += "  " + scheduler.PlainTitle(r.Title)
 	}
 	m.menu = menu{title: title, items: append(m.rowActions(), hint{"", "back"})}
 	return m, nil

@@ -57,6 +57,17 @@ func (r issueRow) note() string {
 	return ""
 }
 
+// status is the row's status word: blocked, unblocked, or its group.
+func (r issueRow) status() string {
+	switch {
+	case len(r.Blockers) > 0:
+		return "blocked"
+	case r.Unblocked:
+		return "unblocked"
+	}
+	return strings.ToLower(r.Group)
+}
+
 // priorityGlyph draws Linear's priority in three cells, by priority number.
 var priorityGlyph = map[int]string{0: "···", 1: " ! ", 2: "▂▄▆", 3: "▂▄ ", 4: "▂  "}
 
@@ -217,6 +228,27 @@ func (mi mine) linearIssues() []linear.Issue {
 		out = append(out, mi.lin[id]...)
 	}
 	return out
+}
+
+// openStates maps the ID of each Issue that its Tracker still holds open to
+// the Tracker's state, for example "Waiting for QA". OwnIssues reads only
+// open GitHub Issues.
+func (mi mine) openStates() map[string]string {
+	open := map[string]string{}
+	for _, is := range mi.linearIssues() {
+		if is.State.Type == "unstarted" || is.State.Type == "started" {
+			open[is.Identifier] = is.State.Name
+		}
+	}
+	for _, is := range mi.gh {
+		open[is.ID()] = "open"
+	}
+	for _, is := range mi.loc {
+		if !closedLocal[is.Status] {
+			open[is.ID()] = string(is.Status)
+		}
+	}
+	return open
 }
 
 type (

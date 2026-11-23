@@ -10,7 +10,7 @@ import (
 
 func TestBoardDefaults(t *testing.T) {
 	want := Board{
-		Order:     []string{"Needs you", "Backlog", "Ready", "Working", "Waiting", "Done"},
+		Order:     []string{"Needs you", "Follow-up", "Backlog", "Ready", "Working", "Waiting", "Done"},
 		Collapsed: []string{"Backlog", "Done"},
 		Hidden:    []string{},
 	}
@@ -32,7 +32,7 @@ order = ["done", "needs_you", "working", "waiting", "ready", "backlog"]
 hidden = ["done"]
 `)
 	want := Board{
-		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Ready", "Backlog"},
+		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Ready", "Backlog", "Follow-up"},
 		Collapsed: []string{"Backlog", "Done"},
 		Hidden:    []string{"Done"},
 	}
@@ -55,7 +55,7 @@ hidden = ["done"]
 		t.Fatal(err)
 	}
 	want := Board{
-		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Ready", "Backlog"},
+		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Ready", "Backlog", "Follow-up"},
 		Collapsed: []string{"Backlog"},
 		Hidden:    []string{"Done"},
 	}
@@ -77,9 +77,21 @@ func TestBoardEmptyCollapsedMeansNoneAndOrderKeepsTheRest(t *testing.T) {
 	if got := b.Collapsed; len(got) != 0 {
 		t.Fatalf("collapsed %v, want none", got)
 	}
-	want := []string{"Waiting", "Ready", "Needs you", "Backlog", "Working", "Done"}
+	want := []string{"Waiting", "Ready", "Needs you", "Follow-up", "Backlog", "Working", "Done"}
 	if got := b.Order; !slices.Equal(got, want) {
 		t.Fatalf("order %v, want %v", got, want)
+	}
+}
+
+func TestBoardTakesFollowUpInEveryList(t *testing.T) {
+	g := load(t, "[board]\norder = [\"waiting\", \"follow_up\"]\ncollapsed = [\"follow_up\"]\nhidden = [\"follow_up\", \"done\"]\n")
+	want := Board{
+		Order:     []string{"Waiting", "Follow-up", "Needs you", "Backlog", "Ready", "Working", "Done"},
+		Collapsed: []string{"Follow-up"},
+		Hidden:    []string{"Follow-up", "Done"},
+	}
+	if got, _, err := g.Board(); err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("board %+v, %v, want %+v", got, err, want)
 	}
 }
 

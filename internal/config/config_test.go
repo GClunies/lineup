@@ -1014,3 +1014,29 @@ func TestCheckPrefixTeamsRefusesAPrefixThatEqualsATeamKeyInAnyCase(t *testing.T)
 		t.Fatalf("err = %v, want a refusal that names hod", err)
 	}
 }
+
+func TestMergedClosesNoTabAndKeepsAWeekByDefault(t *testing.T) {
+	g := load(t, "")
+	if g.CloseMergedTab() || g.KeepWorktree() != 7*24*time.Hour {
+		t.Errorf("defaults: close_tab %v, keep %s, want false and 7 days", g.CloseMergedTab(), g.KeepWorktree())
+	}
+	g = load(t, "[merged]\nclose_tab = true\nkeep_worktree_days = 0\n")
+	if !g.CloseMergedTab() || g.KeepWorktree() != 0 {
+		t.Errorf("set: close_tab %v, keep %s, want true and 0", g.CloseMergedTab(), g.KeepWorktree())
+	}
+	if g := load(t, "[merged]\nkeep_worktree_days = 30\n"); g.KeepWorktree() != 30*24*time.Hour {
+		t.Errorf("30 days: keep %s", g.KeepWorktree())
+	}
+}
+
+func TestBadMergedConfigFailsAtLoad(t *testing.T) {
+	for name, c := range map[string]struct{ text, want string }{
+		"more than 30": {"[merged]\nkeep_worktree_days = 31\n", "merged.keep_worktree_days: 31 is more than 30"},
+		"negative":     {"[merged]\nkeep_worktree_days = -1\n", "merged.keep_worktree_days: -1"},
+		"unknown key":  {"[merged]\nclose_tabs = true\n", "unknown keys"},
+	} {
+		if err := loadErr(t, c.text); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: err = %v, want %q", name, err, c.want)
+		}
+	}
+}

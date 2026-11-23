@@ -2,10 +2,13 @@ package board
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gclunies/lineup/internal/config"
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
@@ -21,9 +24,15 @@ type GitHub struct {
 	// Backlog is the label that puts an Issue in Backlog. Empty puts every
 	// Issue in Ready.
 	Backlog string
+	// Checkouts lists the checkouts below the roots. The Board reads it at
+	// each load, so a new clone shows its Issues within a minute. Nil means
+	// no checkout.
+	Checkouts func() []config.Checkout
 }
 
-// load reads the user's own GitHub Issues, off the render path.
+// load reads the user's own GitHub Issues, off the render path. It keeps an
+// Issue only when a checkout's Repo key, which ignores case, is the Issue's
+// repository.
 func (g GitHub) load() tea.Msg {
 	login, on, err := g.Login()
 	switch {
@@ -39,6 +48,13 @@ func (g GitHub) load() tea.Msg {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	is, err := c.OwnIssues(ctx, login)
+	var cs []config.Checkout
+	if g.Checkouts != nil {
+		cs = g.Checkouts()
+	}
+	is = slices.DeleteFunc(is, func(o github.OwnIssue) bool {
+		return !slices.ContainsFunc(cs, func(c config.Checkout) bool { return strings.EqualFold(c.Key, o.Repo) })
+	})
 	return mineGitHubMsg{issues: is, err: err}
 }
 

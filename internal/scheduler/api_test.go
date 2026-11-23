@@ -185,3 +185,25 @@ func TestAddKeepsWhyAnIssueHasNoRepo(t *testing.T) {
 		t.Fatalf("add: err %v, want %q", err, want)
 	}
 }
+
+// noCheckoutConfig has no checkout, so it maps no Issue to a Repo.
+type noCheckoutConfig struct{ fakeConfig }
+
+func (noCheckoutConfig) RepoForIssue(is Issue) (string, error) {
+	return "", fmt.Errorf("%w for %s", ErrNoRepo, is.Identifier)
+}
+
+func TestAddTakesAGitHubIssueOfARepositoryWithNoCheckout(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Config = noCheckoutConfig{} })
+	_, err := h.s.Handle(context.Background(), Request{Op: "add", Issue: "upstream/tool#3", Kind: KindGitHub})
+	if want := "no Repo mapping for upstream/tool#3: pass a repo"; !errors.Is(err, ErrNoRepo) || err.Error() != want {
+		t.Fatalf("add with no repo: err %v, want %q", err, want)
+	}
+	v := h.do(Request{Op: "add", Issue: "upstream/tool#3", Kind: KindGitHub, Repo: "data"}).(TaskView)
+	if v.ID != "upstream/tool#3" || v.Stage != "Working" {
+		t.Fatalf("add with a repo: %+v", v)
+	}
+	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); len(ids) != 1 || ids[0] != "upstream/tool#3" {
+		t.Fatalf("Tasks = %v", ids)
+	}
+}

@@ -1,14 +1,17 @@
 package board
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
@@ -21,7 +24,7 @@ var (
 	bold    = lipgloss.NewStyle().Bold(true)
 	good    = lipgloss.NewStyle().Foreground(teal)
 	bad     = lipgloss.NewStyle().Foreground(pink)
-	selRow  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e3f1ef"))
+	selRow  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e3f1ef")).Background(lipgloss.Color("#23403d"))
 	headRow = lipgloss.NewStyle().Foreground(teal).Bold(true)
 )
 
@@ -83,28 +86,54 @@ func windowStart(lines []string, h int) int {
 	return min(max(at-h/2, 0), len(lines)-h)
 }
 
+// header shows lineup and its alerts at the left, and the live state at the
+// right. A narrow header drops the live state from the start, and it always
+// keeps the WIP cap.
 func (m Model) header() string {
-	s := " " + bold.Render("lineup") + fmt.Sprintf("  WIP %d/%d", m.board.Started, m.board.Cap)
-	if m.board.OverCap > 0 {
-		s += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
-	}
-	s += fmt.Sprintf("   ●%d need you", needsYou(m.board.OfKind(lifecycle.KindBuild).Tasks))
-	if n := needsYou(m.board.OfKind(lifecycle.KindReview).Tasks); n > 0 {
-		s += fmt.Sprintf(" (+%d in reviews)", n)
-	}
+	left := " " + bold.Render("lineup")
 	if m.board.ReviewsPaused {
-		s += "   " + bad.Render("reviews paused")
+		left += "   " + bad.Render("reviews paused")
 	}
 	if !m.online {
-		s += "   " + bad.Render("scheduler offline, showing cache: run lineup restart")
+		left += "   " + bad.Render("scheduler offline, showing cache: run lineup restart")
 	}
-	return ansi.Truncate(s, m.width, "…")
+	live := []string{good.Render("●") + fmt.Sprintf(" %d working", inGroup(m.board.Tasks, lifecycle.GroupWorking))}
+	if n := inGroup(m.board.OfKind(lifecycle.KindReview).Tasks, lifecycle.GroupNeedsYou); n > 0 {
+		live = append(live, fmt.Sprintf("+%d in reviews", n))
+	}
+	wip := fmt.Sprintf("WIP %d/%d", m.board.Started, m.board.Cap)
+	if m.board.OverCap > 0 {
+		wip += bad.Render(fmt.Sprintf(" +%d over", m.board.OverCap))
+	}
+	live = append(live, fmt.Sprintf("%d done since yesterday", m.doneSinceYesterday()), wip)
+	for {
+		right := strings.Join(live, dim.Render(" · "))
+		gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+		if gap >= 2 || len(live) == 1 {
+			return ansi.Truncate(left+strings.Repeat(" ", max(gap, 2))+right, m.width, "…")
+		}
+		live = live[1:]
+	}
 }
 
-func needsYou(tasks []scheduler.TaskView) int {
+func inGroup(tasks []scheduler.TaskView, g lifecycle.Group) int {
 	n := 0
 	for _, t := range tasks {
-		if inNeedsYou(t) {
+		if t.Group == g.String() {
+			n++
+		}
+	}
+	return n
+}
+
+// doneSinceYesterday counts the Tasks that reached Done since 00:00
+// yesterday, local time.
+func (m Model) doneSinceYesterday() int {
+	y, mo, d := m.opts.Now().Local().Date()
+	since := time.Date(y, mo, d-1, 0, 0, 0, 0, time.Local)
+	n := 0
+	for _, at := range m.board.Done {
+		if !at.Before(since) {
 			n++
 		}
 	}
@@ -151,15 +180,80 @@ func (m Model) modeFooter() string {
 		switch {
 		case len(m.menu.items) > 0:
 			s = dim.Render(" tap an action, or j/k and enter   esc back")
-		case m.status != "" && m.statusE:
-			s = bad.Render(" " + m.status)
+		case !m.detail:
+			return m.strip()
 		case m.status != "":
-			s = good.Render(" " + m.status)
+			s = m.message()
 		default:
 			s = hintBar(m.width, m.boardHints())
 		}
 	}
 	return ansi.Truncate(s, m.width, "…")
+}
+
+// message is the Board message, in the bad style when it is an error.
+func (m Model) message() string {
+	if m.statusE {
+		return bad.Render(" " + m.status)
+	}
+	return good.Render(" " + m.status)
+}
+
+// strip is the footer under the rows: a rule, the title and the facts of the
+// selection, the Board message while it is set, and the key hints. The title
+// and the facts wrap, so that they show in full.
+func (m Model) strip() string {
+	w := max(m.width-1, 1)
+	lines := []string{dim.Render(" " + strings.Repeat("─", w))}
+	wrap := func(s string, style lipgloss.Style) {
+		if s == "" {
+			return
+		}
+		for _, l := range strings.Split(ansi.Wrap(s, w, ""), "\n") {
+			lines = append(lines, style.Render(" "+l))
+		}
+	}
+	title, facts := m.selection()
+	wrap(title, bold)
+	wrap(facts, lipgloss.NewStyle())
+	if m.status != "" {
+		lines = append(lines, ansi.Truncate(m.message(), m.width, "…"))
+	}
+	lines = append(lines, ansi.Truncate(hintBar(m.width, m.boardHints()), m.width, "…"))
+	return strings.Join(lines, "\n")
+}
+
+// selection is the title and the facts that the strip shows for the selected
+// row or heading. Both are empty when nothing is selected.
+func (m Model) selection() (title, facts string) {
+	join := func(fs ...string) string {
+		return strings.Join(slices.DeleteFunc(fs, func(f string) bool { return f == "" }), " · ")
+	}
+	if g, ok := headingName(m.sel); ok {
+		n := len(m.groupIDs(g))
+		if n == 1 {
+			return g, "1 row"
+		}
+		return g, fmt.Sprintf("%d rows", n)
+	}
+	if r, ok := m.currentIssue(); ok {
+		return scheduler.PlainTitle(r.Title), join(boardID(r.ID), r.Group, r.Repo, r.note())
+	}
+	t, ok := m.current()
+	if !ok {
+		return "", ""
+	}
+	// The note can name the PR, as in "pr closed: #5226 closed without a merge".
+	pr := fmt.Sprintf("#%d", t.PRNumber)
+	if t.PRNumber == 0 || slices.Contains(strings.FieldsFunc(t.Note, func(r rune) bool { return r != '#' && !unicode.IsDigit(r) }), pr) {
+		pr = ""
+	}
+	// setBoard put a Follow-up row's Tracker state in the place of its note.
+	var kept string
+	if t.Group == groupFollowUp {
+		kept = t.WorktreeNote
+	}
+	return scheduler.PlainTitle(t.Title), join(boardID(t.ID), t.Stage, t.Repo, pr, t.Note, kept)
 }
 
 type hint struct{ key, does string }
@@ -232,7 +326,7 @@ func (m Model) rowActions() []hint {
 		hs = append(hs, hint{"o", "open the Issue"})
 	}
 	hs = append(hs, hint{"f", "details"})
-	if t.Group == lifecycle.GroupDone.String() && !t.Tab {
+	if t.StageKey == lifecycle.Done.Key() && !t.Tab {
 		return append(hs, hint{"x", "archive"})
 	}
 	return append(hs, hint{"x", "close"})
@@ -273,19 +367,18 @@ func (m Model) rows(w int) string {
 // the heading's key or the row's ID, and empty for a note.
 type rowLine struct{ id, text string }
 
-// column is one column of a row. A max of 0 is no cap, and a drop of 0 never
-// drops. A narrow row drops the lowest rank first.
+// column is one column of a row. A drop of 0 never drops. A narrow row drops
+// the lowest rank first.
 type column struct {
-	min, max int
-	drop     int
-	task     func(Model, scheduler.TaskView) string
-	issue    func(issueRow) string
+	drop  int
+	task  func(Model, scheduler.TaskView) string
+	issue func(issueRow) string
 }
 
 const (
 	colID = iota
 	colTitle
-	colNote
+	colStatus
 	colTail
 	colRepo
 	colSkill
@@ -293,45 +386,80 @@ const (
 )
 
 var columns = [numCols]column{
-	colID:    {task: func(_ Model, t scheduler.TaskView) string { return t.ID }, issue: func(r issueRow) string { return r.ID }},
-	colTitle: {min: 12, task: func(_ Model, t scheduler.TaskView) string { return t.Title }, issue: func(r issueRow) string { return r.Title }},
-	colNote:  {min: 12, max: 48, task: func(_ Model, t scheduler.TaskView) string { return t.Note }, issue: issueRow.note},
-	colTail:  {drop: 3, task: func(m Model, t scheduler.TaskView) string { return m.age(t) }, issue: issueRow.priorityText},
-	colRepo:  {drop: 2, task: func(_ Model, t scheduler.TaskView) string { return t.Repo }, issue: func(r issueRow) string { return r.Repo }},
-	colSkill: {drop: 1, task: func(_ Model, t scheduler.TaskView) string { return t.Skill[strings.LastIndex(t.Skill, ":")+1:] }, issue: func(issueRow) string { return "" }},
+	colID:     {task: func(_ Model, t scheduler.TaskView) string { return boardID(t.ID) }, issue: func(r issueRow) string { return boardID(r.ID) }},
+	colTitle:  {task: func(_ Model, t scheduler.TaskView) string { return scheduler.PlainTitle(t.Title) }, issue: func(r issueRow) string { return scheduler.PlainTitle(r.Title) }},
+	colStatus: {task: func(_ Model, t scheduler.TaskView) string { return taskStatus(t) }, issue: issueRow.status},
+	colTail:   {drop: 3, task: func(m Model, t scheduler.TaskView) string { return m.age(t) }, issue: issueRow.priorityText},
+	colRepo:   {drop: 2, task: func(_ Model, t scheduler.TaskView) string { return t.Repo }, issue: func(r issueRow) string { return r.Repo }},
+	colSkill:  {drop: 1, task: func(_ Model, t scheduler.TaskView) string { return t.Skill[strings.LastIndex(t.Skill, ":")+1:] }, issue: func(issueRow) string { return "" }},
 }
 
 const (
 	// titleWant is the title width that the optional columns must leave before
-	// they show.
+	// they show, and titleMin the width that a narrow row cuts the title to.
 	titleWant = 25
-	// noteKeep is the note width that a narrow row keeps, enough for
-	// "#25867 ✓ approved · ready to land".
-	noteKeep = 33
+	titleMin  = 12
 )
 
-// columnWidths drops columns until the title gets titleWant cells beside the
-// note, or beside noteKeep cells of it when the note is longer. The note then
-// takes what the title leaves, but never less than noteKeep. A narrow row cuts the
-// title down to its minimum first.
-func (m Model) columnWidths(w int) [numCols]int {
+// stageWord is the status word of a Task row, by its Stage key.
+var stageWord = map[string]string{
+	lifecycle.Working.Key():     "working",
+	lifecycle.CIRunning.Key():   "CI running",
+	lifecycle.CIDebug.Key():     "CI debug",
+	lifecycle.InReview.Key():    "in review",
+	lifecycle.Responding.Key():  "responding",
+	lifecycle.ReadyToLand.Key(): "ready",
+	lifecycle.Done.Key():        "done",
+	lifecycle.Reviewing.Key():   "reviewing",
+	lifecycle.ReviewReady.Key(): "review ready",
+}
+
+// flagWord is the status word of a flag whose Reason does not read as one.
+// Any other flag shows its Reason.
+var flagWord = map[string]string{
+	string(lifecycle.ReasonPRClosed):    "PR closed",
+	string(lifecycle.ReasonNoBotReview): "bot late",
+}
+
+// taskStatus is the status word of a Task row: the flag of a Task in Needs
+// you, the Tracker state of a Task in Follow-up, which setBoard puts in its
+// note, and the Stage of any other Task.
+func taskStatus(t scheduler.TaskView) string {
+	switch {
+	case inNeedsYou(t) && t.Flag != "":
+		return cmp.Or(flagWord[t.Flag], t.Flag)
+	case t.Group == groupFollowUp:
+		return t.Note
+	}
+	return cmp.Or(stageWord[t.StageKey], t.Stage)
+}
+
+// boardID is the ID that the ID column shows. A GitHub ID drops its owner,
+// because the Repo column names the repository.
+func boardID(id string) string {
+	if _, _, err := github.ParseIssueID(id); err != nil {
+		return id
+	}
+	_, short, _ := strings.Cut(id, "/")
+	return short
+}
+
+// cellRow is a Task or Issue row before it is laid out. An alert row shows
+// its status in the bad style.
+type cellRow struct {
+	id           string
+	cells        [numCols]string
+	faded, alert bool
+}
+
+// columnWidths fits the columns to the rows on screen. It drops columns until
+// the title gets titleWant cells, and the title then takes the rest. A narrow
+// row cuts the title down to titleMin.
+func columnWidths(w int, rows []cellRow) [numCols]int {
 	var ws [numCols]int
-	for _, t := range m.tasks {
-		for i, c := range columns {
-			ws[i] = max(ws[i], lipgloss.Width(c.task(m, t)))
-		}
-	}
-	for _, r := range m.issues {
-		for i, c := range columns {
-			ws[i] = max(ws[i], lipgloss.Width(c.issue(r)))
-		}
-	}
-	for i, c := range columns {
-		if ws[i] > 0 {
-			ws[i] = max(ws[i], c.min)
-			if c.max > 0 {
-				ws[i] = min(ws[i], c.max)
-			}
+	for _, r := range rows {
+		for i, c := range r.cells {
+			ws[i] = max(ws[i], lipgloss.Width(c))
 		}
 	}
 	// The marker takes 3 cells, and 2 cells sit between columns.
@@ -340,90 +468,107 @@ func (m Model) columnWidths(w int) [numCols]int {
 		for i, cw := range ws {
 			if cw > 0 {
 				n++
-				if i != colTitle && i != colNote {
+				if i != colTitle {
 					rest += cw
 				}
 			}
 		}
 		return w - 3 - rest - 2*(n-1)
 	}
-	for rank := 1; rank < numCols && share() < titleWant+min(ws[colNote], noteKeep); rank++ {
+	for rank := 1; rank < numCols && share() < titleWant; rank++ {
 		for i, c := range columns {
 			if c.drop == rank {
 				ws[i] = 0
 			}
 		}
 	}
-	if ws[colNote] > 0 {
-		ws[colNote] = min(ws[colNote], max(share()-titleWant, min(share()-columns[colTitle].min, noteKeep), columns[colNote].min))
-	}
-	ws[colTitle] = max(share()-ws[colNote], columns[colTitle].min)
+	ws[colTitle] = max(share(), titleMin)
 	return ws
 }
 
 func (m Model) rowLines(w int) []rowLine {
-	ws := m.columnWidths(w)
-	row := func(id string, cells [numCols]string, faded bool) string {
-		marker := "  "
-		if id == m.sel {
-			marker = "▸ "
-		}
-		var parts []string
-		for i, c := range cells {
-			if ws[i] > 0 {
-				parts = append(parts, pad(c, ws[i]))
-			}
-		}
-		s := ansi.Truncate(" "+marker+strings.Join(parts, "  "), w, "…")
-		switch {
-		case id == m.sel:
-			return selRow.Render(s)
-		case faded:
-			return dim.Render(s)
-		}
-		return s
+	type group struct {
+		name string
+		rows []cellRow
 	}
-	// A heading shows the group's count, and a closed group's mark.
-	heading := func(g string, n int) string {
-		s := fmt.Sprintf(" %s  %d", strings.ToUpper(g), n)
-		if !m.open(g) {
-			s += " …"
-		}
-		if m.sel == headingKey(g) {
-			return selRow.Render(ansi.Truncate("▸"+s[1:], w, "…"))
-		}
-		return headRow.Render(ansi.Truncate(s, w, "…"))
-	}
-	var out []rowLine
+	var groups []group
+	var onScreen []cellRow
 	for _, g := range m.lay.order {
 		if !m.shown(g) {
 			continue
 		}
-		var lines []rowLine
+		var rows []cellRow
 		for _, t := range m.tasks {
 			if t.Group == g {
-				var cells [numCols]string
+				r := cellRow{id: t.ID, faded: g == groupDone, alert: inNeedsYou(t)}
 				for i, c := range columns {
-					cells[i] = c.task(m, t)
+					r.cells[i] = c.task(m, t)
 				}
-				lines = append(lines, rowLine{t.ID, row(t.ID, cells, g == groupDone)})
+				rows = append(rows, r)
 			}
 		}
-		for _, r := range m.issues {
-			if r.Group == g {
-				var cells [numCols]string
+		for _, is := range m.issues {
+			if is.Group == g {
+				r := cellRow{id: is.ID, faded: g == groupBacklog || len(is.Blockers) > 0, alert: len(is.Blockers) > 0}
 				for i, c := range columns {
-					cells[i] = c.issue(r)
+					r.cells[i] = c.issue(is)
 				}
-				lines = append(lines, rowLine{r.ID, row(r.ID, cells, g == groupBacklog || len(r.Blockers) > 0)})
+				rows = append(rows, r)
 			}
 		}
-		if len(lines) == 0 {
+		if len(rows) == 0 {
 			continue
 		}
-		out = append(out, rowLine{headingKey(g), heading(g, len(lines))})
+		groups = append(groups, group{g, rows})
 		if m.open(g) {
-			out = append(out, lines...)
+			onScreen = append(onScreen, rows...)
+		}
+	}
+	ws := columnWidths(w, onScreen)
+	// Each cell gets its own style, because the reset of an inner style ends an
+	// outer one.
+	row := func(r cellRow) string {
+		style, marker := lipgloss.NewStyle(), "  "
+		switch {
+		case r.id == m.sel:
+			style, marker = selRow, "▸ "
+		case r.faded:
+			style = dim
+		}
+		var parts []string
+		for i, c := range r.cells {
+			if ws[i] == 0 {
+				continue
+			}
+			cs := style
+			if i == colStatus && r.alert {
+				cs = bad.Inherit(style)
+			}
+			parts = append(parts, cs.Render(pad(c, ws[i])))
+		}
+		return ansi.Truncate(style.Render(" "+marker)+strings.Join(parts, style.Render("  ")), w, "…")
+	}
+	// A heading shows the group's name, its count in the dim style, and a
+	// closed group's mark.
+	heading := func(g string, n int) string {
+		count := fmt.Sprintf(" %d", n)
+		if !m.open(g) {
+			count += " …"
+		}
+		if m.sel != headingKey(g) {
+			return ansi.Truncate(headRow.Render(" "+g)+dim.Render(count), w, "…")
+		}
+		name := "▸" + g
+		return ansi.Truncate(selRow.Render(name)+dim.Inherit(selRow).Render(pad(count, max(w-lipgloss.Width(name), 0))), w, "…")
+	}
+	var out []rowLine
+	for _, g := range groups {
+		out = append(out, rowLine{headingKey(g.name), heading(g.name, len(g.rows))})
+		if !m.open(g.name) {
+			continue
+		}
+		for _, r := range g.rows {
+			out = append(out, rowLine{r.id, row(r)})
 		}
 	}
 	switch {
@@ -441,7 +586,7 @@ func (m Model) row(sel bool, text string) string {
 	if !sel {
 		return ansi.Truncate("   "+text, m.width, "…")
 	}
-	return selRow.Render(ansi.Truncate(" ▸ "+text, m.width, "…"))
+	return selRow.Render(pad(" ▸ "+text, m.width))
 }
 
 func pad(s string, w int) string {
@@ -455,7 +600,7 @@ func (m Model) age(t scheduler.TaskView) string {
 	}
 	now := m.opts.Now()
 	d := now.Sub(t.Since)
-	if t.Group == "Done" && t.Since.Local().YearDay() == now.Local().YearDay() && d < 24*time.Hour {
+	if t.StageKey == lifecycle.Done.Key() && t.Since.Local().YearDay() == now.Local().YearDay() && d < 24*time.Hour {
 		return "today"
 	}
 	return ago(d)

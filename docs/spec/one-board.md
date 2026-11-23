@@ -28,25 +28,29 @@ The Board shows the work view only. It has no plan view (ADR 0021) and no review
 ## Shape
 
 ```
- lineup  WIP 4/5   ●1 need you (+1 in reviews)
+ lineup                          ● 1 working · +1 in reviews · 2 done since yesterday · WIP 4/5
+───────────────────────────────────────────────────────────────────────────────────────────────
+ Needs you 1
+   ENG-590  Add billing model                                              stopped    12m  data
+ Backlog 2
+   ENG-620  Split billing ingest                                           backlog    ▂
+   local-9  Retry failed loads before alerting                             backlog
+ Ready 3
+   ENG-611  Move the retry job                                             unblocked  ▂▄▆
+   local-7  Rename the log flag                                            ready           data
+ ▸ ENG-614  Drop old API keys                                              blocked    ▂▄
+ Working 1
+   ENG-592  Fix flaky test                                                 CI debug   1m   data
+ Waiting 1
+   ENG-571  Rate limit login                                               in review  1d   data
+ Done 1 …
  ──────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU  1
- ▸ ENG-590 data  Add billing model        stopped                    12m
- BACKLOG  2
-   local-9                    Retry failed loads before alerting
-   ENG-620              data  Split billing ingest     △4
- READY  3
-   ENG-611              data  Move the retry job       unblocked        △2
-   local-7                    Rename the log flag
-   ENG-614              data  Drop old API keys        blocked by ENG-610  △3
- WORKING  1
-   ENG-592 data  Fix flaky test           #4655 ○ no review yet · fixing CI     1m
- WAITING  1
-   ENG-571 data  Rate limit login         #4636 ● commented · 1 open thread   1d
- DONE  1 …
+ Drop old API keys
+ ENG-614 · Ready · blocked by ENG-610
+ s start   f details   c status   o open the Issue   j/k move   n new Issue   ? all keys
 ```
 
-Each heading shows its row count. Backlog is open in this picture, and Done is closed. The header has no per-group counts. See "Lay out the groups" below.
+The header shows `lineup` at the left and the live state at the right. See "The header" below. Each heading shows the group name and its row count. Backlog is open in this picture, and Done is closed. See "Lay out the groups" below. Each row shows a status word, and the strip under the rows shows the selected row, ENG-614. See "The status column and the strip" below. A background band marks the selected row. See "The selected row and titles" below.
 
 An Issue row is an Issue of the user's own with no Task on the Board. The Board reads the Issues itself. The Scheduler and its store do not change.
 
@@ -56,6 +60,44 @@ An Issue row is an Issue of the user's own with no Task on the Board. The Board 
  gh search issues (GitHub Tracker) ┘        ▲
                                             └─ minus each ID that a Task on the Board holds
 ```
+
+## The status column and the strip
+
+Each Task row and Issue row shows one status word in its own column, after the title. A status word has one or two words, except a Tracker state in Follow-up. The title takes the cells that the other columns leave.
+
+| Row | Status word |
+|---|---|
+| A Task in Needs you with a flag | The reason of the flag: `question`, `permission`, `auth`, `error`, `setup failed`, `stopped`, `budget spent`, `tab closed`, `worker silent`, `draft`, `drafts`, `PR closed` for `pr closed`, or `bot late` for `no bot review` |
+| A Task in Follow-up | The Tracker state, for example `Waiting for QA`. The Tracker names the state, so it can have more than two words. |
+| Any other Task | The Stage: `working`, `CI running`, `CI debug`, `in review`, `responding`, `ready` for Ready to land, or `done` |
+| An Issue with an open blocker | `blocked` |
+| An Issue whose blockers are all done or canceled | `unblocked` |
+| Any other Issue | The group: `ready` or `backlog` |
+
+The status column never drops. A Task row in Needs you and a blocked Issue row show the word in pink. The word carries the state without the color, so the Board reads the same with `NO_COLOR=1`.
+
+The strip is the footer under the rows. It has these lines:
+
+1. A rule.
+2. The full title of the selected row.
+3. The facts of the selected row, joined by ` · `: the ID, the Stage, the Repo, the PR number, and the full note. An empty fact does not show. The PR number shows only when the note does not name it. An Issue row shows its group in place of the Stage, and its note is `blocked by <IDs>`, `unblocked`, or empty.
+4. The Board message, for example `open ENG-590 ok`, while it is set. The next key clears the message.
+5. The key hints.
+
+The title and the facts wrap at the width of the Board, so the strip never cuts them. On a group heading, the strip shows the group name and its row count, for example `Working` and `2 rows`. When no row is selected, the strip shows the rule and the key hints. A mode with its own keys shows its own footer in place of the strip, for example the capture box, a picker, or the detail pane.
+
+## The selected row and titles
+
+The selected row has the `▸` marker and a dark teal background over the full width of its pane. The band covers the marker, each cell, the separators, and the spaces to the end of the pane. A selected heading and a selected item in a picker or a menu have the same band. A pink status word and the dim count of a heading keep their color on the band.
+
+The rows, the strip, and the menu of a tap show a plain title:
+
+- A URL is a word that holds `://` or starts with `www.`. The last word of a line is also a URL when a cut left only the start of `https://` or `http://`, for example `https:/`.
+- The plain title is the first line of the title that keeps a word without its URLs and without a trailing `:`, `,`, `;`, `-`, `–`, `—`, or `(`. A trailing `)` or `.` stays.
+- The plain title joins the words of that line with one space.
+- A title that is only URLs shows its first line.
+
+A Task with no Issue stores the plain title of its text, cut at a word to at most 60 characters. A first word that is longer is cut inside the word. The tab label and the branch name come from the stored title. The filter matches the stored title, and `lineup ls --json` shows the stored title.
 
 ## Issue rows
 
@@ -67,11 +109,12 @@ An Issue row is an Issue of the user's own with no Task on the Board. The Board 
 
 - An Issue in a started, completed, or canceled state is in neither group.
 - A GitHub Issue is the user's own when the user is an assignee, or when it has no assignee and the user opened it. A pull request gets no row. `docs/spec/trackers.md` ("The Board") gives the details.
+- The Board shows a GitHub Issue only when a checkout below the roots has the Issue's owner/repo as its Repo key. The match ignores case. `lineup add --repo <repo> owner/repo#n` adds an Issue from any repository.
 - An Issue whose ID a Task on the Board holds has no Issue row. The Task row shows that Issue. A Linear ID is in upper case, for example `LOCAL-5`, a local ID is in lower case, for example `local-5`, and a GitHub ID is `owner/repo#12`, so an exact match names one Tracker.
-- A row shows the ID, the Repo when it is known, the title, a note, and the priority. The note is `blocked by <IDs>`, `unblocked`, or empty. A GitHub row's Repo is the repository name, and its note names a blocker in the same repository as `#12`.
+- A row shows the ID, the title, a status word, the priority, and the Repo when it is known. The status word is `blocked`, `unblocked`, `ready`, or `backlog`. The strip names the open blockers of the selected row, as `blocked by <IDs>`. A GitHub row's Repo is the repository name, and the strip names a blocker in the same repository as `#12`.
 - `unblocked` means that the Issue has one or more blockers and that every blocker is done or canceled. A Linear blocker is a "blocks" relation. A local blocker is an entry in `blocked_by`. A GitHub blocker is a `Blocked by #12` line in the body, and it is done when GitHub reports it closed.
 
-The default group order is Needs you, Backlog, Ready, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
+The default group order is Needs you, Follow-up, Backlog, Ready, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. Follow-up comes next because its Issues still need the user after their PRs merge. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
 
 Both groups sort in this order:
 
@@ -87,6 +130,22 @@ Both groups sort in this order:
 - A failed fetch keeps the rows from the last fetch, and the footer names the workspace that failed.
 - The Board reads the Local Tracker folder whatever `local_tracker` says (ADR 0020).
 - The Board reads GitHub Issues at each load while the GitHub Tracker is on, and it has no cache for them. A failed read keeps the GitHub rows from the last read, and the footer shows `GitHub Issues:` and the error. The other rows stay. When the Tracker turns off, the GitHub rows leave.
+
+## Follow-up
+
+When a build Task's PR merges, the Task goes to Done. Its Issue can still need the user, for example in the Linear state "Waiting for QA". A Done Task whose Issue its Tracker still holds open is in the Follow-up group. The row's status word is the Tracker state. The note in the strip is the Tracker state, then the worktree note when lineup keeps the Task's worktree, for example `Waiting for QA · worktree kept: uncommitted changes in <path>`. See [Merged Tasks](mvp.md#merged-tasks).
+
+| Tracker | The Issue is open when | Tracker state |
+|---|---|---|
+| Linear | The state type is `unstarted` or `started` | The state name, for example `Waiting for QA` |
+| GitHub | The Issue is open | `open` |
+| Local | `status` is not `done` or `canceled` | The status, for example `in review` |
+
+- The Task's ID must match the Issue's ID exactly, as for an Issue row.
+- Each load of the Issues places the row again. When the Tracker closes the Issue, the row moves to Done.
+- The Board reads only the user's own Issues. When an Issue leaves them, for example when someone assigns the Linear Issue to another person, its Task moves to Done.
+- Follow-up starts open, and its rows do not fade. On a Follow-up row, `x`, its hint, and the `today` age work as on a Done row.
+- Follow-up rows are not in Needs you. They add nothing to the Needs you count of the heading or the `lineup` tab.
 
 ## Keys on an Issue row
 
@@ -114,10 +173,10 @@ One table, `issueKinds` in `internal/board/issuekind.go`, decides the keys of ea
 
 ```
  / rename
- READY  1
- ▸ local-7                    Rename the log flag
- DONE  1
-   ENG-560 Done         data  Rename config options
+ Ready 1
+ ▸ local-7  Rename the log flag                                              ready         data
+ Done 1
+   ENG-560  Rename config options                                            done   today  data
 ```
 
 - The filter matches the ID and the title of each Task and Issue row, as a fuzzy match.
@@ -174,13 +233,31 @@ The list shows `local` first, then the recent Destinations, then every other Des
 
 If step 1 fails, the local file does not change. If step 2 fails, the footer names both Issues, so the user can cancel the local Issue by hand.
 
-## One Needs you count
+## The header
 
-The header counts the build Tasks that need the user. It counts the review Tasks that need the user in parentheses, when there are any: `●2 need you (+1 in reviews)`. While the queues are paused, the header also shows `reviews paused`.
+The header shows `lineup` and its alerts at the left, and the live state at the right:
 
-The header has no count for the other groups. Each group heading shows its count.
+```
+ lineup  ● 2 working · +3 in reviews · 4 done since yesterday · WIP 5/12 +1 over
+```
 
-The Board already holds the Tasks of both Kinds, so this needs no new data.
+The left part is `lineup`, then each alert in pink, 3 spaces apart:
+
+- `reviews paused` while the review queues are paused.
+- `scheduler offline, showing cache: run lineup restart` while the Board cannot reach the Scheduler.
+
+The right part ends at the last column. It joins these items with ` · `:
+
+1. `● N working`. N counts the Tasks of both Kinds in the Working group.
+2. `+R in reviews`. R counts the review Tasks in Needs you. The item shows only when R is more than 0.
+3. `D done since yesterday`. D counts the Tasks that reached Done at or after 00:00 local time yesterday, archived Tasks included.
+4. `WIP s/c`. s counts the started build Tasks, and c is the WIP cap. When o Tasks run over the cap, ` +o over` follows in pink.
+
+The Scheduler sends the time that each Task reached Done in the last 48 hours, because 00:00 yesterday is at most 48 hours ago. The Board counts the times at or after 00:00 yesterday by its own clock.
+
+The header has no Needs you count of build Tasks, because the Needs you heading shows it. It has no count for the other groups. Each group heading shows its count.
+
+At least 2 spaces separate the two parts. When the header does not fit, it drops items of the live state from the start: first `working`, then `in reviews`, then `done since yesterday`. It always keeps the WIP item. When the header still does not fit, it cuts the text at the width with `…`. At 80 columns with no alert, the header in the example above fits in full.
 
 ## Lay out the groups
 
@@ -193,11 +270,11 @@ collapsed = ["backlog"]
 hidden = ["done"]
 ```
 
-The keys of a group are `needs_you`, `backlog`, `ready`, `working`, `waiting`, and `done`. A key that is absent takes its default, and an empty list means none. A group that `order` leaves out follows the listed groups, in the default order. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors that name the key, but they do not fail the load, so the Scheduler still starts. The board then uses the default layout and shows the error on its own line, for example `config: board.hidden: unknown section "dun" (default layout)`. No other status message replaces that line, and it stays until the board quits. If `config.Load` fails for any other reason, the board runs with defaults and shows `config: <error>` in the same line. The old key `queued` is not an error. A list that names it loads with a warning that names the key, and the board keeps the rest of the layout.
+The keys of a group are `needs_you`, `follow_up`, `backlog`, `ready`, `working`, `waiting`, and `done`. A key that is absent takes its default, and an empty list means none. A group that `order` leaves out follows the listed groups, in the default order. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors that name the key, but they do not fail the load, so the Scheduler still starts. The board then uses the default layout and shows the error on its own line, for example `config: board.hidden: unknown section "dun" (default layout)`. No other status message replaces that line, and it stays until the board quits. If `config.Load` fails for any other reason, the board runs with defaults and shows `config: <error>` in the same line. The old key `queued` is not an error. A list that names it loads with a warning that names the key, and the board keeps the rest of the layout.
 
 | Rule | Behavior |
 |---|---|
-| Heading | The group name in upper case and its row count, as `BACKLOG  7`. A closed group adds ` …` and hides its rows. A group with no row has no heading. |
+| Heading | The group name in sentence case, then its row count in the dim style, as `Backlog 7`. A closed group adds ` …` and hides its rows. A group with no row has no heading. |
 | Needs you | It never closes, and its heading is not a selection stop. |
 | Keys | `j` and `k` move through the headings and the rows of open groups, and skip a hidden group. `enter` on a heading opens or closes the group. The footer reads `enter open` or `enter close`, then `j/k move`. |
 | Order | `order`. The default is the order above. |
@@ -251,12 +328,21 @@ Each PR lands on `main` before the next one starts.
 | A local capture writes `status: backlog`. A Linear capture sends the team, the Project, and `AssignToMe`. | Board tests with the fake Linear client and a temporary Local Tracker folder |
 | The default Destination is `local`, even after the user picks a Linear one | A board test that captures twice |
 | Promote changes the local file only after the Linear create succeeds | A board test with a failing fake create |
-| The header names no view, shows the review Tasks' Needs you count and `reviews paused`, has no per-group counts, and fits 80 columns | Board tests that read the header |
+| The header names no view. It shows `lineup` and its alerts at the left, and the working count, the review Tasks' Needs you count, the Tasks done since yesterday, and WIP at the right. It fits 80 columns, and a narrow header drops the live state from the start. | Board tests that read the header at several widths and with each alert |
+| The header counts the Tasks that reached Done since 00:00 yesterday, and not one before | A Scheduler test that reads the Done times in the view, and a board test with a fixed clock |
+| Each heading shows the group name in sentence case and its count | A board test over every group |
+| The selected row, heading, or menu item has a background over the full width of its pane | A board test that reads the background of each cell with a color profile |
+| A title shows as one line with no URL, and a Task with no Issue stores its title cut at a word | Scheduler tests, and a board test that reads the row, the strip, and the menu |
+| `lineup ls --json` shows the stored title | A CLI test |
 | Backlog and Done start closed with their counts, and `enter` on a heading opens or closes the group for this run only | Board tests that read the screen and the footer, and a restart |
 | The groups show in the `[board]` order, `collapsed` groups start closed, and `hidden` groups show nothing | Board tests that read the screen at 81 columns |
 | A bad `[board]` table loads with the default layout and an error, and the board shows the error until it quits | Config tests, and a board test that reads the screen after other status messages |
 | `d` shows or hides Done, and opens it when it shows | Board tests that read the screen before and after `d` |
 | `[board]` fails at load on an unknown group, a duplicate, and `needs_you` in `collapsed` or `hidden` | Config tests that read the error |
+| `[board]` takes `follow_up` in `order`, `collapsed`, and `hidden`. Follow-up is second in the default order, and it starts open. | Config tests that read the layout |
+| A Done Task whose Issue is open in Linear, GitHub, or the Local Tracker shows in Follow-up with the Tracker state. It moves to Done when the Tracker closes the Issue. | Board tests that read the screen before and after the Tracker closes the Issue, and a table test over every Linear state type and every local status |
+| A Follow-up row adds nothing to the Needs you count | A board test that reads the Status reports and the Needs you heading |
+| A Follow-up row keeps the `x` key, the archive hint, and the `today` age of a Done row | A board test that reads the row and the footer, and presses `x` and `y` |
 | `j` and `k` stop on each shown heading except Needs you and skip the rows of closed groups | A board test over the fixture, and a `rapid` property test over random rows, orders, closed sets, and hidden sets |
 | The free slot toast names the first Ready row, and only when a slot is free | A board test that sends two board views |
 | `1`, `2`, and `3` do nothing | A board test that reads the screen and the command |
@@ -265,4 +351,10 @@ Each PR lands on `main` before the next one starts.
 | `c` writes the new status, the row moves group or leaves the Board, and a failed write changes nothing | Board tests, and a `rapid` property test over every local status pair |
 | The filter shows only the matches, opens a closed group with a match, and `esc` gives back the exact screen | Board tests, and a `rapid` property test over random filters |
 | The first paint stays inside the speed budget | `TestSpeedBudget` with 200 Issue rows |
+| Each row shows the status word of its Stage or its Needs you reason, and no status word has more than two words | A table test over every Stage and every reason that reads the row on the screen |
+| At 95 columns, a row in Needs you and a Working row show their status words in one column, and the title gets at least 45 cells | A board test that measures the cells of the rows |
+| A blocked Issue row shows `blocked`, and the strip names its blockers | Board tests with a Linear blocker and a GitHub blocker |
+| The strip shows the full title and the full note of the selected row, also at 60 columns, and the facts of a heading | Board tests that read the strip |
+| A Board message and the key hints show at the same time, and the next key clears the message | A board test that presses `enter` on a live Task |
+| With color off, each status is a word. With color on, a row in Needs you shows its word in pink. | A board test with the color profile of `NO_COLOR` and with a color profile |
 | Live | A dev build of `lineup board` in a Rex pane, read with `rex`, shows the groups with real Linear data, and captures a local Issue into a temporary Local Tracker folder |

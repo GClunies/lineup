@@ -11,6 +11,7 @@ type section struct{ key, heading string }
 
 var sections = []section{
 	{"needs_you", "Needs you"},
+	{"follow_up", "Follow-up"},
 	{"backlog", "Backlog"},
 	{"ready", "Ready"},
 	{"working", "Working"},

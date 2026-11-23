@@ -15,6 +15,10 @@ import (
 
 var ErrMissing = errors.New("worktrunk is required: brew install worktrunk (https://worktrunk.dev)")
 
+// ErrUncommitted refuses to remove a worktree that holds uncommitted changes,
+// untracked files included, as wt remove does without -f.
+var ErrUncommitted = errors.New("the worktree has uncommitted changes")
+
 // Require finds the wt binary. In zsh, wt is a shell function, so only the
 // binary on PATH can run without a shell.
 func Require() (string, error) {
@@ -67,11 +71,20 @@ func Path(ctx context.Context, bin, repo, branch string) (string, error) {
 	return "", nil
 }
 
-// Remove deletes the worktree of the branch. A branch with no worktree is not an error.
+// Remove deletes the worktree of the branch. A branch with no worktree is not
+// an error. A worktree with uncommitted changes stays, and the error wraps
+// ErrUncommitted. git reads the changes, because wt's message is for people.
 func Remove(ctx context.Context, bin, repo, branch string) error {
 	p, err := Path(ctx, bin, repo, branch)
 	if err != nil || p == "" {
 		return err
+	}
+	changes, err := git(ctx, p, "status", "--porcelain")
+	if err != nil {
+		return err
+	}
+	if changes != "" {
+		return fmt.Errorf("%w: %s", ErrUncommitted, p)
 	}
 	_, err = run(ctx, bin, "-C", repo, "-y", "remove", "--foreground", branch)
 	return err
