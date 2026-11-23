@@ -1,0 +1,24 @@
+internal/board/start_test.go
+  s_dae4353c4a0fc0::t_65c17215b9ad5d 195-226
+internal/board/start.go
+  s_dae4353c4a0fc0::t_097b32ef84f536 141-143
+  s_dae4353c4a0fc0::t_7a2a88ee35ddb6 131
+  s_dae4353c4a0fc0::t_b7b46675f7828d 53-54
+  s_dae4353c4a0fc0::t_49f162b8293577 172-174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c13abefe2e4916e9ee0f7f8870dc57ac64a59d23",
+  "prompts": {},
+  "sessions": {
+    "s_dae4353c4a0fc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a7909f97-d7e4-4e97-b846-f43f4021cdf8",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
