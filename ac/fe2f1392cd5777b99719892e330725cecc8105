@@ -1,0 +1,19 @@
+internal/scheduler/scheduler.go
+  s_1818a5989cfcac::t_67c39ba340614a 205,215-226,236-237,239,242-243,251
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "acfe2f1392cd5777b99719892e330725cecc8105",
+  "prompts": {},
+  "sessions": {
+    "s_1818a5989cfcac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a3fc8e6-5793-4a3f-9e11-3f14d84d32de",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
