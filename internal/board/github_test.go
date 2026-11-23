@@ -109,9 +109,9 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 		level                 int
 	}{
 		{"assigned, with the backlog label", "octo/sandbox#10", groupBacklog, "", 0},
-		{"blocked by an open Issue, its other blocker closed", "octo/sandbox#11", groupReady, "blocked by #12", 1},
-		{"opened by the user, with no assignee", "octo/sandbox#12", groupReady, "", 0},
-		{"its only blocker closed", "octo/sandbox#14", groupReady, "unblocked", 0},
+		{"blocked by an open Issue, its other blocker closed", "octo/sandbox#11", groupUpNext, "blocked by #12", 1},
+		{"opened by the user, with no assignee", "octo/sandbox#12", groupUpNext, "", 0},
+		{"its only blocker closed", "octo/sandbox#14", groupUpNext, "unblocked", 0},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			r, ok := rows[c.id]
@@ -124,7 +124,7 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 		})
 	}
 	out := screen(e.m)
-	inOrder(t, out, "Backlog 2", "sandbox#10", "Ready 5", "sandbox#12", "sandbox#14", "sandbox#11", "Working 1", "sandbox#16")
+	inOrder(t, out, "Backlog 2", "sandbox#10", "Up next 5", "sandbox#12", "sandbox#14", "sandbox#11", "Working 1", "sandbox#16")
 	if l := lineOf(t, out, "sandbox#11"); !strings.Contains(l, "Drop old API keys") || !strings.Contains(l, "blocked") {
 		t.Errorf("the sandbox#11 row must show its title and blocked: %q", l)
 	}
@@ -132,7 +132,7 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 		t.Errorf("the sandbox#14 row must show unblocked: %q", l)
 	}
 	e.m.sel = "octo/sandbox#11"
-	if f := footerAt(e.m, 200); !strings.Contains(f, "\n sandbox#11 · Ready · sandbox · blocked by #12\n") {
+	if f := footerAt(e.m, 200); !strings.Contains(f, "\n sandbox#11 · Up next · sandbox · blocked by #12\n") {
 		t.Errorf("the strip must name the blocker as #12:\n%s", f)
 	}
 }
@@ -171,11 +171,11 @@ func TestATaskHoldsAGitHubRowOnlyByTheExactID(t *testing.T) {
 	}
 }
 
-func TestAnEmptyBacklogLabelPutsEveryGitHubIssueInReady(t *testing.T) {
+func TestAnEmptyBacklogLabelPutsEveryGitHubIssueInUpNext(t *testing.T) {
 	e, _, _ := githubEnv(t)
 	e.m.opts.GitHub.Backlog = ""
 	e.m.setBoard(e.m.board)
-	if g := githubRows(e.m)["octo/sandbox#10"].Group; g != groupReady {
+	if g := githubRows(e.m)["octo/sandbox#10"].Group; g != groupUpNext {
 		t.Fatalf("#10 in %q", g)
 	}
 }

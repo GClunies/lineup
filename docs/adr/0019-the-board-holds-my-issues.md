@@ -1,5 +1,7 @@
 # The Board holds the user's own Issues
 
+[ADR 0034](0034-the-board-has-one-up-next-group.md) amends this ADR. The Up next group replaces the Ready group.
+
 The `2 work` view shows the user's own Issues that have no Task, in two new groups, Ready and Backlog. An Issue is the user's own when Linear assigns it to the user or when it is a local Issue. The user plans the what, which is the ideas and the problems that only the user knows. The Worker plans the how, as part of the work ([ADR 0010](0010-planning-belongs-to-the-worker.md)). We chose this because the user wants one board from an idea to a merged PR, and lineup orchestrates the user's own work, not the team's.
 
 ## Considered Options

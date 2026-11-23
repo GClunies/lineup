@@ -22,7 +22,7 @@ type GitHub struct {
 	// Client runs gh. Nil runs the gh on PATH.
 	Client *github.Client
 	// Backlog is the label that puts an Issue in Backlog. Empty puts every
-	// Issue in Ready.
+	// Issue in Up next.
 	Backlog string
 	// Checkouts lists the checkouts below the roots. The Board reads it at
 	// each load, so a new clone shows its Issues within a minute. Nil means

@@ -581,13 +581,10 @@ func boardOptions(path string) board.Options {
 		Backlog:   g.GitHubBacklogLabel(),
 		Checkouts: g.Checkouts,
 	}
-	b, warnings, berr := g.Board()
+	b, berr := g.Board()
 	opts.Board = b
-	switch {
-	case berr != nil:
+	if berr != nil {
 		opts.ConfigErr = "config: " + berr.Error() + " (default layout)"
-	case len(warnings) > 0:
-		opts.ConfigErr = "config: " + strings.Join(warnings, "; ")
 	}
 	return opts
 }

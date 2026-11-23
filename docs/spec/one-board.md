@@ -1,6 +1,6 @@
 # One board: the user's own Issues on the work view
 
-Status: built. This spec adds the user's own Issues to the work view, a quick capture, and a promote from the Local Tracker to Linear. It also adds the description, the status change, and the filter that replace the plan view. The decisions behind it are in `docs/adr/0019-the-board-holds-my-issues.md`, `docs/adr/0020-capture-defaults-to-the-local-tracker.md`, `docs/adr/0021-the-board-has-no-plan-view.md`, and `docs/adr/0023-the-board-has-no-review-view.md`.
+Status: built. This spec adds the user's own Issues to the work view, a quick capture, and a promote from the Local Tracker to Linear. It also adds the description, the status change, and the filter that replace the plan view. The decisions behind it are in `docs/adr/0019-the-board-holds-my-issues.md`, `docs/adr/0034-the-board-has-one-up-next-group.md`, `docs/adr/0020-capture-defaults-to-the-local-tracker.md`, `docs/adr/0021-the-board-has-no-plan-view.md`, and `docs/adr/0023-the-board-has-no-review-view.md`.
 
 ## Goal
 
@@ -10,16 +10,16 @@ The user sees all of their own work on one board, from a captured idea to a merg
 
 | In this cut | Later |
 |---|---|
-| Ready and Backlog groups on the work view | Columns in place of groups |
+| Up next and Backlog groups on the work view | Columns in place of groups |
 | Linear Issues assigned to the user, in every signed-in workspace | Sync between the Local Tracker and Linear |
 | Local Issues, and a new local status, `backlog` | |
 | The user's own GitHub Issues, while the GitHub Tracker is on | |
 | `s` on an Issue row | A Destination picker in the Orchestrator |
 | `n` captures one line at a Destination, `local` by default | A blocked Issue that starts on its blocker's branch as a stack |
 | `P` promotes a local Issue to Linear | |
-| The `unblocked` mark and the Ready order | |
+| The `unblocked` mark and the Up next order | |
 | A count of the review Tasks that need the user | |
-| A toast that names the next Ready Issue when a WIP slot opens | |
+| A toast that names the next Up next Issue when a WIP slot opens | |
 | `f` shows an Issue's description, and `c` changes its status | |
 | `/` filters the rows of the work view | |
 
@@ -35,9 +35,9 @@ The Board shows the work view only. It has no plan view (ADR 0021) and no review
  Backlog 2
    ENG-620  Split billing ingest                                           backlog    ▂
    LOCAL-9  Retry failed loads before alerting                             backlog
- Ready 3
+ Up next 3
    ENG-611  Move the retry job                                             unblocked  ▂▄▆
-   LOCAL-7  Rename the log flag                                            ready           data
+   LOCAL-7  Rename the log flag                                            up next         data
  ▸ ENG-614  Drop old API keys                                              blocked    ▂▄
  Working 1
    ENG-592  Fix flaky test                                                 CI debug   1m   data
@@ -46,7 +46,7 @@ The Board shows the work view only. It has no plan view (ADR 0021) and no review
  Done 1 …
  ──────────────────────────────────────────────────────────────────────────────────────────────
  Drop old API keys
- ENG-614 · Ready · blocked by ENG-610
+ ENG-614 · Up next · blocked by ENG-610
  s start   f details   c status   o open the Issue   j/k move   n new Issue   ? all keys
 ```
 
@@ -56,7 +56,7 @@ An Issue row is an Issue of the user's own with no Task on the Board. The Board 
 
 ```
  Linear MyIssues (each workspace) ─┐
- Local Tracker folder ─────────────┼─► Issue rows ─► Ready, Backlog ─► s ─► add + start (Scheduler)
+ Local Tracker folder ─────────────┼─► Issue rows ─► Up next, Backlog ─► s ─► add + start (Scheduler)
  gh search issues (GitHub Tracker) ┘        ▲
                                             └─ minus each ID that a Task on the Board holds
 ```
@@ -72,7 +72,7 @@ Each Task row and Issue row shows one status word in its own column, after the t
 | Any other Task | The Stage: `working`, `CI running`, `CI debug`, `in review`, `responding`, `ready` for Ready to land, or `done` |
 | An Issue with an open blocker | `blocked` |
 | An Issue whose blockers are all done or canceled | `unblocked` |
-| Any other Issue | The group: `ready` or `backlog` |
+| Any other Issue | The group: `up next` or `backlog` |
 
 The status column never drops. A Task row in Needs you and a blocked Issue row show the word in pink. The word carries the state without the color, so the Board reads the same with `NO_COLOR=1`.
 
@@ -101,7 +101,7 @@ A Task with no Issue stores the plain title of its text, cut at a word to at mos
 
 ## Issue rows
 
-| Tracker | Ready | Backlog |
+| Tracker | Up next | Backlog |
 |---|---|---|
 | Linear, assigned to the user | State type `unstarted` | State type `backlog` or `triage` |
 | Local | `status: todo` | `status: backlog` |
@@ -111,10 +111,10 @@ A Task with no Issue stores the plain title of its text, cut at a word to at mos
 - A GitHub Issue is the user's own when the user is an assignee, or when it has no assignee and the user opened it. A pull request gets no row. `docs/spec/trackers.md` ("The Board") gives the details.
 - The Board shows a GitHub Issue only when a checkout below the roots has the Issue's owner/repo as its Repo key. The match ignores case. `lineup add --repo <repo> owner/repo#n` adds an Issue from any repository.
 - An Issue whose ID a Task on the Board holds has no Issue row. The Task row shows that Issue. Each ID has one form, as the [Trackers spec](trackers.md#case) gives, so an exact match finds the Issue.
-- A row shows the ID, the title, a status word, the priority, and the Repo when it is known. The status word is `blocked`, `unblocked`, `ready`, or `backlog`. The strip names the open blockers of the selected row, as `blocked by <IDs>`. A GitHub row's Repo is the repository name, and the strip names a blocker in the same repository as `#12`.
+- A row shows the ID, the title, a status word, the priority, and the Repo when it is known. The status word is `blocked`, `unblocked`, `up next`, or `backlog`. The strip names the open blockers of the selected row, as `blocked by <IDs>`. A GitHub row's Repo is the repository name, and the strip names a blocker in the same repository as `#12`.
 - `unblocked` means that the Issue has one or more blockers and that every blocker is done or canceled. A Linear blocker is a "blocks" relation. A local blocker is an entry in `blocked_by`. A GitHub blocker is a `Blocked by #12` line in the body, and it is done when GitHub reports it closed.
 
-The default group order is Needs you, Follow-up, Backlog, Ready, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. Follow-up comes next because its Issues still need the user after their PRs merge. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
+The default group order is Needs you, Follow-up, Backlog, Up next, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. Follow-up comes next because its Issues still need the user after their PRs merge. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
 
 Both groups sort in this order:
 
@@ -173,8 +173,8 @@ One table, `issueKinds` in `internal/board/issuekind.go`, decides the keys of ea
 
 ```
  / rename
- Ready 1
- ▸ LOCAL-7  Rename the log flag                                              ready         data
+ Up next 1
+ ▸ LOCAL-7  Rename the log flag                                              up next       data
  Done 1
    ENG-560  Rename config options                                            done   today  data
 ```
@@ -261,16 +261,16 @@ At least 2 spaces separate the two parts. When the header does not fit, it drops
 
 ## Lay out the groups
 
-A long Backlog or Done group can push Ready and Working off a 24-row pane. The board must show first what needs the user. The `[board]` table in the global file sets the order of the groups, which groups start closed, and which groups are hidden. Each group heading is a selectable row, so the user can also close a group for this run.
+A long Backlog or Done group can push Up next and Working off a 24-row pane. The board must show first what needs the user. The `[board]` table in the global file sets the order of the groups, which groups start closed, and which groups are hidden. Each group heading is a selectable row, so the user can also close a group for this run.
 
 ```toml
 [board]
-order = ["done", "needs_you", "working", "waiting", "ready", "backlog"]
+order = ["done", "needs_you", "working", "waiting", "up_next", "backlog"]
 collapsed = ["backlog"]
 hidden = ["done"]
 ```
 
-The keys of a group are `needs_you`, `follow_up`, `backlog`, `ready`, `working`, `waiting`, and `done`. A key that is absent takes its default, and an empty list means none. A group that `order` leaves out follows the listed groups, in the default order. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors that name the key, but they do not fail the load, so the Scheduler still starts. The board then uses the default layout and shows the error on its own line, for example `config: board.hidden: unknown section "dun" (default layout)`. No other status message replaces that line, and it stays until the board quits. If `config.Load` fails for any other reason, the board runs with defaults and shows `config: <error>` in the same line. The old key `queued` is not an error. A list that names it loads with a warning that names the key, and the board keeps the rest of the layout.
+The keys of a group are `needs_you`, `follow_up`, `backlog`, `up_next`, `working`, `waiting`, and `done`. A key that is absent takes its default, and an empty list means none. A group that `order` leaves out follows the listed groups, in the default order. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors that name the key, but they do not fail the load, so the Scheduler still starts. The board then uses the default layout and shows the error on its own line, for example `config: board.hidden: unknown section "dun" (default layout)`. No other status message replaces that line, and it stays until the board quits. If `config.Load` fails for any other reason, the board runs with defaults and shows `config: <error>` in the same line. The old keys `ready` and `queued` are errors of this kind, and the message names `lineup config migrate`. That command writes one `up_next` at the place of the first of the two keys in each list, and it drops the other.
 
 | Rule | Behavior |
 |---|---|
@@ -286,13 +286,13 @@ The keys of a group are `needs_you`, `follow_up`, `backlog`, `ready`, `working`,
 
 ## The free slot toast
 
-When a build Task goes to Done and the started build Tasks are fewer than the WIP cap, the Board toasts the first Ready row, for example:
+When a build Task goes to Done and the started build Tasks are fewer than the WIP cap, the Board toasts the first Up next row, for example:
 
 ```
 1 slot free, next ENG-611: Move the retry job
 ```
 
-With no Ready row, the Board sends no extra toast. The Board does not start the Issue. The user presses `s`.
+With no Up next row, the Board sends no extra toast. The Board does not start the Issue. The user presses `s`.
 
 ## Code changes
 
@@ -301,10 +301,10 @@ With no Ready row, the Board sends no extra toast. The Board does not start the 
 | `internal/localissues` | The `backlog` status. `Create` writes `backlog`. A `Promote` write that sets `canceled` and adds the line to the body. |
 | `internal/github` | `OwnIssues`: the user's own open Issues from two `gh search issues` calls, with each blocker's state from one GraphQL call |
 | `internal/linear` | A `Levels` function that returns the dependency level of each Issue. An `Unblocked` fact on `Issue` from the closed "blocks" relations. |
-| `internal/board` | Issue rows, their load and refresh, the Ready and Backlog groups, the keys table in `issuekind.go`, the description, the status list, the filter in `filter.go`, the capture box, the Destination list, promote, the group headings and the `[board]` layout, the header count, and the free slot toast |
+| `internal/board` | Issue rows, their load and refresh, the Up next and Backlog groups, the keys table in `issuekind.go`, the description, the status list, the filter in `filter.go`, the capture box, the Destination list, promote, the group headings and the `[board]` layout, the header count, and the free slot toast |
 | `cmd/lineup/wire.go` | The Local Tracker store for the work view, whatever `local_tracker` says |
 | `cmd/lineup/hub.go` | The GitHub Tracker check and the backlog label for the work view |
-| Docs | `GLOSSARY.md` gets Ready, Backlog, Destination, and Promote. `docs/spec/mvp.md` and `docs/spec/trackers.md` name the new groups and the `backlog` status. |
+| Docs | `GLOSSARY.md` gets Up next, Backlog, Destination, and Promote. `docs/spec/mvp.md` and `docs/spec/trackers.md` name the new groups and the `backlog` status. |
 
 ## Delivery
 
@@ -322,7 +322,7 @@ Each PR lands on `main` before the next one starts.
 |---|---|
 | Each Linear state type and local status lands in the right group, or in none | A table test over every state type and every status |
 | An Issue that a Task holds has no Issue row | A board test with a Task and its Issue |
-| Ready sorts unblocked, then priority, then level, then ID | A table test, and a `rapid` property test that the order is total and stable |
+| Up next sorts unblocked, then priority, then level, then ID | A table test, and a `rapid` property test that the order is total and stable |
 | `unblocked` shows only when every blocker is done or canceled | Table tests for Linear relations and local `blocked_by` |
 | `s` on an Issue row sends `add` with the right Kind, then `start` | A board test that reads the fake client's ops |
 | A local capture writes `status: backlog`. A Linear capture sends the team, the Project, and `AssignToMe`. | Board tests with the fake Linear client and a temporary Local Tracker folder |
@@ -344,7 +344,7 @@ Each PR lands on `main` before the next one starts.
 | A Follow-up row adds nothing to the Needs you count | A board test that reads the Status reports and the Needs you heading |
 | A Follow-up row keeps the `x` key, the archive hint, and the `today` age of a Done row | A board test that reads the row and the footer, and presses `x` and `y` |
 | `j` and `k` stop on each shown heading except Needs you and skip the rows of closed groups | A board test over the fixture, and a `rapid` property test over random rows, orders, closed sets, and hidden sets |
-| The free slot toast names the first Ready row, and only when a slot is free | A board test that sends two board views |
+| The free slot toast names the first Up next row, and only when a slot is free | A board test that sends two board views |
 | `1`, `2`, and `3` do nothing | A board test that reads the screen and the command |
 | GitHub rows: assigned, unassigned and opened by the user, opened by someone else and unassigned (no row), a PR (no row), the backlog label, `Blocked by`, an Issue that a Task holds, the Tracker off, and a failed `gh` call | Board tests with recorded `gh` output in `internal/github/testdata` |
 | `f` shows a Linear description and a local file body, and `f` goes back | Board tests with the fake Linear client and a temporary Local Tracker folder |

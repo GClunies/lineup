@@ -631,8 +631,8 @@ const boardHelp = `
    m        merge the PR            (Ready to land)
    x        close the Task, or its tab and worktree when it is Done,
             or archive a Done Task with no tab, after y/n
-   s        start a Task from a Ready or Backlog Issue; pick or
-            type a skill, or just go
+   s        start a Task from an Up next or Backlog Issue; pick
+            or type a skill, or just go
    c        change the status of an Issue row: pick a Linear state of
             its team, or a local status
    o        open the PR or the Issue; a local Issue opens in $EDITOR

@@ -10,7 +10,7 @@ import (
 
 func TestBoardDefaults(t *testing.T) {
 	want := Board{
-		Order:     []string{"Needs you", "Follow-up", "Backlog", "Ready", "Working", "Waiting", "Done"},
+		Order:     []string{"Needs you", "Follow-up", "Backlog", "Up next", "Working", "Waiting", "Done"},
 		Collapsed: []string{"Backlog", "Done"},
 		Hidden:    []string{},
 	}
@@ -19,8 +19,8 @@ func TestBoardDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, g := range map[string]*Global{"no file": missing, "no table": load(t, "start_skills = [\"a\"]\n")} {
-		if got, warnings, err := g.Board(); err != nil || warnings != nil || !reflect.DeepEqual(got, want) {
-			t.Errorf("%s: board %+v, %q, %v, want %+v", name, got, warnings, err, want)
+		if got, err := g.Board(); err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: board %+v, %v, want %+v", name, got, err, want)
 		}
 	}
 }
@@ -28,56 +28,26 @@ func TestBoardDefaults(t *testing.T) {
 func TestBoardKeysTakeTheirValuesAndAbsentKeysTakeDefaults(t *testing.T) {
 	g := load(t, `
 [board]
-order = ["done", "needs_you", "working", "waiting", "ready", "backlog"]
+order = ["done", "needs_you", "working", "waiting", "up_next", "backlog"]
 hidden = ["done"]
 `)
 	want := Board{
-		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Ready", "Backlog", "Follow-up"},
+		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Up next", "Backlog", "Follow-up"},
 		Collapsed: []string{"Backlog", "Done"},
 		Hidden:    []string{"Done"},
 	}
-	if got, warnings, err := g.Board(); err != nil || warnings != nil || !reflect.DeepEqual(got, want) {
-		t.Fatalf("board %+v, %q, %v, want %+v", got, warnings, err, want)
-	}
-}
-
-// lineup has no Queued section, so a list that names it loads without it, and
-// a warning names each such list.
-func TestABoardListThatNamesQueuedLoadsWithoutItAndWarns(t *testing.T) {
-	g := load(t, `
-[board]
-order = ["done", "needs_you", "queued", "working", "waiting", "ready", "backlog"]
-collapsed = ["queued", "backlog"]
-hidden = ["done"]
-`)
-	got, warnings, err := g.Board()
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := Board{
-		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Ready", "Backlog", "Follow-up"},
-		Collapsed: []string{"Backlog"},
-		Hidden:    []string{"Done"},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("board %+v, want %+v", got, want)
-	}
-	wantWarnings := []string{
-		`board.order: section "queued" is gone, lineup add starts each Task (ignored)`,
-		`board.collapsed: section "queued" is gone, lineup add starts each Task (ignored)`,
-	}
-	if !slices.Equal(warnings, wantWarnings) {
-		t.Errorf("warnings %q, want %q", warnings, wantWarnings)
+	if got, err := g.Board(); err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("board %+v, %v, want %+v", got, err, want)
 	}
 }
 
 func TestBoardEmptyCollapsedMeansNoneAndOrderKeepsTheRest(t *testing.T) {
-	g := load(t, "[board]\norder = [\"waiting\", \"ready\"]\ncollapsed = []\n")
-	b, _, _ := g.Board()
+	g := load(t, "[board]\norder = [\"waiting\", \"up_next\"]\ncollapsed = []\n")
+	b, _ := g.Board()
 	if got := b.Collapsed; len(got) != 0 {
 		t.Fatalf("collapsed %v, want none", got)
 	}
-	want := []string{"Waiting", "Ready", "Needs you", "Follow-up", "Backlog", "Working", "Done"}
+	want := []string{"Waiting", "Up next", "Needs you", "Follow-up", "Backlog", "Working", "Done"}
 	if got := b.Order; !slices.Equal(got, want) {
 		t.Fatalf("order %v, want %v", got, want)
 	}
@@ -86,25 +56,28 @@ func TestBoardEmptyCollapsedMeansNoneAndOrderKeepsTheRest(t *testing.T) {
 func TestBoardTakesFollowUpInEveryList(t *testing.T) {
 	g := load(t, "[board]\norder = [\"waiting\", \"follow_up\"]\ncollapsed = [\"follow_up\"]\nhidden = [\"follow_up\", \"done\"]\n")
 	want := Board{
-		Order:     []string{"Waiting", "Follow-up", "Needs you", "Backlog", "Ready", "Working", "Done"},
+		Order:     []string{"Waiting", "Follow-up", "Needs you", "Backlog", "Up next", "Working", "Done"},
 		Collapsed: []string{"Follow-up"},
 		Hidden:    []string{"Follow-up", "Done"},
 	}
-	if got, _, err := g.Board(); err != nil || !reflect.DeepEqual(got, want) {
+	if got, err := g.Board(); err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("board %+v, %v, want %+v", got, err, want)
 	}
 }
 
 func TestABadBoardTableLoadsWithTheDefaultLayoutAndTheError(t *testing.T) {
 	cases := map[string]string{
-		`hidden = ["dun"]`:                  `board.hidden: unknown section "dun"`,
-		`order = ["Done"]`:                  `board.order: unknown section "Done"`,
-		`collapsed = ["nope"]`:              `board.collapsed: unknown section "nope"`,
-		`order = ["done", "ready", "done"]`: `board.order: duplicate section "done"`,
-		`collapsed = ["ready", "ready"]`:    `board.collapsed: duplicate section "ready"`,
-		`hidden = ["done", "done"]`:         `board.hidden: duplicate section "done"`,
-		`collapsed = ["needs_you"]`:         `board.collapsed: section "needs_you" cannot be in this list`,
-		`hidden = ["backlog", "needs_you"]`: `board.hidden: section "needs_you" cannot be in this list`,
+		`hidden = ["dun"]`:                    `board.hidden: unknown section "dun"`,
+		`order = ["Done"]`:                    `board.order: unknown section "Done"`,
+		`collapsed = ["nope"]`:                `board.collapsed: unknown section "nope"`,
+		`order = ["done", "up_next", "done"]`: `board.order: duplicate section "done"`,
+		`collapsed = ["up_next", "up_next"]`:  `board.collapsed: duplicate section "up_next"`,
+		`order = ["done", "ready"]`:           `board.order: section "ready" is now up_next. Run lineup config migrate to rewrite it`,
+		`collapsed = ["queued", "backlog"]`:   `board.collapsed: section "queued" is now up_next. Run lineup config migrate to rewrite it`,
+		`hidden = ["ready", "queued"]`:        `board.hidden: section "ready" is now up_next. Run lineup config migrate to rewrite it`,
+		`hidden = ["done", "done"]`:           `board.hidden: duplicate section "done"`,
+		`collapsed = ["needs_you"]`:           `board.collapsed: section "needs_you" cannot be in this list`,
+		`hidden = ["backlog", "needs_you"]`:   `board.hidden: section "needs_you" cannot be in this list`,
 	}
 	for body, want := range cases {
 		path := write(t, filepath.Join(t.TempDir(), "config.toml"), "start_skills = [\"a\"]\n[board]\n"+body+"\n")
@@ -113,7 +86,7 @@ func TestABadBoardTableLoadsWithTheDefaultLayoutAndTheError(t *testing.T) {
 			t.Errorf("%s: Load failed: %v", body, err)
 			continue
 		}
-		got, _, berr := g.Board()
+		got, berr := g.Board()
 		if berr == nil || !strings.Contains(berr.Error(), want) {
 			t.Errorf("%s: board error %v, want %q", body, berr, want)
 		}

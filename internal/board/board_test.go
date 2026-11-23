@@ -470,7 +470,7 @@ func writeCache(tb testing.TB, n int) string {
 	return p
 }
 
-// mineFixture is n Issue rows: Linear Issues in Ready and Backlog, half of
+// mineFixture is n Issue rows: Linear Issues in Up next and Backlog, half of
 // them blocked by the one before, and n/2 local Issues.
 func mineFixture(n int) []tea.Msg {
 	var lin []linear.Issue
@@ -932,11 +932,11 @@ func TestTheHeaderKeepsItsAlertsAtEightyColumns(t *testing.T) {
 	}
 }
 
-func TestTheBoardToastsTheNextReadyIssueWhenASlotFrees(t *testing.T) {
-	ready := mineIssuesMsg{ws: acme, live: true, issues: []linear.Issue{
+func TestTheBoardToastsTheFirstUpNextIssueWhenASlotFrees(t *testing.T) {
+	upNext := mineIssuesMsg{ws: acme, live: true, issues: []linear.Issue{
 		mineIssue("ENG-620", "backlog", 1), mineIssue("ENG-611", "unstarted", 2), mineIssue("ENG-612", "unstarted", 3),
 	}}
-	ready.issues[1].Title = "Move the retry job"
+	upNext.issues[1].Title = "Move the retry job"
 	landing := tv("ENG-571", lifecycle.ReadyToLand, "data", "Rate limit login", "#4636 ✓ approved · ready to land", 0)
 	landing.Group = "Needs you"
 	done := tv("ENG-571", lifecycle.Done, "data", "Rate limit login", "#4636", 0)
@@ -954,17 +954,17 @@ func TestTheBoardToastsTheNextReadyIssueWhenASlotFrees(t *testing.T) {
 		before, then scheduler.BoardView
 		want         string
 	}{
-		{"a free slot names the first Ready row", true,
+		{"a free slot names the first Up next row", true,
 			board(4, landing, review), board(3, done, review), "2 slots free, next ENG-611: Move the retry job"},
 		{"one free slot", true,
 			board(5, landing, review), board(4, done, review), "1 slot free, next ENG-611: Move the retry job"},
 		{"no free slot", true, board(5, landing, review), board(5, done, review), ""},
-		{"no Ready row", false, board(4, landing, review), board(3, done, review), ""},
+		{"no Up next row", false, board(4, landing, review), board(3, done, review), ""},
 	} {
 		var toasts []string
 		m := New(c.before, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }})
 		if c.issues {
-			m = feed(m, ready)
+			m = feed(m, upNext)
 		}
 		send := func(v scheduler.BoardView) {
 			t2, cmd := m.Update(boardMsg(v))
