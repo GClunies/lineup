@@ -1,0 +1,22 @@
+docs/spec/trackers.md
+  s_bd7f7947992ef2::t_d42558ed1b2269 236
+  s_bd7f7947992ef2::t_0f44aa3b46b66f 189-190
+docs/spec/one-board.md
+  s_bd7f7947992ef2::t_0ae6e8991355a6 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "04ac38ab9161cab815c308baadc437504238b0cc",
+  "prompts": {},
+  "sessions": {
+    "s_bd7f7947992ef2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4d65e9d1-49e6-4349-b3bf-699a305f18e9",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
