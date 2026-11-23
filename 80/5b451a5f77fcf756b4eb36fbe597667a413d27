@@ -1,0 +1,25 @@
+internal/scheduler/scheduler_test.go
+  s_59f22b65e91f8e::t_aaf7bf54fb1927 553-555,557
+cmd/lineup/wire.go
+  s_59f22b65e91f8e::t_59f1a6618df657 329
+internal/harness/claude/claude.go
+  s_59f22b65e91f8e::t_bcb57919d5a867 56
+internal/scheduler/api.go
+  s_59f22b65e91f8e::t_58b1c16c035eb3 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "805b451a5f77fcf756b4eb36fbe597667a413d27",
+  "prompts": {},
+  "sessions": {
+    "s_59f22b65e91f8e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebd739c9-7583-4350-b806-9bd20a91bffe",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
