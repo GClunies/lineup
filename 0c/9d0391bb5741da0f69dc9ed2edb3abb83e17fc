@@ -1,0 +1,57 @@
+internal/scheduler/merged_test.go
+  s_d7e7cbeb0b5b10::t_bec515501e162d 132
+internal/scheduler/session_test.go
+  s_d7e7cbeb0b5b10::t_5d99bf3976cae2 5,10,12-13
+docs/product-intent/board.md
+  s_d7e7cbeb0b5b10::t_65816f7f78f504 88-91
+docs/product-intent/tabs.md
+  s_d7e7cbeb0b5b10::t_e2656b82922a6e 56-59
+  s_d7e7cbeb0b5b10::t_74644df7b2c062 11
+cmd/lineup/wire.go
+  s_d7e7cbeb0b5b10::t_bb610fbbb233e3 36-39
+internal/scheduler/prefix_test.go
+  s_d7e7cbeb0b5b10::t_cd3d11f69bf6d7 56
+  s_d7e7cbeb0b5b10::t_059f2f21299f72 57
+internal/rex/client_test.go
+  s_d7e7cbeb0b5b10::t_ab7b7854351cf7 60-74
+  s_d7e7cbeb0b5b10::t_576de60656ad5e 29-30
+internal/scheduler/api.go
+  s_d7e7cbeb0b5b10::t_b850be9fc3eb7b 390-391
+  s_d7e7cbeb0b5b10::t_b2bf1982c9d16b 453-454
+internal/rex/client.go
+  s_d7e7cbeb0b5b10::t_b146544aace600 123-140
+  s_d7e7cbeb0b5b10::t_4ebc33ec7385da 13
+internal/scheduler/scheduler.go
+  s_d7e7cbeb0b5b10::t_d1f5a1bd3de6a4 941
+  s_d7e7cbeb0b5b10::t_cc5e054923c0ac 1037-1055,1059-1063
+  s_d7e7cbeb0b5b10::t_c393d1cbf6625a 1056-1058
+internal/scheduler/review.go
+  s_d7e7cbeb0b5b10::t_1f00d739fd430a 203
+internal/scheduler/record.go
+  s_d7e7cbeb0b5b10::t_c6e8ad86d7ca6d 188-189,192-194,196
+  s_d7e7cbeb0b5b10::t_244cab68a04c57 37-38
+internal/scheduler/ports.go
+  s_d7e7cbeb0b5b10::t_c500b5a47d8030 27-29
+internal/scheduler/scheduler_test.go
+  s_d7e7cbeb0b5b10::t_f5202eb0a66ca6 88-94
+  s_d7e7cbeb0b5b10::t_78c5611b6969fb 895,919
+  s_d7e7cbeb0b5b10::t_8674d23eae0d9c 59-61
+  s_d7e7cbeb0b5b10::t_44a4e5c7107667 1516-1584
+  s_d7e7cbeb0b5b10::t_398e009ef27853 1505-1506,1508-1509
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0c9d0391bb5741da0f69dc9ed2edb3abb83e17fc",
+  "prompts": {},
+  "sessions": {
+    "s_d7e7cbeb0b5b10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6ee97ee9-4188-405b-8d73-9111ff0c30db",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
