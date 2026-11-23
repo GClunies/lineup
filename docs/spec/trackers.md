@@ -59,9 +59,23 @@ lineup always needs `gh` for PRs, so a signed-in `gh` does not make GitHub a Tra
 |---|---|---|
 | Linear | `<TEAM>-<n>` | `ENG-614` |
 | GitHub | `<owner>/<repo>#<n>` | `owner/repo#12` |
-| Local | `local-<n>`, or `<prefix>-<n>` for a Repo with a [Repo prefix](#repo-prefixes) | `local-7`, `hod-3` |
+| Local | `LOCAL-<n>`, or `<PREFIX>-<n>` for a Repo with a [Repo prefix](#repo-prefixes) | `LOCAL-7`, `HOD-3` |
 
-`lineup add` takes any of these forms. An ID that starts with `local-` always names a local Issue, so a typed ID names exactly one Tracker. An ID `<prefix>-<n>` names a local Issue too, though it has the form of a Linear ID. lineup refuses a prefix that equals a Linear team key, so the two forms never meet. The Board sends each Issue row's Kind with its add request, so it can still start an Issue from a Linear team keyed `LOCAL`.
+`lineup add` takes any of these forms. An ID that starts with `LOCAL-` always names a local Issue, so a typed ID names exactly one Tracker. An ID `<PREFIX>-<n>` names a local Issue too, though it has the form of a Linear ID. lineup refuses a prefix that equals a Linear team key, so the two forms never meet. The Board sends each Issue row's Kind with its add request, so it can still start an Issue from a Linear team keyed `LOCAL`.
+
+### Case
+
+lineup reads each ID in any case, and shows it in one form.
+
+| ID | Shows as | Example |
+|---|---|---|
+| Linear, Local Issue, ad hoc Task, review Task | Upper case | `ENG-614`, `LOCAL-7`, `HOD-3`, `AH-65`, `PR-12` |
+| GitHub | The form that GitHub gives | `owner/repo#12` |
+| Branch, Local Issue file | Lower case | `local-7-retry-failed-loads`, `local-7.md` |
+
+- Each command that takes an Issue or a Task takes its ID in any case, for example `lineup add`, `start`, `show`, `close`, `steer`, and `decide`. `eng-614`, `Eng-614`, and `ENG-614` name one Task.
+- The Board, `lineup ls`, `lineup show`, `lineup next-id`, the tab labels, and the Orchestrator's instructions show the form in the table.
+- At start, the Scheduler moves each Task stored under a lower-case ID, such as `ah-65`, to its upper-case ID, with its events. The Task keeps its number and its branch.
 
 ## Repo for each Issue
 
@@ -71,52 +85,59 @@ lineup always needs `gh` for PRs, so a signed-in `gh` does not make GitHub a Tra
 | GitHub | The one checkout below the roots whose Repo key is the Issue's repository | `lineup add` fails and names the repository. The user clones it below a root, or adds its folder to `roots`. If two checkouts have the key, the error names both. |
 | Local | The Repo whose prefix starts the ID, else the Issue's `repo:` field, resolved as `lineup add --repo` resolves a name | The fuzzy picker. lineup writes the choice back to `repo:`. |
 
-### Locked Repos
+### Repo Trackers
 
-A `[repos."<key>"]` table with a `trackers` key locks its Repos to those Trackers. The key holds `linear`, `github`, `local`, or more than one of them. A Repo with no `trackers` key takes the Issues of every Tracker.
+Each Repo takes the Issues of one Tracker at most. The `tracker` key of its table names that Tracker: `linear`, `github`, or `local`.
 
 ```toml
+[repos."crexi/*"]
+tracker = "linear"
+
 [repos."GClunies/hod"]
-trackers = ["local"]
+tracker = "local"
 ```
 
-- `lineup add <ISSUE>` refuses an Issue of another Tracker for a locked Repo, from a mapping or from `--repo`. The error names the Repo and its trackers.
-- The fuzzy picker offers a locked Repo only for an Issue of one of its Trackers.
-- An ad hoc Task, from `lineup add --repo <repo> "<text>"`, can use a locked Repo.
-- The Orchestrator's CLAUDE.md names each locked Repo and its Trackers. The Orchestrator plans the Issues of a locked Repo only in those Trackers.
-- The `trackers` key of the Repo's `[repos."<owner>/<repo>"]` table decides. Without one, the `trackers` key of its `[repos."<owner>/*"]` table decides.
-- lineup refuses to load a config with an unknown tracker name, an empty `trackers` list, or `teams` on a Repo whose `trackers` has no `linear`. `lineup restart` prints that error and leaves the Scheduler on the old config.
+- The `tracker` key of the Repo's `[repos."<owner>/<repo>"]` table decides. Without one, the `tracker` key of its `[repos."<owner>/*"]` table decides. The Repo's own table wins.
+- A Repo with no `tracker` takes no Issues. `lineup add <ISSUE>` for it fails with `repo has no tracker: <owner>/<repo>`.
+- `lineup add <ISSUE>` refuses an Issue of another Tracker, from a mapping or from `--repo`. The error names the Repo, its Tracker, and the Issue's Tracker.
+- The fuzzy picker offers a Repo only for an Issue of its Tracker.
+- An ad hoc Task, from `lineup add --repo <repo> "<text>"`, can use each Repo, also a Repo with no `tracker`.
+- The Trackers section of the Orchestrator's CLAUDE.md names each table that sets a `tracker`, and its Tracker. The Orchestrator plans the Issues of a Repo only in its Tracker.
+- `teams` needs `tracker = "linear"` for the Repo, in its own table or in its owner's table.
+- lineup refuses to load a config with an unknown Tracker in `tracker`, or with `teams` on a Repo whose Tracker is not `linear`. `lineup restart` prints that error and leaves the Scheduler on the old config.
+- A `trackers` list stops the load with an error that names `lineup config migrate`. The [migration](mvp.md#migration) rewrites a list of one Tracker as `tracker`.
 
 ### Repo prefixes
 
-A `[repos."<owner>/<repo>"]` table with a `prefix` key gives its Repo its own IDs. Its Local Issues and its ad hoc Tasks take the form `<prefix>-<n>`. A Repo with no `prefix` keeps `local-<n>` and `ah-<n>`.
+A `[repos."<owner>/<repo>"]` table with a `prefix` key gives its Repo its own IDs. Its Local Issues and its ad hoc Tasks take the form `<PREFIX>-<n>`. A Repo with no `prefix` keeps `LOCAL-<n>` and `AH-<n>`. The prefix can be in any case, so `"SCP"`, `"scp"`, and `"Scp"` are one prefix, and its IDs show as `SCP-<n>`.
 
 ```toml
 [repos."GClunies/hod"]
-trackers = ["local"]
+tracker = "local"
 prefix = "hod"
 ```
 
 | Item | No prefix | Prefix `hod` |
 |---|---|---|
+| Local Issue ID | `LOCAL-7` | `HOD-3` |
 | Local Issue file | `local-7.md` | `hod-3.md` |
-| Ad hoc Task ID | `ah-63` | `hod-4` |
+| Ad hoc Task ID | `AH-63` | `HOD-4` |
 | Ad hoc branch | `lineup/ah-63-<title slug>` | `hod-4-<title slug>` |
-| Tab label | `ah-63 <title>` | `hod-4 <title>` |
+| Tab label | `AH-63 <title>` | `HOD-4 <title>` |
 
 - Each prefix numbers on its own. The next n is one more than the highest n of the prefix among the Local Issue files and every Task in the store, archived Tasks too.
-- `lineup next-id <repo>` prints the next free ID of the Repo, for example `hod-5`. The Orchestrator names a new Local Issue file with it.
+- `lineup next-id <repo>` prints the next free ID of the Repo, for example `HOD-5`. The Orchestrator names a new Local Issue file with it, in lower case, for example `hod-5.md`.
 - `lineup add` refuses a Local Issue whose ID another Task in the store already holds.
 - The ad hoc Task's tab opens in its Repo's session, for example `hod`.
 - The Orchestrator's CLAUDE.md names each prefix and the file name of a new Local Issue of its Repo.
 
 lineup refuses to load a config with one of these prefixes. The error names the prefix.
 
-- A prefix with a character that is not a lowercase letter, a digit, or a dash, or that starts or ends with a dash.
+- A prefix with a character that is not a letter, a digit, or a dash, a prefix that starts or ends with a dash, or a prefix with two dashes in a row.
 - A prefix in a `[repos."<owner>/*"]` table.
-- A prefix that two tables share.
+- A prefix that two tables share, in any case.
 - A prefix that equals a team key of a `teams` list, in any case. `lineup restart` also reads the team keys of each signed-in Linear workspace. If Linear does not answer, restart prints a warning and checks only the `teams` lists.
-- The prefixes `local`, `ah`, and `pr`. lineup uses them for the IDs without a Repo prefix.
+- The prefixes `LOCAL`, `AH`, and `PR`, in any case. lineup uses them for the IDs without a Repo prefix.
 
 `lineup restart` prints the error and leaves the Scheduler on the old config.
 
@@ -150,14 +171,14 @@ The Working Stage contract for a GitHub Issue adds one rule: the PR body must co
 
 The Local Tracker is one folder, `~/.local/share/lineup/issues/`. The global config key `local_issues_dir` moves it. The folder is outside every Repo, so planning files never enter a Repo's git history.
 
-Each Issue is one file, `local-<n>.md`, or `<prefix>-<n>.md` for a Repo with a [Repo prefix](#repo-prefixes):
+Each Issue is one file, `local-<n>.md`, or `<prefix>-<n>.md` for a Repo with a [Repo prefix](#repo-prefixes). The file name is in lower case, so `local-7.md` holds `LOCAL-7`:
 
 ```markdown
 ---
 title: Retry failed loads before alerting
 repo: data
 status: todo
-blocked_by: [local-3]
+blocked_by: [LOCAL-3]
 ---
 
 The description, in Markdown.
@@ -168,11 +189,11 @@ The description, in Markdown.
 | `title` | Text | Yes |
 | `repo` | A Repo name or path, as `lineup add --repo` takes | No. Without it, the start opens the fuzzy picker. |
 | `status` | `backlog`, `todo`, `started`, `in review`, `done`, `canceled` | Yes |
-| `blocked_by` | Local Issue IDs | No |
+| `blocked_by` | Local Issue IDs, in any case | No |
 
 - The next ID is one more than the highest n of its prefix in the folder. The adapter creates the file with `O_EXCL`, so two writers cannot take one ID.
 - A new Issue gets `status: backlog`. The Board shows a `backlog` Issue in Backlog and a `todo` Issue in Ready.
-- The branch name is `<ID>-<title slug>`, for example `local-7-retry-failed-loads-before-alerting` or `hod-3-block-linear-writes`. A GitHub Issue's branch is `gh-<n>-<title slug>`.
+- The branch name is `<ID>-<title slug>` in lower case, for example `local-7-retry-failed-loads-before-alerting` or `hod-3-block-linear-writes`. A GitHub Issue's branch is `gh-<n>-<title slug>`.
 - The adapter reads files that the Orchestrator or the user wrote. The work view leaves out a file that the adapter cannot parse.
 
 ## The Board
@@ -235,6 +256,8 @@ The Orchestrator's instructions hold one section for each Tracker. Claude Code r
 5. **Local folder:** Property tests show that create never reuses an ID, and that parse after write gives back the same Issue. The list names a broken file and still lists the rest.
 6. **GitHub Issue rows:** Board tests with recorded `gh` output cover an assigned Issue, an unassigned Issue that the user opened, an unassigned Issue that someone else opened (no row), a PR (no row), the backlog label, `Blocked by` lines, an Issue that a Task holds, an Issue in a repository with no checkout (no row), a checkout key in another case, an empty checkout list (no row), the Tracker turned off, and a failed `gh` call.
 7. **When each Tracker is on:** Table tests over Linear signed in or not, `github.json` present or not, and `local_tracker`.
-8. **Live:**
+8. **Case:** Scheduler tests run the ops with an ad hoc ID, a Local Issue ID, a Repo prefix's ID, a Linear ID, and a GitHub ID in any case. A store with lower-case IDs loads them in upper case, keeps their events, and holds one row for each after a save. Config tests load `"SCP"`, `"scp"`, and `"Scp"` as one prefix.
+9. **Repo Trackers:** Config tests cover the Repo's own table, the owner's table, the own table that wins, no `tracker`, and `teams` on a Repo whose Tracker is not `linear`. Scheduler tests cover an Issue of another Tracker, a Repo with no `tracker`, and an ad hoc Task in that Repo. Migrate tests rewrite a list of one Tracker and refuse a longer list.
+10. **Live:**
    - A local Issue goes from `todo` to `done` through a merged PR in a sandbox repository.
    - A GitHub Issue in that repository goes from open, through `in progress`, to closed by the PR.

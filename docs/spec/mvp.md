@@ -233,7 +233,7 @@ Rex server
 │   └── tab "ENG-592 Fix flaky test"
 └── session "web"
     ├── tab "WEB-12 …"
-    └── tab "ah-9 Evaluate the ADR …"  (an ad hoc Task opens in its Repo's session too)
+    └── tab "AH-9 Evaluate the ADR …"  (an ad hoc Task opens in its Repo's session too)
 ```
 
 The Scheduler has no tab. launchd runs `lineup serve` as a user agent, and the log is `~/.local/state/lineup/scheduler.log`.
@@ -369,13 +369,14 @@ wip_cap = 5
 stage.default = { model = "claude-opus-5-5", effort = "high", skill = "pstack:poteto-mode" }
 
 [repos."crexi/*"]
+tracker = "linear"
 review_bot = { name = "greptile", min_review_score = 5, max_review_cycles = 5 }
 
 [repos."crexi/data"]
 teams = ["PD"]
 
 [repos."GClunies/hod"]
-trackers = ["local"]
+tracker = "local"
 prefix = "hod"
 ```
 
@@ -383,7 +384,7 @@ The top level holds the keys that apply once: `roots`, `start_skills`, `linear_c
 
 `[defaults]` holds each key that a Repo can override: `wip_cap`, `poll_interval`, `[budgets]`, `[review_bot]`, `[landing_bar]`, and `[stage.*]`. A layer key at the top level stops the load, for example with `wip_cap belongs in [defaults]. Run lineup config migrate to move it`.
 
-`[repos."<key>"]` holds the keys of `[defaults]`, and `teams`, `trackers`, and `prefix`. `teams` and `prefix` need an `<owner>/<repo>` key. `trackers` can go in both forms.
+`[repos."<key>"]` holds the keys of `[defaults]`, and `teams`, `tracker`, and `prefix`. `teams` and `prefix` need an `<owner>/<repo>` key. `tracker` can go in both forms.
 
 ### Repo keys and checkouts
 
@@ -407,21 +408,23 @@ Each key has one checkout. A linked worktree of a Repo is never a checkout, so i
 
 ### Migration
 
-A file from before this model holds `[[repos]]` tables with a `match` glob, and layer keys at the top level. Such a file stops the load with an error that names `lineup config migrate`. The command rewrites the file once:
+A file from before this model holds `[[repos]]` tables with a `match` glob, layer keys at the top level, or `trackers` lists. Such a file stops the load with an error that names `lineup config migrate`. The command rewrites the file once:
 
 - A `[[repos]]` table whose `match` is a path becomes `[repos."<owner>/<repo>"]`, with the key of that checkout.
 - A `[[repos]]` table whose `match` is a `<folder>/*` glob becomes `[repos."<owner>/*"]`, if each checkout that the glob matches has that owner. Otherwise the command fails and names the glob.
 - A `[[repos]]` table with only `match` goes away. Its folder becomes a `roots` entry, for example `~/repos` for `~/repos/*/*`.
 - The roots find each checkout that the old `match` globs found. If a checkout is more than two folders below the roots, the command fails and names it.
 - The layer keys at the top level move into `[defaults]`.
+- A `trackers` list of one Tracker becomes a `tracker` key, for example `trackers = ["local"]` becomes `tracker = "local"`. A list of more or fewer Trackers makes the command fail and name the Repo key.
+- A table with `teams` and no `tracker`, in the table or in its owner's table, gets `tracker = "linear"`.
 
 The command keeps the comments. It writes `config.toml.bak` first. If `config.toml.bak` already exists, the command stops and changes nothing, so an older backup stays. Then it loads the new file, and it puts the old file back if the load fails. A file in the new form stays as it is. Run `lineup restart` after the migration.
 
 ### Repo settings
 
-`trackers` locks the table's Repos to those Trackers, for example `trackers = ["local"]`. The [Trackers spec](trackers.md#locked-repos) has the rules.
+`tracker` names the one Tracker whose Issues the table's Repos take, for example `tracker = "local"`. A Repo with no `tracker` takes no Issues, only ad hoc Tasks. The [Trackers spec](trackers.md#repo-trackers) has the rules.
 
-`prefix` gives the table's Repo its own IDs for Local Issues and ad hoc Tasks, for example `prefix = "hod"` gives `hod-1`. The [Trackers spec](trackers.md#repo-prefixes) has the rules.
+`prefix` gives the table's Repo its own IDs for Local Issues and ad hoc Tasks, for example `prefix = "hod"` gives `HOD-1`. The prefix can be in any case. The [Trackers spec](trackers.md#repo-prefixes) has the rules.
 
 `[review_bot]` turns on the review bot gate. Put it in the table of the Repos where the bot is installed, as in `[repos."crexi/*"]` above. The example gates each Repo of `crexi`, and no other Repo.
 
@@ -522,7 +525,7 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
  BACKLOG  7 …
  READY  2
    ENG-611  Move the retry job                                            unblocked   ▂▄▆
-   local-7  Rename the log flag                                           ready            data
+   LOCAL-7  Rename the log flag                                           ready            data
  QUEUED  1
    ENG-601  Drop old API keys                                             queued           data
  WORKING  2
