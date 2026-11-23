@@ -125,10 +125,15 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 	}
 	out := screen(e.m)
 	inOrder(t, out, "BACKLOG", "sandbox#10", "READY", "sandbox#12", "sandbox#14", "sandbox#11", "QUEUED", "sandbox#16")
-	for _, want := range []string{"Drop old API keys", "blocked by #12", "unblocked"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("screen lacks %q:\n%s", want, out)
-		}
+	if l := lineOf(t, out, "sandbox#11"); !strings.Contains(l, "Drop old API keys") || !strings.Contains(l, "blocked") {
+		t.Errorf("the sandbox#11 row must show its title and blocked: %q", l)
+	}
+	if l := lineOf(t, out, "sandbox#14"); !strings.Contains(l, "unblocked") {
+		t.Errorf("the sandbox#14 row must show unblocked: %q", l)
+	}
+	e.m.sel = "octo/sandbox#11"
+	if f := footerAt(e.m, 200); !strings.Contains(f, "\n sandbox#11 · Ready · sandbox · blocked by #12\n") {
+		t.Errorf("the strip must name the blocker as #12:\n%s", f)
 	}
 }
 

@@ -514,28 +514,34 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
 
 ```
  lineup  WIP 4/5   ●3 need you (+1 in reviews)
- ─────────────────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU  3
- ▸ ENG-590 data   Add billing model          stopped      12m
-   ENG-588 data   Backfill events           permission: Bash(make deploy)   3m
-   ENG-580 data   Retry failed loads        drafts: 2 replies to approve    1m
+   ENG-590  Add billing model                                             stopped     12m  data
+   ENG-588  Backfill events                                               permission  3m   data
+   ENG-580  Retry failed loads                                            drafts      1m   data
  BACKLOG  7 …
  READY  2
-   ENG-611        Move the retry job        unblocked    ▂▄▆
-   local-7 data   Rename the log flag
+   ENG-611  Move the retry job                                            unblocked   ▂▄▆
+   local-7  Rename the log flag                                           ready            data
  QUEUED  1
-   ENG-601 data   Drop old API keys
+   ENG-601  Drop old API keys                                             queued           data
  WORKING  2
-   WEB-12  web    Fix map tooltip           #4650 ○ no review yet · answering review    5m
-   ENG-592 data   Fix flaky test            #4655 ○ no review yet · fixing CI           1m
+   WEB-12   Fix map tooltip                                               responding  5m   web
+   ENG-592  Fix flaky test                                                CI debug    1m   data
  WAITING  1
-   ENG-571 data   Rate limit login          #4636 ● commented · 1 open thread · optional failed: lint  1d
+ ▸ ENG-571  Rate limit login                                              in review   1d   data
  DONE  1 …
+ ──────────────────────────────────────────────────────────────────────────────────────────────
+ Rate limit login
+ ENG-571 · In review · data · #4636 ● commented · 1 open thread · optional failed: lint
+ enter go to the Worker   p preview   f details   x close   j/k move   n new Issue   ? all keys
 ```
 
 The header shows the WIP cap and the count of the build Tasks that need the user. It counts the review Tasks that need the user in parentheses, when there are any: `(+1 in reviews)`. It has no count for the other groups, because each group heading shows its own count. The header also shows `reviews paused` while the review queues are paused, and a warning when the Scheduler is offline. At 80 columns, the header with `+1 over` and the review count fits.
 
-A row has no Stage column. The group heading says who must act, and the note says what happens. The note of a build Task with a PR starts with the PR number and where the PR stands with its reviewers. Then it says what happens now, or the next gap that the Landing bar has. The approval gap never shows, because the review state already says it.
+Each row shows a status word after the title. A Task in Needs you with a flag shows the reason of the flag, for example `stopped` or `PR closed`. Any other Task shows its Stage, for example `working` or `in review`. An Issue row shows `blocked`, `unblocked`, `ready`, or `backlog`. `docs/spec/one-board.md` lists every status word.
+
+The strip under the rows shows the selected row: the full title, then the ID, the Stage, the Repo, the PR number, and the full note. The strip also shows the Board message and the key hints at the same time. The note says what happens. The note of a build Task with a PR starts with the PR number and where the PR stands with its reviewers. Then it says what happens now, or the next gap that the Landing bar has. The approval gap never shows, because the review state already says it.
 
 | Review state | When |
 |---|---|

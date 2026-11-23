@@ -57,6 +57,17 @@ func (r issueRow) note() string {
 	return ""
 }
 
+// status is the row's status word: blocked, unblocked, or its group.
+func (r issueRow) status() string {
+	switch {
+	case len(r.Blockers) > 0:
+		return "blocked"
+	case r.Unblocked:
+		return "unblocked"
+	}
+	return strings.ToLower(r.Group)
+}
+
 // priorityGlyph draws Linear's priority in three cells, by priority number.
 var priorityGlyph = map[int]string{0: "···", 1: " ! ", 2: "▂▄▆", 3: "▂▄ ", 4: "▂  "}
 

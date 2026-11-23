@@ -65,15 +65,23 @@ func TestADoneTaskShowsInFollowUpUntilItsTrackerClosesTheIssue(t *testing.T) {
 				t.Fatalf("want %s in an open Follow-up and no Done:\n%s", c.id, out)
 			}
 			if l := lineOf(t, out, boardID(c.id)); !strings.Contains(l, c.note) || strings.Contains(l, "merged") {
-				t.Errorf("row %q, want the note %q in place of the PR note", l, c.note)
+				t.Errorf("row %q, want the status %q", l, c.note)
 			}
-			out = screen(openAll(feed(m, c.closed)))
+			if f := footerAt(m, 100); !strings.Contains(f, " · "+c.note+"\n") {
+				t.Errorf("the strip must name the Tracker state %q:\n%s", c.note, f)
+			}
+			m = openAll(feed(m, c.closed))
+			m.sel = c.id
+			out = screen(m)
 			if strings.Contains(out, "FOLLOW-UP") {
 				t.Fatalf("Follow-up shows after the Tracker closed the Issue:\n%s", out)
 			}
 			inOrder(t, out, "DONE  1\n", boardID(c.id))
-			if l := lineOf(t, out, boardID(c.id)); !strings.Contains(l, "#12 merged") {
-				t.Errorf("row %q, want the note %q", l, "#12 merged")
+			if l := lineOf(t, out, boardID(c.id)); !strings.Contains(l, "done") {
+				t.Errorf("row %q, want the status done", l)
+			}
+			if f := footerAt(m, 100); !strings.Contains(f, "#12 merged") {
+				t.Errorf("the strip must show the note %q:\n%s", "#12 merged", f)
 			}
 		})
 	}
@@ -102,7 +110,7 @@ func TestEachOpenTrackerStateKeepsADoneTaskInFollowUp(t *testing.T) {
 			t.Errorf("local status %q: in Follow-up %v, want %v:\n%s", st, !want, want, screen(m))
 		}
 		if want && !strings.Contains(lineOf(t, screen(m), "local-1"), string(st)) {
-			t.Errorf("local status %q: the row lacks the note:\n%s", st, screen(m))
+			t.Errorf("local status %q: the row lacks the status:\n%s", st, screen(m))
 		}
 	}
 }

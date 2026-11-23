@@ -1,10 +1,12 @@
 package board
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -152,15 +154,75 @@ func (m Model) modeFooter() string {
 		switch {
 		case len(m.menu.items) > 0:
 			s = dim.Render(" tap an action, or j/k and enter   esc back")
-		case m.status != "" && m.statusE:
-			s = bad.Render(" " + m.status)
+		case !m.detail:
+			return m.strip()
 		case m.status != "":
-			s = good.Render(" " + m.status)
+			s = m.message()
 		default:
 			s = hintBar(m.width, m.boardHints())
 		}
 	}
 	return ansi.Truncate(s, m.width, "…")
+}
+
+// message is the Board message, in the bad style when it is an error.
+func (m Model) message() string {
+	if m.statusE {
+		return bad.Render(" " + m.status)
+	}
+	return good.Render(" " + m.status)
+}
+
+// strip is the footer under the rows: a rule, the title and the facts of the
+// selection, the Board message while it is set, and the key hints. The title
+// and the facts wrap, so that they show in full.
+func (m Model) strip() string {
+	w := max(m.width-1, 1)
+	lines := []string{dim.Render(" " + strings.Repeat("─", w))}
+	wrap := func(s string, style lipgloss.Style) {
+		if s == "" {
+			return
+		}
+		for _, l := range strings.Split(ansi.Wrap(s, w, ""), "\n") {
+			lines = append(lines, style.Render(" "+l))
+		}
+	}
+	title, facts := m.selection()
+	wrap(title, bold)
+	wrap(facts, lipgloss.NewStyle())
+	if m.status != "" {
+		lines = append(lines, ansi.Truncate(m.message(), m.width, "…"))
+	}
+	lines = append(lines, ansi.Truncate(hintBar(m.width, m.boardHints()), m.width, "…"))
+	return strings.Join(lines, "\n")
+}
+
+// selection is the title and the facts that the strip shows for the selected
+// row or heading. Both are empty when nothing is selected.
+func (m Model) selection() (title, facts string) {
+	join := func(fs ...string) string {
+		return strings.Join(slices.DeleteFunc(fs, func(f string) bool { return f == "" }), " · ")
+	}
+	if g, ok := headingName(m.sel); ok {
+		n := len(m.groupIDs(g))
+		if n == 1 {
+			return g, "1 row"
+		}
+		return g, fmt.Sprintf("%d rows", n)
+	}
+	if r, ok := m.currentIssue(); ok {
+		return r.Title, join(boardID(r.ID), r.Group, r.Repo, r.note())
+	}
+	t, ok := m.current()
+	if !ok {
+		return "", ""
+	}
+	// The note can name the PR, as in "pr closed: #5226 closed without a merge".
+	pr := fmt.Sprintf("#%d", t.PRNumber)
+	if t.PRNumber == 0 || slices.Contains(strings.FieldsFunc(t.Note, func(r rune) bool { return r != '#' && !unicode.IsDigit(r) }), pr) {
+		pr = ""
+	}
+	return t.Title, join(boardID(t.ID), t.Stage, t.Repo, pr, t.Note)
 }
 
 type hint struct{ key, does string }
@@ -277,19 +339,18 @@ func (m Model) rows(w int) string {
 // the heading's key or the row's ID, and empty for a note.
 type rowLine struct{ id, text string }
 
-// column is one column of a row. A max of 0 is no cap, and a drop of 0 never
-// drops. A narrow row drops the lowest rank first.
+// column is one column of a row. A drop of 0 never drops. A narrow row drops
+// the lowest rank first.
 type column struct {
-	min, max int
-	drop     int
-	task     func(Model, scheduler.TaskView) string
-	issue    func(issueRow) string
+	drop  int
+	task  func(Model, scheduler.TaskView) string
+	issue func(issueRow) string
 }
 
 const (
 	colID = iota
 	colTitle
-	colNote
+	colStatus
 	colTail
 	colRepo
 	colSkill
@@ -297,22 +358,54 @@ const (
 )
 
 var columns = [numCols]column{
-	colID:    {task: func(_ Model, t scheduler.TaskView) string { return boardID(t.ID) }, issue: func(r issueRow) string { return boardID(r.ID) }},
-	colTitle: {min: 12, task: func(_ Model, t scheduler.TaskView) string { return t.Title }, issue: func(r issueRow) string { return r.Title }},
-	colNote:  {min: 12, max: 48, task: func(_ Model, t scheduler.TaskView) string { return t.Note }, issue: issueRow.note},
-	colTail:  {drop: 3, task: func(m Model, t scheduler.TaskView) string { return m.age(t) }, issue: issueRow.priorityText},
-	colRepo:  {drop: 2, task: func(_ Model, t scheduler.TaskView) string { return t.Repo }, issue: func(r issueRow) string { return r.Repo }},
-	colSkill: {drop: 1, task: func(_ Model, t scheduler.TaskView) string { return t.Skill[strings.LastIndex(t.Skill, ":")+1:] }, issue: func(issueRow) string { return "" }},
+	colID:     {task: func(_ Model, t scheduler.TaskView) string { return boardID(t.ID) }, issue: func(r issueRow) string { return boardID(r.ID) }},
+	colTitle:  {task: func(_ Model, t scheduler.TaskView) string { return t.Title }, issue: func(r issueRow) string { return r.Title }},
+	colStatus: {task: func(_ Model, t scheduler.TaskView) string { return taskStatus(t) }, issue: issueRow.status},
+	colTail:   {drop: 3, task: func(m Model, t scheduler.TaskView) string { return m.age(t) }, issue: issueRow.priorityText},
+	colRepo:   {drop: 2, task: func(_ Model, t scheduler.TaskView) string { return t.Repo }, issue: func(r issueRow) string { return r.Repo }},
+	colSkill:  {drop: 1, task: func(_ Model, t scheduler.TaskView) string { return t.Skill[strings.LastIndex(t.Skill, ":")+1:] }, issue: func(issueRow) string { return "" }},
 }
 
 const (
 	// titleWant is the title width that the optional columns must leave before
-	// they show.
+	// they show, and titleMin the width that a narrow row cuts the title to.
 	titleWant = 25
-	// noteKeep is the note width that a narrow row keeps, enough for
-	// "#25867 ✓ approved · ready to land".
-	noteKeep = 33
+	titleMin  = 12
 )
+
+// stageWord is the status word of a Task row, by its Stage key.
+var stageWord = map[string]string{
+	lifecycle.Queued.Key():      "queued",
+	lifecycle.Working.Key():     "working",
+	lifecycle.CIRunning.Key():   "CI running",
+	lifecycle.CIDebug.Key():     "CI debug",
+	lifecycle.InReview.Key():    "in review",
+	lifecycle.Responding.Key():  "responding",
+	lifecycle.ReadyToLand.Key(): "ready",
+	lifecycle.Done.Key():        "done",
+	lifecycle.Reviewing.Key():   "reviewing",
+	lifecycle.ReviewReady.Key(): "review ready",
+}
+
+// flagWord is the status word of a flag whose Reason does not read as one.
+// Any other flag shows its Reason.
+var flagWord = map[string]string{
+	string(lifecycle.ReasonPRClosed):    "PR closed",
+	string(lifecycle.ReasonNoBotReview): "bot late",
+}
+
+// taskStatus is the status word of a Task row: the flag of a Task in Needs
+// you, the Tracker state of a Task in Follow-up, which setBoard puts in its
+// note, and the Stage of any other Task.
+func taskStatus(t scheduler.TaskView) string {
+	switch {
+	case inNeedsYou(t) && t.Flag != "":
+		return cmp.Or(flagWord[t.Flag], t.Flag)
+	case t.Group == groupFollowUp:
+		return t.Note
+	}
+	return cmp.Or(stageWord[t.StageKey], t.Stage)
+}
 
 // boardID is the ID that the ID column shows. A GitHub ID drops its owner,
 // because the Repo column names the repository.
@@ -324,30 +417,22 @@ func boardID(id string) string {
 	return short
 }
 
-// cellRow is a Task or Issue row before it is laid out.
+// cellRow is a Task or Issue row before it is laid out. An alert row shows
+// its status in the bad style.
 type cellRow struct {
-	id    string
-	cells [numCols]string
-	faded bool
+	id           string
+	cells        [numCols]string
+	faded, alert bool
 }
 
 // columnWidths fits the columns to the rows on screen. It drops columns until
-// the title gets titleWant cells beside the note, or beside noteKeep cells of it
-// when the note is longer. The note then takes what the title leaves, but never
-// less than noteKeep. A narrow row cuts the title down to its minimum first.
+// the title gets titleWant cells, and the title then takes the rest. A narrow
+// row cuts the title down to titleMin.
 func columnWidths(w int, rows []cellRow) [numCols]int {
 	var ws [numCols]int
 	for _, r := range rows {
 		for i, c := range r.cells {
 			ws[i] = max(ws[i], lipgloss.Width(c))
-		}
-	}
-	for i, c := range columns {
-		if ws[i] > 0 {
-			ws[i] = max(ws[i], c.min)
-			if c.max > 0 {
-				ws[i] = min(ws[i], c.max)
-			}
 		}
 	}
 	// The marker takes 3 cells, and 2 cells sit between columns.
@@ -356,24 +441,21 @@ func columnWidths(w int, rows []cellRow) [numCols]int {
 		for i, cw := range ws {
 			if cw > 0 {
 				n++
-				if i != colTitle && i != colNote {
+				if i != colTitle {
 					rest += cw
 				}
 			}
 		}
 		return w - 3 - rest - 2*(n-1)
 	}
-	for rank := 1; rank < numCols && share() < titleWant+min(ws[colNote], noteKeep); rank++ {
+	for rank := 1; rank < numCols && share() < titleWant; rank++ {
 		for i, c := range columns {
 			if c.drop == rank {
 				ws[i] = 0
 			}
 		}
 	}
-	if ws[colNote] > 0 {
-		ws[colNote] = min(ws[colNote], max(share()-titleWant, min(share()-columns[colTitle].min, noteKeep), columns[colNote].min))
-	}
-	ws[colTitle] = max(share()-ws[colNote], columns[colTitle].min)
+	ws[colTitle] = max(share(), titleMin)
 	return ws
 }
 
@@ -391,7 +473,7 @@ func (m Model) rowLines(w int) []rowLine {
 		var rows []cellRow
 		for _, t := range m.tasks {
 			if t.Group == g {
-				r := cellRow{id: t.ID, faded: g == groupDone || g == "Queued"}
+				r := cellRow{id: t.ID, faded: g == groupDone || g == "Queued", alert: inNeedsYou(t)}
 				for i, c := range columns {
 					r.cells[i] = c.task(m, t)
 				}
@@ -400,7 +482,7 @@ func (m Model) rowLines(w int) []rowLine {
 		}
 		for _, is := range m.issues {
 			if is.Group == g {
-				r := cellRow{id: is.ID, faded: g == groupBacklog || len(is.Blockers) > 0}
+				r := cellRow{id: is.ID, faded: g == groupBacklog || len(is.Blockers) > 0, alert: len(is.Blockers) > 0}
 				for i, c := range columns {
 					r.cells[i] = c.issue(is)
 				}
@@ -416,25 +498,28 @@ func (m Model) rowLines(w int) []rowLine {
 		}
 	}
 	ws := columnWidths(w, onScreen)
+	// Each cell gets its own style, because the reset of an inner style ends an
+	// outer one.
 	row := func(r cellRow) string {
-		marker := "  "
-		if r.id == m.sel {
-			marker = "▸ "
+		style, marker := lipgloss.NewStyle(), "  "
+		switch {
+		case r.id == m.sel:
+			style, marker = selRow, "▸ "
+		case r.faded:
+			style = dim
 		}
 		var parts []string
 		for i, c := range r.cells {
-			if ws[i] > 0 {
-				parts = append(parts, pad(c, ws[i]))
+			if ws[i] == 0 {
+				continue
 			}
+			cs := style
+			if i == colStatus && r.alert {
+				cs = bad
+			}
+			parts = append(parts, cs.Render(pad(c, ws[i])))
 		}
-		s := ansi.Truncate(" "+marker+strings.Join(parts, "  "), w, "…")
-		switch {
-		case r.id == m.sel:
-			return selRow.Render(s)
-		case r.faded:
-			return dim.Render(s)
-		}
-		return s
+		return ansi.Truncate(style.Render(" "+marker)+strings.Join(parts, style.Render("  ")), w, "…")
 	}
 	// A heading shows the group's count, and a closed group's mark.
 	heading := func(g string, n int) string {

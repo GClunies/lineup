@@ -81,14 +81,14 @@ func TestBacklogAndDoneStartClosedWithTheirCounts(t *testing.T) {
 func TestEnterOnAHeadingTogglesTheGroupForThisRunOnly(t *testing.T) {
 	e := groupEnv(t)
 	e.m.sel = headingKey("Backlog")
-	if f := footerAt(e.m, 100); !strings.HasPrefix(f, " enter open   j/k move   n new Issue") {
+	if f := footerAt(e.m, 100); !strings.Contains(f, "\n enter open   j/k move   n new Issue") {
 		t.Fatalf("footer %q, want enter open, j/k move, then n new Issue", f)
 	}
 	e.press("enter")
 	if out := screen(e.m); !strings.Contains(out, "BACKLOG  1\n") || !strings.Contains(out, "ENG-20") {
 		t.Fatalf("Backlog did not open:\n%s", out)
 	}
-	if f := footerAt(e.m, 100); !strings.HasPrefix(f, " enter close   j/k move") {
+	if f := footerAt(e.m, 100); !strings.Contains(f, "\n enter close   j/k move") {
 		t.Fatalf("footer %q, want enter close first", f)
 	}
 
