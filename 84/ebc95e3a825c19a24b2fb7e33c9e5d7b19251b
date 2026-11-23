@@ -1,0 +1,36 @@
+internal/config/config.go
+  s_dae4353c4a0fc0::t_540126fd7455a3 781
+  s_dae4353c4a0fc0::t_efaefda22d8f2a 1038-1042,1049-1051,1054-1055
+  s_dae4353c4a0fc0::t_bb21c848dfadcf 33-35
+  s_dae4353c4a0fc0::t_908b6ece531f32 87-89
+  s_dae4353c4a0fc0::t_eb543c975f4d9b 375
+  s_dae4353c4a0fc0::t_d440ac674d0595 822
+  s_dae4353c4a0fc0::t_52add896b0edd4 1002-1037,1043-1048,1052-1053,1056-1059,1061-1062,1068-1072
+  s_dae4353c4a0fc0::t_432bdb515a578d 1063-1067
+  s_dae4353c4a0fc0::t_c98648449454c5 757-763
+  s_dae4353c4a0fc0::t_a1ecad45979615 346,350-368
+  s_dae4353c4a0fc0::t_dc6215e82b35e8 833
+  s_dae4353c4a0fc0::t_8593ef96fbc308 1060
+internal/config/repoinit.go
+  s_dae4353c4a0fc0::t_98a6cf2532c1a3 1-133,135-194,198-199
+  s_dae4353c4a0fc0::t_8dd613b697ab04 134
+  s_dae4353c4a0fc0::t_328277e0484454 195-197
+internal/config/repoinit_test.go
+  s_dae4353c4a0fc0::t_71ddbb69d81b97 1-245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "84ebc95e3a825c19a24b2fb7e33c9e5d7b19251b",
+  "prompts": {},
+  "sessions": {
+    "s_dae4353c4a0fc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a7909f97-d7e4-4e97-b846-f43f4021cdf8",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
