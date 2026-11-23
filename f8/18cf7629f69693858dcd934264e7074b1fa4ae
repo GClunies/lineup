@@ -9,9 +9,18 @@ internal/config/board_test.go
   s_fe8d4c1691a132::t_4809b7e97e1493 36,44,46,48-49
   s_fe8d4c1691a132::t_2fb8e37dbf7d00 50
   s_62e3808e7f1359::t_c540a2d20817b0 53-55
+  s_fe8d4c1691a132::t_13a069e5c3b9c1 47
+  s_fe8d4c1691a132::t_c1b58f9ee5d750 51-52
+  s_fe8d4c1691a132::t_e9d1afa9f787e3 13,35,62,71
+  s_fe8d4c1691a132::t_7125054e659716 45
 internal/config/board.go
   s_fe8d4c1691a132::t_1855df4b048d35 16
   s_fe8d4c1691a132::t_02ad9f974c2d4f 87
+internal/board/groups_test.go
+  s_fe8d4c1691a132::t_0f663f0d277075 312
+internal/config/migrate_test.go
+  s_fe8d4c1691a132::t_ad4ce0c3a74690 383
+  s_fe8d4c1691a132::t_0428cda65b46e2 140
 ---
 {
   "schema_version": "authorship/3.0.0",
