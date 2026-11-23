@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -28,6 +29,13 @@ const usage = `usage: lineup [command]
                                and [repos."owner/repo"] tables, from trackers lists
                                to tracker keys, and from ready and queued in [board]
                                to up_next
+  lineup repo detect <owner>/<repo> --json
+                               print the detected setup of a Repo: its Tracker, review
+                               bot, Landing bar, Linear teams, and worktree hooks
+  lineup repo init <owner>/<repo> [key=value ...] | --defaults
+                               add the Repo's [repos."owner/repo"] table, which lineup add
+                               needs for a build Task, then restart the Scheduler.
+                               --defaults writes what repo detect lists in init
 
   lineup add [--over-cap] [--set key=value]... <ISSUE> | --repo <repo> "<text>"
                                start a Task for an Issue (ENG-614, owner/repo#12, LOCAL-7,
@@ -92,6 +100,8 @@ func run(args []string) error {
 		return logout(args[1:], os.Stdout, linear.Logout)
 	case "config":
 		return cmdConfig(args[1:], os.Stdout)
+	case "repo":
+		return cmdRepo(context.Background(), args[1:], os.Stdout, realRepoEnv())
 	case "trackers":
 		on, err := currentTrackers()
 		if err != nil {
