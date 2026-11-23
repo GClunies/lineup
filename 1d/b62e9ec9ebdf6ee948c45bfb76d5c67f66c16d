@@ -2,6 +2,7 @@ internal/scheduler/api.go
   s_dae4353c4a0fc0::t_0dc0920ff8a7fe 63-66
   s_dae4353c4a0fc0::t_5aa08010a0def7 390-392,406
   s_dae4353c4a0fc0::t_1a4a73d5694276 393-400
+  s_dae4353c4a0fc0::t_67c41ae67a0651 367,382-389,402
 cmd/lineup/wire.go
   s_dae4353c4a0fc0::t_de3a1192242b1c 725-726
 cmd/lineup/wire_test.go
@@ -10,6 +11,8 @@ internal/scheduler/ports.go
   s_dae4353c4a0fc0::t_3c3272cad11560 286-288
 internal/scheduler/setup_test.go
   s_dae4353c4a0fc0::t_8c519e40405f52 1-52
+internal/scheduler/scheduler_test.go
+  s_dae4353c4a0fc0::t_79fb8bafb5a2f0 644
 ---
 {
   "schema_version": "authorship/3.0.0",
