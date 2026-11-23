@@ -1,0 +1,21 @@
+internal/board/followup_test.go
+  s_9988d3ce3617ed::t_f6599229f250e9 67
+  s_9988d3ce3617ed::t_a568d1b918ee45 74
+  s_9988d3ce3617ed::t_74769b3d2bf5d9 75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "120020404d591c7e2c29d94581e71012bf5c34aa",
+  "prompts": {},
+  "sessions": {
+    "s_9988d3ce3617ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "60871028-73d4-42c5-927a-1511d5629145",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
