@@ -1,0 +1,20 @@
+internal/harness/claude/usage.go
+  s_59f22b65e91f8e::t_7f8b5517d7383a 121
+  s_59f22b65e91f8e::t_45f990cf537e14 92-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bae5b85bf70bf3afb6d195710263abc57bcda638",
+  "prompts": {},
+  "sessions": {
+    "s_59f22b65e91f8e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebd739c9-7583-4350-b806-9bd20a91bffe",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
