@@ -173,9 +173,8 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 			s.d.Log.Warn("close the setup block", "task", r.ID, "err", err)
 		}
 	}
-	// The side pane shows the worktree's changes, and a read-only Worker has no worktree.
-	if !spec.ReadOnly {
-		s.openSide(ctx, r.ID, w.SessionID, w.BlockID, r.Worktree, r.sideCommand())
+	if rec, want, ok := s.liveSide(ctx, r.ID); ok && want != nil {
+		s.syncSide(ctx, rec, nil, want)
 	}
 	return true
 }

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -69,6 +70,21 @@ func Path(ctx context.Context, bin, repo, branch string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// DiffBase is the merge-base of HEAD in the worktree dir with origin's default
+// branch, or with origin/main when the clone names no default branch. A rebase
+// or a merge of the default branch moves it. A missing dir gives the error of
+// os.Stat, which wraps fs.ErrNotExist.
+func DiffBase(ctx context.Context, dir string) (string, error) {
+	if _, err := os.Stat(dir); err != nil {
+		return "", err
+	}
+	branch, err := git(ctx, dir, "symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD")
+	if err != nil || branch == "" {
+		branch = "origin/main"
+	}
+	return git(ctx, dir, "merge-base", "HEAD", branch)
 }
 
 // Remove deletes the worktree of the branch. A branch with no worktree is not

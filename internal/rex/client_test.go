@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -152,6 +153,44 @@ func TestIdleShellReadsOnlyALoginShellWithNothingInItsForeground(t *testing.T) {
 	}
 	if _, err := idleShell([]byte("not json")); err == nil {
 		t.Error("idleShell read text that is not JSON")
+	}
+}
+
+// The records come from a live Rex at API revision 18: a side pane that lineup
+// split, a plain split where the user typed hunk, a Worker, and a kept block.
+func TestForegroundNamesTheProgramThatABlockRuns(t *testing.T) {
+	cases := []struct{ name, out, want string }{
+		{"a side pane", `{"last_exit":null,"child":{"pid":28928,"name":"hunk","path":"/opt/homebrew/Cellar/hunk/0.24.1/libexec/hunk","cwd":"/wt/data.pd-762"},"foreground":{"pid":28928,"name":"hunk","path":"/opt/homebrew/Cellar/hunk/0.24.1/libexec/hunk","cwd":"/wt/data.pd-762"},"home":"/Users/g"}`, "hunk"},
+		{"hunk typed in a shell", `{"last_exit":null,"child":{"pid":11749,"name":"login","path":"/usr/bin/login"},"foreground":{"pid":12015,"name":"hunk","path":"/opt/homebrew/Cellar/hunk/0.24.1/libexec/hunk","cwd":"/wt/data.pd-762"},"ancestors":[{"pid":11753,"name":"zsh","path":"/bin/zsh"},{"pid":11749,"name":"login","path":"/usr/bin/login"}],"home":"/Users/g"}`, "hunk"},
+		{"a Worker", `{"last_exit":null,"child":{"pid":22873,"name":"2.1.323","path":"/Users/g/.local/share/claude/versions/2.1.323"},"foreground":{"pid":22873,"name":"2.1.323","cwd":"/wt/data.pd-762"},"home":"/Users/g"}`, "2.1.323"},
+		{"a kept block after exit 0", `{"last_exit":{"exit_code":0},"home":"/Users/g"}`, ""},
+	}
+	for _, c := range cases {
+		if got, err := foreground([]byte(c.out)); err != nil || got != c.want {
+			t.Errorf("%s: foreground = %q, %v, want %q", c.name, got, err, c.want)
+		}
+	}
+	if _, err := foreground([]byte("not json")); err == nil {
+		t.Error("foreground read text that is not JSON")
+	}
+}
+
+// The record comes from a live Rex: a Worker's tab with its side pane and a
+// plain split.
+func TestViewReadsTheLabelOfEachBlock(t *testing.T) {
+	dir := t.TempDir()
+	record := filepath.Join(dir, "inspect.json")
+	os.WriteFile(record, []byte(`{"revision":3,"session_id":"session:1","label":"data","windows":[{"window_id":"window:1","label":"ENG-1 Add billing model","layers":[{"layer_id":"layer:1","kind":"tiled","blocks":[{"block_id":"block:worker","label":"shell"},{"block_id":"block:side","label":"side"},{"block_id":"block:typed","label":"shell"}]}]}]}`), 0o644)
+	bin := filepath.Join(dir, "rex")
+	os.WriteFile(bin, []byte("#!/bin/sh\ncat \""+record+"\"\n"), 0o755)
+	c := Client{Bin: bin}
+	v, err := c.View(context.Background(), "session:1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Windows) != 1 || !slices.Equal(v.Windows[0].BlockIDs, []string{"block:worker", "block:side", "block:typed"}) ||
+		!slices.Equal(v.Windows[0].Labels, []string{"shell", "side", "shell"}) {
+		t.Fatalf("view %+v, want three blocks with their labels", v)
 	}
 }
 

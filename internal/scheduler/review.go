@@ -285,19 +285,6 @@ func (s *Scheduler) setupReview(ctx context.Context, r Record) bool {
 	return true
 }
 
-// sideCommand is the program of the side pane beside the Task's Worker. A
-// review Task shows the PR's page in rexweb, or its diff in hunk if RexWeb.app
-// is missing. hunk reads a token from GH_TOKEN for a private repository. The
-// shell sets it from gh, so the token is in no argv. A build Task shows its
-// worktree's changes since the worktree left the default branch, or
-// origin/main if the clone names no default branch.
-func (r *Record) sideCommand() []string {
-	if r.Review != nil {
-		return []string{"sh", "-c", `for a in "$HOME/Applications/RexWeb.app" /Applications/RexWeb.app; do p=$a/Contents/Resources/rexweb-pane; [ -x "$p" ] && exec "$p" "$1"; done; GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"`, "side", r.Review.URL}
-	}
-	return []string{"sh", "-c", `b=$(git symbolic-ref -q --short refs/remotes/origin/HEAD) || b=origin/main; exec hunk diff --watch "$(git merge-base HEAD "$b")"`, "hunk"}
-}
-
 // removeReviewWorktree never runs worktrunk: the review worktree is not
 // worktrunk's.
 func (s *Scheduler) removeReviewWorktree(ctx context.Context, r Record) {

@@ -26,6 +26,8 @@ type Window struct{ SessionID, WindowID, BlockID string }
 type WindowView struct {
 	ID, Label string
 	BlockIDs  []string
+	// Labels holds the label of each block in BlockIDs, such as side or shell.
+	Labels []string
 }
 
 type SessionView struct {
@@ -258,7 +260,8 @@ func (c *Client) View(ctx context.Context, session string) (SessionView, error) 
 			Label  string `json:"label"`
 			Layers []struct {
 				Blocks []struct {
-					ID string `json:"block_id"`
+					ID    string `json:"block_id"`
+					Label string `json:"label"`
 				} `json:"blocks"`
 			} `json:"layers"`
 		} `json:"windows"`
@@ -272,6 +275,7 @@ func (c *Client) View(ctx context.Context, session string) (SessionView, error) 
 		for _, l := range w.Layers {
 			for _, b := range l.Blocks {
 				wv.BlockIDs = append(wv.BlockIDs, b.ID)
+				wv.Labels = append(wv.Labels, b.Label)
 			}
 		}
 		sv.Windows = append(sv.Windows, wv)
@@ -327,6 +331,30 @@ func idleShell(out []byte) (bool, error) {
 		return false, err
 	}
 	return v.Child.Path == loginShell && len(v.Ancestors) <= 1, nil
+}
+
+// Foreground returns the name of the program in a block's foreground, such as
+// hunk, or "" in a kept block whose command exited.
+func (c *Client) Foreground(ctx context.Context, session, block string) (string, error) {
+	out, err := c.run(ctx, "block", "call", "-s", session, "-b", block, "process")
+	if err != nil {
+		return "", err
+	}
+	return foreground(out)
+}
+
+// foreground reads the record of the process method. A program that the user
+// typed in a plain tab's shell is in the foreground too.
+func foreground(out []byte) (string, error) {
+	var v struct {
+		Foreground struct {
+			Name string `json:"name"`
+		} `json:"foreground"`
+	}
+	if err := json.Unmarshal(out, &v); err != nil {
+		return "", err
+	}
+	return v.Foreground.Name, nil
 }
 
 // LastExit returns the exit code of a block's command after it exits in a block

@@ -27,7 +27,7 @@ At Intake, the Scheduler resolves the Loop budgets, the Landing bar, and the rev
 
 ## ARCH-STATE-006: The Record holds the Rex IDs, the conversation, and the pending prompt
 
-Each Record keeps the Rex session, tab, and block IDs of its Task, and the block ID of its side pane. Each Rex event and each recovery finds its Task through these IDs. The Record keeps the conversation ID of the Task, which its first Worker starts and every later Worker resumes. It keeps the pending Stage, whose prompt the Worker has not received, and the last program status of the Worker.
+Each Record keeps the Rex session, tab, and block IDs of its Task, and the block ID, folder, and command of its side pane. Each Rex event and each recovery finds its Task through these IDs. The Record keeps the conversation ID of the Task, which its first Worker starts and every later Worker resumes. It keeps the pending Stage, whose prompt the Worker has not received, and the last program status of the Worker.
 
 Because: Rex has no key-value metadata on its objects.
 

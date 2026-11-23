@@ -59,7 +59,7 @@ Because: Rex brings back each tab after its restart with the same IDs, as a logi
 
 ## ARCH-REX-010: The side pane never changes the Task
 
-The side pane is a block labeled `side` to the right of the Worker, in the Task's folder. The Record keeps its ID apart, and the Worker's block stays the block of the Task, so no event of the pane changes the Task. When the Worker's block closes and the pane holds the tab open, lineup closes the tab. At start, the Scheduler opens the pane again beside each live Worker whose pane is gone. A failed split logs a warning, and the Worker runs without the pane.
+The side pane is a block labeled `side` to the right of the Worker, in the Task's worktree. The Record keeps the pane's block ID, folder, and command apart, and the Worker's block stays the block of the Task, so no event of the pane changes the Task. When the Worker's block closes and the pane holds the tab open, lineup closes the tab.
 
 ## ARCH-REX-011: A Hub reopen that would end its caller runs in a detached copy
 
@@ -67,3 +67,10 @@ When lineup must close the Hub tab whose pane runs it, it starts a copy of itsel
 
 Because: closing a Rex window ends every process of its panes, and a process in its own session outlives that close.
 Not: refusing to reopen the caller's tab; a Board that re-execs itself when its binary changes.
+
+## ARCH-REX-012: One step on the Task's lane converges its side pane
+
+One step on the Task's lane converges the tab on one side pane. It runs after a Worker opens, at start for each live Worker, and at each poll where the Record names a pane. A side pane is any block but the Worker's that is labeled `side` or runs `hunk` or `rexweb-pane`. The step keeps the Record's pane while its folder and command match the Task's worktree and merge-base, and closes the others. A new pane splits the old pane, which then closes, so the new pane keeps its place and size. A failed split logs a warning.
+
+Because: the user can type `hunk` in a plain split, so a check of the label or of the stored block ID alone misses a pane.
+Not: the merge-base computed once in the pane's shell, which freezes the base.
