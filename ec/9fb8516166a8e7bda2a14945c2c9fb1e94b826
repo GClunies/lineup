@@ -1,0 +1,19 @@
+internal/board/view_test.go
+  s_3b28055ecbdc0f::t_bd6382ca063e5d 54-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ec9fb8516166a8e7bda2a14945c2c9fb1e94b826",
+  "prompts": {},
+  "sessions": {
+    "s_3b28055ecbdc0f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c32c2d84-afbb-49eb-9fa5-8182023a14e3",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
