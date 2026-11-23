@@ -1,0 +1,19 @@
+docs/spec/one-board.md
+  s_a56bd72ec7104f::t_cf24701559de6c 337
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5ba2408d9d4eecfa4ac1f1352bda02055326a793",
+  "prompts": {},
+  "sessions": {
+    "s_a56bd72ec7104f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7def645d-2c6a-46b8-912b-a30a82ff8bc6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
