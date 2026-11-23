@@ -315,9 +315,12 @@ func (m Model) toggleDone() Model {
 	return m
 }
 
+// restorable reports whether open gives the Task a Worker: a started Task
+// with no live Worker, or a Done build Task with no tab, which resumes in its
+// kept worktree or read-only in the main checkout.
 func restorable(t scheduler.TaskView) bool {
 	st, err := lifecycle.ParseStage(t.StageKey)
-	return err == nil && st.Started() && !t.Live
+	return err == nil && !t.Live && (st.Started() || st == lifecycle.Done && t.Kind == lifecycle.KindBuild && !t.Tab)
 }
 
 func (m Model) current() (scheduler.TaskView, bool) {

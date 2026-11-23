@@ -177,12 +177,12 @@ func TestConfigDir(t *testing.T) {
 
 func TestCommand(t *testing.T) {
 	st := config.StageConfig{Model: "claude-opus-5-5", Effort: "high"}
-	argv, env := Command("/bin/claude", "/profiles/work", st, "", "", "do it")
+	argv, env := Command("/bin/claude", "/profiles/work", st, "", "", "do it", false)
 	want := []string{"/bin/claude", "--model", "claude-opus-5-5", "--effort", "high", "--allowedTools=Bash(lineup ask:*)", "do it"}
 	if !reflect.DeepEqual(argv, want) || !reflect.DeepEqual(env, map[string]string{"CLAUDE_CONFIG_DIR": "/profiles/work"}) {
 		t.Errorf("%v %v", argv, env)
 	}
-	if _, env := Command("/bin/claude", "", st, "", "", "x"); len(env) != 0 {
+	if _, env := Command("/bin/claude", "", st, "", "", "x", false); len(env) != 0 {
 		t.Errorf("default profile must set no env: %v", env)
 	}
 }
@@ -310,7 +310,7 @@ func TestEveryContractNamesTheAskCommand(t *testing.T) {
 
 // claude's --add-dir takes many values, so a separate value would swallow the prompt.
 func TestCommandAddsEachDirInOneArgument(t *testing.T) {
-	argv, _ := Command("/bin/claude", "", config.StageConfig{Model: "m"}, "", "", "the prompt", "/repos/data.review-pr-7")
+	argv, _ := Command("/bin/claude", "", config.StageConfig{Model: "m"}, "", "", "the prompt", false, "/repos/data.review-pr-7")
 	want := []string{"/bin/claude", "--model", "m", "--allowedTools=Bash(lineup ask:*)", "--add-dir=/repos/data.review-pr-7", "the prompt"}
 	if !reflect.DeepEqual(argv, want) {
 		t.Errorf("argv = %q, want %q", argv, want)
@@ -321,22 +321,45 @@ func TestCommandAddsEachDirInOneArgument(t *testing.T) {
 // reopen resumes it with no prompt and the user finds it by name.
 func TestABuildWorkerStartsItsConversationWithSessionID(t *testing.T) {
 	id := "6a1f0c2e-7d3b-4e8a-9c5f-2b4d6e8f0a1c"
-	argv, _ := Command("/bin/claude", "", config.StageConfig{Model: "m"}, id, "ENG-1 Fix X", "Do the work for this Task.")
+	argv, _ := Command("/bin/claude", "", config.StageConfig{Model: "m"}, id, "ENG-1 Fix X", "Do the work for this Task.", false)
 	want := []string{"/bin/claude", "--model", "m", "--session-id", id, "--name", "ENG-1 Fix X", "--allowedTools=Bash(lineup ask:*)", "Do the work for this Task."}
 	if !reflect.DeepEqual(argv, want) {
 		t.Fatalf("argv = %q, want %q", argv, want)
 	}
 }
 
+// A Worker whose worktree lineup removed resumes in the Repo's main checkout
+// with no tool that writes files. A resume sends the system prompt that the
+// conversation recorded first, so the added text needs a fresh one.
+func TestAReadOnlyWorkerHasNoToolThatWritesFiles(t *testing.T) {
+	const id = "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20"
+	argv, _ := Command("/bin/claude", "", config.StageConfig{Model: "m"}, id, "ENG-1 Fix X", "", true)
+	if !slices.Contains(argv, "--disallowedTools=Bash,Edit,Write,NotebookEdit,EnterWorktree") {
+		t.Errorf("argv = %q, want the tools that write files denied", argv)
+	}
+	if slices.ContainsFunc(argv, func(a string) bool { return strings.HasPrefix(a, "--allowedTools") }) {
+		t.Errorf("argv = %q, want no allowed tools", argv)
+	}
+	if i := slices.Index(argv, "--system-prompt-snapshot"); i < 0 || argv[i+1] != "off" {
+		t.Errorf("argv = %q, want --system-prompt-snapshot off", argv)
+	}
+	if i := slices.Index(argv, "--append-system-prompt"); i < 0 || !strings.Contains(argv[i+1], "main checkout") {
+		t.Errorf("argv = %q, want a system prompt that names the main checkout", argv)
+	}
+	if i := slices.Index(argv, "--resume"); i < 0 || argv[i+1] != id {
+		t.Errorf("argv = %q, want --resume %s", argv, id)
+	}
+}
+
 func TestCommandStartsAndResumesAConversation(t *testing.T) {
 	const id = "0b6f8f0e-3c1a-4b8e-9d2f-5a7c1e4b9d20"
 	st := config.StageConfig{Model: "m", Effort: "max"}
-	start, _ := Command("/bin/claude", "", st, id, "R-7 data#7 Fix X", "/pr-review x", "/repos/data.review-pr-7")
+	start, _ := Command("/bin/claude", "", st, id, "R-7 data#7 Fix X", "/pr-review x", false, "/repos/data.review-pr-7")
 	want := []string{"/bin/claude", "--model", "m", "--effort", "max", "--session-id", id, "--name", "R-7 data#7 Fix X", "--allowedTools=Bash(lineup ask:*)", "--add-dir=/repos/data.review-pr-7", "/pr-review x"}
 	if !reflect.DeepEqual(start, want) {
 		t.Errorf("start argv = %q, want %q", start, want)
 	}
-	resume, _ := Command("/bin/claude", "", st, id, "R-7 data#7 Fix X", "", "/repos/data.review-pr-7")
+	resume, _ := Command("/bin/claude", "", st, id, "R-7 data#7 Fix X", "", false, "/repos/data.review-pr-7")
 	want = []string{"/bin/claude", "--model", "m", "--effort", "max", "--resume", id, "--name", "R-7 data#7 Fix X", "--allowedTools=Bash(lineup ask:*)", "--add-dir=/repos/data.review-pr-7"}
 	if !reflect.DeepEqual(resume, want) {
 		t.Errorf("resume argv = %q, want %q", resume, want)

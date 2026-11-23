@@ -111,16 +111,18 @@ func serve() error {
 	s, err := scheduler.New(scheduler.Deps{
 		Rex: rexPort{rc}, GitHub: gh, Worktrees: worktreePort{wtBin},
 		Harness: harnessPort{cfg: cfg, tracker: tracker}, Tracker: tracker,
-		Config:       configPort{cfg: cfg, choices: config.NewRepoChoices(choicesPath)},
-		LocalIssues:  local,
-		Store:        st,
-		DefaultCap:   defaults.WIPCap,
-		PollInterval: defaults.PollInterval,
-		Queues:       reviewQueues(cfg),
-		Slots:        cfg.ReviewSlots(),
-		StateHome:    xdgStateHome(),
-		BoardCache:   filepath.Join(stateDir(), "board.json"),
-		Log:          log,
+		Config:         configPort{cfg: cfg, choices: config.NewRepoChoices(choicesPath)},
+		LocalIssues:    local,
+		Store:          st,
+		DefaultCap:     defaults.WIPCap,
+		PollInterval:   defaults.PollInterval,
+		Queues:         reviewQueues(cfg),
+		Slots:          cfg.ReviewSlots(),
+		StateHome:      xdgStateHome(),
+		BoardCache:     filepath.Join(stateDir(), "board.json"),
+		Log:            log,
+		CloseMergedTab: cfg.CloseMergedTab(),
+		KeepWorktree:   cfg.KeepWorktree(),
 	})
 	if err != nil {
 		return err

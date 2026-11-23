@@ -1024,6 +1024,35 @@ func TestEnterRestoresAClosedWorker(t *testing.T) {
 	}
 }
 
+// A Done build Task with no tab keeps its conversation, in its kept worktree
+// or read-only in the main checkout, so enter restores its Worker.
+func TestEnterRestoresTheWorkerOfADoneBuildTaskWithNoTab(t *testing.T) {
+	f := &fakeClient{open: scheduler.OpenResult{Action: scheduler.OpenRestored}}
+	v := fixture()
+	kept := tv("ENG-702", lifecycle.Done, "data", "Add billing model", "#42 merged · worktree until Nov 14", time.Hour)
+	kept.Live, kept.Outcome = false, "merged"
+	review := rtv("pr-7", lifecycle.Done, "Fix the tooltip", urlBase, time.Hour)
+	review.Live = false
+	v.Tasks = append(v.Tasks, kept, review)
+	m := newModel(f, v)
+	m.sel = "pr-7"
+	if strings.Contains(m.footer(), "restore the Worker") {
+		t.Fatalf("footer = %q, want no restore for a Done review", m.footer())
+	}
+	m.sel = "ENG-702"
+	if !strings.Contains(m.footer(), "enter restore the Worker") || !strings.Contains(m.footer(), "x archive") {
+		t.Fatalf("footer = %q, want the restore and archive hints", m.footer())
+	}
+	m2, cmd := press(m, "enter")
+	if cmd == nil {
+		t.Fatal("enter sent nothing")
+	}
+	run(m2, cmd)
+	if len(f.calls) != 1 || f.calls[0].Op != "open" || f.calls[0].Task != "ENG-702" {
+		t.Fatalf("calls = %+v, want one open of ENG-702", f.calls)
+	}
+}
+
 func TestEnterOnALiveWorkerOffersTheWorker(t *testing.T) {
 	f := &fakeClient{}
 	m := newModel(f, fixture())

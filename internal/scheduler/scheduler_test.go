@@ -31,6 +31,8 @@ type tab struct {
 	blockGone bool
 	// shell marks a tab that Rex restored as an idle shell after a restart.
 	shell bool
+	// program is the state that Rex reads from the tab's program now.
+	program string
 	// keep marks a tab that stays open after its program exits, and exited
 	// marks that exit with code.
 	keep, exited bool
@@ -244,7 +246,14 @@ func (f *fakeRex) LastExit(_ context.Context, _, block string) (int, bool, error
 	return 0, false, nil
 }
 
-func (f *fakeRex) ProgramStatus(context.Context, string, string) (Status, error) {
+func (f *fakeRex) ProgramStatus(_ context.Context, _, block string) (Status, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, t := range f.tabs {
+		if t.BlockID == block {
+			return Status{State: t.program}, nil
+		}
+	}
 	return Status{}, nil
 }
 func (f *fakeRex) Focus(_ context.Context, _, _, block string) error {
@@ -485,6 +494,9 @@ type fakeWorktrees struct {
 	mostInFlight   int
 	// keep makes RemoveReview keep the worktree, as for an unpushed commit.
 	keep bool
+	// dirty makes Remove keep the worktree, as for uncommitted changes.
+	// removed still logs each try.
+	dirty bool
 	// addErr fails the next AddReview call.
 	addErr error
 }
@@ -521,7 +533,16 @@ func (w *fakeWorktrees) Remove(_ context.Context, _, branch string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.removed = append(w.removed, branch)
+	if w.dirty {
+		return fmt.Errorf("%w: %s", ErrUncommitted, branch)
+	}
 	return nil
+}
+
+func (w *fakeWorktrees) setDirty(dirty bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.dirty = dirty
 }
 
 type fakeHarness struct {
@@ -1797,14 +1818,18 @@ func TestOpenRefusesATaskWithNothingToOpen(t *testing.T) {
 	if err := h.openFails("ENG-9"); !errors.Is(err, lifecycle.ErrUnknownTask) {
 		t.Fatalf("unknown: %v", err)
 	}
-	h, worker := doneWithATab(t)
-	h.do(Request{Op: "close", Task: "ENG-1"})
-	eventually(t, "the worktree removed", func() bool { return len(h.worktreesRemoved()) == 1 })
-	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
-	if err := h.openFails("ENG-1"); err.Error() != "ENG-1 is Done and its worktree is gone" {
-		t.Fatalf("done: %v", err)
+	h = newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	h.waitTabRecorded("claude reviewing", "pr-7")
+	merged := openPR(7, "h1")
+	merged.State = "MERGED"
+	h.gh.setReview(merged)
+	eventually(t, "the review tab closed", func() bool { v := h.task("pr-7"); return v.Stage == "Done" && !v.Tab })
+	if err := h.openFails("pr-7"); err.Error() != "pr-7 is Done and its worktree is gone" {
+		t.Fatalf("done review: %v", err)
 	}
-	if n := len(h.rex.open("claude working")); n != 0 {
+	if n := len(h.rex.open("claude reviewing")); n != 0 {
 		t.Fatalf("open left %d Worker tabs", n)
 	}
 }

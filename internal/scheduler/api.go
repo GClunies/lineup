@@ -185,7 +185,7 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 				return &lifecycle.NotAllowedError{Signal: "archive", Stage: r.Stage}
 			}
 			if !r.Archived {
-				if r.WindowID != "" {
+				if r.keepsWork() {
 					if err := s.apply(r, lifecycle.TaskClosed{}, ""); err != nil {
 						return err
 					}
@@ -367,6 +367,9 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 			}
 			if old.keepsTab() {
 				return fmt.Errorf("%s is Done and keeps its tab: close its tab first with lineup close %s", r.ID, r.ID)
+			}
+			if old.keepsWork() {
+				return fmt.Errorf("%s is Done and keeps its worktree: remove it first with lineup close %s", r.ID, r.ID)
 			}
 			if old.Stage != lifecycle.Done {
 				return fmt.Errorf("%s is already on the Board", r.ID)

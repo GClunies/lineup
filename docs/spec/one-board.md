@@ -122,7 +122,7 @@ Both groups sort in this order:
 
 ## Follow-up
 
-When a build Task's PR merges, the Task goes to Done. Its Issue can still need the user, for example in the Linear state "Waiting for QA". A Done Task whose Issue its Tracker still holds open is in the Follow-up group. The row's status word and its note in the strip are the Tracker state.
+When a build Task's PR merges, the Task goes to Done. Its Issue can still need the user, for example in the Linear state "Waiting for QA". A Done Task whose Issue its Tracker still holds open is in the Follow-up group. The row's status word is the Tracker state. The note in the strip is the Tracker state, then the worktree note when lineup keeps the Task's worktree, for example `Waiting for QA · worktree kept: uncommitted changes in <path>`. See [Merged Tasks](mvp.md#merged-tasks).
 
 | Tracker | The Issue is open when | Tracker state |
 |---|---|---|
