@@ -1,0 +1,29 @@
+GLOSSARY.md
+  s_9988d3ce3617ed::t_3a703286e2a5c0 88
+  s_9988d3ce3617ed::t_5e1ea6a19b6e59 69-72
+docs/spec/one-board.md
+  s_9988d3ce3617ed::t_b2fbc95ec27c01 93-104,106-108
+  s_9988d3ce3617ed::t_1052f72e04902d 76
+  s_9988d3ce3617ed::t_0059df03ec17b2 278-281
+  s_9988d3ce3617ed::t_856ed645f9a2da 214
+  s_9988d3ce3617ed::t_f1e104bdeb91e7 105
+docs/spec/mvp.md
+  s_9988d3ce3617ed::t_9dbd102ffa3f36 560
+  s_9988d3ce3617ed::t_c51461a1cd996b 464
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a2e7da77b723e888331081a2e32ff78fda5d6332",
+  "prompts": {},
+  "sessions": {
+    "s_9988d3ce3617ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "60871028-73d4-42c5-927a-1511d5629145",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
