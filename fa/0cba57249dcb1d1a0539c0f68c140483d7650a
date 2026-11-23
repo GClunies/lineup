@@ -1,0 +1,27 @@
+docs/product-intent/orchestrator.md
+  s_0bbe30b549c9a0::t_9e28612213a6ee 7
+docs/product-intent/tabs.md
+  s_0bbe30b549c9a0::t_cf18fa82b31b65 7
+  s_0bbe30b549c9a0::t_e42223854ccc32 72-75
+docs/product-intent/configuration.md
+  s_0bbe30b549c9a0::t_f441082695ac52 15
+GLOSSARY.md
+  s_0bbe30b549c9a0::t_280eddb4e396f0 92
+  s_0bbe30b549c9a0::t_77427b9c8ca547 100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fa0cba57249dcb1d1a0539c0f68c140483d7650a",
+  "prompts": {},
+  "sessions": {
+    "s_0bbe30b549c9a0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2d0d4eee-ae46-4a5a-a227-f8eba13a8690",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
