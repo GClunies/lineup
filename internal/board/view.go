@@ -526,16 +526,18 @@ func (m Model) rowLines(w int) []rowLine {
 		}
 		return ansi.Truncate(style.Render(" "+marker)+strings.Join(parts, style.Render("  ")), w, "…")
 	}
-	// A heading shows the group's count, and a closed group's mark.
+	// A heading shows the group's name, its count in the dim style, and a
+	// closed group's mark.
 	heading := func(g string, n int) string {
-		s := fmt.Sprintf(" %s  %d", strings.ToUpper(g), n)
-		if !m.open(g) {
-			s += " …"
-		}
+		name, marker := headRow, " "
 		if m.sel == headingKey(g) {
-			return selRow.Render(ansi.Truncate("▸"+s[1:], w, "…"))
+			name, marker = selRow, "▸"
 		}
-		return headRow.Render(ansi.Truncate(s, w, "…"))
+		count := fmt.Sprintf(" %d", n)
+		if !m.open(g) {
+			count += " …"
+		}
+		return ansi.Truncate(name.Render(marker+g)+dim.Render(count), w, "…")
 	}
 	var out []rowLine
 	for _, g := range groups {

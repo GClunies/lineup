@@ -91,13 +91,13 @@ func TestATapOnAHeadingOpensOrClosesTheGroup(t *testing.T) {
 	if shows(m, "ENG-560") {
 		t.Fatal("Done starts closed")
 	}
-	m, _ = tap(t, m, "DONE")
+	m, _ = tap(t, m, "Done 1")
 	if !shows(m, "ENG-560") {
-		t.Fatalf("a tap on DONE did not open it:\n%s", ansi.Strip(m.View()))
+		t.Fatalf("a tap on Done did not open it:\n%s", ansi.Strip(m.View()))
 	}
-	m, _ = tap(t, m, "DONE")
+	m, _ = tap(t, m, "Done 1")
 	if shows(m, "ENG-560") {
-		t.Fatal("a second tap on DONE did not close it")
+		t.Fatal("a second tap on Done did not close it")
 	}
 }
 

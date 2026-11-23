@@ -2,6 +2,7 @@ package board
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -60,10 +61,33 @@ var userBoard = config.Board{
 
 func screen(m Model) string { return ansi.Strip(m.View()) }
 
+// hasHeading reports whether the screen shows the heading of group g.
+func hasHeading(out, g string) bool {
+	return regexp.MustCompile(`(?m)^[ ▸]` + regexp.QuoteMeta(g) + ` \d+`).MatchString(out)
+}
+
+func TestEachHeadingIsTheGroupNameInSentenceCaseAndItsCount(t *testing.T) {
+	e := groupEnv(t)
+	v := fixture()
+	v.Tasks = append(v.Tasks, shipped("ENG-9"))
+	e.m = openAll(feed(e.m, boardMsg(v)))
+	out := screen(e.m)
+	want := map[string]int{"Needs you": 2, "Follow-up": 1, "Backlog": 1, "Ready": 1, "Queued": 1, "Working": 2, "Waiting": 1, "Done": 1}
+	lines := strings.Split(out, "\n")
+	for g, n := range want {
+		if head := fmt.Sprintf(" %s %d", g, n); !slices.Contains(lines, head) {
+			t.Errorf("no line is the heading %q:\n%s", head, out)
+		}
+		if strings.Contains(out, strings.ToUpper(g)) {
+			t.Errorf("the screen shows %q in upper case:\n%s", g, out)
+		}
+	}
+}
+
 func TestBacklogAndDoneStartClosedWithTheirCounts(t *testing.T) {
 	e := groupEnv(t)
 	out := screen(e.m)
-	for _, want := range []string{"NEEDS YOU  2", "BACKLOG  1 …", "READY  2", "ENG-9", "local-1", "QUEUED  1", "WORKING  2", "WAITING  1", "DONE  1 …"} {
+	for _, want := range []string{"Needs you 2", "Backlog 1 …", "Ready 2", "ENG-9", "local-1", "Queued 1", "Working 2", "Waiting 1", "Done 1 …"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("screen lacks %q:\n%s", want, out)
 		}
@@ -73,7 +97,7 @@ func TestBacklogAndDoneStartClosedWithTheirCounts(t *testing.T) {
 			t.Errorf("screen shows %s in a closed group:\n%s", hidden, out)
 		}
 	}
-	if strings.Contains(out, "READY  2 …") {
+	if strings.Contains(out, "Ready 2 …") {
 		t.Errorf("an open heading shows the closed mark:\n%s", out)
 	}
 }
@@ -85,7 +109,7 @@ func TestEnterOnAHeadingTogglesTheGroupForThisRunOnly(t *testing.T) {
 		t.Fatalf("footer %q, want enter open, j/k move, then n new Issue", f)
 	}
 	e.press("enter")
-	if out := screen(e.m); !strings.Contains(out, "BACKLOG  1\n") || !strings.Contains(out, "ENG-20") {
+	if out := screen(e.m); !strings.Contains(out, "Backlog 1\n") || !strings.Contains(out, "ENG-20") {
 		t.Fatalf("Backlog did not open:\n%s", out)
 	}
 	if f := footerAt(e.m, 100); !strings.Contains(f, "\n enter close   j/k move") {
@@ -99,7 +123,7 @@ func TestEnterOnAHeadingTogglesTheGroupForThisRunOnly(t *testing.T) {
 	}
 
 	e.press("enter")
-	if out := screen(e.m); !strings.Contains(out, "BACKLOG  1 …") || strings.Contains(out, "ENG-20") {
+	if out := screen(e.m); !strings.Contains(out, "Backlog 1 …") || strings.Contains(out, "ENG-20") {
 		t.Fatalf("Backlog did not close:\n%s", out)
 	}
 }
@@ -116,7 +140,7 @@ func TestJAndKStopOnEachHeadingExceptNeedsYouAndSkipClosedRows(t *testing.T) {
 	if !slices.Equal(seen, want) {
 		t.Fatalf("j moved through %v, want %v", seen, want)
 	}
-	if !strings.Contains(screen(e.m), "▸DONE  1 …") {
+	if !strings.Contains(screen(e.m), "▸Done 1 …") {
 		t.Fatalf("the selected heading has no marker:\n%s", screen(e.m))
 	}
 	e.press("k")
@@ -138,7 +162,7 @@ func TestATaskThatMovesIntoAClosedGroupSelectsItsHeading(t *testing.T) {
 	if e.m.sel != headingKey("Done") {
 		t.Fatalf("selection %q, want the Done heading", e.m.sel)
 	}
-	if !strings.Contains(screen(e.m), "▸DONE  2 …") {
+	if !strings.Contains(screen(e.m), "▸Done 2 …") {
 		t.Fatalf("the Done heading is not marked:\n%s", screen(e.m))
 	}
 }
@@ -300,7 +324,7 @@ func TestTheConfiguredOrderSetsTheSectionsOnScreen(t *testing.T) {
 	b.Hidden = nil
 	e := layoutEnv(t, b)
 	out := screen(e.m)
-	inOrder(t, out, "DONE  1\n", "ENG-560", "NEEDS YOU  2", "ENG-588", "WORKING  2", "WAITING  1", "QUEUED  1", "READY  2", "BACKLOG  1 …")
+	inOrder(t, out, "Done 1\n", "ENG-560", "Needs you 2", "ENG-588", "Working 2", "Waiting 1", "Queued 1", "Ready 2", "Backlog 1 …")
 	var heads []string
 	for _, id := range e.m.rowIDs() {
 		if _, ok := headingName(id); ok {
@@ -318,7 +342,7 @@ func TestTheConfiguredCollapsedSetStartsClosed(t *testing.T) {
 	b.Collapsed = []string{"Ready", "Waiting"}
 	e := layoutEnv(t, b)
 	out := screen(e.m)
-	for _, want := range []string{"READY  2 …", "WAITING  1 …", "BACKLOG  1\n", "ENG-20", "DONE  1\n", "ENG-560"} {
+	for _, want := range []string{"Ready 2 …", "Waiting 1 …", "Backlog 1\n", "ENG-20", "Done 1\n", "ENG-560"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("screen lacks %q:\n%s", want, out)
 		}
@@ -339,10 +363,8 @@ func TestAHiddenSectionShowsNoHeadingNoRowsAndNoStopAndKeepsTheHeaderCounts(t *t
 	shown := layoutEnv(t, config.DefaultBoard())
 	e := layoutEnv(t, userBoard)
 	out := screen(e.m)
-	for _, gone := range []string{"DONE", "ENG-560"} {
-		if strings.Contains(out, gone) {
-			t.Errorf("screen shows %q of a hidden section:\n%s", gone, out)
-		}
+	if hasHeading(out, "Done") || strings.Contains(out, "ENG-560") {
+		t.Errorf("screen shows the hidden Done:\n%s", out)
 	}
 	for range 20 {
 		if e.m.sel == headingKey("Done") || e.m.sel == "ENG-560" {
@@ -357,29 +379,29 @@ func TestAHiddenSectionShowsNoHeadingNoRowsAndNoStopAndKeepsTheHeaderCounts(t *t
 
 func TestDShowsAndHidesDoneAndOpensIt(t *testing.T) {
 	e := layoutEnv(t, userBoard)
-	if out := screen(e.m); strings.Contains(out, "DONE") {
+	if out := screen(e.m); hasHeading(out, "Done") {
 		t.Fatalf("Done shows before d:\n%s", out)
 	}
 	e.press("d")
 	out := screen(e.m)
-	inOrder(t, out, "DONE  1\n", "ENG-560", "NEEDS YOU  2")
+	inOrder(t, out, "Done 1\n", "ENG-560", "Needs you 2")
 	e.press("d")
-	if out := screen(e.m); strings.Contains(out, "DONE") || strings.Contains(out, "ENG-560") {
+	if out := screen(e.m); hasHeading(out, "Done") || strings.Contains(out, "ENG-560") {
 		t.Fatalf("Done shows after the second d:\n%s", out)
 	}
 }
 
 func TestDHidesDoneEvenWhenTheFileHidesNothing(t *testing.T) {
 	e := layoutEnv(t, config.DefaultBoard())
-	if !strings.Contains(screen(e.m), "DONE  1 …") {
+	if !strings.Contains(screen(e.m), "Done 1 …") {
 		t.Fatalf("Done does not show by default:\n%s", screen(e.m))
 	}
 	e.press("d")
-	if strings.Contains(screen(e.m), "DONE") {
+	if hasHeading(screen(e.m), "Done") {
 		t.Fatalf("d did not hide Done:\n%s", screen(e.m))
 	}
 	e.press("d")
-	if !strings.Contains(screen(e.m), "DONE  1\n") || !strings.Contains(screen(e.m), "ENG-560") {
+	if !strings.Contains(screen(e.m), "Done 1\n") || !strings.Contains(screen(e.m), "ENG-560") {
 		t.Fatalf("d did not show Done open:\n%s", screen(e.m))
 	}
 }
@@ -400,7 +422,7 @@ func TestTheFilterFindsARowInAHiddenSection(t *testing.T) {
 		t.Fatalf("the filter did not find ENG-560 in the hidden Done:\n%s", out)
 	}
 	e.press("esc")
-	if out := screen(e.m); strings.Contains(out, "ENG-560") || strings.Contains(out, "DONE") {
+	if out := screen(e.m); strings.Contains(out, "ENG-560") || hasHeading(out, "Done") {
 		t.Fatalf("Done shows after the filter cleared:\n%s", out)
 	}
 }

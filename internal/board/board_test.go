@@ -420,7 +420,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 func TestAgeAndRows(t *testing.T) {
 	m := openAll(newModel(&fakeClient{}, fixture()))
 	out := m.View()
-	for _, w := range []string{"NEEDS YOU", "WORKING", "WAITING", "QUEUED", "DONE", "12m", "1d", "today", "done"} {
+	for _, w := range []string{"Needs you 2", "Working 2", "Waiting 1", "Queued 1", "Done 1", "12m", "1d", "today", "done"} {
 		if !strings.Contains(out, w) {
 			t.Errorf("view lacks %q", w)
 		}
