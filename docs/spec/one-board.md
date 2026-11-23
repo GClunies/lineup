@@ -29,26 +29,30 @@ The Board shows the work view only. It has no plan view (ADR 0021) and no review
 
 ```
  lineup  WIP 4/5   ●1 need you (+1 in reviews)
- ──────────────────────────────────────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU  1
- ▸ ENG-590 data  Add billing model        stopped                    12m
+   ENG-590  Add billing model                                              stopped    12m  data
  BACKLOG  2
-   local-9                    Retry failed loads before alerting
-   ENG-620              data  Split billing ingest     △4
+   ENG-620  Split billing ingest                                           backlog    ▂
+   local-9  Retry failed loads before alerting                             backlog
  READY  3
-   ENG-611              data  Move the retry job       unblocked        △2
-   local-7                    Rename the log flag
-   ENG-614              data  Drop old API keys        blocked by ENG-610  △3
+   ENG-611  Move the retry job                                             unblocked  ▂▄▆
+   local-7  Rename the log flag                                            ready           data
+ ▸ ENG-614  Drop old API keys                                              blocked    ▂▄
  QUEUED  1
-   ah-9                 data  Evaluate the ADR
+   ah-9     Evaluate the ADR                                               queued          data
  WORKING  1
-   ENG-592 data  Fix flaky test           #4655 ○ no review yet · fixing CI     1m
+   ENG-592  Fix flaky test                                                 CI debug   1m   data
  WAITING  1
-   ENG-571 data  Rate limit login         #4636 ● commented · 1 open thread   1d
+   ENG-571  Rate limit login                                               in review  1d   data
  DONE  1 …
+ ──────────────────────────────────────────────────────────────────────────────────────────────
+ Drop old API keys
+ ENG-614 · Ready · blocked by ENG-610
+ s start   f details   c status   o open the Issue   j/k move   n new Issue   ? all keys
 ```
 
-Each heading shows its row count. Backlog is open in this picture, and Done is closed. The header has no per-group counts. See "Lay out the groups" below.
+Each heading shows its row count. Backlog is open in this picture, and Done is closed. The header has no per-group counts. See "Lay out the groups" below. Each row shows a status word, and the strip under the rows shows the selected row, ENG-614. See "The status column and the strip" below.
 
 An Issue row is an Issue of the user's own with no Task on the Board. The Board reads the Issues itself. The Scheduler and its store do not change.
 
@@ -58,6 +62,30 @@ An Issue row is an Issue of the user's own with no Task on the Board. The Board 
  gh search issues (GitHub Tracker) ┘        ▲
                                             └─ minus each ID that a Task on the Board holds
 ```
+
+## The status column and the strip
+
+Each Task row and Issue row shows one status word in its own column, after the title. A status word has one or two words. The title takes the cells that the other columns leave.
+
+| Row | Status word |
+|---|---|
+| A Task in Needs you with a flag | The reason of the flag: `question`, `permission`, `auth`, `error`, `setup failed`, `stopped`, `budget spent`, `tab closed`, `worker silent`, `draft`, `drafts`, `PR closed` for `pr closed`, or `bot late` for `no bot review` |
+| Any other Task | The Stage: `queued`, `working`, `CI running`, `CI debug`, `in review`, `responding`, `ready` for Ready to land, or `done` |
+| An Issue with an open blocker | `blocked` |
+| An Issue whose blockers are all done or canceled | `unblocked` |
+| Any other Issue | The group: `ready` or `backlog` |
+
+The status column never drops. A Task row in Needs you and a blocked Issue row show the word in pink. The word carries the state without the color, so the Board reads the same with `NO_COLOR=1`.
+
+The strip is the footer under the rows. It has these lines:
+
+1. A rule.
+2. The full title of the selected row.
+3. The facts of the selected row, joined by ` · `: the ID, the Stage, the Repo, the PR number, and the full note. An empty fact does not show. The PR number shows only when the note does not start with it. An Issue row shows its group in place of the Stage, and its note is `blocked by <IDs>`, `unblocked`, or empty.
+4. The Board message, for example `open ENG-590 ok`, while it is set. The next key clears the message.
+5. The key hints.
+
+The title and the facts wrap at the width of the Board, so the strip never cuts them. On a group heading, the strip shows the group name and its row count, for example `Working` and `2 rows`. When no row is selected, the strip shows the rule and the key hints. A mode with its own keys shows its own footer in place of the strip, for example the capture box, a picker, or the detail pane.
 
 ## Issue rows
 
@@ -71,7 +99,7 @@ An Issue row is an Issue of the user's own with no Task on the Board. The Board 
 - A GitHub Issue is the user's own when the user is an assignee, or when it has no assignee and the user opened it. A pull request gets no row. `docs/spec/trackers.md` ("The Board") gives the details.
 - The Board shows a GitHub Issue only when a checkout below the roots has the Issue's owner/repo as its Repo key. The match ignores case. `lineup add --repo <repo> owner/repo#n` adds an Issue from any repository.
 - An Issue whose ID a Task on the Board holds has no Issue row. The Task row shows that Issue. A Linear ID is in upper case, for example `LOCAL-5`, a local ID is in lower case, for example `local-5`, and a GitHub ID is `owner/repo#12`, so an exact match names one Tracker.
-- A row shows the ID, the Repo when it is known, the title, a note, and the priority. The note is `blocked by <IDs>`, `unblocked`, or empty. A GitHub row's Repo is the repository name, and its note names a blocker in the same repository as `#12`.
+- A row shows the ID, the title, a status word, the priority, and the Repo when it is known. The status word is `blocked`, `unblocked`, `ready`, or `backlog`. The strip names the open blockers of the selected row, as `blocked by <IDs>`. A GitHub row's Repo is the repository name, and the strip names a blocker in the same repository as `#12`.
 - `unblocked` means that the Issue has one or more blockers and that every blocker is done or canceled. A Linear blocker is a "blocks" relation. A local blocker is an entry in `blocked_by`. A GitHub blocker is a `Blocked by #12` line in the body, and it is done when GitHub reports it closed.
 
 The default group order is Needs you, Follow-up, Backlog, Ready, Queued, Working, Waiting, Done. Needs you comes first because it holds the rows that wait for the user. Follow-up comes next because its Issues still need the user after their PRs merge. The other groups follow the development cycle, from an idea to a merged PR. The `[board]` table in the global file sets another order. See "Lay out the groups" below.
@@ -134,9 +162,9 @@ One table, `issueKinds` in `internal/board/issuekind.go`, decides the keys of ea
 ```
  / rename
  READY  1
- ▸ local-7                    Rename the log flag
+ ▸ local-7  Rename the log flag                                              ready         data
  DONE  1
-   ENG-560 Done         data  Rename config options
+   ENG-560  Rename config options                                            done   today  data
 ```
 
 - The filter matches the ID and the title of each Task and Issue row, as a fuzzy match.
@@ -288,4 +316,10 @@ Each PR lands on `main` before the next one starts.
 | `c` writes the new status, the row moves group or leaves the Board, and a failed write changes nothing | Board tests, and a `rapid` property test over every local status pair |
 | The filter shows only the matches, opens a closed group with a match, and `esc` gives back the exact screen | Board tests, and a `rapid` property test over random filters |
 | The first paint stays inside the speed budget | `TestSpeedBudget` with 200 Issue rows |
+| Each row shows the status word of its Stage or its Needs you reason, and no status word has more than two words | A table test over every Stage and every reason that reads the row on the screen |
+| At 95 columns, a row in Needs you and a Working row show their status words in one column, and the title gets at least 45 cells | A board test that measures the cells of the rows |
+| A blocked Issue row shows `blocked`, and the strip names its blockers | Board tests with a Linear blocker and a GitHub blocker |
+| The strip shows the full title and the full note of the selected row, also at 60 columns, and the facts of a heading | Board tests that read the strip |
+| A Board message and the key hints show at the same time, and the next key clears the message | A board test that presses `enter` on a live Task |
+| With color off, each status is a word. With color on, a row in Needs you shows its word in pink. | A board test with the color profile of `NO_COLOR` and with a color profile |
 | Live | A dev build of `lineup board` in a Rex pane, read with `rex`, shows the groups with real Linear data, and captures a local Issue into a temporary Local Tracker folder |
