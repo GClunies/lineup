@@ -109,8 +109,14 @@ func TestAStoredQueuedTaskLoadsAsARemovedTask(t *testing.T) {
 		st.Save("ENG-5", legacy(t, storedTask("ENG-5", lifecycle.Working), map[string]string{"stage": "queued", "worker_stage": "queued"}), nil)
 	}
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed)
-	if ids := boardIDs(h.do(Request{Op: "ls"}).(BoardView)); slices.Contains(ids, "ENG-5") {
+	h.s.call(func() { h.s.recs["ENG-5"].StageSince = time.Now().Add(-time.Hour) })
+	v := h.do(Request{Op: "ls"}).(BoardView)
+	if ids := boardIDs(v); slices.Contains(ids, "ENG-5") {
 		t.Fatalf("board = %v, want ENG-5 archived", ids)
+	}
+	// A Task that never started did no work, so the header counts it as no Task done.
+	if len(v.Done) != 0 {
+		t.Fatalf("done times = %v, want none for a Task that never started", v.Done)
 	}
 	if v := h.task("ENG-5"); v.Stage != "Done" || v.Outcome != "removed" || v.Note != "removed: never started" {
 		t.Fatalf("task = %+v, want Done, removed: never started", v)

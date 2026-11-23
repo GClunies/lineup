@@ -1088,7 +1088,7 @@ const doneCountedFor = 48 * time.Hour
 func (s *Scheduler) view() BoardView {
 	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap(), ReviewsPaused: s.paused, Skips: s.skips}
 	for _, r := range s.list() {
-		if r.Stage == lifecycle.Done && s.now().Sub(r.StageSince) < doneCountedFor {
+		if r.Stage == lifecycle.Done && r.Outcome != lifecycle.OutcomeRemoved && s.now().Sub(r.StageSince) < doneCountedFor {
 			v.Done = append(v.Done, r.StageSince)
 		}
 		if r.Stage == lifecycle.Done && (r.Archived || !r.keepsWork() && s.now().Sub(r.StageSince) > doneShownFor) {
