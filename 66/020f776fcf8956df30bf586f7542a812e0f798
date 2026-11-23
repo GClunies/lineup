@@ -1,0 +1,27 @@
+cmd/lineup/hub.go
+  s_1818a5989cfcac::t_a565c5776b5188 582-585,587-588
+internal/config/board.go
+  s_1818a5989cfcac::t_2c8d7a003b60a1 23-26,44,49-52,63-66,69-72,76,78,80,85,88,100-107,110-111,118-119,121-122,124
+internal/config/config.go
+  s_1818a5989cfcac::t_9ae26ce4c5f429 216-221,359
+internal/config/board_test.go
+  s_1818a5989cfcac::t_8cd000ee21bed7 22-23,39-70,76,104
+cmd/lineup/boardwarn_test.go
+  s_1818a5989cfcac::t_cb4234da83d208 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "66020f776fcf8956df30bf586f7542a812e0f798",
+  "prompts": {},
+  "sessions": {
+    "s_1818a5989cfcac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a3fc8e6-5793-4a3f-9e11-3f14d84d32de",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
