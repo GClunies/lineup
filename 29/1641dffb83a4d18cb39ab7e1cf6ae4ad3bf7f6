@@ -1,0 +1,59 @@
+cmd/lineup/hub_test.go
+  s_d440eb60b482fc::t_1528b6104d1f8f 13,76,328,373,388-398,404-407,411,428-433,437-449,452-456,458-487,491-514,516-604
+cmd/lineup/service_test.go
+  s_d440eb60b482fc::t_c375fd9d220495 4,12,348-385
+  s_d7e7cbeb0b5b10::t_29138df037cf0c 386-387
+cmd/lineup/hub.go
+  s_d440eb60b482fc::t_1a05ee7f6ef805 148-149,151-160,162-167,169-180
+  s_d440eb60b482fc::t_50110d075705ae 15
+  s_d440eb60b482fc::t_3a9b60e2ad6f88 161
+  s_d440eb60b482fc::t_bb0e4948209328 500
+  s_d440eb60b482fc::t_f54a1ceadf105d 408-411
+  s_d440eb60b482fc::t_674f7f3c2d92d9 168
+  s_d440eb60b482fc::t_767a9354e80df0 533
+  s_d440eb60b482fc::t_b10971f27630dc 534
+  s_d440eb60b482fc::t_f7e3f73c5700ab 440-442
+  s_d440eb60b482fc::t_56f745c1fb29cb 483-485,487,492
+  s_d440eb60b482fc::t_3bb9146d2c95fd 545
+  s_d440eb60b482fc::t_aaacdfa5a7994c 491
+  s_d440eb60b482fc::t_f7ac5e06c927d7 517-532,535-540,542-543
+  s_d440eb60b482fc::t_024dd85bf1552d 439
+  s_d440eb60b482fc::t_66c154d5ab7f83 488-490
+cmd/lineup/main.go
+  s_d440eb60b482fc::t_ae61fa8f176826 18-21
+  s_d440eb60b482fc::t_40affcf79780da 95-97
+  s_d440eb60b482fc::t_7460d302c151fe 84
+cmd/lineup/service.go
+  s_d440eb60b482fc::t_f1c8cebfaeff87 298
+  s_d440eb60b482fc::t_ee681b16f1aeff 14
+  s_d440eb60b482fc::t_f1959982dde0c1 9
+  s_d440eb60b482fc::t_fa8941acf0588b 282-290,294-297
+  s_d440eb60b482fc::t_4769f5220a5a0e 291
+cmd/lineup/agent/CLAUDE.md
+  s_d440eb60b482fc::t_fe7ee24d7d86ad 25
+  s_d440eb60b482fc::t_4e976037b5b952 80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "291641dffb83a4d18cb39ab7e1cf6ae4ad3bf7f6",
+  "prompts": {},
+  "sessions": {
+    "s_d440eb60b482fc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cb0d5ef4-b485-4777-8905-3cde5f189000",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_d7e7cbeb0b5b10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6ee97ee9-4188-405b-8d73-9111ff0c30db",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
