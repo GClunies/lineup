@@ -1,0 +1,38 @@
+internal/config/config.go
+  s_fe8d4c1691a132::t_1c9f1da340601e 975,984
+  s_fe8d4c1691a132::t_0de0b513974984 976-983
+internal/config/config_test.go
+  s_fe8d4c1691a132::t_81125d7973ae8e 412-414,416-417,419-430
+internal/config/board_test.go
+  s_fe8d4c1691a132::t_96bf2873265194 14
+  s_fe8d4c1691a132::t_4809b7e97e1493 36,74-76,78-79
+  s_fe8d4c1691a132::t_2fb8e37dbf7d00 80
+  s_62e3808e7f1359::t_c540a2d20817b0 83-85
+internal/config/board.go
+  s_fe8d4c1691a132::t_1855df4b048d35 16
+  s_fe8d4c1691a132::t_02ad9f974c2d4f 91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d06d6ee1f4da723a924d1cae4f6c56f67f9c1547",
+  "prompts": {},
+  "sessions": {
+    "s_62e3808e7f1359": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc4c19bf-2d88-4b96-8b28-9396d6a5563c",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_fe8d4c1691a132": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "954196b3-8743-4035-b4ed-db7be336559e",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
