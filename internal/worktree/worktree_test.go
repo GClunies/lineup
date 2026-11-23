@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,5 +85,33 @@ func TestCreateFailsWhenHookFails(t *testing.T) {
 	argv := CreateArgv(bin, repo, "feat/y")
 	if err := exec.Command(argv[0], argv[1:]...).Run(); err == nil {
 		t.Fatal("a failing pre-start hook must fail setup")
+	}
+}
+
+// wt remove fails on a dirty worktree, so Remove refuses it before wt runs,
+// with an error that callers can tell apart.
+func TestRemoveKeepsAWorktreeWithUncommittedChanges(t *testing.T) {
+	bin, repo, _ := setup(t)
+	ctx := context.Background()
+	sh(t, t.TempDir(), CreateArgv(bin, repo, "feat/dirty")...)
+	wt, err := Path(ctx, bin, repo, "feat/dirty")
+	if err != nil || wt == "" {
+		t.Fatalf("Path = %q %v", wt, err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, "notes.txt"), []byte("draft\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Remove(ctx, bin, repo, "feat/dirty"); !errors.Is(err, ErrUncommitted) {
+		t.Fatalf("Remove of a dirty worktree: err = %v, want ErrUncommitted", err)
+	}
+	if _, err := os.Stat(filepath.Join(wt, "notes.txt")); err != nil {
+		t.Fatalf("the dirty worktree is gone: %v", err)
+	}
+	os.Remove(filepath.Join(wt, "notes.txt"))
+	if err := Remove(ctx, bin, repo, "feat/dirty"); err != nil {
+		t.Fatalf("Remove of the cleaned worktree: %v", err)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Errorf("the cleaned worktree is still there: %v", err)
 	}
 }
