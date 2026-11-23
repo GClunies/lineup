@@ -1,0 +1,58 @@
+internal/scheduler/scheduler_test.go
+  s_fb56ce352cbfde::t_6d144e45da5881 488-490
+  s_fb56ce352cbfde::t_e5c72f460729cb 527-529,533-536
+  s_fb56ce352cbfde::t_3864be62506ed7 537-538
+internal/scheduler/ports.go
+  s_fb56ce352cbfde::t_b13aba19525ee7 6
+  s_fb56ce352cbfde::t_5f216600a881d6 108-111,116-117
+cmd/lineup/wire_test.go
+  s_fb56ce352cbfde::t_23b913ada7a93a 287-299
+internal/scheduler/merged_test.go
+  s_fb56ce352cbfde::t_d5bb402556a6f0 54,56
+  s_fb56ce352cbfde::t_31a9d67f10a496 1-53,55,57-66
+internal/scheduler/record.go
+  s_fb56ce352cbfde::t_77cb95e8615bf9 315,317-318,320
+  s_fb56ce352cbfde::t_5a563165bda1e2 77-79,81-86
+  s_fb56ce352cbfde::t_e054b35ac0c9f2 316
+  s_fb56ce352cbfde::t_2e51c340c1a439 321
+  s_fb56ce352cbfde::t_25ee950713b666 205-230
+internal/scheduler/scheduler.go
+  s_fb56ce352cbfde::t_dfa63a0d33d20d 508,510-536,952
+  s_fb56ce352cbfde::t_0bd9868c321cc2 889-890
+  s_fb56ce352cbfde::t_9e21a079aae1d1 174
+  s_fb56ce352cbfde::t_040f977e5a54ae 868
+  s_fb56ce352cbfde::t_d903308b1682c6 950-951
+  s_fb56ce352cbfde::t_c97c83f2b57abd 954-967
+  s_3b28055ecbdc0f::t_4f3868c77a3838 953
+internal/scheduler/note_test.go
+  s_fb56ce352cbfde::t_e0c4861b7caac0 5
+  s_fb56ce352cbfde::t_c3effc99b9cbc6 30-39
+  s_fb56ce352cbfde::t_1325761d3dfe6e 59-62
+cmd/lineup/wire.go
+  s_fb56ce352cbfde::t_1159d7c8dc0bea 241,243-245
+  s_fb56ce352cbfde::t_c8fd46aaa5b57b 242
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "334a7e7e59bd14e2e3893b88a414adfb96694bb9",
+  "prompts": {},
+  "sessions": {
+    "s_3b28055ecbdc0f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c32c2d84-afbb-49eb-9fa5-8182023a14e3",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_fb56ce352cbfde": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fae7e67-0800-4a66-b7d1-8d3e076d23e4",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
