@@ -722,6 +722,8 @@ func (p configPort) RepoTracker(repo string) (string, string) { return p.cfg.Rep
 
 func (p configPort) RepoPrefix(repo string) string { return p.cfg.RepoPrefix(repo) }
 
+func (p configPort) SetUp(repo string) (string, bool) { return p.cfg.SetUp(repo) }
+
 func (p configPort) RepoForGitHub(slug string) (string, bool) { return p.cfg.CheckoutFor(slug) }
 
 func (p configPort) ResolveRepo(name string) (string, error) { return p.cfg.FindCheckout(name) }

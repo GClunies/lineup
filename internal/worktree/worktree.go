@@ -90,6 +90,28 @@ func Remove(ctx context.Context, bin, repo, branch string) error {
 	return err
 }
 
+// Hook is one command that worktrunk runs at a hook, from the user's config
+// or from the Repo's .config/wt.toml.
+type Hook struct {
+	Type     string `json:"type"`   // such as pre-start
+	Source   string `json:"source"` // user or project
+	Name     string `json:"name"`
+	Template string `json:"template"`
+}
+
+// Hooks lists the hook commands that wt runs for the Repo.
+func Hooks(ctx context.Context, bin, repo string) ([]Hook, error) {
+	out, err := run(ctx, bin, "-C", repo, "hook", "show", "--format", "json")
+	if err != nil {
+		return nil, err
+	}
+	var hooks []Hook
+	if err := json.Unmarshal(out, &hooks); err != nil {
+		return nil, fmt.Errorf("parse wt hook show output: %w", err)
+	}
+	return hooks, nil
+}
+
 func run(ctx context.Context, bin string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, bin, args...)
 	var stdout, stderr bytes.Buffer

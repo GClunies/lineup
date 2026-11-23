@@ -641,6 +641,7 @@ func (fakeConfig) RepoForIssue(context.Context, Issue) (string, error) {
 func (fakeConfig) PickedRepo(context.Context, Issue, string) error { return nil }
 func (fakeConfig) ResolveRepo(name string) (string, error)         { return "/repos/acme/" + name, nil }
 func (fakeConfig) RepoPrefix(string) string                        { return "" }
+func (fakeConfig) SetUp(repo string) (string, bool)                { return "acme/" + filepath.Base(repo), true }
 
 // RepoTracker gives /repos/acme/issues the GitHub Tracker, /repos/acme/notes
 // the Local Tracker, and every other Repo Linear.

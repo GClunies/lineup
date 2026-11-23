@@ -60,6 +60,10 @@ type TaskDetail struct {
 
 var ErrNoRepo = errors.New("no Repo mapping")
 
+// ErrNotSetUp refuses a build Task in a Repo with no [repos."owner/repo"]
+// table. The Orchestrator sets the Repo up with lineup repo init.
+var ErrNotSetUp = errors.New("repo not set up")
+
 // RepoAsk is the error of an add whose Issue fits more than one Repo, when
 // nothing in the Issue picks one. The user picks one of Repos.
 type RepoAsk struct {
@@ -360,6 +364,7 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 			return TaskView{}, err
 		}
 	}
+	picked := r.Repo != ""
 	switch {
 	case req.Issue != "":
 		is, err := s.d.Tracker.Lookup(ctx, req.Kind, req.Issue)
@@ -367,23 +372,10 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 			return TaskView{}, err
 		}
 		r.Issue, r.ID, r.Title, r.Branch = &is, is.Identifier, is.Title, is.BranchName
-		picked := r.Repo != ""
 		if !picked {
 			if r.Repo, err = s.d.Config.RepoForIssue(ctx, is); errors.Is(err, ErrNoRepo) {
 				return TaskView{}, fmt.Errorf("%w: pass a repo", err)
 			} else if err != nil {
-				return TaskView{}, err
-			}
-		}
-		switch key, tracker := s.d.Config.RepoTracker(r.Repo); tracker {
-		case is.Tracker():
-		case "":
-			return TaskView{}, fmt.Errorf("repo has no tracker: %s", key)
-		default:
-			return TaskView{}, fmt.Errorf("%s takes Issues only from its Tracker %s, and %s is a %s Issue", key, tracker, is.Identifier, is.Tracker())
-		}
-		if picked {
-			if err := s.d.Config.PickedRepo(ctx, is, r.Repo); err != nil {
 				return TaskView{}, err
 			}
 		}
@@ -394,6 +386,23 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 		r.Title = textTitle(r.Text)
 	default:
 		return TaskView{}, errors.New("add needs an Issue or a text")
+	}
+	if key, ok := s.d.Config.SetUp(r.Repo); !ok {
+		return TaskView{}, fmt.Errorf("%w: %s", ErrNotSetUp, key)
+	}
+	if is := r.Issue; is != nil {
+		switch key, tracker := s.d.Config.RepoTracker(r.Repo); tracker {
+		case is.Tracker():
+		case "":
+			return TaskView{}, fmt.Errorf("repo has no tracker: %s", key)
+		default:
+			return TaskView{}, fmt.Errorf("%s takes Issues only from its Tracker %s, and %s is a %s Issue", key, tracker, is.Identifier, is.Tracker())
+		}
+		if picked {
+			if err := s.d.Config.PickedRepo(ctx, *is, r.Repo); err != nil {
+				return TaskView{}, err
+			}
+		}
 	}
 	// Resolving the overrides checks them, so a bad one fails the add.
 	policy, err := s.d.Config.Policy(r.Repo, req.Set)

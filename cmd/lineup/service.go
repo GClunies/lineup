@@ -278,6 +278,18 @@ func startService() error {
 }
 
 func cmdRestart() error {
+	if err := restartScheduler(); err != nil {
+		return err
+	}
+	fmt.Println(restarted)
+	return nil
+}
+
+const restarted = "The Scheduler restarted."
+
+// restartScheduler installs the launchd agent, restarts it, and returns
+// once the new Scheduler listens.
+func restartScheduler() error {
 	m, err := newManager()
 	if err != nil {
 		return err
@@ -285,11 +297,7 @@ func cmdRestart() error {
 	if err := m.restart(); err != nil {
 		return err
 	}
-	if err := waitListening(socketPath(), 30*time.Second); err != nil {
-		return err
-	}
-	fmt.Println("The Scheduler restarted.")
-	return nil
+	return waitListening(socketPath(), 30*time.Second)
 }
 
 // waitListening returns once the Scheduler accepts a connection on sock.

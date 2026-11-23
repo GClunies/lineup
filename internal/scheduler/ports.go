@@ -283,6 +283,9 @@ type Config interface {
 	// RepoPrefix is the prefix of the Repo's Local Issue and ad hoc Task IDs,
 	// in lower case, such as hod, or "" for LOCAL-<n> and AH-<n>.
 	RepoPrefix(repo string) string
+	// SetUp reports whether the Repo has its own [repos."owner/repo"]
+	// table, which a build Task needs, and the Repo's owner/repo key.
+	SetUp(repo string) (key string, ok bool)
 }
 
 // LocalIssues is the Local Tracker's folder, as the ad hoc Task IDs need it.

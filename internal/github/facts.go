@@ -63,18 +63,23 @@ var decisions = map[string]lifecycle.Decision{
 	"CHANGES_REQUESTED": lifecycle.DecisionChanges,
 }
 
-// requiredChecks is the union of the classic branch protection's required
-// contexts and the required checks of each active ruleset on the base branch.
-// Both name a check with no PR number, so the first poll of a PR has them.
+// requiredChecks are the base branch's required checks. They name a check
+// with no PR number, so the first poll of a PR has them.
 func (g gqlPR) requiredChecks() []string {
 	if g.BaseRef == nil {
 		return nil
 	}
+	return g.BaseRef.required()
+}
+
+// required is the union of the classic branch protection's required
+// contexts and the required checks of each active ruleset, sorted.
+func (r gqlRefRules) required() []string {
 	var names []string
-	if r := g.BaseRef.RefUpdateRule; r != nil {
+	if r := r.RefUpdateRule; r != nil {
 		names = append(names, r.RequiredStatusCheckContexts...)
 	}
-	for _, r := range g.BaseRef.Rules.Nodes {
+	for _, r := range r.Rules.Nodes {
 		if r.Type != "REQUIRED_STATUS_CHECKS" || r.RepositoryRuleset != nil && r.RepositoryRuleset.Enforcement != "ACTIVE" {
 			continue
 		}

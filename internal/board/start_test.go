@@ -234,6 +234,38 @@ func fullCapStart(t *testing.T, keys ...string) (*workEnv, scheduler.Request) {
 	return e, lastAdd(t, e)
 }
 
+func TestAStartInARepoThatIsNotSetUpStartsNothing(t *testing.T) {
+	e := startEnv(t, "kit:test-first")
+	e.sched.errs["add"] = errors.New("repo not set up: acme/data")
+	e.press("s", "down", "enter")
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add"}) {
+		t.Fatalf("ops = %v, want only the refused add", got)
+	}
+	if want := "acme/data is not set up. Ask the Orchestrator to set it up"; e.m.status != want || e.m.mode != modeNormal {
+		t.Fatalf("status %q mode %d, want %q", e.m.status, e.m.mode, want)
+	}
+}
+
+func TestARepoPickedThatIsNotSetUpStartsNothing(t *testing.T) {
+	e := startEnv(t, "kit:test-first")
+	e.sched.errs["add"] = errors.New(noMapping + " for ENG-9: pass a repo")
+	e.press("s", "down", "enter")
+	if e.m.mode != modeRepo {
+		t.Fatalf("mode %d, status %q, want the Repo picker", e.m.mode, e.m.status)
+	}
+	e.sched.errs["add"] = errors.New("repo not set up: acme/web")
+	e.press("w", "e", "enter")
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "add"}) {
+		t.Fatalf("ops = %v, want two refused adds", got)
+	}
+	if c := lastAdd(t, e); c.Repo != "/Users/g/repos/acme/web" {
+		t.Fatalf("second add = %+v", c)
+	}
+	if want := "acme/web is not set up. Ask the Orchestrator to set it up"; e.m.status != want || e.m.mode != modeNormal {
+		t.Fatalf("status %q mode %d, want %q", e.m.status, e.m.mode, want)
+	}
+}
+
 func TestTheCapPromptSendsTheAddAgainOverTheCap(t *testing.T) {
 	for _, keys := range [][]string{{"s", "enter"}, {"s", "down", "enter"}} {
 		e, failed := fullCapStart(t, keys...)
