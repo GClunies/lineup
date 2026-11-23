@@ -576,8 +576,9 @@ func boardOptions(path string) board.Options {
 	opts.LocalIssues = g.LocalIssuesDir()
 	opts.LocalPrefixes = g.Prefixes()
 	opts.GitHub = board.GitHub{
-		Login:   func() (string, bool, error) { return github.TrackerLogin(stateDir()) },
-		Backlog: g.GitHubBacklogLabel(),
+		Login:     func() (string, bool, error) { return github.TrackerLogin(stateDir()) },
+		Backlog:   g.GitHubBacklogLabel(),
+		Checkouts: g.Checkouts,
 	}
 	var berr error
 	if opts.Board, berr = g.Board(); berr != nil {
