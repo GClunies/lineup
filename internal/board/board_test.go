@@ -1072,7 +1072,20 @@ func TestTheDetailPaneShowsTheLandingBar(t *testing.T) {
 		Branch: "ada/eng-590-billing", Bar: []string{"✓ required checks passed", "✗ 2 open threads (1 bot)"},
 	}
 	want := "ENG-590  Add billing model\nResponding  ada/eng-590-billing\n⚑ budget spent 2 open threads (1 bot) after 3 rounds\n" +
-		"Landing bar\n  ✓ required checks passed\n  ✗ 2 open threads (1 bot)\n\n"
+		"Landing bar\n  ✓ required checks passed\n  ✗ 2 open threads (1 bot)\nusage  unknown\n\n"
+	if got := formatDetail(d); got != want {
+		t.Errorf("detail %q, want %q", got, want)
+	}
+}
+
+func TestTheDetailPaneShowsTheUsage(t *testing.T) {
+	d := scheduler.TaskDetail{
+		TaskView: scheduler.TaskView{ID: "ah-64", Title: "Explore the ideas", Stage: "Working",
+			Usage: &scheduler.Usage{Input: 268, Output: 83615, CacheWrite: 634187, CacheRead: 22427257, AgentSeconds: 18752}},
+		Branch: "lineup/ah-64-explore",
+	}
+	want := "ah-64  Explore the ideas\nWorking  lineup/ah-64-explore\n" +
+		"tokens  output 83.6k · input 268 · cache write 634k · cache read 22.4M\nagent time  5h 12m\n\n"
 	if got := formatDetail(d); got != want {
 		t.Errorf("detail %q, want %q", got, want)
 	}

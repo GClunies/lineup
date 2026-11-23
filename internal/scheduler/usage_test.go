@@ -6,6 +6,8 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -140,5 +142,36 @@ func TestAUsageReadDoesNotHoldTheLoop(t *testing.T) {
 	release()
 	if d := <-shown; d.Usage == nil || *d.Usage != spent {
 		t.Errorf("usage after the read = %+v, want %+v", d.Usage, spent)
+	}
+}
+
+func TestUsageLinesShowTheTokensAndTheAgentTime(t *testing.T) {
+	u := &Usage{Input: 268, Output: 83615, CacheWrite: 634187, CacheRead: 22427257, AgentSeconds: 5*3600 + 12*60 + 59}
+	want := []string{"tokens  output 83.6k · input 268 · cache write 634k · cache read 22.4M", "agent time  5h 12m"}
+	if got := u.Lines(); !slices.Equal(got, want) {
+		t.Errorf("lines = %q, want %q", got, want)
+	}
+	var unknown *Usage
+	if got := unknown.Lines(); !slices.Equal(got, []string{"usage  unknown"}) {
+		t.Errorf("lines of unknown usage = %q", got)
+	}
+}
+
+func TestUsageLinesGiveTokensInThreeSignificantDigits(t *testing.T) {
+	for n, want := range map[int64]string{
+		0: "0", 999: "999", 1000: "1.00k", 1234: "1.23k", 9994: "9.99k", 9995: "10.0k", 83615: "83.6k",
+		99950: "100k", 634187: "634k", 999499: "999k", 999500: "1.00M", 22427257: "22.4M", 99950000: "100M",
+	} {
+		if got := (&Usage{Output: n}).Lines()[0]; !strings.HasPrefix(got, "tokens  output "+want+" ·") {
+			t.Errorf("%d tokens: %q, want output %s", n, got, want)
+		}
+	}
+}
+
+func TestUsageLinesGiveTheAgentTimeInItsLargestUnits(t *testing.T) {
+	for s, want := range map[int64]string{0: "0s", 59: "59s", 60: "1m", 3599: "59m", 3600: "1h 0m", 5*3600 + 12*60: "5h 12m"} {
+		if got := (&Usage{AgentSeconds: s}).Lines()[1]; got != "agent time  "+want {
+			t.Errorf("%d s: %q, want agent time %s", s, got, want)
+		}
 	}
 }

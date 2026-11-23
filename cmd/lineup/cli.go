@@ -296,7 +296,7 @@ func cmdLs(c scheduler.Client, args []string, out io.Writer) error {
 		return err
 	}
 	var v scheduler.BoardView
-	if err := c.Do(scheduler.Request{Op: "ls"}, &v); err != nil {
+	if err := c.Do(scheduler.Request{Op: "ls", Usage: asJSON}, &v); err != nil {
 		return err
 	}
 	if asJSON {
@@ -368,6 +368,9 @@ func cmdShow(c scheduler.Client, args []string, out io.Writer) error {
 		for _, line := range d.Bar {
 			fmt.Fprintln(out, "  "+line)
 		}
+	}
+	for _, line := range d.Usage.Lines() {
+		fmt.Fprintln(out, line)
 	}
 	for _, e := range d.Events {
 		fmt.Fprintf(out, "  %s  %-26s %s -> %s  %s\n", e.At.Local().Format(time.DateTime), e.Signal, e.From, e.To, e.Detail)

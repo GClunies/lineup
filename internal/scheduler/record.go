@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -237,6 +238,52 @@ type Usage struct {
 	CacheWrite   int64 `json:"cache_write_tokens"`
 	CacheRead    int64 `json:"cache_read_tokens"`
 	AgentSeconds int64 `json:"agent_seconds"`
+}
+
+// Lines are the usage lines of the detail pane and of lineup show, for
+// example "tokens  output 83.6k · input 268 · cache write 634k · cache read
+// 22.4M" and "agent time  5h 12m". A nil Usage is unknown.
+func (u *Usage) Lines() []string {
+	if u == nil {
+		return []string{"usage  unknown"}
+	}
+	return []string{
+		fmt.Sprintf("tokens  output %s · input %s · cache write %s · cache read %s",
+			tokenCount(u.Output), tokenCount(u.Input), tokenCount(u.CacheWrite), tokenCount(u.CacheRead)),
+		"agent time  " + agentTime(u.AgentSeconds),
+	}
+}
+
+// tokenCount is n in full under 1000, and otherwise n in three significant
+// digits with k or M. Each bound is the first n that rounds to one more digit.
+func tokenCount(n int64) string {
+	switch {
+	case n < 1_000:
+		return strconv.FormatInt(n, 10)
+	case n < 9_995:
+		return fmt.Sprintf("%.2fk", float64(n)/1e3)
+	case n < 99_950:
+		return fmt.Sprintf("%.1fk", float64(n)/1e3)
+	case n < 999_500:
+		return fmt.Sprintf("%.0fk", float64(n)/1e3)
+	case n < 9_995_000:
+		return fmt.Sprintf("%.2fM", float64(n)/1e6)
+	case n < 99_950_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1e6)
+	}
+	return fmt.Sprintf("%.0fM", float64(n)/1e6)
+}
+
+// agentTime is the time in hours and minutes, in minutes under an hour, and
+// in seconds under a minute.
+func agentTime(s int64) string {
+	switch {
+	case s >= 3600:
+		return fmt.Sprintf("%dh %dm", s/3600, s%3600/60)
+	case s >= 60:
+		return fmt.Sprintf("%dm", s/60)
+	}
+	return fmt.Sprintf("%ds", s)
 }
 
 type BoardView struct {
