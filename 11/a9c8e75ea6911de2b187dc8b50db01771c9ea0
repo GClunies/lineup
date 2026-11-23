@@ -1,0 +1,19 @@
+internal/localissues/localissues_test.go
+  s_62e3808e7f1359::t_4de47620adb531 87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "11a9c8e75ea6911de2b187dc8b50db01771c9ea0",
+  "prompts": {},
+  "sessions": {
+    "s_62e3808e7f1359": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc4c19bf-2d88-4b96-8b28-9396d6a5563c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
