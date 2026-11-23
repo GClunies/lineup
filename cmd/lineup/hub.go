@@ -40,7 +40,6 @@ const (
 	// formerHubSession is the Hub's session name before my-lineup. openHub
 	// renames it, so the agent and its conversation stay.
 	formerHubSession = "lineup hub"
-	agentRows        = 25 // percent of the tab
 )
 
 // agentSettings gives the Orchestrator its status line, lets it run lineup
@@ -107,9 +106,10 @@ const agentSettings = `{
 }
 `
 
-// agentTab is one Hub tab: a Board view on top and a Claude agent below.
+// agentTab is one Hub tab: a Board view, and a Claude agent beside it on the
+// side that the [layout] table sets.
 type agentTab struct {
-	window, view, agent string // Rex window label, top block label, agent block label
+	window, view, agent string // Rex window label, Board block label, agent block label
 	boardArgs           []string
 	role                []byte
 	settings            string
@@ -122,6 +122,12 @@ type agentTab struct {
 // agentTabs are in Hub tab order.
 var agentTabs = []agentTab{
 	{"lineup", "BOARD", "LINEUP", []string{"board"}, agentRole, agentSettings, "#1b2733", composeAgent},
+}
+
+// agentSplits are the rex split directions that put the agent, the new block,
+// on each side of the Board (PROD-TABS-018).
+var agentSplits = map[config.AgentSide]string{
+	config.AgentLeft: "left", config.AgentRight: "right", config.AgentTop: "above", config.AgentBottom: "below",
 }
 
 // activeTab is the tab that a new Hub opens on.
@@ -435,6 +441,11 @@ func openHub(mode hubMode) error {
 	if err != nil {
 		return fmt.Errorf("claude is required and is not on PATH")
 	}
+	// A bad config stops the open before it changes a tab.
+	cfg, err := config.Load(configPath())
+	if err != nil {
+		return err
+	}
 	if err := renameFormerHub(); err != nil {
 		return err
 	}
@@ -503,7 +514,7 @@ func openHub(mode hubMode) error {
 			delete(windows, t.window)
 		}
 		if _, ok := windows[t.window]; !ok {
-			if err := openAgentTab(t, dir, self, claudeBin, t.window == activeTab, mode); err != nil {
+			if err := openAgentTab(t, dir, self, claudeBin, t.window == activeTab, mode, cfg.Layout()); err != nil {
 				return err
 			}
 		}
@@ -545,8 +556,9 @@ func startDetached(bin string, args []string, log string) error {
 }
 
 // openAgentTab opens the tab, with the agent in dir, the folder that
-// prepareAgent wrote. Only a repair continues the agent's conversation (ARCH-ORCH-005).
-func openAgentTab(t agentTab, dir, self, claudeBin string, focus bool, mode hubMode) error {
+// prepareAgent wrote, on the side and at the size that layout sets. Only a
+// repair continues the agent's conversation (ARCH-ORCH-005).
+func openAgentTab(t agentTab, dir, self, claudeBin string, focus bool, mode hubMode, layout config.Layout) error {
 	cmd := agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, t.window)
 	if mode == hubRepair && hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {
 		cmd = append(cmd, "--continue")
@@ -556,15 +568,15 @@ func openAgentTab(t agentTab, dir, self, claudeBin string, focus bool, mode hubM
 	if err != nil {
 		return err
 	}
-	top, err := firstBlock(out)
+	view, err := firstBlock(out)
 	if err != nil {
 		return err
 	}
-	if _, err := rexRun("block", "rename", "-s", hubSession, top, t.view); err != nil {
+	if _, err := rexRun("block", "rename", "-s", hubSession, view, t.view); err != nil {
 		return err
 	}
-	split, err := rexRun(slices.Concat([]string{"split", "-s", hubSession, "-b", top, "--split", "below",
-		"--ratio", fmt.Sprint(agentRows), "--focus=false", "--json", "-c", dir, "--"}, cmd)...)
+	split, err := rexRun(slices.Concat([]string{"split", "-s", hubSession, "-b", view, "--split", agentSplits[layout.AgentSide],
+		"--ratio", strconv.Itoa(layout.AgentSize), "--focus=false", "--json", "-c", dir, "--"}, cmd)...)
 	if err != nil {
 		return err
 	}

@@ -185,6 +185,7 @@ type globalFile struct {
 	} `toml:"review"`
 	Board  boardFile  `toml:"board"`
 	Merged mergedFile `toml:"merged"`
+	Layout layoutFile `toml:"layout"`
 }
 
 // mergedFile is the [merged] table: what lineup does with a build Task's tab
@@ -416,6 +417,9 @@ func parseGlobal(globalPath, data string) (*Global, error) {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	if err := g.file.Merged.check(); err != nil {
+		return nil, fmt.Errorf("%s: %w", globalPath, err)
+	}
+	if _, err := g.file.Layout.resolve(); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	if g.board, g.boardErr = resolveBoard(g.file.Board); g.boardErr != nil {
