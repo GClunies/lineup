@@ -109,7 +109,7 @@ func TestEnterOnAHeadingTogglesTheGroupForThisRunOnly(t *testing.T) {
 		t.Fatalf("footer %q, want enter open, j/k move, then n new Issue", f)
 	}
 	e.press("enter")
-	if out := screen(e.m); !strings.Contains(out, "Backlog 1\n") || !strings.Contains(out, "ENG-20") {
+	if out := screen(e.m); strings.Contains(out, "Backlog 1 …") || !strings.Contains(out, "ENG-20") {
 		t.Fatalf("Backlog did not open:\n%s", out)
 	}
 	if f := footerAt(e.m, 100); !strings.Contains(f, "\n enter close   j/k move") {

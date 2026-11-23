@@ -24,7 +24,7 @@ var (
 	bold    = lipgloss.NewStyle().Bold(true)
 	good    = lipgloss.NewStyle().Foreground(teal)
 	bad     = lipgloss.NewStyle().Foreground(pink)
-	selRow  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e3f1ef"))
+	selRow  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e3f1ef")).Background(lipgloss.Color("#23403d"))
 	headRow = lipgloss.NewStyle().Foreground(teal).Bold(true)
 )
 
@@ -520,7 +520,7 @@ func (m Model) rowLines(w int) []rowLine {
 			}
 			cs := style
 			if i == colStatus && r.alert {
-				cs = bad
+				cs = bad.Inherit(style)
 			}
 			parts = append(parts, cs.Render(pad(c, ws[i])))
 		}
@@ -529,15 +529,15 @@ func (m Model) rowLines(w int) []rowLine {
 	// A heading shows the group's name, its count in the dim style, and a
 	// closed group's mark.
 	heading := func(g string, n int) string {
-		name, marker := headRow, " "
-		if m.sel == headingKey(g) {
-			name, marker = selRow, "▸"
-		}
 		count := fmt.Sprintf(" %d", n)
 		if !m.open(g) {
 			count += " …"
 		}
-		return ansi.Truncate(name.Render(marker+g)+dim.Render(count), w, "…")
+		if m.sel != headingKey(g) {
+			return ansi.Truncate(headRow.Render(" "+g)+dim.Render(count), w, "…")
+		}
+		name := "▸" + g
+		return ansi.Truncate(selRow.Render(name)+dim.Inherit(selRow).Render(pad(count, max(w-lipgloss.Width(name), 0))), w, "…")
 	}
 	var out []rowLine
 	for _, g := range groups {
@@ -564,7 +564,7 @@ func (m Model) row(sel bool, text string) string {
 	if !sel {
 		return ansi.Truncate("   "+text, m.width, "…")
 	}
-	return selRow.Render(ansi.Truncate(" ▸ "+text, m.width, "…"))
+	return selRow.Render(pad(" ▸ "+text, m.width))
 }
 
 func pad(s string, w int) string {
