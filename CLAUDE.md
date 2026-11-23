@@ -17,7 +17,7 @@
 
 ## The running Scheduler
 
-- launchd runs the `lineup` binary that `go install ./cmd/lineup` writes. That Scheduler runs old code until you rebuild it and run `lineup restart`. A restart keeps the tab of each Worker.
+- launchd runs the `lineup` binary that `go install ./cmd/lineup` writes. That Scheduler runs old code until you rebuild it and run `lineup restart`. A restart keeps the tab of each Worker. It also reopens the Hub tab, so the Board runs the new build and the Orchestrator starts a new session.
 - At the start of a session, and each time you see that a PR merged, compare the installed build with `main`:
 
   ```bash

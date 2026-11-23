@@ -4,7 +4,7 @@ This document states the current intended experience for how the Scheduler runs 
 
 ## PROD-SERVICE-001: The Scheduler runs from login and starts again when it stops
 
-launchd runs the Scheduler as a user agent. It starts the Scheduler at login and starts it again when it stops. `lineup` installs the agent, and it loads the agent only when the agent is not loaded. `lineup restart`, `lineup stop`, and `lineup logs` control the Scheduler. `lineup restart` gives the agent the current `PATH` and lineup's environment variables. Only one Scheduler runs at a time. Each start of the Scheduler keeps only the last 1 MiB of its log.
+launchd runs the Scheduler as a user agent. It starts the Scheduler at login and starts it again when it stops. `lineup` installs the agent, and it loads the agent only when the agent is not loaded. `lineup restart` and `lineup restart scheduler` restart the Scheduler, and `lineup stop` and `lineup logs` control it. Each restart gives the agent the current `PATH` and lineup's environment variables. Only one Scheduler runs at a time. Each start of the Scheduler keeps only the last 1 MiB of its log.
 
 ## PROD-SERVICE-002: lineup names each missing dependency
 

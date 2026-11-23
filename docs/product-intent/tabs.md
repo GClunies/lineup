@@ -52,8 +52,20 @@ lineup opens a tab with no ask from the user only for a Task's first Worker. Whe
 
 ## PROD-TABS-013: The Hub repairs itself after a Rex restart
 
-After a Rex server restart, Rex brings back each tab as an idle shell. When `lineup` runs and the `BOARD` or `LINEUP` pane of the Hub holds an idle shell, `lineup` closes the Hub tab and opens it again. The Orchestrator then continues its conversation. A pane that the user added does not count. If `lineup` runs inside that tab, it stops with an error that says to run `lineup` in another tab, because the close would end it.
+After a Rex server restart, Rex brings back each tab as an idle shell. When `lineup` runs and the `BOARD` or `LINEUP` pane of the Hub holds an idle shell, `lineup` closes the Hub tab and opens it again. The Orchestrator then continues its conversation. A pane that the user added does not count.
 
 ## PROD-TABS-014: A Repo session with a folder name takes the Repo key
 
 An older lineup named each Repo session after the Repo's folder, for example `data`. At its start, lineup renames each such session of a Task to the Repo key, for example `crexi/data`, and the session's tabs stay open. If a session already has the key, lineup leaves the old session as it is.
+
+## PROD-TABS-015: `lineup restart` reopens the Hub on the installed lineup
+
+`lineup restart` restarts the Scheduler, then closes each Hub tab and opens it again. Each Board then runs the installed `lineup`, and the Orchestrator starts a new session. Worker tabs and review tabs stay as they are. If the config file does not load, `lineup restart` restarts nothing. If no Hub is open, it opens none. `lineup restart scheduler` restarts only the Scheduler.
+
+## PROD-TABS-016: `lineup` brings back a missing Hub pane
+
+When the Hub tab has no `BOARD` pane or no `LINEUP` pane, `lineup` closes the tab and opens it again with both panes. The Orchestrator then continues its conversation.
+
+## PROD-TABS-017: lineup reopens the tab that it runs in
+
+When `lineup` or `lineup restart` must reopen the Hub tab that it runs in, a background process reopens the tab, and the command returns at once. The command prints the path of that process's log. The Orchestrator can run `lineup restart` in its own pane, and its tab then comes back with a new Orchestrator session.

@@ -8,7 +8,7 @@ The Orchestrator is the one agent that the user talks to. It runs in the `LINEUP
 
 ## PROD-ORCH-002: The Orchestrator maps each request to a lineup command
 
-The Orchestrator changes Tasks only through the `lineup` CLI. It maps "start ENG-123" to `lineup add`, an ad hoc job to `lineup add --repo`, and "what needs me?" to `lineup decide`. A steer goes to `lineup steer`, a cap or a rerun to `lineup cap` or `lineup rerun`, and a restore to `lineup open`. "review <url>" and `/pr-review <url>` go to `lineup review`. `/pr-explain` for a PR with an open review Task goes to that Task's Worker. Every other slash command becomes a Task that runs the skill. The Orchestrator never follows a skill itself.
+The Orchestrator changes Tasks only through the `lineup` CLI. It maps "start ENG-123" to `lineup add`, an ad hoc job to `lineup add --repo`, and "what needs me?" to `lineup decide`. A steer goes to `lineup steer`, a cap or a rerun to `lineup cap` or `lineup rerun`, a restore to `lineup open`, and a restart to `lineup restart`. "review <url>" and `/pr-review <url>` go to `lineup review`. `/pr-explain` for a PR with an open review Task goes to that Task's Worker. Every other slash command becomes a Task that runs the skill. The Orchestrator never follows a skill itself.
 
 ## PROD-ORCH-003: The Orchestrator asks nothing about a Task on its own
 
@@ -44,4 +44,8 @@ When `lineup add` fails with `repo not set up: <owner>/<repo>`, the Orchestrator
 
 ## PROD-ORCH-011: The Orchestrator edits the review queues for the user
 
-When the user asks to add or change a review queue, the Orchestrator edits only `[review]` and `[[review.queues]]` in the config file. Then it runs `lineup restart`. If the restart prints a load error, the Scheduler keeps the old file, and the Orchestrator fixes or undoes its edit. Then it shows the changed lines and `lineup reviews`. It also pauses, resumes, skips, and unskips through `lineup reviews`. It asks the user before a skip that ends an open review Task.
+When the user asks to add or change a review queue, the Orchestrator edits only `[review]` and `[[review.queues]]` in the config file. Then it runs `lineup restart scheduler`, which leaves the Orchestrator's session as it is. If the restart prints a load error, the Scheduler keeps the old file, and the Orchestrator fixes or undoes its edit. Then it shows the changed lines and `lineup reviews`. It also pauses, resumes, skips, and unskips through `lineup reviews`. It asks the user before a skip that ends an open review Task.
+
+## PROD-ORCH-012: Each `lineup restart` starts a new Orchestrator session
+
+Each `lineup restart` starts the Orchestrator as a new session, on the current Claude Code settings. The earlier sessions stay. When the user asks about an earlier conversation, the Orchestrator reads its earlier sessions.

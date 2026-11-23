@@ -45,7 +45,8 @@ const (
 
 // agentSettings gives the Orchestrator its status line, lets it run lineup
 // and edit the Trackers without a permission prompt, and keeps it from
-// writing to a PR. Only the user posts a review or merges outside lineup.
+// writing to a PR. Only the user posts a review or merges outside lineup. It
+// also lets the Orchestrator read its earlier sessions (ARCH-ORCH-004).
 const agentSettings = `{
   "statusLine": {"type": "command", "command": "echo Lineup"},
   "permissions": {
@@ -157,7 +158,7 @@ const (
 
 // reopens reports whether openHub closes w, the window of t, and opens the tab
 // again. openHub adds no block to a window that exists, so a tab that lacks its
-// Board or agent pane opens again. A tab that still runs an agent from before
+// Board or agent pane opens again (PROD-TABS-016). A tab that still runs an agent from before
 // the one agent lacks its agent pane too.
 func (m hubMode) reopens(w hubWindow, t agentTab, idle func(block string) (bool, error)) bool {
 	return m == hubFresh || !slices.Contains(w.Blocks, t.view) || !slices.Contains(w.Blocks, t.agent) || restored(w, t, idle)
@@ -487,7 +488,7 @@ func openHub(mode hubMode) error {
 		}
 		if w, ok := windows[t.window]; ok && mode.reopens(w, t, idle) {
 			// A close of the window would end this lineup before the tab opens
-			// again, so a copy in its own session runs the whole open again.
+			// again, so a copy in its own session runs the whole open again (ARCH-REX-011).
 			if slices.Contains(w.BlockIDs, os.Getenv("REX_BLOCK")) {
 				log := filepath.Join(stateDir(), "hub.log")
 				if err := detachHub(self, mode.args(), log); err != nil {
@@ -544,7 +545,7 @@ func startDetached(bin string, args []string, log string) error {
 }
 
 // openAgentTab opens the tab, with the agent in dir, the folder that
-// prepareAgent wrote. Only a repair continues the agent's conversation.
+// prepareAgent wrote. Only a repair continues the agent's conversation (ARCH-ORCH-005).
 func openAgentTab(t agentTab, dir, self, claudeBin string, focus bool, mode hubMode) error {
 	cmd := agentArgv(os.Getenv("CLAUDE_CONFIG_DIR"), claudeBin, t.window)
 	if mode == hubRepair && hasConversation(os.Getenv("CLAUDE_CONFIG_DIR"), dir) {

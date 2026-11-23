@@ -28,4 +28,4 @@ lineup checks the whole config file at each load. A bad value, an unknown key, o
 
 ## PROD-CONFIG-007: Changes to the file apply only after a restart
 
-The Scheduler reads the config file only when it starts. After the user edits the file or runs `lineup config migrate`, `lineup restart` applies the change to the Scheduler. `lineup repo init` restarts the Scheduler by itself. The Board also reads the file when it starts. A new clone below a root needs no restart.
+The Scheduler and the Board read the config file only when they start. After the user edits the file or runs `lineup config migrate`, `lineup restart` applies the change to both. `lineup restart scheduler` applies it to the Scheduler alone. `lineup repo init` restarts the Scheduler by itself. A new clone below a root needs no restart.

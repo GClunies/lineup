@@ -281,7 +281,7 @@ func startService() error {
 
 // cmdRestart is lineup restart [scheduler]. With no argument, it then opens
 // each Hub tab again, so each Board runs the installed lineup and the
-// Orchestrator starts a new session. A Scheduler that does not restart
+// Orchestrator starts a new session (PROD-TABS-015). A Scheduler that does not restart
 // leaves the Hub as it is.
 func cmdRestart(args []string, out io.Writer, scheduler func() error, hub func(hubMode) error) error {
 	all := len(args) == 0

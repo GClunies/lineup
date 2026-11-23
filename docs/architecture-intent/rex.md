@@ -60,3 +60,10 @@ Because: Rex brings back each tab after its restart with the same IDs, as a logi
 ## ARCH-REX-010: The side pane never changes the Task
 
 The side pane is a block labeled `side` to the right of the Worker, in the Task's folder. The Record keeps its ID apart, and the Worker's block stays the block of the Task, so no event of the pane changes the Task. When the Worker's block closes and the pane holds the tab open, lineup closes the tab. At start, the Scheduler opens the pane again beside each live Worker whose pane is gone. A failed split logs a warning, and the Worker runs without the pane.
+
+## ARCH-REX-011: A Hub reopen that would end its caller runs in a detached copy
+
+When lineup must close the Hub tab whose pane runs it, it starts a copy of itself in a new process session and returns. The copy gets no `REX_BLOCK`, appends its output to a log in the state directory, and runs the whole Hub setup again. Each step of that setup is idempotent, so the second run reaches the same Hub.
+
+Because: closing a Rex window ends every process of its panes, and a process in its own session outlives that close.
+Not: refusing to reopen the caller's tab; a Board that re-execs itself when its binary changes.
