@@ -80,6 +80,13 @@ local function onBoard(t)
   return t.stage_key ~= "done" or t.tab
 end
 
+-- openable reports whether lineup open focuses or restores a Worker for the
+-- Task, as the Board's enter does. A Done build Task with no tab resumes its
+-- Worker in the kept worktree, or read-only after lineup removed it.
+local function openable(t)
+  return onBoard(t) or t.kind == "build"
+end
+
 local function notDone(t)
   return t.stage_key ~= "done"
 end
@@ -196,7 +203,7 @@ rex.action{
   category = "Lineup",
   keywords = "lineup open focus jump switch tab",
   run = function(ctx, args)
-    local task, reason = pickTask("Go to which Task?", "No Task is on the Board", onBoard)
+    local task, reason = pickTask("Go to which Task?", "No Task is on the Board", openable)
     if task == nil then
       return { answered = false, reason = reason }
     end
