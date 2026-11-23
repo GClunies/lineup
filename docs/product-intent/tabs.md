@@ -4,7 +4,7 @@ This document states the current intended experience for where Tasks live in Rex
 
 ## PROD-TABS-001: The Hub is one tab with the Board and the Orchestrator
 
-The Hub is the Rex session `my-lineup`, with one tab, `lineup`. The Board fills the top of the tab. The Orchestrator runs below it in the `LINEUP` pane, a quarter of the height, with its own background color. `lineup` opens the Hub and creates the session when it is missing. `lineup` also brings a Hub of an older form to this layout and keeps the Orchestrator's conversation. The Scheduler has no tab.
+The Hub is the Rex session `my-lineup`, with one tab, also `my-lineup`. The Board fills the top of the tab. The Orchestrator runs below it in the `LINEUP` pane, a quarter of the height, with its own background color. `lineup` opens the Hub and creates the session when it is missing. `lineup` also brings a Hub of an older form to this layout, and renames an old tab in place, so the Orchestrator keeps its conversation. The Scheduler has no tab.
 
 ## PROD-TABS-002: Each Repo has its own Rex session
 

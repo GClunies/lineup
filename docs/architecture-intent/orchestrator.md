@@ -4,7 +4,7 @@ This file states how the Orchestrator connects to lineup.
 
 ## ARCH-ORCH-001: One front agent serves every Kind
 
-The Hub runs one Claude agent, the Orchestrator, in the `LINEUP` pane under the Board, in the Hub's `lineup` tab. It takes build Tasks and review Tasks, and it plans in each Tracker that is on. It acts only through `lineup` commands and the Tracker CLIs, so every Task change goes through the Scheduler.
+The Hub runs one Claude agent, the Orchestrator, in the `LINEUP` pane under the Board, in the Hub's `my-lineup` tab. It takes build Tasks and review Tasks, and it plans in each Tracker that is on. It acts only through `lineup` commands and the Tracker CLIs, so every Task change goes through the Scheduler.
 
 Because: the user wants every request in one conversation, and one agent for each tab made the user know which tab owns a request.
 Not: four agents, one for each Hub tab; a router that sends each event to a handler and has no chat.

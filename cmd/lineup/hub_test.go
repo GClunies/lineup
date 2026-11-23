@@ -128,12 +128,12 @@ func TestHubHasOneTabAndItCarriesTheAgent(t *testing.T) {
 			agents = append(agents, tab.window)
 		}
 	}
-	if !slices.Equal(tabs, []string{"lineup"}) || !slices.Equal(agents, []string{"lineup"}) {
-		t.Errorf("tabs %v with agents %v, want lineup with an agent", tabs, agents)
+	if !slices.Equal(tabs, []string{"my-lineup"}) || !slices.Equal(agents, []string{"my-lineup"}) {
+		t.Errorf("tabs %v with agents %v, want my-lineup with an agent", tabs, agents)
 	}
-	i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == "lineup" })
+	i := slices.IndexFunc(agentTabs, func(a agentTab) bool { return a.window == "my-lineup" })
 	if got := agentTabs[i]; got.agent != "LINEUP" || !slices.Equal(got.boardArgs, []string{"board"}) {
-		t.Errorf("the lineup tab runs %v over %q, want board over LINEUP", got.boardArgs, got.agent)
+		t.Errorf("the my-lineup tab runs %v over %q, want board over LINEUP", got.boardArgs, got.agent)
 	}
 }
 
@@ -249,16 +249,18 @@ func TestBoardOptionsListTheTeamKeys(t *testing.T) {
 }
 
 func TestOpenHubRenamesTheHubTab(t *testing.T) {
-	old := hubWindow{ID: "w7", Label: "hub"}
+	hub, lineup := hubWindow{ID: "w7", Label: "hub"}, hubWindow{ID: "w6", Label: "lineup"}
 	cases := []struct {
 		name    string
 		windows map[string]hubWindow
 		label   string
 		want    string // the ID of the window to rename, or ""
 	}{
-		{"an old Hub", map[string]hubWindow{"hub": old, "plan": {ID: "w8"}}, "lineup", "w7"},
-		{"a Hub with both", map[string]hubWindow{"hub": old, "lineup": {ID: "w9"}}, "lineup", ""},
-		{"a new Hub", map[string]hubWindow{}, "lineup", ""},
+		{"a Hub with a lineup tab", map[string]hubWindow{"lineup": lineup}, "my-lineup", "w6"},
+		{"a Hub with a hub tab", map[string]hubWindow{"hub": hub, "plan": {ID: "w8"}}, "my-lineup", "w7"},
+		{"a Hub with both old tabs", map[string]hubWindow{"hub": hub, "lineup": lineup}, "my-lineup", "w6"},
+		{"a Hub with the tab", map[string]hubWindow{"lineup": lineup, "my-lineup": {ID: "w9"}}, "my-lineup", ""},
+		{"a new Hub", map[string]hubWindow{}, "my-lineup", ""},
 	}
 	for _, c := range cases {
 		got := ""
@@ -272,8 +274,8 @@ func TestOpenHubRenamesTheHubTab(t *testing.T) {
 	if !slices.Equal(retiredTabs, []string{"orchestrate", "plan", "review"}) {
 		t.Errorf("retired tabs = %v, want orchestrate, plan, review", retiredTabs)
 	}
-	if activeTab != "lineup" {
-		t.Errorf("a new Hub opens on %q, want lineup", activeTab)
+	if activeTab != "my-lineup" {
+		t.Errorf("a new Hub opens on %q, want my-lineup", activeTab)
 	}
 }
 
@@ -303,7 +305,7 @@ func TestOpenHubRewritesTheAgentFilesWhenTheTabExists(t *testing.T) {
 	for name, body := range map[string]string{
 		"rex": `case "$1 $2" in
 "session inspect") echo '{"windows":[
-{"window_id":"w2","label":"lineup","layers":[{"blocks":[{"label":"BOARD"},{"label":"LINEUP"}]}]}]}';;
+{"window_id":"w2","label":"my-lineup","layers":[{"blocks":[{"label":"BOARD"},{"label":"LINEUP"}]}]}]}';;
 esac`,
 		"launchctl": "",
 		"gh":        "",
@@ -341,57 +343,67 @@ esac`,
 	}
 }
 
-// A Hub from before the rename keeps its agent and its conversation: lineup
+// A Hub from before a rename keeps its agent and its conversation: lineup
 // renames the session and the tab in place and opens no second Hub.
 func TestOpenHubRenamesTheOldHubInPlace(t *testing.T) {
-	bin, tmp := t.TempDir(), t.TempDir()
-	log, renamedMark := filepath.Join(tmp, "rex.log"), filepath.Join(tmp, "renamed")
-	for name, body := range map[string]string{
-		"rex": `echo "$@" >> '` + log + `'
+	for _, c := range []struct {
+		name, session, tab string
+		want               []string // rex calls that the rename makes
+	}{
+		{"a lineup tab", "my-lineup", "lineup", []string{"window rename -s my-lineup w2 my-lineup"}},
+		{"the lineup hub session", "lineup hub", "hub", []string{"session rename lineup hub my-lineup", "window rename -s my-lineup w2 my-lineup"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			bin, tmp := t.TempDir(), t.TempDir()
+			log, renamedMark := filepath.Join(tmp, "rex.log"), filepath.Join(tmp, "renamed")
+			for name, body := range map[string]string{
+				"rex": `echo "$@" >> '` + log + `'
 case "$1 $2" in
 "session inspect")
-  if [ "$4" = "lineup hub" ] || [ -f '` + renamedMark + `' ]; then
-    echo '{"windows":[{"window_id":"w2","label":"hub","layers":[{"blocks":[{"label":"BOARD"},{"label":"LINEUP"}]}]}]}'
+  if [ "$4" = '` + c.session + `' ] || [ -f '` + renamedMark + `' ]; then
+    echo '{"windows":[{"window_id":"w2","label":"` + c.tab + `","layers":[{"blocks":[{"label":"BOARD"},{"label":"LINEUP"}]}]}]}'
   else
     echo "session $4 not found" >&2; exit 1
   fi;;
 "session rename") touch '` + renamedMark + `';;
 esac`,
-		"launchctl": "",
-		"gh":        "",
-		"wt":        "",
-		"claude":    "",
-	} {
-		os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755)
-	}
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("LINEUP_STATE_DIR", t.TempDir())
-	t.Setenv("LINEUP_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
-	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+				"launchctl": "",
+				"gh":        "",
+				"wt":        "",
+				"claude":    "",
+			} {
+				os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755)
+			}
+			t.Setenv("PATH", bin+":/usr/bin:/bin")
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("LINEUP_STATE_DIR", t.TempDir())
+			t.Setenv("LINEUP_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+			t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 
-	if err := openHub(hubRepair); err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := os.ReadFile(log)
-	calls := string(raw)
-	for _, want := range []string{"session rename lineup hub my-lineup", "window rename -s my-lineup w2 lineup"} {
-		if !strings.Contains(calls, want) {
-			t.Errorf("rex calls lack %q:\n%s", want, calls)
-		}
-	}
-	if strings.Contains(calls, "session new") || strings.Contains(calls, "window new") {
-		t.Errorf("lineup opened a second Hub:\n%s", calls)
+			if err := openHub(hubRepair); err != nil {
+				t.Fatal(err)
+			}
+			raw, _ := os.ReadFile(log)
+			calls := string(raw)
+			for _, want := range c.want {
+				if !strings.Contains(calls, want) {
+					t.Errorf("rex calls lack %q:\n%s", want, calls)
+				}
+			}
+			if strings.Contains(calls, "session new") || strings.Contains(calls, "window new") || strings.Contains(calls, "window close") {
+				t.Errorf("lineup rebuilt the Hub:\n%s", calls)
+			}
+		})
 	}
 }
 
-// The blocks of the Hub's lineup tab in fakeHubRex.
+// The blocks of the Hub's my-lineup tab in fakeHubRex.
 const (
 	restoredBoard = `[{"block_id":"b1","label":"BOARD"},{"block_id":"b2","label":"LINEUP"}]`
 	livePanes     = `[{"block_id":"b3","label":"BOARD"},{"block_id":"b2","label":"LINEUP"}]`
 )
 
-// fakeHubRex is a rex whose Hub has one lineup tab, w2, with blocks, a JSON
+// fakeHubRex is a rex whose Hub has one my-lineup tab, w2, with blocks, a JSON
 // list. Block b1 holds an idle shell, as a pane does after a Rex restart, and
 // each other block runs a program. An empty blocks means no Hub session. The
 // fake logs each call. lineup runs outside the Hub, and a detach fails the test.
@@ -401,7 +413,7 @@ func fakeHubRex(t *testing.T, blocks string) string {
 	log := filepath.Join(t.TempDir(), "rex.log")
 	idle := `{"child":{"name":"login","path":"/usr/bin/login"},"foreground":{"name":"zsh","path":"/bin/zsh"},"ancestors":[{"name":"login","path":"/usr/bin/login"}]}`
 	live := `{"child":{"name":"claude","path":"/bin/claude"},"foreground":{"name":"claude","path":"/bin/claude"}}`
-	inspect := `echo '{"windows":[{"window_id":"w2","label":"lineup","layers":[{"blocks":` + blocks + `}]}]}'`
+	inspect := `echo '{"windows":[{"window_id":"w2","label":"my-lineup","layers":[{"blocks":` + blocks + `}]}]}'`
 	if blocks == "" {
 		inspect = `echo "session $4 not found" >&2; exit 1`
 	}
@@ -454,7 +466,7 @@ func rexCalls(t *testing.T, log string) string {
 
 // reopened reports whether lineup closed the tab w2 and then opened it again.
 func reopened(calls string) bool {
-	closed, opened := strings.Index(calls, "window close -s my-lineup w2"), strings.Index(calls, "window new -s my-lineup lineup")
+	closed, opened := strings.Index(calls, "window close -s my-lineup w2"), strings.Index(calls, "window new -s my-lineup my-lineup")
 	return closed >= 0 && opened > closed
 }
 

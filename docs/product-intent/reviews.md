@@ -56,7 +56,7 @@ A review Task that the user's review ended holds its PR out of the queues until 
 
 ## PROD-REVIEW-014: Review Tasks give no alert and stay off the Board
 
-A review Task gives no alert. The Board lists no review Task, makes no toast for one, and leaves it out of the Needs you count on the `lineup` tab. The Board's header counts the review Tasks that need the user, as `+N in reviews`. The user sees each review in its tab in the Rex sidebar, and decides each finding there.
+A review Task gives no alert. The Board lists no review Task, makes no toast for one, and leaves it out of the Needs you count on the `my-lineup` tab. The Board's header counts the review Tasks that need the user, as `+N in reviews`. The user sees each review in its tab in the Rex sidebar, and decides each finding there.
 
 ## PROD-REVIEW-015: A lost review tab keeps the review
 
