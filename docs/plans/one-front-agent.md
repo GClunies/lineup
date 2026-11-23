@@ -37,7 +37,7 @@ Live lanes run on this machine, not on cloud VMs. Lineup is a solo TUI on Rex, a
   - [ ] S1b after S1a. S1c after S1b. Stack 1 is `watch-all-kinds`, `one-front-agent`, `one-screen`.
   - [ ] S2b after S2a. S2c after S2b. Stack 2 is `worker-ask`, `steer-replay`, `resume-fallback`.
   - [ ] F is `drop-harness-knob`.
-- [ ] Hold the file boundaries. Stack 1 touches only `cmd/lineup/watch.go`, `cmd/lineup/watch_test.go`, `cmd/lineup/hub.go`, `cmd/lineup/hub_test.go`, `cmd/lineup/*/CLAUDE.md`, `internal/board/model.go`, `internal/board/*_test.go`, `docs/adr/*`, `GLOSSARY.md`. Stack 2 touches only `cmd/lineup/cli.go`, `internal/scheduler/api.go`, `internal/scheduler/alerts.go`, `internal/scheduler/scheduler.go`, `internal/scheduler/*_test.go`, `internal/harness/claude/*`, `internal/lifecycle/*`. F touches only `internal/config/*`, `cmd/lineup/wire.go`.
+- [ ] Hold the file boundaries. Stack 1 touches only `cmd/lineup/watch.go`, `cmd/lineup/watch_test.go`, `cmd/lineup/hub.go`, `cmd/lineup/hub_test.go`, `cmd/lineup/*/CLAUDE.md`, `internal/board/model.go`, `internal/board/*_test.go`, `docs/architecture-intent/*`, `GLOSSARY.md`. Stack 2 touches only `cmd/lineup/cli.go`, `internal/scheduler/api.go`, `internal/scheduler/alerts.go`, `internal/scheduler/scheduler.go`, `internal/scheduler/*_test.go`, `internal/harness/claude/*`, `internal/lifecycle/*`. F touches only `internal/config/*`, `cmd/lineup/wire.go`.
 - [ ] Hold the review gate. S1b, S1c, and S2a change an interaction. They wait for the operator's review in chat with screenshots and a video before merge.
 
 ### PR mechanics, for every PR
@@ -128,8 +128,8 @@ Each live lane runs on this machine at the PR head, in a worktree that `wt` crea
 - [ ] Edit `cmd/lineup/hub_test.go`.
 - [ ] Create `cmd/lineup/agent/CLAUDE.md`.
 - [ ] Delete `cmd/lineup/orchestrator/CLAUDE.md`, `cmd/lineup/planner/CLAUDE.md`, `cmd/lineup/reviewer/CLAUDE.md`. Move `cmd/lineup/planner/{github,linear,local}.md` under `cmd/lineup/agent/`.
-- [ ] Create `docs/adr/0016-one-front-agent.md`.
-- [ ] Edit `docs/adr/0004-fresh-worker-per-stage.md`, `docs/adr/0009-orchestrator-alerts-come-from-a-monitor.md`, `docs/adr/0012-a-review-is-a-task-kind.md`, `GLOSSARY.md`.
+- [ ] Write ARCH-ORCH-001 and PROD-ORCH-001.
+- [ ] Edit ARCH-HARNESS-002, ARCH-ORCH-002, ARCH-REVIEW-001, and `GLOSSARY.md`.
 
 **Build.**
 
@@ -137,8 +137,8 @@ Each live lane runs on this machine at the PR head, in a worktree that `wt` crea
 - [ ] Write one `agentSettings` in `hub.go`. Allow is the union of `orchestratorSettings`, `plannerSettings`, and `reviewerSettings` allow lists at lines 57, 68, and 119. Deny keeps `gh pr review/comment/merge/close/edit`, `gh api`, `linear issue delete`, `gh issue delete`. Drop the denies on `lineup add/start/review/reviews/watch`.
 - [ ] Name the agent `LINEUP` so `stateDir()/lineup` is a fresh role dir and `--continue` finds no old conversation (`hub.go` lines 212 and 471).
 - [ ] In `agentTabs` at lines 164-167, give the `work` tab the `LINEUP` agent and make `plan` and `review` board-only, as `review` was at commit cd58b74. Keep `assist` as is.
-- [ ] Write ADR 0016. Decision, one front agent and one board per Kind. Reason, every alert reaches one chat and every answer leaves from it. Rejected, four role agents (the Nov 5-6 commits 018be9a, 8f25938, bd42fdb had no ADR) and a dsh-style router with no chat.
-- [ ] Fix stale text. ADR 0009 says the watch covers every Kind. ADR 0012 drops "This is what the Orchestrator does today". ADR 0004 drops Planning from its Stage list. GLOSSARY entries for Hub, Board, and Orchestrator name the one agent.
+- [ ] Write ARCH-ORCH-001. Decision, one front agent and one board per Kind. Reason, every alert reaches one chat and every answer leaves from it. Rejected, four role agents (the Nov 5-6 commits 018be9a, 8f25938, bd42fdb had no ADR) and a dsh-style router with no chat.
+- [ ] Fix stale text. ARCH-ORCH-002 says the watch covers every Kind. ARCH-REVIEW-001 drops "This is what the Orchestrator does today". ARCH-HARNESS-002 drops Planning from its Stage list. GLOSSARY entries for Hub, Board, and Orchestrator name the one agent.
 
 **You see.**
 
@@ -191,14 +191,14 @@ Each live lane runs on this machine at the PR head, in a worktree that `wt` crea
 - [ ] Edit `internal/board/board_test.go`.
 - [ ] Edit `cmd/lineup/hub.go`.
 - [ ] Edit `cmd/lineup/hub_test.go`.
-- [ ] Edit `docs/adr/0016-one-front-agent.md`.
+- [ ] Edit ARCH-ORCH-001.
 
 **Build.**
 
 - [ ] In `model.go`, handle `1`, `2`, `3` in `modeNormal` only. `1` sets `m.view = viewTracker`. `2` sets `m.view, m.kind = viewBoard, lifecycle.KindBuild`. `3` sets `m.view, m.kind = viewReview, lifecycle.KindReview`. The guard at line 255 keeps digits as text inside a filter.
 - [ ] Draw the three names in the header with the active one bright, `1 plan  2 work  3 review`.
 - [ ] In `hub.go` `agentTabs`, replace `plan`, `work`, `review` with one `hub` tab that runs `board` over the `LINEUP` agent. Keep `assist`. Add `hub` to `formerLabels` so a running `work` tab is renamed in place.
-- [ ] Add the one-tab layout to ADR 0016.
+- [ ] Add the one-tab layout to PROD-TABS-001.
 
 **You see.**
 
@@ -488,7 +488,7 @@ Unproven. Whether `auto` permission mode would have approved `lineup ask` withou
 - Keep four agents and add cross-Kind alerts only (option A). Rejected because an Orchestrator that sees review alerts and holds `lineup review` in its deny list must redirect the user to another tab.
 - A dsh-style router with no chat (option C). Rejected because mvp.md line 562 makes "what needs me?" an Orchestrator job and the mockup's chat answers it.
 - One agent pane shown in three tabs (B1). Rejected because the three boards are one program (`model.go` lines 51-53), so one tab with a view key is cheaper and matches the mockup.
-- Pipe full plans to the front agent. Rejected. ADR 0010 stands. The one-line question travels through `lineup ask`, the plan body stays in the Worker's tab.
+- Pipe full plans to the front agent. Rejected. PROD-LIFE-006 stands. The one-line question travels through `lineup ask`, the plan body stays in the Worker's tab.
 
 ## Appendix C. Risks
 
@@ -504,8 +504,8 @@ Unproven. Whether `auto` permission mode would have approved `lineup ask` withou
 
 ## Appendix D. Links and reading list
 
-- `docs/spec/mvp.md`, the Orchestrator jobs table at line 562.
-- `docs/adr/0001-scheduler-and-orchestrator-are-separate.md`, `0004`, `0009`, `0010`, `0012`, `0015`.
+- PROD-ORCH-002, the Orchestrator jobs.
+- ARCH-CORE-001, ARCH-HARNESS-002, ARCH-ORCH-002, PROD-LIFE-006, ARCH-REVIEW-001, and PROD-LAND-001.
 - `cmd/lineup/hub.go` lines 55-145 (role settings), 164-167 (tabs), 212 (role dir), 406-408 and 464-471 (`--continue`).
 - `internal/board/model.go` lines 51-53 and 137-142 (views).
 - `cmd/lineup/watch.go` lines 21-27 and 62-72.
@@ -517,7 +517,7 @@ Unproven. Whether `auto` permission mode would have approved `lineup ask` withou
 
 ## Appendix E. Outcome
 
-Every PR below merged into `main` on 2026-11-10. The checklist above is the plan as written before execution. Its boxes stay unchecked, because the evidence for each lives in the PR, not in this file. `docs/adr/0016-one-front-agent.md` records the decision.
+Every PR below merged into `main` on 2026-11-10. The checklist above is the plan as written before execution. Its boxes stay unchecked, because the evidence for each lives in the PR, not in this file. ARCH-ORCH-001 records the decision.
 
 | Plan id | PR | Merge commit | What landed |
 |---|---|---|---|
