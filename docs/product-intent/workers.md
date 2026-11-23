@@ -54,6 +54,6 @@ Each Worker tab holds a side pane to the right of the Worker, half of the tab wi
 
 lineup shows what the Worker of each Task spent: input, output, cache write, and cache read tokens, with its subagents, and agent time. Agent time counts only the turns in which the Worker worked, so a wait for the user, CI, or a reviewer adds nothing. The detail pane (`f`) and `lineup show` print a `tokens` line and an `agent time` line, with large counts in three digits and `k` or `M`. `lineup ls --json` and `lineup show --json` give each Task a `usage` object. lineup shows usage that it cannot read as unknown, never as zero.
 
-## PROD-WORKER-014: The name of each Worker starts with its Task ID
+## PROD-WORKER-014: The name of each Worker names its Task
 
-lineup names each Worker after its tab label, which starts with the Task ID. So Claude's prompt box, its resume picker, and the terminal title show the Task ID of each Worker.
+lineup names each Worker after its tab label, which starts with the Task ID, or with `<repo>#<n>` for a GitHub Issue. So Claude's prompt box, its resume picker, and the terminal title show which Task each Worker works on.

@@ -106,23 +106,28 @@ var (
 
 // tabLabel names the Task's tab and its Worker's conversation. It is the
 // Task's ID and its title, cut at a word to tabLabelWidth characters with a
-// closing "…". A review's title loses its repo#n prefix, its issue key, and
-// its commit type, because the ID already names the PR.
+// closing "…". A GitHub ID loses its owner, because the Repo session names it
+// (PROD-TABS-003). A review's title loses its repo#n prefix, its issue key,
+// and its commit type, because the ID already names the PR.
 func (r *Record) tabLabel() string {
+	id := r.ID
+	if KindOf(id, nil) == KindGitHub {
+		_, id, _ = strings.Cut(id, "/")
+	}
 	title := r.Title
 	if r.Review != nil {
 		title = repoPrefix.ReplaceAllString(title, "")
 		title = issueKey.ReplaceAllString(title, "")
 		title = commitType.ReplaceAllString(title, "")
 	}
-	label := strings.TrimSpace(r.ID + " " + title)
+	label := strings.TrimSpace(id + " " + title)
 	rs := []rune(label)
 	if len(rs) <= tabLabelWidth {
 		return label
 	}
 	head := rs[:tabLabelWidth-1]
 	if !unicode.IsSpace(rs[tabLabelWidth-1]) {
-		for i := len(head) - 1; i > len([]rune(r.ID)); i-- {
+		for i := len(head) - 1; i > len([]rune(id)); i-- {
 			if unicode.IsSpace(head[i]) {
 				head = head[:i]
 				break

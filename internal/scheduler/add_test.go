@@ -19,21 +19,27 @@ func TestAnAddStartsTheTask(t *testing.T) {
 		req     Request
 		id      string
 		setup   string
+		label   string
 		tracker bool
 	}{
-		{"a Linear Issue", Request{Op: "add", Issue: "ENG-1"}, "ENG-1", "wt ada/eng-1-billing", true},
-		{"a GitHub Issue", Request{Op: "add", Issue: "acme/data#12", Kind: KindGitHub, Repo: "issues"}, "acme/data#12", "wt ada/eng-1-billing", true},
-		{"an ad hoc Task", Request{Op: "add", Repo: "web", Text: "Fix map tooltip"}, "AH-1", "wt lineup/ah-1-fix-map-tooltip", false},
+		{"a Linear Issue", Request{Op: "add", Issue: "ENG-1"}, "ENG-1", "wt ada/eng-1-billing", "ENG-1 Add billing model", true},
+		{"a GitHub Issue", Request{Op: "add", Issue: "acme/data#12", Kind: KindGitHub, Repo: "issues"}, "acme/data#12", "wt ada/eng-1-billing", "data#12 Add billing model", true},
+		{"an ad hoc Task", Request{Op: "add", Repo: "web", Text: "Fix map tooltip"}, "AH-1", "wt lineup/ah-1-fix-map-tooltip", "AH-1 Fix map tooltip", false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 			if v := h.do(c.req).(TaskView); v.ID != c.id || v.Stage != "Working" || v.OverCap {
 				t.Fatalf("add = %+v, want %s in Working", v, c.id)
 			}
-			h.rex.exits(h.waitTab(c.setup), 0)
-			h.waitTab("claude working")
-			if spec := h.waitSpecs(1); spec.Task != c.id || spec.Stage != lifecycle.Working {
+			setup := h.waitTab(c.setup)
+			h.rex.exits(setup, 0)
+			worker := h.waitTab("claude working")
+			spec := h.waitSpecs(1)
+			if spec.Task != c.id || spec.Stage != lifecycle.Working {
 				t.Fatalf("first prompt = %s in %s, want %s in Working", spec.Task, spec.Stage, c.id)
+			}
+			if setup.label != c.label || worker.label != c.label || spec.Name != c.label {
+				t.Fatalf("setup tab %q, Worker tab %q, Worker name %q, want %q (PROD-TABS-003)", setup.label, worker.label, spec.Name, c.label)
 			}
 			d, err := h.s.show(context.Background(), c.id)
 			if err != nil {
