@@ -30,6 +30,7 @@ internal/scheduler/scheduler_test.go
   s_59f22b65e91f8e::t_271b79483b8066 555-561
   s_59f22b65e91f8e::t_dbe9f5d97fbe8c 577-593
   s_299a42094fc058::t_1764f2122a82d5 722,1132,1357,2147
+  s_59f22b65e91f8e::t_8fa3837beac350 2063,2084
 internal/scheduler/record.go
   s_59f22b65e91f8e::t_0b349c3e5d3f92 316-318
   s_59f22b65e91f8e::t_c54e63bbf7d7de 319-322
