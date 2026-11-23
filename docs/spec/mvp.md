@@ -343,6 +343,8 @@ One command adds a Task and starts it: `lineup add <ISSUE>` for an Issue, or `li
 - `--over-cap` starts the Task once over a full WIP cap. Use it only with the user's yes.
 - The flags can come before or after the Issue or the text, for example `lineup add --repo data "<text>" --set skill=pr-explain --set pr=false`.
 
+A build Task needs a Repo that is set up. If the Repo has no `[repos."<owner>/<repo>"]` table, `lineup add` adds nothing and fails with `repo not set up: <owner>/<repo>`. `s` on a Board Issue row then shows `<owner>/<repo> is not set up. Ask the Orchestrator to set it up`, and starts nothing. [Repo setup](#repo-setup) tells how the Orchestrator sets the Repo up. A review Task needs no setup.
+
 This sequence runs in the background. The Board shows only the Task as it changes Stage.
 
 1. The Scheduler checks the WIP cap. If the cap is full and `--over-cap` is absent, `lineup add` adds nothing and fails with `wip cap full`, and the Issue stays in Up next. The Board then asks the user to start this Task once over the cap or to raise the cap. A start over the cap shows `+1 over` in the header.
@@ -478,6 +480,45 @@ Each key has one checkout. A linked worktree of a Repo is never a checkout, so i
 - A path must be a checkout. A path to a linked worktree fails with `<path> is not a main git checkout`.
 - A GitHub Issue goes to the checkout of its repository's key.
 - The Repo picker lists the checkouts below the roots.
+
+### Repo setup
+
+The first build Task in a Repo makes the user set the Repo up. A Repo is set up when the file has its own `[repos."<owner>/<repo>"]` table. An empty table is enough. An `[repos."<owner>/*"]` table does not count, and a past Task does not count. The setup writes only the global file. It never writes a file in the Repo.
+
+1. `lineup add` fails with `repo not set up: <owner>/<repo>`.
+2. The Orchestrator runs `lineup repo detect <owner>/<repo> --json`.
+3. The Orchestrator asks the setup questions with `AskUserQuestion`. The detected value is the first option of each question.
+4. The Orchestrator runs `lineup repo init <owner>/<repo>` with a `key=value` argument for each answer.
+5. The Orchestrator runs the same `lineup add` again.
+
+| Question | Keys | Detected value |
+|---|---|---|
+| Tracker | `tracker` | The `tracker` of the owner table. Otherwise `github` for a GitHub origin with Issues turned on. Otherwise none. |
+| Review bot gate | `review_bot.name` | The `[review_bot]` of `[defaults]` or the owner table. Otherwise `greptile` if Greptile commented on one of the last 20 PRs. Otherwise no gate. |
+| Landing bar | `landing_bar.checks` | The `[landing_bar]` of `[defaults]` or the owner table. Otherwise `all` if the default branch requires no check. Otherwise `required`. |
+| Worktree setup | none | Whether worktrunk has a `pre-start` hook, or a hook that runs `wt step copy-ignored`, for the Repo. If it has none, the Orchestrator offers an ad hoc Task that writes the hooks. |
+| Linear teams | `teams` | None. The Orchestrator asks only when the user picks the Linear Tracker. The options are the teams of the signed-in workspaces. |
+
+Each other key takes its default. `AskUserQuestion` takes at most 4 questions, so the Linear teams question comes in a second call.
+
+`lineup repo detect <owner>/<repo> --json` prints one JSON object with these fields:
+
+- `repo` and `checkout`: the key and its checkout below the roots.
+- `trackers_on`: the Trackers that are on, for example `["linear", "github"]`.
+- `tracker`, `review_bot`, and `landing_bar`: the detected values. `review_bot` is `null` for no gate.
+- `linear_teams`: each team of each signed-in Linear workspace, with the other Repos that list the team. The field is absent while Linear is off.
+- `worktree`: the worktrunk hooks that set up a new worktree, `set_up`, and an `error` if `wt` fails.
+- `init`: the `key=value` arguments for the detected values that `[defaults]` and the owner table do not already set.
+
+One GraphQL query reads the GitHub facts: Issues on or off, the required checks of the default branch, and the authors of the comments on the last 20 PRs. A Repo with no GitHub origin skips the query.
+
+`lineup repo init <owner>/<repo> [key=value ...]` adds the table. The keys are `tracker`, `teams`, `review_bot.name`, `review_bot.min_review_score`, `review_bot.max_review_cycles`, `landing_bar.checks`, `landing_bar.threads`, and `landing_bar.approvals`. `teams` takes a comma-separated list, for example `teams=PD,ENG`.
+
+- The command puts the table after the last `[repos."…"]` table, or at the end of a file with none. It keeps each other byte of the file, comments included.
+- It loads the new text before it writes the file. If the load fails, the file stays as it was, and the command prints the load error.
+- It refuses a key that already has a table, and an `<owner>/*` key.
+- It prints the new table, then restarts the Scheduler so that the table applies to the next `lineup add`.
+- `lineup repo init <owner>/<repo> --defaults` writes the `init` arguments of `lineup repo detect`, with no questions.
 
 ### Migration
 
