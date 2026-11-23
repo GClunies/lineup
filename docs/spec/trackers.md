@@ -192,7 +192,7 @@ The description, in Markdown.
 | `blocked_by` | Local Issue IDs, in any case | No |
 
 - The next ID is one more than the highest n of its prefix in the folder. The adapter creates the file with `O_EXCL`, so two writers cannot take one ID.
-- A new Issue gets `status: backlog`. The Board shows a `backlog` Issue in Backlog and a `todo` Issue in Ready.
+- A new Issue gets `status: backlog`. The Board shows a `backlog` Issue in Backlog and a `todo` Issue in Up next.
 - The branch name is `<ID>-<title slug>` in lower case, for example `local-7-retry-failed-loads-before-alerting` or `hod-3-block-linear-writes`. A GitHub Issue's branch is `gh-<n>-<title slug>`.
 - The adapter reads files that the Orchestrator or the user wrote. The work view leaves out a file that the adapter cannot parse.
 
@@ -211,10 +211,10 @@ The searches cover every repository. The Board shows an Issue only when a checko
 
 | Group | GitHub Issue |
 |---|---|
-| Ready | Open, without the backlog label |
+| Up next | Open, without the backlog label |
 | Backlog | Open, with the backlog label |
 
-The backlog label is the `backlog` key of `[github.labels]`. Without the key, the label is `backlog`. An empty value puts every GitHub Issue in Ready. The label name matches without case, as GitHub matches label names.
+The backlog label is the `backlog` key of `[github.labels]`. Without the key, the label is `backlog`. An empty value puts every GitHub Issue in Up next. The label name matches without case, as GitHub matches label names.
 
 ```toml
 [github.labels]

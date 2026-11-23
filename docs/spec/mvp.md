@@ -60,7 +60,7 @@ lineup has no dependency on herdr. It copies the Linear client, OAuth, cache, an
 
 A Task with the Needs you flag shows in the Needs you group, whatever its Stage is.
 
-A Task has no Stage before Working. A Task exists only once its Worker starts. An Issue that has not started is an Issue row in Ready or Backlog, not a Task.
+A Task has no Stage before Working. A Task exists only once its Worker starts. An Issue that has not started is an Issue row in Up next or Backlog, not a Task.
 
 ### Stage contracts
 
@@ -345,7 +345,7 @@ One command adds a Task and starts it: `lineup add <ISSUE>` for an Issue, or `li
 
 This sequence runs in the background. The Board shows only the Task as it changes Stage.
 
-1. The Scheduler checks the WIP cap. If the cap is full and `--over-cap` is absent, `lineup add` adds nothing and fails with `wip cap full`, and the Issue stays in Ready. The Board then asks the user to start this Task once over the cap or to raise the cap. A start over the cap shows `+1 over` in the header.
+1. The Scheduler checks the WIP cap. If the cap is full and `--over-cap` is absent, `lineup add` adds nothing and fails with `wip cap full`, and the Issue stays in Up next. The Board then asks the user to start this Task once over the cap or to raise the cap. A start over the cap shows `+1 over` in the header.
 2. The Scheduler assigns the Issue to the user and sets the `started` status from the team's status map. See [Linear status map](#linear-status-map).
 3. The Scheduler picks the Repo. A Linear Issue gets its Repo as [Pick the Repo of a Linear Issue](#pick-the-repo-of-a-linear-issue) says. A GitHub Issue gets the checkout of its repository. A Local Issue gets the Repo of its prefix, else the Repo of its `repo` field. If no Repo fits, a fuzzy picker opens. For a Linear Issue, the picker remembers the choice for the Issue's Project.
 4. The Scheduler creates the Repo session if it does not exist, and then a setup tab for the Task with `--focus=false --keep-open`.
@@ -481,7 +481,7 @@ Each key has one checkout. A linked worktree of a Repo is never a checkout, so i
 
 ### Migration
 
-A file from before this model holds `[[repos]]` tables with a `match` glob, layer keys at the top level, or `trackers` lists. Such a file stops the load with an error that names `lineup config migrate`. The command rewrites the file once:
+A file from before this model holds `[[repos]]` tables with a `match` glob, layer keys at the top level, or `trackers` lists. Such a file stops the load with an error that names `lineup config migrate`. A `[board]` list that names `ready` or `queued` gives a Board error that names the command. The command rewrites the file once:
 
 - A `[[repos]]` table whose `match` is a path becomes `[repos."<owner>/<repo>"]`, with the key of that checkout.
 - A `[[repos]]` table whose `match` is a `<folder>/*` glob becomes `[repos."<owner>/*"]`, if each checkout that the glob matches has that owner. Otherwise the command fails and names the glob.
@@ -490,6 +490,7 @@ A file from before this model holds `[[repos]]` tables with a `match` glob, laye
 - The layer keys at the top level move into `[defaults]`.
 - A `trackers` list of one Tracker becomes a `tracker` key, for example `trackers = ["local"]` becomes `tracker = "local"`. A list of more or fewer Trackers makes the command fail and name the Repo key.
 - A table with `teams` and no `tracker`, in the table or in its owner's table, gets `tracker = "linear"`.
+- In `order`, `collapsed`, and `hidden` of `[board]`, the first `ready` or `queued` becomes `up_next`, and the other goes away. For example, `order = ["needs_you", "ready", "queued", "working"]` becomes `order = ["needs_you", "up_next", "working"]`.
 
 The command keeps the comments. It writes `config.toml.bak` first. If `config.toml.bak` already exists, the command stops and changes nothing, so an older backup stays. Then it loads the new file, and it puts the old file back if the load fails. A file in the new form stays as it is. Run `lineup restart` after the migration.
 
@@ -532,12 +533,12 @@ Each key layers on its own, as in `[budgets]`. A value that is not in the table 
 
 ```toml
 [board]
-order = ["done", "needs_you", "working", "waiting", "ready", "backlog"]
+order = ["done", "needs_you", "working", "waiting", "up_next", "backlog"]
 collapsed = ["backlog"]
 hidden = ["done"]
 ```
 
-`order` lists the groups, first to last. A group that it leaves out follows the listed ones, in the default order: `needs_you`, `follow_up`, `backlog`, `ready`, `working`, `waiting`, `done`. `collapsed` lists the groups that start closed. Its default is `backlog` and `done`. `hidden` lists the groups that the Board does not show. Its default is none. A key that is absent takes its default, and an empty list means none. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors, but they do not fail the load. The Scheduler starts, and the Board uses the default layout. The Board shows the error on its own line until it quits, for example `config: board.hidden: unknown section "dun" (default layout)`. If the load fails for any other reason, the Board runs with defaults and shows `config: <error>` the same way. The key `queued` named a group that lineup no longer has. A list that names it loads with a warning that names the key, and the Board keeps the rest of the layout.
+`order` lists the groups, first to last. A group that it leaves out follows the listed ones, in the default order: `needs_you`, `follow_up`, `backlog`, `up_next`, `working`, `waiting`, `done`. `collapsed` lists the groups that start closed. Its default is `backlog` and `done`. `hidden` lists the groups that the Board does not show. Its default is none. A key that is absent takes its default, and an empty list means none. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors, but they do not fail the load. The Scheduler starts, and the Board uses the default layout. The Board shows the error on its own line until it quits, for example `config: board.hidden: unknown section "dun" (default layout)`. If the load fails for any other reason, the Board runs with defaults and shows `config: <error>` the same way. The old keys `ready` and `queued` are errors of this kind, and the message names `lineup config migrate`. That command writes one `up_next` at the place of the first of the two keys in each list, and it drops the other.
 
 `linear_client_id` is a top-level key. Put it above the first `[table]`, or TOML reads it as part of that table. Leave it out to sign in through lineup's own Linear OAuth app, which any workspace can use. To use your own app, register an OAuth app in Linear with the redirect URI `http://localhost:47821/callback` and no client credentials. Then set its client ID here.
 
@@ -624,9 +625,9 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
    ENG-588  Backfill events                                               permission  3m   data
    ENG-580  Retry failed loads                                            drafts      1m   data
  BACKLOG  7 …
- READY  2
+ UP NEXT  2
    ENG-611  Move the retry job                                            unblocked   ▂▄▆
-   LOCAL-7  Rename the log flag                                           ready            data
+   LOCAL-7  Rename the log flag                                           up next          data
  WORKING  2
    WEB-12   Fix map tooltip                                               responding  5m   web
    ENG-592  Fix flaky test                                                CI debug    1m   data
@@ -641,7 +642,7 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
 
 The header shows the WIP cap and the count of the build Tasks that need the user. It counts the review Tasks that need the user in parentheses, when there are any: `(+1 in reviews)`. It has no count for the other groups, because each group heading shows its own count. The header also shows `reviews paused` while the review queues are paused, and a warning when the Scheduler is offline. At 80 columns, the header with `+1 over` and the review count fits.
 
-Each row shows a status word after the title. A Task in Needs you with a flag shows the reason of the flag, for example `stopped` or `PR closed`. Any other Task shows its Stage, for example `working` or `in review`. An Issue row shows `blocked`, `unblocked`, `ready`, or `backlog`. `docs/spec/one-board.md` lists every status word.
+Each row shows a status word after the title. A Task in Needs you with a flag shows the reason of the flag, for example `stopped` or `PR closed`. Any other Task shows its Stage, for example `working` or `in review`. An Issue row shows `blocked`, `unblocked`, `up next`, or `backlog`. `docs/spec/one-board.md` lists every status word.
 
 The strip under the rows shows the selected row: the full title, then the ID, the Stage, the Repo, the PR number, and the full note. The strip also shows the Board message and the key hints at the same time. The note says what happens. The note of a build Task with a PR starts with the PR number and where the PR stands with its reviewers. Then it says what happens now, or the next gap that the Landing bar has. The approval gap never shows, because the review state already says it.
 
@@ -665,9 +666,9 @@ A review Task shows `#N reviewing`, `#N review ready` with `· head moved` when 
 
 Reviews by bots do not count as a person's review.
 
-The groups are Needs you, Follow-up, Backlog, Ready, Working, Waiting, and Done. By default they show in that order: Needs you and Follow-up come first, and the other groups follow the development cycle. The `[board]` table in the global file changes the order. Follow-up holds the Done build Tasks whose Issues are still open in their Trackers. `docs/spec/one-board.md` ("Follow-up") gives the rule for each Tracker. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
+The groups are Needs you, Follow-up, Backlog, Up next, Working, Waiting, and Done. By default they show in that order: Needs you and Follow-up come first, and the other groups follow the development cycle. The `[board]` table in the global file changes the order. Follow-up holds the Done build Tasks whose Issues are still open in their Trackers. `docs/spec/one-board.md` ("Follow-up") gives the rule for each Tracker. Backlog and Up next hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
 
-Each group with at least one row has a heading that shows the group name and its row count, for example `BACKLOG  7`. A heading is a row that the user can select, except the Needs you heading. `j` and `k` stop on each heading and skip the rows of a closed group. `enter` on a heading opens or closes the group. A closed group shows its heading with a `…` mark and hides its rows, as `BACKLOG  7 …` does. Needs you never closes. This keeps a long Backlog or Done group from pushing Ready and Working off the screen.
+Each group with at least one row has a heading that shows the group name and its row count, for example `BACKLOG  7`. A heading is a row that the user can select, except the Needs you heading. `j` and `k` stop on each heading and skip the rows of a closed group. `enter` on a heading opens or closes the group. A closed group shows its heading with a `…` mark and hides its rows, as `BACKLOG  7 …` does. Needs you never closes. This keeps a long Backlog or Done group from pushing Up next and Working off the screen.
 
 Backlog and Done start closed, and `[board] collapsed` changes that. `enter` or a tap on a heading opens or closes a group for this run only. `[board] hidden` hides groups: a hidden group shows no heading and no rows, and `j` and `k` skip it. `d` shows or hides Done for this run, whatever `hidden` says, and opens Done when it shows. While the filter holds text, a hidden group shows its matches. When a Task moves into a closed group, the selection goes to that group's heading. When `n` adds a local Issue, lineup shows and opens Backlog for this run and selects the new row.
 
@@ -719,7 +720,7 @@ A Task alerts when it enters the Needs you group or Done. It alerts again only a
 |---|---|
 | The Board | It prints an OSC 777 notification for each alert of a build Task that reaches Ready to land or Done. Rex shows it as a desktop toast for the Board's pane. A click on the toast opens that pane. The toast names the Task and the PR, for example `ENG-571 #4636 ✓ approved · ready to land \| Rate limit login`. A build Task that enters Needs you for a flag gets no toast, because the status record reports it. A Task in Ready to land with a flag gets no toast either. The view that the Board opens on makes no toast. |
 | The status record | While a build Task is in Needs you, the Board keeps one Rex program status record (OSC 7501) on its pane. The record has `state=blocked` and `kind=question`. Its message names the count, for example `2 Tasks need you`. The count is the one that the header shows. Rex shows a dot and the message on the `lineup` tab. The Board sends the record at start, and again each time the set of those Tasks changes. A Task changes the set when it joins or leaves Needs you, or when its Stage or its flag changes. A review Task does not count. When no build Task is in Needs you, the Board clears the record. Rex drops the record when the Board quits. |
-| The free slot toast | When a build Task alerts for Done and the started build Tasks are fewer than the WIP cap, the Board sends one more toast that names the first Ready row, for example `1 slot free, next ENG-611: Move the retry job`. A Board view sends at most one such toast. With no Ready row, it sends none. The Board does not start the Issue. |
+| The free slot toast | When a build Task alerts for Done and the started build Tasks are fewer than the WIP cap, the Board sends one more toast that names the first Up next row, for example `1 slot free, next ENG-611: Move the retry job`. A Board view sends at most one such toast. With no Up next row, it sends none. The Board does not start the Issue. |
 
 The Orchestrator's one alert is each PR that is ready to land. Its `UserPromptSubmit` hook runs `lineup ready` before each turn. The command prints one line for each build Task in Ready to land with no flag, for example `Ready to land: ENG-571, PR #4636 https://github.com/acme/data/pull/4636, Rate limit login`. It prints nothing when no PR is ready. The hook costs no agent turn, so the Orchestrator learns a ready PR at the user's next message. See [ADR 0031](../adr/0031-the-orchestrator-learns-each-pr-that-is-ready-to-land.md).
 
@@ -757,7 +758,7 @@ Each time that `lineup` opens the Hub, it writes `lineup.lua` beside Rex's `init
 | Pause Reviews, Resume Reviews | Run `lineup reviews pause` or `lineup reviews resume`. |
 | Set a Task's Model… | Lists the Tasks that are not Done, then the Claude models. The user can type another model. It runs `lineup set <task> model=<model>`. The model applies when the Task's next Worker starts. |
 
-When `lineup add` finds the WIP cap full, the action asks to start the Task once over the cap. If the user says no, it adds nothing, and the Issue stays in Ready.
+When `lineup add` finds the WIP cap full, the action asks to start the Task once over the cap. If the user says no, it adds nothing, and the Issue stays in Up next.
 
 The actions ask with Rex prompts, which need Rex API revision 17 or later. On an older server, `lineup.lua` defines no action. Rex asks every connected Rex app, so the user can answer on another device. The first answer wins.
 

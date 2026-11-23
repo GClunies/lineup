@@ -58,9 +58,9 @@ _Avoid_: Text Task, one-off
 The `prefix` key of a Repo's `[repos."<owner>/<repo>"]` table, for example `hod`, in any case. The Repo's Local Issues and ad hoc Tasks take IDs of the form `<PREFIX>-<n>`, numbered on their own, for example `HOD-3`.
 _Avoid_: team key
 
-**Ready**:
+**Up next**:
 The Board group of the user's own Issues that have no Task and that the user chose to do next: a Linear Issue assigned to the user in an unstarted state, a local Issue with `status: todo`, or one of the user's own open GitHub Issues without the backlog label.
-_Avoid_: Todo, next up
+_Avoid_: Ready, Todo, Queued
 
 **Backlog**:
 The Board group of the user's own Issues that have no Task and that wait for the user to choose them: a Linear Issue assigned to the user in a backlog or triage state, a local Issue with `status: backlog`, or one of the user's own open GitHub Issues with the backlog label.
@@ -85,7 +85,7 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The top of the `lineup` tab, above the Orchestrator. It lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Follow-up, Backlog, Ready, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless it still keeps its tab or its worktree.
+The top of the `lineup` tab, above the Orchestrator. It lists the build Tasks and the user's own Issues that have no Task, grouped as Needs you, Follow-up, Backlog, Up next, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless it still keeps its tab or its worktree.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:
