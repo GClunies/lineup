@@ -120,7 +120,7 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 		})
 	}
 	out := screen(e.m)
-	inOrder(t, out, "BACKLOG", "octo/sandbox#10", "READY", "octo/sandbox#12", "octo/sandbox#14", "octo/sandbox#11", "QUEUED", "octo/sandbox#16")
+	inOrder(t, out, "BACKLOG", "sandbox#10", "READY", "sandbox#12", "sandbox#14", "sandbox#11", "QUEUED", "sandbox#16")
 	for _, want := range []string{"Drop old API keys", "blocked by #12", "unblocked"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("screen lacks %q:\n%s", want, out)

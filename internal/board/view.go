@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/scheduler"
 )
@@ -296,7 +297,7 @@ const (
 )
 
 var columns = [numCols]column{
-	colID:    {task: func(_ Model, t scheduler.TaskView) string { return t.ID }, issue: func(r issueRow) string { return r.ID }},
+	colID:    {task: func(_ Model, t scheduler.TaskView) string { return boardID(t.ID) }, issue: func(r issueRow) string { return boardID(r.ID) }},
 	colTitle: {min: 12, task: func(_ Model, t scheduler.TaskView) string { return t.Title }, issue: func(r issueRow) string { return r.Title }},
 	colNote:  {min: 12, max: 48, task: func(_ Model, t scheduler.TaskView) string { return t.Note }, issue: issueRow.note},
 	colTail:  {drop: 3, task: func(m Model, t scheduler.TaskView) string { return m.age(t) }, issue: issueRow.priorityText},
@@ -313,20 +314,32 @@ const (
 	noteKeep = 33
 )
 
-// columnWidths drops columns until the title gets titleWant cells beside the
-// note, or beside noteKeep cells of it when the note is longer. The note then
-// takes what the title leaves, but never less than noteKeep. A narrow row cuts the
-// title down to its minimum first.
-func (m Model) columnWidths(w int) [numCols]int {
-	var ws [numCols]int
-	for _, t := range m.tasks {
-		for i, c := range columns {
-			ws[i] = max(ws[i], lipgloss.Width(c.task(m, t)))
-		}
+// boardID is the ID that the ID column shows. A GitHub ID drops its owner,
+// because the Repo column names the repository.
+func boardID(id string) string {
+	if _, _, err := github.ParseIssueID(id); err != nil {
+		return id
 	}
-	for _, r := range m.issues {
-		for i, c := range columns {
-			ws[i] = max(ws[i], lipgloss.Width(c.issue(r)))
+	_, short, _ := strings.Cut(id, "/")
+	return short
+}
+
+// cellRow is a Task or Issue row before it is laid out.
+type cellRow struct {
+	id    string
+	cells [numCols]string
+	faded bool
+}
+
+// columnWidths fits the columns to the rows on screen. It drops columns until
+// the title gets titleWant cells beside the note, or beside noteKeep cells of it
+// when the note is longer. The note then takes what the title leaves, but never
+// less than noteKeep. A narrow row cuts the title down to its minimum first.
+func columnWidths(w int, rows []cellRow) [numCols]int {
+	var ws [numCols]int
+	for _, r := range rows {
+		for i, c := range r.cells {
+			ws[i] = max(ws[i], lipgloss.Width(c))
 		}
 	}
 	for i, c := range columns {
@@ -365,23 +378,60 @@ func (m Model) columnWidths(w int) [numCols]int {
 }
 
 func (m Model) rowLines(w int) []rowLine {
-	ws := m.columnWidths(w)
-	row := func(id string, cells [numCols]string, faded bool) string {
+	type group struct {
+		name string
+		rows []cellRow
+	}
+	var groups []group
+	var onScreen []cellRow
+	for _, g := range m.lay.order {
+		if !m.shown(g) {
+			continue
+		}
+		var rows []cellRow
+		for _, t := range m.tasks {
+			if t.Group == g {
+				r := cellRow{id: t.ID, faded: g == groupDone || g == "Queued"}
+				for i, c := range columns {
+					r.cells[i] = c.task(m, t)
+				}
+				rows = append(rows, r)
+			}
+		}
+		for _, is := range m.issues {
+			if is.Group == g {
+				r := cellRow{id: is.ID, faded: g == groupBacklog || len(is.Blockers) > 0}
+				for i, c := range columns {
+					r.cells[i] = c.issue(is)
+				}
+				rows = append(rows, r)
+			}
+		}
+		if len(rows) == 0 {
+			continue
+		}
+		groups = append(groups, group{g, rows})
+		if m.open(g) {
+			onScreen = append(onScreen, rows...)
+		}
+	}
+	ws := columnWidths(w, onScreen)
+	row := func(r cellRow) string {
 		marker := "  "
-		if id == m.sel {
+		if r.id == m.sel {
 			marker = "▸ "
 		}
 		var parts []string
-		for i, c := range cells {
+		for i, c := range r.cells {
 			if ws[i] > 0 {
 				parts = append(parts, pad(c, ws[i]))
 			}
 		}
 		s := ansi.Truncate(" "+marker+strings.Join(parts, "  "), w, "…")
 		switch {
-		case id == m.sel:
+		case r.id == m.sel:
 			return selRow.Render(s)
-		case faded:
+		case r.faded:
 			return dim.Render(s)
 		}
 		return s
@@ -398,35 +448,13 @@ func (m Model) rowLines(w int) []rowLine {
 		return headRow.Render(ansi.Truncate(s, w, "…"))
 	}
 	var out []rowLine
-	for _, g := range m.lay.order {
-		if !m.shown(g) {
+	for _, g := range groups {
+		out = append(out, rowLine{headingKey(g.name), heading(g.name, len(g.rows))})
+		if !m.open(g.name) {
 			continue
 		}
-		var lines []rowLine
-		for _, t := range m.tasks {
-			if t.Group == g {
-				var cells [numCols]string
-				for i, c := range columns {
-					cells[i] = c.task(m, t)
-				}
-				lines = append(lines, rowLine{t.ID, row(t.ID, cells, g == groupDone || g == "Queued")})
-			}
-		}
-		for _, r := range m.issues {
-			if r.Group == g {
-				var cells [numCols]string
-				for i, c := range columns {
-					cells[i] = c.issue(r)
-				}
-				lines = append(lines, rowLine{r.ID, row(r.ID, cells, g == groupBacklog || len(r.Blockers) > 0)})
-			}
-		}
-		if len(lines) == 0 {
-			continue
-		}
-		out = append(out, rowLine{headingKey(g), heading(g, len(lines))})
-		if m.open(g) {
-			out = append(out, lines...)
+		for _, r := range g.rows {
+			out = append(out, rowLine{r.id, row(r)})
 		}
 	}
 	switch {
