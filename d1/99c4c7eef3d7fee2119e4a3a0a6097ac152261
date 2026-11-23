@@ -1,0 +1,32 @@
+GLOSSARY.md
+  s_6c90caccc4b092::t_3bec076c31131f 61,63,88
+docs/adr/0034-the-board-has-one-up-next-group.md
+  s_6c90caccc4b092::t_36201b869b1f5b 1-19
+docs/spec/mvp.md
+  s_6c90caccc4b092::t_046bb6233bf1ae 493
+  s_6c90caccc4b092::t_1ac7571990ce0b 63,348,536,541,628,630,645,669,671,723,761
+  s_6c90caccc4b092::t_34c212f5927cf7 484
+docs/spec/one-board.md
+  s_6c90caccc4b092::t_02d39001032757 3
+  s_6c90caccc4b092::t_030ad89a2cf918 13,20,22,38,40,49,59,75,104,114,117,176-177,264,268,273,289,295,304,307,325,347
+docs/adr/0019-the-board-holds-my-issues.md
+  s_6c90caccc4b092::t_45c47340db11fd 3-4
+docs/spec/trackers.md
+  s_6c90caccc4b092::t_89907a9fa939c5 195,214,217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d199c4c7eef3d7fee2119e4a3a0a6097ac152261",
+  "prompts": {},
+  "sessions": {
+    "s_6c90caccc4b092": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bf254d47-111a-4ca5-b7ba-93756441fa61",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
