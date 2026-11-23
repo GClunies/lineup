@@ -1,0 +1,57 @@
+internal/lifecycle/board_test.go
+  s_4a61a1e16f71a0::t_f853e48eef7a87 508-509
+docs/mockups/design.src.html
+  s_4a61a1e16f71a0::t_ecb75c0e6fde69 226
+  s_4a61a1e16f71a0::t_defd10c7de5844 82
+  s_4a61a1e16f71a0::t_d742dfb361eeb9 260
+  s_4a61a1e16f71a0::t_39a19bb04a7563 29
+  s_4a61a1e16f71a0::t_c2f308b26577d2 123
+internal/scheduler/merged_test.go
+  s_4a61a1e16f71a0::t_e6971f0f378caf 316
+CLAUDE.md
+  s_4a61a1e16f71a0::t_988c8e1e91124d 3-9
+docs/plans/user-closes-tabs.md
+  s_4a61a1e16f71a0::t_b21275079d1747 409
+  s_4a61a1e16f71a0::t_16379e8f1ecc78 89-90
+  s_4a61a1e16f71a0::t_7de3530c060c08 102
+  s_4a61a1e16f71a0::t_b51d2591557182 187
+  s_4a61a1e16f71a0::t_462c06d07fa4aa 434
+  s_4a61a1e16f71a0::t_40afcc5bb0cc1a 101
+  s_4a61a1e16f71a0::t_371cc88362eb77 436
+  s_4a61a1e16f71a0::t_4cf7d89a513fc3 167-169
+  s_4a61a1e16f71a0::t_193b76ae530a69 257
+  s_4a61a1e16f71a0::t_714314e1390775 276
+  s_4a61a1e16f71a0::t_34c5ea9dc9a453 186
+  s_4a61a1e16f71a0::t_4fde1da2b467ac 333
+  s_4a61a1e16f71a0::t_794cfb0a8bd456 37
+docs/plans/one-front-agent.md
+  s_4a61a1e16f71a0::t_91ca6a6103323d 507
+  s_4a61a1e16f71a0::t_bd099a7706cae6 40
+  s_4a61a1e16f71a0::t_ab083134fb6eb3 132
+  s_4a61a1e16f71a0::t_9e313a2b80b1b3 491
+  s_4a61a1e16f71a0::t_38125ee5d5ea00 140
+  s_4a61a1e16f71a0::t_cdb2f3a905f0a4 201
+  s_4a61a1e16f71a0::t_e7984b8ea49242 194
+  s_4a61a1e16f71a0::t_d7c5c80464d5c1 131
+  s_4a61a1e16f71a0::t_2e86b528128cea 508
+  s_4a61a1e16f71a0::t_b7b916ad1cc824 520
+  s_4a61a1e16f71a0::t_ec9d8e1542dabc 141
+internal/harness/claude/claude.go
+  s_4a61a1e16f71a0::t_598fe800871163 336
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1a2366ef5a69f14f4b197e74dfb07f9cf8b2792c",
+  "prompts": {},
+  "sessions": {
+    "s_4a61a1e16f71a0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0a6f24cf-ea8c-43bf-adb9-47209204a1d0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
