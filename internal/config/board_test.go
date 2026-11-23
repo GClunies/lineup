@@ -10,7 +10,7 @@ import (
 
 func TestBoardDefaults(t *testing.T) {
 	want := Board{
-		Order:     []string{"Needs you", "Backlog", "Ready", "Queued", "Working", "Waiting", "Done"},
+		Order:     []string{"Needs you", "Follow-up", "Backlog", "Ready", "Queued", "Working", "Waiting", "Done"},
 		Collapsed: []string{"Backlog", "Done"},
 		Hidden:    []string{},
 	}
@@ -32,7 +32,7 @@ order = ["done", "needs_you", "working", "waiting", "queued", "ready", "backlog"
 hidden = ["done"]
 `)
 	want := Board{
-		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Queued", "Ready", "Backlog"},
+		Order:     []string{"Done", "Needs you", "Working", "Waiting", "Queued", "Ready", "Backlog", "Follow-up"},
 		Collapsed: []string{"Backlog", "Done"},
 		Hidden:    []string{"Done"},
 	}
@@ -47,9 +47,21 @@ func TestBoardEmptyCollapsedMeansNoneAndOrderKeepsTheRest(t *testing.T) {
 	if got := b.Collapsed; len(got) != 0 {
 		t.Fatalf("collapsed %v, want none", got)
 	}
-	want := []string{"Waiting", "Ready", "Needs you", "Backlog", "Queued", "Working", "Done"}
+	want := []string{"Waiting", "Ready", "Needs you", "Follow-up", "Backlog", "Queued", "Working", "Done"}
 	if got := b.Order; !slices.Equal(got, want) {
 		t.Fatalf("order %v, want %v", got, want)
+	}
+}
+
+func TestBoardTakesFollowUpInEveryList(t *testing.T) {
+	g := load(t, "[board]\norder = [\"waiting\", \"follow_up\"]\ncollapsed = [\"follow_up\"]\nhidden = [\"follow_up\", \"done\"]\n")
+	want := Board{
+		Order:     []string{"Waiting", "Follow-up", "Needs you", "Backlog", "Ready", "Queued", "Working", "Done"},
+		Collapsed: []string{"Follow-up"},
+		Hidden:    []string{"Follow-up", "Done"},
+	}
+	if got, err := g.Board(); err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("board %+v, %v, want %+v", got, err, want)
 	}
 }
 
