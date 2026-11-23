@@ -1,0 +1,26 @@
+internal/board/start.go
+  s_dae4353c4a0fc0::t_b7b46675f7828d 57-58
+  s_dae4353c4a0fc0::t_bcf734242766a0 144-145,148
+  s_dae4353c4a0fc0::t_097b32ef84f536 146-147
+  s_dae4353c4a0fc0::t_75e3ec4b58422e 135
+  s_dae4353c4a0fc0::t_49f162b8293577 192-194
+internal/board/start_test.go
+  s_dae4353c4a0fc0::t_65c17215b9ad5d 237-241,243-258,260-263,266-268
+  s_dae4353c4a0fc0::t_d5195816a8a81c 242,259,264-265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ca8e0f3289944358a24f73bf92ceccc0157c97aa",
+  "prompts": {},
+  "sessions": {
+    "s_dae4353c4a0fc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a7909f97-d7e4-4e97-b846-f43f4021cdf8",
+        "model": "unknown"
+      },
+      "human_author": null
+    }
+  }
+}
