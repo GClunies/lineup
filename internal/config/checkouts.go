@@ -45,15 +45,24 @@ func (g *Global) keyOf(path string) string {
 	return g.keys[path]
 }
 
-// findCheckouts lists the git checkouts at each root, its children, and its
-// grandchildren, sorted by path. The walk does not go into a checkout or
-// into a folder whose name starts with a dot.
+// isMainCheckout reports whether dir is a main git checkout, whose .git is a
+// folder. A linked worktree has a .git file and is never a Repo.
+func isMainCheckout(dir string) bool {
+	fi, err := os.Stat(filepath.Join(dir, ".git"))
+	return err == nil && fi.IsDir()
+}
+
+// findCheckouts lists the main git checkouts at each root, its children, and
+// its grandchildren, sorted by path. The walk does not go into a folder with
+// a .git folder or file, or into a folder whose name starts with a dot.
 func findCheckouts(home string, roots []string) []string {
 	found := map[string]bool{}
 	var walk func(dir string, depth int)
 	walk = func(dir string, depth int) {
-		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-			found[dir] = true
+		if fi, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			if fi.IsDir() {
+				found[dir] = true
+			}
 			return
 		}
 		if depth == 2 {
@@ -73,7 +82,7 @@ func findCheckouts(home string, roots []string) []string {
 	return slices.Sorted(maps.Keys(found))
 }
 
-// Checkouts lists the git checkouts below the roots, sorted by path. It
+// Checkouts lists the main git checkouts below the roots, sorted by path. It
 // walks the roots on each call, so a new clone shows up at once.
 func (g *Global) Checkouts() []Checkout {
 	var out []Checkout
@@ -83,34 +92,59 @@ func (g *Global) Checkouts() []Checkout {
 	return out
 }
 
-// checkoutFor picks the checkout of the Repo key, which ignores case. Of
-// several checkouts with the key, it picks the one named like the repo, if
-// only one is. all lists every checkout with the key.
-func (g *Global) checkoutFor(key string) (path string, all []string) {
-	_, repo, _ := strings.Cut(key, "/")
-	var named []string
+// checkoutsOf lists the checkouts of the Repo key, which ignores case.
+func (g *Global) checkoutsOf(key string) []string {
+	var out []string
 	for _, c := range g.Checkouts() {
 		if strings.EqualFold(c.Key, key) {
-			all = append(all, c.Path)
-			if strings.EqualFold(filepath.Base(c.Path), repo) {
-				named = append(named, c.Path)
-			}
+			out = append(out, c.Path)
 		}
 	}
-	switch {
-	case len(all) == 1:
-		return all[0], all
-	case len(named) == 1:
-		return named[0], all
-	}
-	return "", all
+	return out
 }
 
-// CheckoutFor is the checkout of the Repo key, for example the checkout of
-// a GitHub Issue's repository.
+// clash says that several checkouts have the Repo key.
+func clash(key string, paths []string) string {
+	return fmt.Sprintf("%d checkouts have the key %s: %s", len(paths), key, strings.Join(paths, " and "))
+}
+
+// KeyClash says which checkouts have the Repo key, when more than one has
+// it. It is "" when one or none has it.
+func (g *Global) KeyClash(key string) string {
+	if all := g.checkoutsOf(key); len(all) > 1 {
+		return clash(key, all)
+	}
+	return ""
+}
+
+// KeyClashes describes each Repo key that more than one checkout has.
+// lineup picks no checkout for such a key.
+func (g *Global) KeyClashes() []string {
+	byKey := map[string][]Checkout{}
+	for _, c := range g.Checkouts() {
+		k := strings.ToLower(c.Key)
+		byKey[k] = append(byKey[k], c)
+	}
+	var out []string
+	for _, k := range slices.Sorted(maps.Keys(byKey)) {
+		if cs := byKey[k]; len(cs) > 1 {
+			var paths []string
+			for _, c := range cs {
+				paths = append(paths, c.Path)
+			}
+			out = append(out, clash(cs[0].Key, paths))
+		}
+	}
+	return out
+}
+
+// CheckoutFor is the one checkout of the Repo key, for example the checkout
+// of a GitHub Issue's repository.
 func (g *Global) CheckoutFor(key string) (string, bool) {
-	path, _ := g.checkoutFor(key)
-	return path, path != ""
+	if all := g.checkoutsOf(key); len(all) == 1 {
+		return all[0], true
+	}
+	return "", false
 }
 
 // FindCheckout turns the --repo of lineup add, or the repo of a Local Issue,
@@ -120,12 +154,12 @@ func (g *Global) FindCheckout(name string) (string, error) {
 	isPath := strings.HasPrefix(name, "/") || strings.HasPrefix(name, "~/") || strings.HasPrefix(name, ".")
 	if !isPath {
 		if _, repo, ok := splitKey(name); ok && repo != "*" {
-			path, all := g.checkoutFor(name)
-			switch {
-			case path != "":
-				return path, nil
-			case len(all) > 1:
-				return "", fmt.Errorf("%d checkouts have the origin %s and none is named %s: pass a path, %s", len(all), name, repo, strings.Join(all, " or "))
+			switch all := g.checkoutsOf(name); len(all) {
+			case 0:
+			case 1:
+				return all[0], nil
+			default:
+				return "", fmt.Errorf("%s: pass a path", clash(name, all))
 			}
 		}
 		if !strings.Contains(name, "/") {
@@ -136,8 +170,8 @@ func (g *Global) FindCheckout(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, err := os.Stat(filepath.Join(abs, ".git")); err != nil {
-		return "", fmt.Errorf("%s is not a git checkout", abs)
+	if !isMainCheckout(abs) {
+		return "", fmt.Errorf("%s is not a main git checkout", abs)
 	}
 	return abs, nil
 }

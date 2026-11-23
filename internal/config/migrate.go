@@ -132,8 +132,8 @@ func oldRepos(entries []map[string]any, home string) ([]oldRepo, error) {
 func repoKeyOf(r oldRepo, home string) (string, error) {
 	if !strings.ContainsAny(r.match, "*?[") {
 		path := filepath.Clean(expand(home, r.match))
-		if _, err := os.Stat(filepath.Join(path, ".git")); err != nil {
-			return "", fmt.Errorf("the [[repos]] match %q is not a git checkout, so it has no owner/repo key", r.match)
+		if !isMainCheckout(path) {
+			return "", fmt.Errorf("the [[repos]] match %q is not a main git checkout, so it has no owner/repo key", r.match)
 		}
 		return checkoutKey(path), nil
 	}
@@ -157,12 +157,12 @@ func repoKeyOf(r oldRepo, home string) (string, error) {
 	return "", fmt.Errorf("the checkouts that the [[repos]] glob %q matches have more than one owner (%s), so no [repos.\"<owner>/*\"] table can replace it", r.match, strings.Join(owners, ", "))
 }
 
-// globCheckouts are the git checkouts that a [[repos]] match finds.
+// globCheckouts are the main git checkouts that a [[repos]] match finds.
 func globCheckouts(home, match string) []string {
 	dirs, _ := filepath.Glob(filepath.Clean(expand(home, match)))
 	var out []string
 	for _, d := range dirs {
-		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
+		if isMainCheckout(d) {
 			out = append(out, d)
 		}
 	}

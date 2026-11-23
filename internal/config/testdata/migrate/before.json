@@ -98,58 +98,6 @@
       "Trackers": null,
       "Prefix": ""
     },
-    "repos/crexi/data.review-pr-1": {
-      "Resolved": {
-        "WIPCap": 5,
-        "PR": true,
-        "PollInterval": 30000000000,
-        "Budgets": {
-          "ci_debug": 3,
-          "responding": 3,
-          "review_cycles": 5
-        },
-        "Bar": {
-          "checks": "required",
-          "threads": "replied",
-          "approvals": "required",
-          "bot": {
-            "bot": "greptile",
-            "title": "Greptile",
-            "min_score": 5,
-            "top_score": 5
-          }
-        },
-        "Stages": {
-          "ci_debug": {
-            "Model": "claude-opus-5-5",
-            "Effort": "high",
-            "Skill": "pstack:poteto-mode",
-            "Command": ""
-          },
-          "responding": {
-            "Model": "claude-opus-5-5",
-            "Effort": "high",
-            "Skill": "pstack:poteto-mode",
-            "Command": ""
-          },
-          "reviewing": {
-            "Model": "claude-opus-5-5",
-            "Effort": "high",
-            "Skill": "pstack:poteto-mode",
-            "Command": ""
-          },
-          "working": {
-            "Model": "claude-opus-5-5",
-            "Effort": "high",
-            "Skill": "pstack:poteto-mode",
-            "Command": ""
-          }
-        },
-        "Claude": ""
-      },
-      "Trackers": null,
-      "Prefix": ""
-    },
     "repos/crexi/de-interview-exercise": {
       "Resolved": {
         "WIPCap": 5,
