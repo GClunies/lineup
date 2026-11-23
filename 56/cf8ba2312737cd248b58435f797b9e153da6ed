@@ -1,0 +1,36 @@
+internal/github/own_test.go
+  s_bd7f7947992ef2::t_1525081dbc1345 60
+internal/github/testdata/own_assigned.json
+  s_bd7f7947992ef2::t_5a303fdda08dbc 4-5
+cmd/lineup/hub.go
+  s_bd7f7947992ef2::t_7a23526bdacc4c 579-581
+internal/board/github_test.go
+  s_bd7f7947992ef2::t_760576ce506d14 12
+  s_bd7f7947992ef2::t_2bd205aee6c9dd 61-63
+  s_bd7f7947992ef2::t_86afa20fe1e56a 135-158
+  s_bd7f7947992ef2::t_43dffc9c37ae20 69-72
+  s_bd7f7947992ef2::t_27783db7f20e98 99
+internal/board/github.go
+  s_bd7f7947992ef2::t_22feabaa9915a9 11
+  s_bd7f7947992ef2::t_16e8b522d6e74d 55,57
+  s_bd7f7947992ef2::t_7bf3bf2247d296 56
+  s_bd7f7947992ef2::t_e95cddfc9fc5a8 5-6
+  s_bd7f7947992ef2::t_7345147fdc0002 51-54
+  s_bd7f7947992ef2::t_5fe13cc28b87cc 27-30,33-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "56cf8ba2312737cd248b58435f797b9e153da6ed",
+  "prompts": {},
+  "sessions": {
+    "s_bd7f7947992ef2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4d65e9d1-49e6-4349-b3bf-699a305f18e9",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
