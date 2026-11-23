@@ -595,10 +595,15 @@ var testPolicy = lifecycle.Policy{Budgets: lifecycle.Budgets{CIDebug: 3, Respond
 func (fakeConfig) Policy(string, map[string]string) (lifecycle.Policy, error) { return testPolicy, nil }
 func (fakeConfig) RepoForIssue(Issue) (string, error)                         { return "/repos/acme/data", nil }
 func (fakeConfig) ResolveRepo(name string) (string, error)                    { return "/repos/acme/" + name, nil }
+func (fakeConfig) RepoPrefix(string) string                                   { return "" }
+
+// RepoTracker gives /repos/acme/issues the GitHub Tracker, /repos/acme/notes
+// the Local Tracker, and every other Repo Linear.
 func (fakeConfig) RepoTracker(repo string) (string, string) {
-	return "acme/" + filepath.Base(repo), KindLinear
+	base := filepath.Base(repo)
+	return "acme/" + base, cmp.Or(map[string]string{"issues": KindGitHub, "notes": KindLocal}[base], KindLinear)
 }
-func (fakeConfig) RepoPrefix(string) string { return "" }
+
 func (fakeConfig) RepoForGitHub(slug string) (string, bool) {
 	if strings.EqualFold(slug, "acme/data") {
 		return "/repos/acme/data", true

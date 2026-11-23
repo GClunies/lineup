@@ -28,14 +28,15 @@ func (s *Scheduler) open(id string) (OpenResult, error) {
 	var err error
 	done := make(chan struct{})
 	s.call(func() {
-		if _, ok := s.recs[id]; !ok {
-			err = fmt.Errorf("%w: %s", lifecycle.ErrUnknownTask, id)
+		r, ok := s.find(id)
+		if !ok {
+			err = fmt.Errorf("%w: %s", lifecycle.ErrUnknownTask, CanonicalID(id))
 			close(done)
 			return
 		}
-		s.enqueue(id, func(ctx context.Context) {
+		s.enqueue(r.ID, func(ctx context.Context) {
 			defer close(done)
-			res, err = s.restore(ctx, id, true)
+			res, err = s.restore(ctx, r.ID, true)
 		})
 	})
 	<-done

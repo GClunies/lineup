@@ -237,12 +237,27 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 	return nil, fmt.Errorf("unknown op %q", req.Op)
 }
 
+// find is the Record of the Task that id names in any case. GitHub names
+// ignore case, so owner/repo#12 matches in any case too. Only the loop calls
+// it.
+func (s *Scheduler) find(id string) (*Record, bool) {
+	if r, ok := s.recs[CanonicalID(id)]; ok {
+		return r, true
+	}
+	for k, r := range s.recs {
+		if strings.EqualFold(k, id) {
+			return r, true
+		}
+	}
+	return nil, false
+}
+
 func (s *Scheduler) with(id string, f func(r *Record) error) error {
 	var err error
 	s.call(func() {
-		r, ok := s.recs[id]
+		r, ok := s.find(id)
 		if !ok {
-			err = fmt.Errorf("%w: %s", lifecycle.ErrUnknownTask, id)
+			err = fmt.Errorf("%w: %s", lifecycle.ErrUnknownTask, CanonicalID(id))
 			return
 		}
 		err = f(r)
@@ -263,7 +278,7 @@ func (s *Scheduler) show(id string) (TaskDetail, error) {
 	if err != nil {
 		return d, err
 	}
-	d.Events, err = s.d.Store.Events(id)
+	d.Events, err = s.d.Store.Events(d.ID)
 	return d, err
 }
 

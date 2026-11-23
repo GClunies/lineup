@@ -187,6 +187,15 @@ func KindOf(identifier string, prefixes []string) string {
 	return KindLinear
 }
 
+// CanonicalID is the one form of an ID: owner/repo#12 as it is, and every
+// other ID in upper case, such as ENG-614, LOCAL-7, HOD-3, AH-65, or PR-12.
+func CanonicalID(id string) string {
+	if KindOf(id, nil) == KindGitHub {
+		return id
+	}
+	return strings.ToUpper(id)
+}
+
 var prefixedID = regexp.MustCompile(`^(.+)-([1-9][0-9]*)$`)
 
 // SplitID reads the prefix, in lower case, and n from the ID <prefix>-<n>.
