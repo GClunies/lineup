@@ -6,8 +6,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -225,6 +227,121 @@ func TestAStatusIsAWordWithAndWithoutColor(t *testing.T) {
 			if alert := id == "ah-63" || id == "ENG-901"; strings.Contains(last, pink) != alert {
 				t.Errorf("the %s row shows %q in %q, want pink %v", id, word, last, alert)
 			}
+		}
+	}
+}
+
+// bandCells is one entry for each cell of a rendered line: true when the cell
+// has a background color.
+func bandCells(line string) []bool {
+	var cells []bool
+	bg := false
+	for len(line) > 0 {
+		if strings.HasPrefix(line, "\x1b[") {
+			end := strings.IndexByte(line, 'm')
+			ps := strings.Split(line[2:end], ";")
+			for i := 0; i < len(ps); i++ {
+				switch p := ps[i]; {
+				case p == "" || p == "0" || p == "49":
+					bg = false
+				case p == "48" || p == "38" || p == "58":
+					bg = bg || p == "48"
+					if i+1 < len(ps) && ps[i+1] == "5" {
+						i += 2
+					} else if i+1 < len(ps) && ps[i+1] == "2" {
+						i += 4
+					}
+				case len(p) == 2 && p[0] == '4' && p[1] <= '7', len(p) == 3 && strings.HasPrefix(p, "10"):
+					bg = true
+				}
+			}
+			line = line[end+1:]
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(line)
+		for range lipgloss.Width(string(r)) {
+			cells = append(cells, bg)
+		}
+		line = line[size:]
+	}
+	return cells
+}
+
+// The selected row, heading, or menu item carries a background over the whole
+// width, the marker and the last cell included. Other rows have none.
+func TestTheSelectionHasABackgroundOverTheFullWidth(t *testing.T) {
+	before := lipgloss.ColorProfile()
+	t.Cleanup(func() { lipgloss.SetColorProfile(before) })
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	at := func(m Model, w int, sel string) Model {
+		m.width, m.sel = w, sel
+		return m
+	}
+	menu, _ := tap(t, at(exampleBoard(), 95, "ah-64"), "ah-63")
+	for _, c := range []struct {
+		name   string
+		m      Model
+		marked string // a text on the selected line
+		other  string // a text on a line that is not selected
+	}{
+		{"a Task row", at(exampleBoard(), 95, "ah-64"), "ah-64", "ah-63"},
+		{"a row that needs the user", at(exampleBoard(), 95, "ah-63"), "ah-63", "ah-64"},
+		{"a row cut to fit 30 columns", at(exampleBoard(), 30, "ah-64"), "ah-64", "ah-63"},
+		{"a heading", at(exampleBoard(), 95, headingKey("Working")), "Working 1", "ah-64"},
+		{"a menu item", menu, "▸ go to the Worker", "preview"},
+	} {
+		raw := strings.Split(c.m.View(), "\n")
+		var sel, other string
+		for _, l := range raw {
+			switch s := ansi.Strip(l); {
+			case sel == "" && strings.Contains(s, c.marked):
+				sel = l
+			case other == "" && strings.Contains(s, c.other):
+				other = l
+			}
+		}
+		if sel == "" || other == "" {
+			t.Fatalf("%s: no line holds %q or %q:\n%s", c.name, c.marked, c.other, ansi.Strip(c.m.View()))
+		}
+		if !strings.Contains(ansi.Strip(sel), "▸") {
+			t.Errorf("%s: the selected line has no marker: %q", c.name, ansi.Strip(sel))
+		}
+		cells := bandCells(sel)
+		if len(cells) != c.m.width {
+			t.Errorf("%s: the selected line is %d cells wide, want %d: %q", c.name, len(cells), c.m.width, ansi.Strip(sel))
+		}
+		for i, on := range cells {
+			if !on {
+				t.Errorf("%s: cell %d of the selected line has no background: %q", c.name, i, sel)
+				break
+			}
+		}
+		if slices.Contains(bandCells(other), true) {
+			t.Errorf("%s: a line that is not selected has a background: %q", c.name, other)
+		}
+	}
+}
+
+// A title shows as one line with no URL in the row, the strip, and the menu
+// of a tap.
+func TestARowShowsItsTitleAsOneLineWithNoURL(t *testing.T) {
+	adHoc := tv("ah-64", lifecycle.Working, "lineup", "Start a sessions to explore the ideas and UI here:\n- https:/", "", 5*time.Hour)
+	issue := mineIssue("ENG-900", "unstarted", 2)
+	issue.Title = "Read the notes at https://x.com/abc\nand more"
+	m := feed(newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{adHoc}}),
+		mineIssuesMsg{ws: linear.Workspace{ID: "w1", Name: "Crexi"}, live: true, issues: []linear.Issue{issue}})
+	for id, want := range map[string]string{"ah-64": "Start a sessions to explore the ideas and UI here", "ENG-900": "Read the notes at"} {
+		m.sel = id
+		out := screen(m)
+		if l := lineOf(t, out, id); !strings.Contains(l, want) || strings.Contains(l, "http") || strings.Contains(l, want+":") {
+			t.Errorf("%s: row %q, want the title %q", id, l, want)
+		}
+		if got := strip(m, 100); len(got) < 2 || got[1] != " "+want {
+			t.Errorf("%s: strip %q, want the title %q", id, got, want)
+		}
+		menu, _ := tap(t, m, id)
+		if got := strings.Split(screen(menu), "\n")[2]; got != " "+id+"  "+want {
+			t.Errorf("%s: the menu title is %q, want %q", id, got, id+"  "+want)
 		}
 	}
 }

@@ -68,3 +68,24 @@ func TestTabLabel(t *testing.T) {
 		})
 	}
 }
+
+func TestPlainTitle(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"Start a sessions to explore the ideas and UI here:\n- https:/", "Start a sessions to explore the ideas and UI here"},
+		{"start a task to address all comments here: https://github.co", "start a task to address all comments here"},
+		{"compare the findings of https://claude.ai/artifact/YWPhJttg1", "compare the findings of"},
+		{"grant access (DSC-1057)", "grant access (DSC-1057)"},
+		{"see www.example.com for the steps", "see for the steps"},
+		{"https://x.com/abc\n\nFix the login retry", "Fix the login retry"},
+		{"- https://x.com/abc\nFix the login retry", "Fix the login retry"},
+		{"Fix   the\tlogin  retry -", "Fix the login retry"},
+		{"End the sentence.", "End the sentence."},
+		{"Open the docs (", "Open the docs"},
+		{"https://x.com/abc", "https://x.com/abc"},
+		{"", ""},
+	} {
+		if got := PlainTitle(c.in); got != c.want {
+			t.Errorf("PlainTitle(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

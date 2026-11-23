@@ -61,23 +61,23 @@ var billing = linear.NewIssue{TeamID: "t1", ProjectID: "p1", AssignToMe: true}
 func TestNIntoAClosedBacklogOpensIt(t *testing.T) {
 	e, _ := captureEnv(t)
 	e.m = feed(e.m, boardMsg(fixture()))
-	if out := ansi.Strip(e.m.View()); !strings.Contains(out, "BACKLOG  1 …") || strings.Contains(out, "ENG-20") {
+	if out := ansi.Strip(e.m.View()); !strings.Contains(out, "Backlog 1 …") || strings.Contains(out, "ENG-20") {
 		t.Fatalf("Backlog starts open:\n%s", out)
 	}
 	e.press("n", "Retry failed loads", "enter")
 	out := ansi.Strip(e.m.View())
-	inOrder(t, out, "BACKLOG  2\n", "ENG-20", "Retry failed loads")
+	inOrder(t, out, "Backlog 2\n", "ENG-20", "Retry failed loads")
 }
 
 func TestNIntoAHiddenBacklogShowsItAndSelectsTheNewRow(t *testing.T) {
 	e, _ := captureEnv(t)
 	e.m.lay = e.m.lay.withHidden(groupBacklog, true)
 	e.m = feed(e.m, boardMsg(fixture()))
-	if out := ansi.Strip(e.m.View()); strings.Contains(out, "BACKLOG") {
+	if out := ansi.Strip(e.m.View()); hasHeading(out, "Backlog") {
 		t.Fatalf("Backlog shows before the add:\n%s", out)
 	}
 	e.press("n", "Retry failed loads", "enter")
-	inOrder(t, ansi.Strip(e.m.View()), "BACKLOG  2\n", "ENG-20", "Retry failed loads")
+	inOrder(t, ansi.Strip(e.m.View()), "Backlog 2\n", "ENG-20", "Retry failed loads")
 	if e.m.sel != "local-2" {
 		t.Fatalf("selection %q, want the new row local-2", e.m.sel)
 	}
@@ -108,7 +108,7 @@ func TestNCapturesALocalIssueInTheBacklog(t *testing.T) {
 		t.Fatalf("footer %q, want the new Issue named", f)
 	}
 	body := strings.Split(ansi.Strip(e.m.View()), "\n")
-	inOrder(t, strings.Join(body[:len(body)-1], "\n"), "BACKLOG", "ENG-20", "local-2")
+	inOrder(t, strings.Join(body[:len(body)-1], "\n"), "Backlog 2", "ENG-20", "local-2")
 	if len(e.api.created) != 0 {
 		t.Fatalf("a local capture created Linear Issues: %+v", e.api.created)
 	}

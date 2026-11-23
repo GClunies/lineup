@@ -332,10 +332,7 @@ func (s *Scheduler) add(ctx context.Context, req Request) (TaskView, error) {
 		if r.Repo == "" {
 			return TaskView{}, errors.New("a Task without an Issue needs a repo")
 		}
-		r.Title = r.Text
-		if len(r.Title) > 60 {
-			r.Title = r.Title[:60]
-		}
+		r.Title = textTitle(r.Text)
 	default:
 		return TaskView{}, errors.New("add needs an Issue or a text")
 	}

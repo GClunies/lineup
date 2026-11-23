@@ -283,7 +283,7 @@ func TestTheWorkViewShowsReadyAndBacklogInTheirPlaces(t *testing.T) {
 	e.m = openAll(feed(e.m, boardMsg(v)))
 	e.m.width = 200
 	out := ansi.Strip(e.m.View())
-	inOrder(t, out, "NEEDS YOU", "BACKLOG", "ENG-20", "READY", "ENG-9", "local-1", "QUEUED", "WORKING", "WAITING", "DONE")
+	inOrder(t, out, "Needs you 2", "Backlog 1", "ENG-20", "Ready 2", "ENG-9", "local-1", "Queued 1", "Working 2", "Waiting 1", "Done 1")
 }
 
 func TestJAndKMoveAcrossTaskAndIssueRows(t *testing.T) {

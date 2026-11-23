@@ -128,6 +128,59 @@ func (r *Record) tabLabel() string {
 	return strings.TrimRightFunc(string(head), func(c rune) bool { return unicode.IsSpace(c) || unicode.IsPunct(c) }) + "…"
 }
 
+// titleTail is what a title loses from its end.
+const titleTail = " :,;-–—("
+
+// PlainTitle is s as one line with no URL. It is the first line of s that
+// keeps a word when its URLs and a trailing titleTail go, with its words
+// joined by one space. A title that is only URLs keeps its first line.
+func PlainTitle(s string) string {
+	first := ""
+	for _, line := range strings.Split(s, "\n") {
+		if first == "" {
+			first = strings.TrimSpace(line)
+		}
+		words := strings.Fields(line)
+		var kept []string
+		for i, w := range words {
+			if !urlWord(w, i == len(words)-1) {
+				kept = append(kept, w)
+			}
+		}
+		if t := strings.TrimRight(strings.Join(kept, " "), titleTail); t != "" {
+			return t
+		}
+	}
+	return first
+}
+
+// urlWord reports whether the word w is a URL. A cut can leave the last word
+// of a line as the start of "https://" or "http://", as in "https:/".
+func urlWord(w string, last bool) bool {
+	if strings.Contains(w, "://") || strings.HasPrefix(w, "www.") {
+		return true
+	}
+	return last && len(w) >= 4 && (strings.HasPrefix("https://", w) || strings.HasPrefix("http://", w))
+}
+
+// textTitleWidth is the most runes that the title of a Task with no Issue holds.
+const textTitleWidth = 60
+
+// textTitle is the title of a Task with no Issue: the PlainTitle of its text,
+// cut at a word to textTitleWidth runes. A first word that is longer is cut
+// inside the word.
+func textTitle(text string) string {
+	t := []rune(PlainTitle(text))
+	if len(t) <= textTitleWidth {
+		return string(t)
+	}
+	head := string(t[:textTitleWidth])
+	if i := strings.LastIndexFunc(head, unicode.IsSpace); i > 0 && !unicode.IsSpace(t[textTitleWidth]) {
+		head = head[:i]
+	}
+	return strings.TrimRight(head, titleTail)
+}
+
 // HubSession is the Rex session of the Hub. The Scheduler removes a Repo
 // session after its last Task, so no Repo session may take this name.
 const HubSession = "my-lineup"
@@ -181,6 +234,10 @@ type BoardView struct {
 	// Skips are the PRs that the user holds out of every review queue.
 	Skips []github.Skip `json:"skips,omitempty"`
 	Tasks []TaskView    `json:"tasks"`
+	// Done is the time that each Task reached Done in the last 48 hours,
+	// archived Tasks included, so that the header counts the Tasks done since
+	// yesterday.
+	Done []time.Time `json:"done,omitempty"`
 }
 
 // OfKind is the view with only the Tasks of Kind k. Each Hub tab shows one Kind.

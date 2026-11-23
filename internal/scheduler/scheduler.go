@@ -1061,9 +1061,16 @@ func cmpString(a, b string) int {
 // stays on the Board.
 const doneShownFor = 7 * 24 * time.Hour
 
+// doneCountedFor is how long BoardView.Done holds a Task after it reached
+// Done. 00:00 yesterday is at most 48 hours ago.
+const doneCountedFor = 48 * time.Hour
+
 func (s *Scheduler) view() BoardView {
 	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap(), ReviewsPaused: s.paused, Skips: s.skips}
 	for _, r := range s.list() {
+		if r.Stage == lifecycle.Done && s.now().Sub(r.StageSince) < doneCountedFor {
+			v.Done = append(v.Done, r.StageSince)
+		}
 		if r.Stage == lifecycle.Done && (r.Archived || !r.keepsWork() && s.now().Sub(r.StageSince) > doneShownFor) {
 			continue
 		}
