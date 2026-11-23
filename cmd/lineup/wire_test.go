@@ -133,6 +133,21 @@ func TestAGitHubIssueMapsToTheCheckoutWhoseOriginIsItsRepository(t *testing.T) {
 	}
 }
 
+// An empty [repos."owner/repo"] table sets the Repo up. An owner/* table
+// does not.
+func TestARepoIsSetUpByItsOwnTable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	app := gitCheckout(t, filepath.Join(home, "code", "acme", "app"), "git@github.com:acme/app.git")
+	api := gitCheckout(t, filepath.Join(home, "code", "acme", "api"), "git@github.com:acme/api.git")
+	p := configPort{cfg: loadConfig(t, "roots = [\"~/code\"]\n\n[repos.\"acme/*\"]\nwip_cap = 2\n\n[repos.\"Acme/App\"]\n")}
+	for repo, want := range map[string]bool{app: true, api: false} {
+		if key, ok := p.SetUp(repo); ok != want || key != "acme/"+filepath.Base(repo) {
+			t.Errorf("SetUp(%s) = %q %v, want %v", repo, key, ok, want)
+		}
+	}
+}
+
 func TestARepoNameIsAFolderNameAKeyOrAPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
