@@ -469,7 +469,7 @@ collapsed = ["backlog"]
 hidden = ["done"]
 ```
 
-`order` lists the groups, first to last. A group that it leaves out follows the listed ones, in the default order: `needs_you`, `backlog`, `ready`, `queued`, `working`, `waiting`, `done`. `collapsed` lists the groups that start closed. Its default is `backlog` and `done`. `hidden` lists the groups that the Board does not show. Its default is none. A key that is absent takes its default, and an empty list means none. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors, but they do not fail the load. The Scheduler starts, and the Board uses the default layout. The Board shows the error on its own line until it quits, for example `config: board.hidden: unknown section "dun" (default layout)`. If the load fails for any other reason, the Board runs with defaults and shows `config: <error>` the same way.
+`order` lists the groups, first to last. A group that it leaves out follows the listed ones, in the default order: `needs_you`, `follow_up`, `backlog`, `ready`, `queued`, `working`, `waiting`, `done`. `collapsed` lists the groups that start closed. Its default is `backlog` and `done`. `hidden` lists the groups that the Board does not show. Its default is none. A key that is absent takes its default, and an empty list means none. `needs_you` cannot be in `collapsed` or `hidden`. An unknown group, a duplicate in one list, and `needs_you` in `collapsed` or `hidden` are errors, but they do not fail the load. The Scheduler starts, and the Board uses the default layout. The Board shows the error on its own line until it quits, for example `config: board.hidden: unknown section "dun" (default layout)`. If the load fails for any other reason, the Board runs with defaults and shows `config: <error>` the same way.
 
 `linear_client_id` is a top-level key. Put it above the first `[table]`, or TOML reads it as part of that table. Leave it out to sign in through lineup's own Linear OAuth app, which any workspace can use. To use your own app, register an OAuth app in Linear with the redirect URI `http://localhost:47821/callback` and no client credentials. Then set its client ID here.
 
@@ -550,28 +550,34 @@ The Board shows the build Tasks and the user's own Issues that have no Task. Rev
 
 ```
  lineup  WIP 4/5   ●3 need you (+1 in reviews)
- ─────────────────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU  3
- ▸ ENG-590 data   Add billing model          stopped      12m
-   ENG-588 data   Backfill events           permission: Bash(make deploy)   3m
-   ENG-580 data   Retry failed loads        drafts: 2 replies to approve    1m
+   ENG-590  Add billing model                                             stopped     12m  data
+   ENG-588  Backfill events                                               permission  3m   data
+   ENG-580  Retry failed loads                                            drafts      1m   data
  BACKLOG  7 …
  READY  2
-   ENG-611        Move the retry job        unblocked    ▂▄▆
-   local-7 data   Rename the log flag
+   ENG-611  Move the retry job                                            unblocked   ▂▄▆
+   local-7  Rename the log flag                                           ready            data
  QUEUED  1
-   ENG-601 data   Drop old API keys
+   ENG-601  Drop old API keys                                             queued           data
  WORKING  2
-   WEB-12  web    Fix map tooltip           #4650 ○ no review yet · answering review    5m
-   ENG-592 data   Fix flaky test            #4655 ○ no review yet · fixing CI           1m
+   WEB-12   Fix map tooltip                                               responding  5m   web
+   ENG-592  Fix flaky test                                                CI debug    1m   data
  WAITING  1
-   ENG-571 data   Rate limit login          #4636 ● commented · 1 open thread · optional failed: lint  1d
+ ▸ ENG-571  Rate limit login                                              in review   1d   data
  DONE  1 …
+ ──────────────────────────────────────────────────────────────────────────────────────────────
+ Rate limit login
+ ENG-571 · In review · data · #4636 ● commented · 1 open thread · optional failed: lint
+ enter go to the Worker   p preview   f details   x close   j/k move   n new Issue   ? all keys
 ```
 
 The header shows the WIP cap and the count of the build Tasks that need the user. It counts the review Tasks that need the user in parentheses, when there are any: `(+1 in reviews)`. It has no count for the other groups, because each group heading shows its own count. The header also shows `reviews paused` while the review queues are paused, and a warning when the Scheduler is offline. At 80 columns, the header with `+1 over` and the review count fits.
 
-A row has no Stage column. The group heading says who must act, and the note says what happens. The note of a build Task with a PR starts with the PR number and where the PR stands with its reviewers. Then it says what happens now, or the next gap that the Landing bar has. The approval gap never shows, because the review state already says it.
+Each row shows a status word after the title. A Task in Needs you with a flag shows the reason of the flag, for example `stopped` or `PR closed`. Any other Task shows its Stage, for example `working` or `in review`. An Issue row shows `blocked`, `unblocked`, `ready`, or `backlog`. `docs/spec/one-board.md` lists every status word.
+
+The strip under the rows shows the selected row: the full title, then the ID, the Stage, the Repo, the PR number, and the full note. The strip also shows the Board message and the key hints at the same time. The note says what happens. The note of a build Task with a PR starts with the PR number and where the PR stands with its reviewers. Then it says what happens now, or the next gap that the Landing bar has. The approval gap never shows, because the review state already says it.
 
 | Review state | When |
 |---|---|
@@ -593,7 +599,7 @@ A review Task shows `#N reviewing`, `#N review ready` with `· head moved` when 
 
 Reviews by bots do not count as a person's review.
 
-The groups are Needs you, Backlog, Ready, Queued, Working, Waiting, and Done. By default they show in that order: Needs you comes first, and the other groups follow the development cycle. The `[board]` table in the global file changes the order. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
+The groups are Needs you, Follow-up, Backlog, Ready, Queued, Working, Waiting, and Done. By default they show in that order: Needs you and Follow-up come first, and the other groups follow the development cycle. The `[board]` table in the global file changes the order. Follow-up holds the Done build Tasks whose Issues are still open in their Trackers. `docs/spec/one-board.md` ("Follow-up") gives the rule for each Tracker. Backlog and Ready hold Issue rows. Each lists the Issues with no open blocker first, then sorts by priority, dependency level, and ID. An Issue with no open blocker has level 0. Any other Issue has a level one higher than its highest open blocker.
 
 Each group with at least one row has a heading that shows the group name and its row count, for example `BACKLOG  7`. A heading is a row that the user can select, except the Needs you heading. `j` and `k` stop on each heading and skip the rows of a closed group. `enter` on a heading opens or closes the group. A closed group shows its heading with a `…` mark and hides its rows, as `BACKLOG  7 …` does. Needs you never closes. This keeps a long Backlog or Done group from pushing Ready and Working off the screen.
 

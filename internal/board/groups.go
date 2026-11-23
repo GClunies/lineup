@@ -13,6 +13,7 @@ import (
 
 const (
 	groupNeedsYou = "Needs you"
+	groupFollowUp = "Follow-up"
 	groupDone     = "Done"
 	// headingPrefix starts the selection key of a heading. No Task or Issue ID has it.
 	headingPrefix = "group:"

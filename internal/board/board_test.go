@@ -420,7 +420,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 func TestAgeAndRows(t *testing.T) {
 	m := openAll(newModel(&fakeClient{}, fixture()))
 	out := m.View()
-	for _, w := range []string{"NEEDS YOU", "WORKING", "WAITING", "QUEUED", "DONE", "12m", "1d", "today", "#4601 merged"} {
+	for _, w := range []string{"NEEDS YOU", "WORKING", "WAITING", "QUEUED", "DONE", "12m", "1d", "today", "done"} {
 		if !strings.Contains(out, w) {
 			t.Errorf("view lacks %q", w)
 		}
@@ -601,10 +601,17 @@ func TestSpeedBudget(t *testing.T) {
 	}
 }
 
+// footerAt is every line under the rows at the width, as the user sees it.
 func footerAt(m Model, width int) string {
 	m.width = width
-	lines := strings.Split(m.View(), "\n")
-	return ansi.Strip(lines[len(lines)-1])
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	return strings.Join(lines[2+m.bodyHeight():], "\n")
+}
+
+// bodyOf is the screen above the footer: the header and the rows.
+func bodyOf(m Model) string {
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	return strings.Join(lines[:2+m.bodyHeight()], "\n")
 }
 
 // The footer names the keys that work on the selected Task, and "? all keys"
@@ -643,15 +650,24 @@ func TestFooterShowsTheKeysForTheSelection(t *testing.T) {
 	}
 }
 
-func TestStatusGivesWayToHintsOnTheNextKey(t *testing.T) {
-	m := newModel(&fakeClient{}, fixture())
-	m.setStatus("start ENG-601 ok", false)
-	if f := footerAt(m, 100); !strings.Contains(f, "start ENG-601 ok") {
-		t.Fatalf("status not shown: %q", f)
+// The message of an action shows above the key hints, so both show at once.
+// The next key clears the message.
+func TestTheMessageShowsWithTheHintsUntilTheNextKey(t *testing.T) {
+	f := &fakeClient{}
+	m := exampleBoard()
+	m.client, m.sel = f, "ah-64"
+	m, cmd := press(m, "enter")
+	m = run(m, cmd)
+	if got := f.ops(); !slices.Equal(got, []string{"open"}) {
+		t.Fatalf("enter sent %v, want open", got)
 	}
-	m, _ = press(m, "j")
-	if f := footerAt(m, 100); !strings.HasSuffix(f, "? all keys") {
-		t.Fatalf("hints did not come back: %q", f)
+	lines := strings.Split(footerAt(m, 95), "\n")
+	if n := len(lines); n < 2 || lines[n-2] != " open ah-64 ok" || !strings.HasSuffix(lines[n-1], "? all keys") {
+		t.Fatalf("the strip must show the message, then the hints:\n%s", strings.Join(lines, "\n"))
+	}
+	m, _ = press(m, "k")
+	if f := footerAt(m, 95); strings.Contains(f, "open ah-64 ok") || !strings.HasSuffix(f, "? all keys") {
+		t.Fatalf("the next key must clear the message and keep the hints:\n%s", f)
 	}
 }
 
@@ -690,7 +706,7 @@ func narrowBoard() Model {
 		issues: []linear.Issue{mineIssue("ENG-900", "unstarted", 2)}})
 }
 
-func TestANarrowRowKeepsTheIDTitleAndNoteOnTheLeft(t *testing.T) {
+func TestANarrowRowKeepsTheIDTitleAndStatusOnTheLeft(t *testing.T) {
 	for _, w := range []int{60, 85} {
 		out := viewAt(narrowBoard(), w)
 		for _, id := range []string{"ENG-801", "WEB-12"} {
@@ -700,7 +716,7 @@ func TestANarrowRowKeepsTheIDTitleAndNoteOnTheLeft(t *testing.T) {
 		}
 		l := lineOf(t, out, "ENG-801")
 		var at []int
-		for _, s := range []string{"ENG-801", "Rate limit", "#4636 ✗ changes requested"} {
+		for _, s := range []string{"ENG-801", "Rate limit", "in review"} {
 			c := cellOf(l, s)
 			if c < 0 {
 				t.Fatalf("width %d: row lacks %q: %q", w, s, l)
@@ -708,28 +724,26 @@ func TestANarrowRowKeepsTheIDTitleAndNoteOnTheLeft(t *testing.T) {
 			at = append(at, c)
 		}
 		if !slices.IsSorted(at) {
-			t.Errorf("width %d: ID, title, note must run left to right, got cells %v: %q", w, at, l)
+			t.Errorf("width %d: ID, title, status must run left to right, got cells %v: %q", w, at, l)
 		}
 	}
 }
 
-func TestARowHasNoStateColumnAndNoFlagMark(t *testing.T) {
+func TestARowShowsItsStatusWordAndNoFlagMark(t *testing.T) {
 	v := narrowBoard().board
 	drafts := scheduler.TaskView{ID: "ENG-700", Title: "Retry loads", Stage: "Responding", StageKey: "responding", Group: "Needs you",
 		Flag: "drafts", FlagDetail: "2 replies to approve", Note: "drafts: 2 replies to approve", Skill: "poteto-mode"}
 	v.Tasks = append(v.Tasks, drafts)
 	for _, w := range []int{60, 85, 200} {
 		out := viewAt(newModel(&fakeClient{}, v), w)
-		for _, id := range []string{"ENG-801", "WEB-12", "ENG-700"} {
+		for id, word := range map[string]string{"ENG-801": "in review", "WEB-12": "responding", "ENG-700": "drafts"} {
 			l := lineOf(t, out, id)
-			for _, gone := range []string{"⚑", "Responding", "In review", "awaiting"} {
-				if strings.Contains(l, gone) {
-					t.Errorf("width %d: %s row shows %q: %q", w, id, gone, l)
-				}
+			if !strings.Contains(l, word) || strings.Contains(l, "⚑") || lipgloss.Width(l) > w {
+				t.Errorf("width %d: the %s row must show %q, no flag mark, and fit: %q", w, id, word, l)
 			}
 		}
-		if l := lineOf(t, out, "ENG-700"); !strings.Contains(l, "drafts: 2 replies to approve") || lipgloss.Width(l) > w {
-			t.Errorf("width %d: the drafts row must name its action in full and fit: %q", w, l)
+		if l := lineOf(t, out, "ENG-700"); strings.Contains(l, "2 replies to approve") {
+			t.Errorf("width %d: the drafts row must show its status, not its note: %q", w, l)
 		}
 	}
 }
@@ -746,28 +760,28 @@ func landingBoard() Model {
 	return newModel(&fakeClient{}, v)
 }
 
-func TestALongNoteOnAnotherRowDoesNotNarrowTheTitle(t *testing.T) {
-	l := lineOf(t, viewAt(landingBoard(), 85), "ENG-810")
-	if title := cellOf(l, "#5084") - cellOf(l, "Freeze") - 2; title < 25 {
-		t.Errorf("the title is %d cells wide at 85 columns, want at least 25: %q", title, l)
+func TestTheTitleTakesTheCellsThatTheOtherColumnsLeave(t *testing.T) {
+	out := viewAt(landingBoard(), 85)
+	for id, title := range map[string]string{"ENG-810": "Freeze the legacy pricing tables", "ENG-811": "Remove the kyp_v3 dependency",
+		"ENG-812": "Retire the v15 search tasks", "ENG-801": "Rate limit the login endpoint"} {
+		if l := lineOf(t, out, id); !strings.Contains(l, title) {
+			t.Errorf("at 85 columns the %s row must show its title in full: %q", id, l)
+		}
 	}
 }
 
-func TestANeedsYouNoteShowsInFullAtSixtyColumns(t *testing.T) {
+func TestEachRowShowsItsStatusAtSixtyColumns(t *testing.T) {
 	out := viewAt(landingBoard(), 60)
-	for id, note := range map[string]string{"ENG-810": "#5084 ✓ approved · ready to land", "ENG-811": "drafts: 2 replies to approve"} {
-		if l := lineOf(t, out, id); !strings.Contains(l, note) || lipgloss.Width(l) > 60 {
-			t.Errorf("%s row must show %q in full and fit in 60 cells: %q", id, note, l)
+	for id, word := range map[string]string{"ENG-810": "ready", "ENG-811": "drafts", "ENG-812": "in review"} {
+		if l := lineOf(t, out, id); !strings.Contains(l, word) || lipgloss.Width(l) > 60 {
+			t.Errorf("%s row must show %q and fit in 60 cells: %q", id, word, l)
 		}
-	}
-	if l := lineOf(t, out, "ENG-812"); !strings.Contains(l, "#5200 ✓ approved") {
-		t.Errorf("a cut note keeps the PR number and the review state: %q", l)
 	}
 }
 
 func TestAWideRowAlsoShowsTheAgeTheRepoAndTheSkill(t *testing.T) {
 	l := lineOf(t, viewAt(narrowBoard(), 200), "ENG-801")
-	for _, s := range []string{"Rate limit the login endpoint", "#4636 ✗ changes requested · 2 open threads", "5h", "data-platform", "poteto-mode"} {
+	for _, s := range []string{"Rate limit the login endpoint", "in review", "5h", "data-platform", "poteto-mode"} {
 		if !strings.Contains(l, s) {
 			t.Errorf("row lacks %q: %q", s, l)
 		}
@@ -1058,5 +1072,49 @@ func TestEnterOnAQueuedTaskOffersNoRestore(t *testing.T) {
 	m.sel = "ENG-701"
 	if strings.Contains(m.footer(), "restore the Worker") {
 		t.Fatalf("footer = %q, want no restore for a Task that has not started", m.footer())
+	}
+}
+
+// idBoard has two Working Tasks with short IDs and a Done Task with a GitHub
+// ID, 95 columns wide.
+func idBoard() Model {
+	done := tv("GClunies/lineup#108", lifecycle.Done, "lineup", "Show only main checkouts as Repos", "#127 merged", 2*time.Hour)
+	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Started: 2, Tasks: []scheduler.TaskView{
+		tv("ah-63", lifecycle.Working, "lineup", "setup and brainstorming session", "", 24*time.Hour),
+		tv("ah-64", lifecycle.Working, "lineup", "Start a sessions to explore the ideas and UI here", "", 5*time.Hour),
+		done,
+	}})
+	m.width = 95
+	return m
+}
+
+// idCells is the width of the ID column on the row that shows id, read as the
+// cells from the ID to the title.
+func idCells(t *testing.T, out, id, title string) int {
+	t.Helper()
+	l := lineOf(t, out, id)
+	return cellOf(l, title) - cellOf(l, id) - 2
+}
+
+func TestTheIDColumnFitsTheRowsOnScreen(t *testing.T) {
+	closed := screen(withClosed(idBoard(), "Done"))
+	if got := idCells(t, closed, "ah-64", "Start a sessions"); got != 5 {
+		t.Errorf("with Done closed the ID column is %d cells, want 5:\n%s", got, closed)
+	}
+	if l := lineOf(t, closed, "ah-64"); !strings.Contains(l, "Start a sessions to explore the ideas and UI here") {
+		t.Errorf("the title must take the cells that the ID column frees: %q", l)
+	}
+
+	open := screen(openAll(idBoard()))
+	if got := idCells(t, open, "lineup#108", "Show only"); got != 10 {
+		t.Errorf("with Done open the ID column is %d cells, want 10 for lineup#108:\n%s", got, open)
+	}
+	if strings.Contains(open, "GClunies/") {
+		t.Errorf("the ID column must show a GitHub ID without its owner:\n%s", open)
+	}
+
+	filtered, _ := press(openAll(idBoard()), "/", "ah-")
+	if out := screen(filtered); idCells(t, out, "ah-64", "Start a sessions") != 5 {
+		t.Errorf("a filter that hides lineup#108 must narrow the ID column to 5 cells:\n%s", out)
 	}
 }

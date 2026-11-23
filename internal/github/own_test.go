@@ -57,7 +57,7 @@ func TestOwnIssuesKeepsTheUsersOwnOpenIssues(t *testing.T) {
 	for _, is := range own {
 		ids = append(ids, is.ID())
 	}
-	want := []string{"octo/sandbox#10", "octo/sandbox#11", "octo/sandbox#14", "octo/sandbox#12", "octo/sandbox#16"}
+	want := []string{"octo/sandbox#10", "octo/sandbox#11", "octo/sandbox#14", "upstream/tool#3", "octo/sandbox#12", "octo/sandbox#16"}
 	if !reflect.DeepEqual(ids, want) {
 		t.Fatalf("IDs %v, want %v", ids, want)
 	}

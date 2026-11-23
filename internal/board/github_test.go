@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/gclunies/lineup/internal/config"
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/scheduler"
@@ -57,16 +58,18 @@ func (g fakeGH) failing(t *testing.T, on bool) {
 	}
 }
 
-// githubEnv is mineEnv with the GitHub Tracker on for octo, and a queued
-// Task that holds octo/sandbox#16. *on turns the Tracker off.
+// githubEnv is mineEnv with the GitHub Tracker on for octo, one checkout
+// with the key octo/sandbox, and a queued Task that holds octo/sandbox#16.
+// *on turns the Tracker off.
 func githubEnv(t *testing.T) (*workEnv, fakeGH, *bool) {
 	t.Helper()
 	e, _ := mineEnv(t)
 	g, on := newFakeGH(t), true
 	e.m.opts.GitHub = GitHub{
-		Login:   func() (string, bool, error) { return "octo", on, nil },
-		Client:  &github.Client{Bin: g.bin},
-		Backlog: "backlog",
+		Login:     func() (string, bool, error) { return "octo", on, nil },
+		Client:    &github.Client{Bin: g.bin},
+		Backlog:   "backlog",
+		Checkouts: func() []config.Checkout { return []config.Checkout{{Path: "/repos/octo/sandbox", Key: "octo/sandbox"}} },
 	}
 	e.m = feed(e.m, boardMsg(scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{
 		tv("octo/sandbox#16", lifecycle.Queued, "sandbox", "Add a GREETING.md", "", 0),
@@ -93,6 +96,7 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 		{"a PR", "octo/sandbox#13"},
 		{"opened by someone else, with no assignee", "octo/sandbox#15"},
 		{"held by a Task", "octo/sandbox#16"},
+		{"in a repo with no checkout", "upstream/tool#3"},
 	} {
 		t.Run("no row: "+c.name, func(t *testing.T) {
 			if _, ok := rows[c.id]; ok {
@@ -120,11 +124,40 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 		})
 	}
 	out := screen(e.m)
-	inOrder(t, out, "BACKLOG", "octo/sandbox#10", "READY", "octo/sandbox#12", "octo/sandbox#14", "octo/sandbox#11", "QUEUED", "octo/sandbox#16")
-	for _, want := range []string{"Drop old API keys", "blocked by #12", "unblocked"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("screen lacks %q:\n%s", want, out)
+	inOrder(t, out, "BACKLOG", "sandbox#10", "READY", "sandbox#12", "sandbox#14", "sandbox#11", "QUEUED", "sandbox#16")
+	if l := lineOf(t, out, "sandbox#11"); !strings.Contains(l, "Drop old API keys") || !strings.Contains(l, "blocked") {
+		t.Errorf("the sandbox#11 row must show its title and blocked: %q", l)
+	}
+	if l := lineOf(t, out, "sandbox#14"); !strings.Contains(l, "unblocked") {
+		t.Errorf("the sandbox#14 row must show unblocked: %q", l)
+	}
+	e.m.sel = "octo/sandbox#11"
+	if f := footerAt(e.m, 200); !strings.Contains(f, "\n sandbox#11 · Ready · sandbox · blocked by #12\n") {
+		t.Errorf("the strip must name the blocker as #12:\n%s", f)
+	}
+}
+
+func TestAGitHubRowNeedsACheckoutWithItsRepoKeyInAnyCase(t *testing.T) {
+	e, _, _ := githubEnv(t)
+	keys := []string{"OCTO/Sandbox", "Upstream/TOOL"}
+	e.m.opts.GitHub.Checkouts = func() []config.Checkout {
+		var cs []config.Checkout
+		for _, k := range keys {
+			cs = append(cs, config.Checkout{Path: "/repos/" + k, Key: k})
 		}
+		return cs
+	}
+	e.m = drain(e.m, e.m.loadMine())
+	rows := githubRows(e.m)
+	for _, id := range []string{"octo/sandbox#10", "upstream/tool#3"} {
+		if _, ok := rows[id]; !ok {
+			t.Errorf("%s has no row with the checkout keys %q: %v", id, keys, rowIDs(e.m.issues))
+		}
+	}
+	keys = nil
+	e.m = drain(e.m, e.m.loadMine())
+	if rows := githubRows(e.m); len(rows) != 0 {
+		t.Fatalf("GitHub rows with no checkout: %v", rowIDs(e.m.issues))
 	}
 }
 

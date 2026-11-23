@@ -186,6 +186,8 @@ The Board reads GitHub Issues only while the GitHub Tracker is on. It checks `gi
 
 A pull request is not an Issue and gets no row. The Board runs two `gh search issues` calls, one for each rule, with at most 200 Issues each. Then one GraphQL call reads the state of each blocker that the searches did not return.
 
+The searches cover every repository. The Board shows an Issue only when a checkout below the roots has the Issue's owner/repo as its Repo key. The match ignores case. The Board lists the checkouts at each load, so a new clone shows its Issues within 60 s. `lineup add --repo <repo> owner/repo#n` adds an Issue from any repository.
+
 | Group | GitHub Issue |
 |---|---|
 | Ready | Open, without the backlog label |
@@ -231,7 +233,7 @@ The Orchestrator's instructions hold one section for each Tracker. Claude Code r
 3. **IDs:** Table tests for the three forms. A Board start of a Linear row sends the Kind `linear`. An add of `LOCAL-1` with the Kind `linear` reaches the Linear adapter.
 4. **GitHub labels:** Against recorded `gh` output, each event adds its label and removes the others. An unmapped event writes nothing.
 5. **Local folder:** Property tests show that create never reuses an ID, and that parse after write gives back the same Issue. The list names a broken file and still lists the rest.
-6. **GitHub Issue rows:** Board tests with recorded `gh` output cover an assigned Issue, an unassigned Issue that the user opened, an unassigned Issue that someone else opened (no row), a PR (no row), the backlog label, `Blocked by` lines, an Issue that a Task holds, the Tracker turned off, and a failed `gh` call.
+6. **GitHub Issue rows:** Board tests with recorded `gh` output cover an assigned Issue, an unassigned Issue that the user opened, an unassigned Issue that someone else opened (no row), a PR (no row), the backlog label, `Blocked by` lines, an Issue that a Task holds, an Issue in a repository with no checkout (no row), a checkout key in another case, an empty checkout list (no row), the Tracker turned off, and a failed `gh` call.
 7. **When each Tracker is on:** Table tests over Linear signed in or not, `github.json` present or not, and `local_tracker`.
 8. **Live:**
    - A local Issue goes from `todo` to `done` through a merged PR in a sandbox repository.
