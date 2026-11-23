@@ -1,0 +1,186 @@
+internal/scheduler/scheduler.go
+  s_1818a5989cfcac::t_4b19aa11d1da08 160
+  s_1818a5989cfcac::t_57c72a883b7d6c 665
+  s_1818a5989cfcac::t_4a23f0a68a9f76 143,145-148,155-159
+internal/lifecycle/review_test.go
+  s_1818a5989cfcac::t_8c7546bb007b7a 13
+  s_1818a5989cfcac::t_d854e722b809d7 161
+  s_1818a5989cfcac::t_98caa1db603bac 120
+  s_1818a5989cfcac::t_b4f111d7d9771e 65-72,76-78,80-81,83-84,86-87,90-91,98-101,103-104,110-111
+  s_1818a5989cfcac::t_e72fd55e5d934c 12
+  s_1818a5989cfcac::t_8cbbbbf241dc1b 137-140
+  s_1818a5989cfcac::t_1ef2ba6a204ee3 130-131
+internal/board/view.go
+  s_1818a5989cfcac::t_2de034f1bcb012 489-490
+  s_1818a5989cfcac::t_6452c001d8d440 453
+  s_1818a5989cfcac::t_098854a35a1918 409
+internal/config/config_test.go
+  s_1818a5989cfcac::t_d08f5231afad2e 162
+internal/scheduler/api.go
+  s_1818a5989cfcac::t_df64e738789a12 390
+  s_1818a5989cfcac::t_1c7594f0d3570b 344-345,351
+  s_1818a5989cfcac::t_b386753c4e6047 36-38
+  s_1818a5989cfcac::t_5b43cf5e02d3f5 364
+  s_1818a5989cfcac::t_634dcfe795827a 379-385,388,392,399-405
+  s_1818a5989cfcac::t_36f5452eaa4282 10
+  s_1818a5989cfcac::t_4d592cbfbdd6af 414-417,422
+  s_fe8d4c1691a132::t_09ea8e69240b91 406-407
+cmd/lineup/cli.go
+  s_1818a5989cfcac::t_ad766f33a70fc8 157
+  s_1818a5989cfcac::t_b67b7c1655d0f2 143-144
+  s_1818a5989cfcac::t_2d55d50f093a4c 75
+cmd/lineup/decide_test.go
+  s_1818a5989cfcac::t_5ce238b3eaba72 7
+  s_1818a5989cfcac::t_cc40627ff5afd2 199
+internal/lifecycle/board.go
+  s_1818a5989cfcac::t_3f8616022f6b00 145-149,151-152,154,159-162,164-166,169,171-172
+  s_1818a5989cfcac::t_4798299b82ee46 167-168,170,173-174
+  s_1818a5989cfcac::t_840afe373a3053 249
+  s_1818a5989cfcac::t_6cebf5866fd3eb 258
+  s_1818a5989cfcac::t_3249cf3fa1f21d 163
+  s_1818a5989cfcac::t_1de70df1d7da7b 150
+  s_1818a5989cfcac::t_78d4c43f0146d1 153,156
+internal/scheduler/queue.go
+  s_1818a5989cfcac::t_cd1d22e3445339 370-371
+  s_1818a5989cfcac::t_8365e9bf30c4d4 304-305
+  s_1818a5989cfcac::t_c9ba08843bf7c8 354-356
+  s_1818a5989cfcac::t_1d3d1a820c049d 25-26
+  s_1818a5989cfcac::t_109257bcb317cb 411
+internal/board/model.go
+  s_1818a5989cfcac::t_5f7f0419d4236d 103-104
+  s_1818a5989cfcac::t_cb0e771a36890a 555-556,558,563,565,568,570
+  s_1818a5989cfcac::t_588fc2509cfbb7 593
+  s_1818a5989cfcac::t_e5b2e80dc23122 133-135
+  s_1818a5989cfcac::t_3ce5614c517274 562
+internal/board/mouse_test.go
+  s_1818a5989cfcac::t_f6c6fe93f33d56 187-194,200-201
+internal/lifecycle/board_test.go
+  s_1818a5989cfcac::t_41a7adffa55e02 117
+  s_1818a5989cfcac::t_be583b7dee9f0f 212
+  s_1818a5989cfcac::t_0c19e292c136b6 16
+  s_1818a5989cfcac::t_55451a8eb7950b 462,515,539,661,782
+  s_1818a5989cfcac::t_2198c20ef4514f 163-166,169-181,183-184,186-187,190-191,195,197-198,202
+internal/scheduler/api_test.go
+  s_1818a5989cfcac::t_e97e5b72e94bd5 109
+internal/scheduler/queue_test.go
+  s_1818a5989cfcac::t_b9fb0a7b8d3751 53-55,59,62,66,68,70,72,74,76,78,81,84,87,91,94,98,102,106,110,114,118,122,125,130-131
+internal/scheduler/migrate.go
+  s_1818a5989cfcac::t_f2c7dcb300ffa6 34
+  s_1818a5989cfcac::t_8855f035e46170 1-29,31-33,35-38
+  s_1818a5989cfcac::t_0454945d1c2589 30
+internal/lifecycle/property_test.go
+  s_1818a5989cfcac::t_1d8dcc3ce98927 208,211-219
+  s_1818a5989cfcac::t_db0c7b10fff02e 56-57,65-66,78,80,82-88
+  s_1818a5989cfcac::t_95568e52e024c7 18
+  s_1818a5989cfcac::t_7b17faade339ce 155-156,160-172
+  s_1818a5989cfcac::t_69193350d8a181 132
+  s_1818a5989cfcac::t_a14a7c216f4ba1 145
+internal/scheduler/review.go
+  s_1818a5989cfcac::t_80512f057c6ff5 190-191,199-202,204,211-212
+  s_1818a5989cfcac::t_59197637712455 147-149,151
+  s_1818a5989cfcac::t_f8e92c3b4b0334 108-109
+  s_1818a5989cfcac::t_b53b67dcd59c6a 225-228
+internal/scheduler/add_test.go
+  s_1818a5989cfcac::t_357f8bdc3767e9 1-160
+internal/board/github_test.go
+  s_1818a5989cfcac::t_1e22919359a482 72
+  s_1818a5989cfcac::t_0ac6bef80e4d12 123
+  s_1818a5989cfcac::t_087fbb6c9443fb 60
+  s_1818a5989cfcac::t_de7eb59d5fbfb0 134
+  s_1818a5989cfcac::t_b6f7a77826e4d2 154-155
+internal/board/start.go
+  s_1818a5989cfcac::t_6a5cf0e0d33263 133
+  s_1818a5989cfcac::t_7f03436a2c5861 127-129,131-132,134-135,137-139,141-152
+  s_1818a5989cfcac::t_543f535c470dc7 16-17
+internal/board/board_test.go
+  s_1818a5989cfcac::t_b308bf743d6f93 456
+  s_1818a5989cfcac::t_525f7c93a6a111 87
+  s_1818a5989cfcac::t_17066185a549bf 166-167
+  s_1818a5989cfcac::t_2a8fb52ed0d0a7 376
+  s_1818a5989cfcac::t_d0a4faf761eccd 575
+  s_1818a5989cfcac::t_b1e2ab5ac2c031 69
+internal/store/store_test.go
+  s_1818a5989cfcac::t_1a075c0ac97ce3 17
+  s_1818a5989cfcac::t_55f30e233e742c 44
+internal/scheduler/scheduler_test.go
+  s_1818a5989cfcac::t_e344ab98044f0e 2414
+  s_1818a5989cfcac::t_0b79c36d176936 737
+  s_1818a5989cfcac::t_445565bc4282c1 1319-1320
+  s_1818a5989cfcac::t_ecb40ee549ce7e 1035-1037,1041-1055,1057-1069
+  s_1818a5989cfcac::t_af113eab26a45c 9
+  s_1818a5989cfcac::t_aeb8c695cb0451 2500
+  s_1818a5989cfcac::t_f980901734b71c 2060,2063-2064
+  s_1818a5989cfcac::t_efb8aa22ef3452 1813
+  s_1818a5989cfcac::t_63be4df7b0707d 1188-1189,1191-1202,1215-1216
+internal/board/issues_test.go
+  s_1818a5989cfcac::t_aecabbfa48c926 286
+  s_1818a5989cfcac::t_e518422d6223e2 324-325
+  s_1818a5989cfcac::t_c05c75fdc7825b 344-345
+  s_1818a5989cfcac::t_e152b76c2dcd1f 312
+  s_1818a5989cfcac::t_f3239311deedcf 298-299
+internal/config/testdata/migrate/config.toml
+  s_1818a5989cfcac::t_d67ee218ff95e5 59
+internal/scheduler/deliver.go
+  s_1818a5989cfcac::t_b1be7e9c52b556 153
+  s_1818a5989cfcac::t_8f0280f40a96f3 211
+cmd/lineup/main.go
+  s_1818a5989cfcac::t_5a91c235551ec8 30
+internal/board/groups_test.go
+  s_1818a5989cfcac::t_0c9de9315409f5 301
+  s_1818a5989cfcac::t_3e406af53a93af 256
+  s_1818a5989cfcac::t_66e1226c574852 294
+  s_1818a5989cfcac::t_88cfddee0479a7 65
+  s_1818a5989cfcac::t_d0f78740386bb1 113-114
+  s_1818a5989cfcac::t_524e3bc9585ab8 179
+  s_1818a5989cfcac::t_3e0b484b65006a 283
+  s_1818a5989cfcac::t_be5d777701a636 55
+internal/lifecycle/stage.go
+  s_1818a5989cfcac::t_650aff57eee0ff 202-204
+  s_1818a5989cfcac::t_d4856d28febed6 13
+  s_1818a5989cfcac::t_d24634da35ca64 148
+  s_1818a5989cfcac::t_fdae51637e52b1 26
+  s_1818a5989cfcac::t_ffe631f207429f 126
+internal/scheduler/record.go
+  s_1818a5989cfcac::t_501b490df59a2f 280-284
+  s_1818a5989cfcac::t_661e2fadbbcea7 192
+  s_1818a5989cfcac::t_496bae5f1bbd7e 60-63
+internal/config/board_test.go
+  s_1818a5989cfcac::t_b649034249e587 13
+  s_1818a5989cfcac::t_ee9235d85ba301 31,35
+  s_1818a5989cfcac::t_211cc197f49db6 50
+internal/board/start_test.go
+  s_1818a5989cfcac::t_72e983876dce02 57,60-61,63-64
+  s_1818a5989cfcac::t_73e6013adf1e83 114-115,117-118
+  s_1818a5989cfcac::t_0f44bcc3b5d5bd 102-103
+  s_1818a5989cfcac::t_25d71ca4e95866 161-162
+  s_1818a5989cfcac::t_f9f7c4870d5910 199-212,214,216-222,227-247
+  s_1818a5989cfcac::t_8bc8005b4a29ec 191-192,194-195
+  s_1818a5989cfcac::t_3d6f27466a6b9d 5-6
+  s_1818a5989cfcac::t_ef6e25ff32b21d 89-90
+  s_1818a5989cfcac::t_f714caa33322d5 46-50
+  s_1818a5989cfcac::t_246ddf0eb167b6 248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d079bd1af5e2fb89e24ad0e9d16e8483848d5932",
+  "prompts": {},
+  "sessions": {
+    "s_1818a5989cfcac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a3fc8e6-5793-4a3f-9e11-3f14d84d32de",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_fe8d4c1691a132": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "954196b3-8743-4035-b4ed-db7be336559e",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
