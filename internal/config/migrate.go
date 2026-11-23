@@ -17,7 +17,8 @@ import (
 
 // Migrate rewrites the config file at path from [[repos]] tables and layer
 // keys at the top level to roots, [defaults], and [repos."<key>"] tables,
-// and from trackers lists to tracker keys. It writes the old file to
+// from trackers lists to tracker keys, and from the moved sections in the
+// [board] lists to their keys now. It writes the old file to
 // <path>.bak first, and puts the old file back when the new one does not
 // load. It returns a line for the user.
 func Migrate(path string) (string, error) {
@@ -30,7 +31,7 @@ func Migrate(path string) (string, error) {
 		return "", fmt.Errorf("%s: %w", path, err)
 	}
 	if text == string(old) {
-		return fmt.Sprintf("%s has no [[repos]] tables, no layer keys at the top level, and no trackers lists, so lineup changed nothing.", path), nil
+		return fmt.Sprintf("%s has no [[repos]] tables, no layer keys at the top level, no trackers lists, and no ready or queued in [board], so lineup changed nothing.", path), nil
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -80,7 +81,72 @@ func migrateFile(text string) (string, error) {
 			return "", err
 		}
 	}
-	return migrateTrackers(text)
+	if text, err = migrateTrackers(text); err != nil {
+		return "", err
+	}
+	return migrateBoard(text)
+}
+
+// migrateBoard rewrites each [board] list that names a moved section. The
+// first moved section takes the key that replaced it, in its place, and each
+// key stays in the list once.
+func migrateBoard(text string) (string, error) {
+	var raw struct {
+		Board boardFile `toml:"board"`
+	}
+	if _, err := toml.Decode(text, &raw); err != nil {
+		return "", err
+	}
+	lists := []struct {
+		name string
+		keys *[]string
+	}{{"order", raw.Board.Order}, {"collapsed", raw.Board.Collapsed}, {"hidden", raw.Board.Hidden}}
+	// set holds the new value of each list, by its name.
+	set := map[string]string{}
+	for _, l := range lists {
+		if l.keys == nil || !slices.ContainsFunc(*l.keys, func(k string) bool { return movedSections[k] != "" }) {
+			continue
+		}
+		var quoted []string
+		for _, k := range *l.keys {
+			if to, ok := movedSections[k]; ok {
+				k = to
+			}
+			if q := strconv.Quote(k); !slices.Contains(quoted, q) {
+				quoted = append(quoted, q)
+			}
+		}
+		set[l.name] = "[" + strings.Join(quoted, ", ") + "]"
+	}
+	if len(set) == 0 {
+		return text, nil
+	}
+	items, err := parseItems(text)
+	if err != nil {
+		return "", err
+	}
+	inBoard := false
+	for i, it := range items {
+		if it.kind == '[' {
+			name, _, array, _ := splitHeader(it.lines[it.above])
+			head, rest := firstKey(name)
+			inBoard = !array && head == "board" && strings.TrimSpace(rest) == ""
+		}
+		value, ok := set[it.first]
+		if !inBoard || it.kind != '=' || !ok {
+			continue
+		}
+		key := it.lines[it.above]
+		line := strings.TrimRight(key[:valueStart(key)-1], " \t") + " = " + value + " " + trailingComment(it.lines[len(it.lines)-1])
+		items[i].lines = append(slices.Clone(it.lines[:it.above]), strings.TrimRight(line, " "))
+		delete(set, it.first)
+	}
+	for _, l := range lists {
+		if value, ok := set[l.name]; ok {
+			return "", fmt.Errorf("board.%s: lineup config migrate finds the list outside the [board] header: write %s = %s by hand", l.name, l.name, value)
+		}
+	}
+	return keepLayout(items, text), nil
 }
 
 // migrateTrackers rewrites each trackers list as a tracker key, and adds

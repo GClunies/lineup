@@ -49,7 +49,7 @@ func TestTheFilterShowsAMatchFromAClosedGroupAndEscRestoresTheRows(t *testing.T)
 	if e.m.mode != modeFilter || !strings.Contains(v, "/ eng-20") {
 		t.Fatalf("mode %d, want the filter line:\n%s", e.m.mode, v)
 	}
-	if !strings.Contains(v, "Backlog 1\n") || !strings.Contains(v, "ENG-20 ") || strings.Contains(v, "ENG-9 ") || hasHeading(v, "Ready") {
+	if !strings.Contains(v, "Backlog 1\n") || !strings.Contains(v, "ENG-20 ") || strings.Contains(v, "ENG-9 ") || hasHeading(v, "Up next") {
 		t.Fatalf("the filter does not show just ENG-20 in an open Backlog:\n%s", v)
 	}
 	e.press("esc")
@@ -62,7 +62,7 @@ func TestEveryGroupWithAMatchOpensAndItsHeadingCountsTheMatches(t *testing.T) {
 	e := groupEnv(t)
 	e.press("/", "rename")
 	v := screen(e.m)
-	inOrder(t, v, "Ready 1\n", "LOCAL-1", "Done 1\n", "ENG-560")
+	inOrder(t, v, "Up next 1\n", "LOCAL-1", "Done 1\n", "ENG-560")
 	for _, gone := range []string{"ENG-9 ", "ENG-588"} {
 		if strings.Contains(v, gone) {
 			t.Fatalf("the filter shows %q:\n%s", gone, v)

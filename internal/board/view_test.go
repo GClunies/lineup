@@ -30,7 +30,7 @@ func exampleBoard() Model {
 	return m
 }
 
-// blockedBoard is exampleBoard with two Ready Issues. ENG-901 waits on ENG-900.
+// blockedBoard is exampleBoard with two Up next Issues. ENG-901 waits on ENG-900.
 func blockedBoard() Model {
 	return feed(exampleBoard(), mineIssuesMsg{ws: linear.Workspace{ID: "w1", Name: "Crexi"}, live: true,
 		issues: []linear.Issue{mineIssue("ENG-900", "unstarted", 2), mineIssue("ENG-901", "unstarted", 2, "ENG-900")}})
@@ -121,10 +121,10 @@ func TestABlockedIssueRowShowsBlockedAndTheStripNamesTheBlockers(t *testing.T) {
 	if l := lineOf(t, out, "ENG-901"); !strings.Contains(l, "blocked") || strings.Contains(l, "blocked by") {
 		t.Errorf("the blocked row must show blocked and not its blockers: %q", l)
 	}
-	if l := lineOf(t, out, "ENG-900"); !strings.Contains(l, "ready") {
-		t.Errorf("the Ready row must show ready: %q", l)
+	if l := lineOf(t, out, "ENG-900"); !strings.Contains(l, "up next") {
+		t.Errorf("the Up next row must show up next: %q", l)
 	}
-	if f := footerAt(m, 95); !strings.Contains(f, "\n ENG-901 · Ready · blocked by ENG-900\n") {
+	if f := footerAt(m, 95); !strings.Contains(f, "\n ENG-901 · Up next · blocked by ENG-900\n") {
 		t.Errorf("the strip must name the blockers:\n%s", f)
 	}
 }
@@ -201,7 +201,7 @@ func TestWithNoRowTheStripShowsTheRuleAndTheHints(t *testing.T) {
 func TestAStatusIsAWordWithAndWithoutColor(t *testing.T) {
 	before := lipgloss.ColorProfile()
 	t.Cleanup(func() { lipgloss.SetColorProfile(before) })
-	words := map[string]string{"AH-63": "stopped", "AH-64": "working", "ENG-900": "ready", "ENG-901": "blocked"}
+	words := map[string]string{"AH-63": "stopped", "AH-64": "working", "ENG-900": "up next", "ENG-901": "blocked"}
 	const pink = "38;2;243;163;181"
 	sgr := regexp.MustCompile(`\x1b\[([0-9;]*)m`)
 	for _, p := range []termenv.Profile{termenv.Ascii, termenv.TrueColor} {

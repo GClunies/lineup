@@ -136,11 +136,20 @@ func TestMigrateKeepsWhatEachCheckoutResolves(t *testing.T) {
 	if !slices.Equal(g.file.Roots, []string{"~/repos"}) {
 		t.Errorf("roots = %q, want [~/repos]", g.file.Roots)
 	}
+	wantBoard := Board{
+		Order:     []string{"Done", "Needs you", "Up next", "Working", "Waiting", "Backlog", "Follow-up"},
+		Collapsed: []string{"Backlog", "Up next"},
+		Hidden:    []string{"Done"},
+	}
+	if b, err := g.Board(); err != nil || !reflect.DeepEqual(b, wantBoard) {
+		t.Errorf("board %+v, %v, want %+v", b, err, wantBoard)
+	}
 	if bak, _ := os.ReadFile(path + ".bak"); !bytes.Equal(bak, old) {
 		t.Errorf("the .bak file is not the old file:\n%s", bak)
 	}
 	text, _ := os.ReadFile(path)
-	for _, c := range []string{"# Personal repos (GClunies/*) track Issues in GitHub.", "# Crexi only allows apps registered in Crexi", "# Personal: hod tracks its Issues in the Local Tracker only.\n[repos.\"GClunies/hod\"]"} {
+	for _, c := range []string{"# Personal repos (GClunies/*) track Issues in GitHub.", "# Crexi only allows apps registered in Crexi", "# Personal: hod tracks its Issues in the Local Tracker only.\n[repos.\"GClunies/hod\"]",
+		"# d on the board shows or hides Done.\n[board]\norder = [\"done\", \"needs_you\", \"up_next\", \"working\", \"waiting\", \"backlog\"]\ncollapsed = [\"backlog\", \"up_next\"] # start closed\n"} {
 		if !strings.Contains(string(text), c) {
 			t.Errorf("the migrated file lost %q:\n%s", c, text)
 		}
@@ -225,6 +234,8 @@ func TestMigrateRefusesWhatNoTableCanReplace(t *testing.T) {
 		"poll_interval = '''10s'''\n":                                                                                "line 1: lineup config migrate cannot move a multi-line string",
 		"[repos.\"GClunies/*\"]\ntrackers = [\"local\", \"github\"]\n":                                               `repos."GClunies/*": trackers holds 2 Trackers, but a Repo takes Issues from one Tracker`,
 		"[repos.\"GClunies/hod\"]\ntrackers = []\n":                                                                  `repos."GClunies/hod": trackers holds 0 Trackers`,
+		"board.order = [\"ready\", \"done\"]\n":                                                                      `board.order: lineup config migrate finds the list outside the [board] header: write order = ["up_next", "done"] by hand`,
+		"board = { hidden = [\"queued\"] }\n":                                                                        `board.hidden: lineup config migrate finds the list outside the [board] header: write hidden = ["up_next"] by hand`,
 	} {
 		path := write(t, filepath.Join(t.TempDir(), "config.toml"), text)
 		_, err := Migrate(path)
@@ -315,14 +326,88 @@ func TestMigrateLeavesTeamsWithAnOwnerTrackerAlone(t *testing.T) {
 }
 
 func TestMigrateChangesNothingInANewFile(t *testing.T) {
-	text := "roots = [\"~/repos\"]\n[defaults]\nwip_cap = 3\n[repos.\"o/r\"]\nwip_cap = 2\n"
+	text := "roots = [\"~/repos\"]\n[defaults]\nwip_cap = 3\n[repos.\"o/r\"]\nwip_cap = 2\n[board]\norder = [\"done\", \"up_next\"]\n"
 	path := write(t, filepath.Join(t.TempDir(), "config.toml"), text)
 	msg, err := Migrate(path)
-	if err != nil || msg != path+" has no [[repos]] tables, no layer keys at the top level, and no trackers lists, so lineup changed nothing." {
+	if err != nil || msg != path+" has no [[repos]] tables, no layer keys at the top level, no trackers lists, and no ready or queued in [board], so lineup changed nothing." {
 		t.Fatalf("Migrate = %q %v", msg, err)
 	}
 	if _, err := os.Stat(path + ".bak"); err == nil {
 		t.Error("a migration that changed nothing wrote a .bak file")
+	}
+}
+
+// The first of ready and queued in a [board] list becomes up_next, and the
+// other goes. The rest of the file keeps its layout and its comments.
+func TestMigrateRewritesReadyAndQueuedInTheBoardListsAsOneUpNext(t *testing.T) {
+	old := `start_skills = ["a"]
+
+# Board sections.
+[board]
+# The groups, top first.
+order = ["needs_you", "ready", "queued", "working"] # mine
+collapsed = [
+  "queued",
+  "backlog",
+]
+  hidden = ["queued"]
+
+[github.labels]
+backlog = "later"
+`
+	path := write(t, filepath.Join(t.TempDir(), "config.toml"), old)
+	msg, err := Migrate(path)
+	if err != nil || !strings.HasPrefix(msg, "Rewrote "+path) {
+		t.Fatalf("Migrate = %q %v", msg, err)
+	}
+	want := `start_skills = ["a"]
+
+# Board sections.
+[board]
+# The groups, top first.
+order = ["needs_you", "up_next", "working"] # mine
+collapsed = ["up_next", "backlog"]
+  hidden = ["up_next"]
+
+[github.labels]
+backlog = "later"
+`
+	if got, _ := os.ReadFile(path); string(got) != want {
+		t.Errorf("migrated file:\n%s\nwant\n%s", got, want)
+	}
+	g, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantBoard := Board{
+		Order:     []string{"Needs you", "Up next", "Working", "Follow-up", "Backlog", "Waiting", "Done"},
+		Collapsed: []string{"Up next", "Backlog"},
+		Hidden:    []string{"Up next"},
+	}
+	if b, err := g.Board(); err != nil || !reflect.DeepEqual(b, wantBoard) {
+		t.Errorf("board %+v, %v, want %+v", b, err, wantBoard)
+	}
+	if msg, err := Migrate(path); err != nil || !strings.Contains(msg, "changed nothing") {
+		t.Errorf("a second migration: %q %v", msg, err)
+	}
+}
+
+func TestMigrateKeepsThePlaceOfTheFirstMovedSection(t *testing.T) {
+	for old, want := range map[string]string{
+		`order = ["needs_you", "ready", "queued", "working"]`: `order = ["needs_you", "up_next", "working"]`,
+		`order = ["queued", "done", "ready"]`:                 `order = ["up_next", "done"]`,
+		`collapsed = ["backlog", "ready"]`:                    `collapsed = ["backlog", "up_next"]`,
+		`hidden = ["queued"]`:                                 `hidden = ["up_next"]`,
+		`order = ["up_next", "ready"]`:                        `order = ["up_next"]`,
+	} {
+		path := write(t, filepath.Join(t.TempDir(), "config.toml"), "[board]\n"+old+"\n")
+		if _, err := Migrate(path); err != nil {
+			t.Errorf("%s: %v", old, err)
+			continue
+		}
+		if got, _ := os.ReadFile(path); string(got) != "[board]\n"+want+"\n" {
+			t.Errorf("%s: migrated to\n%s\nwant %s", old, got, want)
+		}
 	}
 }
 

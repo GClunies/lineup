@@ -199,6 +199,7 @@ func TestBoardOptionsCarryTheConfigProblem(t *testing.T) {
 	cases := []struct{ name, body, want string }{
 		{"good", "start_skills = [\"a\"]\n", ""},
 		{"bad board", "[board]\nhidden = [\"dun\"]\n", `config: board.hidden: unknown section "dun" (default layout)`},
+		{"old board key", "[board]\norder = [\"queued\", \"done\"]\n", `config: board.order: section "queued" is now up_next. Run lineup config migrate to rewrite it (default layout)`},
 		{"bad file", "[github.labels]\nnope = \"x\"\n", "config: "},
 	}
 	for _, c := range cases {

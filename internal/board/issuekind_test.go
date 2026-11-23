@@ -13,7 +13,7 @@ import (
 	"github.com/gclunies/lineup/internal/scheduler"
 )
 
-// withLocal2 adds LOCAL-2 in Ready, with a Markdown body, to a mineEnv.
+// withLocal2 adds LOCAL-2 in Up next, with a Markdown body, to a mineEnv.
 func withLocal2(t *testing.T, e *workEnv, store localissues.Store) {
 	t.Helper()
 	is, err := store.Create("Split the log writer", "", "The writer holds **two** jobs.\n\n- rotate\n- flush")

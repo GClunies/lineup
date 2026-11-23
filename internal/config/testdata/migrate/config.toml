@@ -56,8 +56,8 @@ exclude_regex = "HLESS-"
 # Board sections: order, which start closed, and which are hidden.
 # d on the board shows or hides Done.
 [board]
-order = ["done", "needs_you", "working", "waiting", "ready", "backlog"]
-collapsed = ["backlog"]
+order = ["done", "needs_you", "queued", "working", "waiting", "ready", "backlog"]
+collapsed = ["backlog", "queued"] # start closed
 hidden = ["done"]
 
 # Personal: hod tracks its Issues in the Local Tracker only.

@@ -244,12 +244,11 @@ type queueFile struct {
 const defaultSlots = 3
 
 type Global struct {
-	file          globalFile
-	board         Board
-	boardWarnings []string
-	boardErr      error
-	home          string
-	lookPath      func(string) (string, error)
+	file     globalFile
+	board    Board
+	boardErr error
+	home     string
+	lookPath func(string) (string, error)
 
 	// keys caches the Repo key of each checkout path. The Scheduler asks for
 	// keys from several goroutines.
@@ -282,7 +281,7 @@ func (g *Global) GitHubLabels() map[string]string {
 
 // GitHubBacklogLabel is the label that puts a GitHub Issue in Backlog on the
 // Board: "backlog" unless [github.labels] sets backlog. An empty value puts
-// every GitHub Issue in Ready.
+// every GitHub Issue in Up next.
 func (g *Global) GitHubBacklogLabel() string {
 	if l, ok := g.file.GitHub.Labels[backlogKey]; ok {
 		return l
@@ -404,7 +403,7 @@ func Load(globalPath string) (*Global, error) {
 	if err := g.file.Merged.check(); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
-	if g.board, g.boardWarnings, g.boardErr = resolveBoard(g.file.Board); g.boardErr != nil {
+	if g.board, g.boardErr = resolveBoard(g.file.Board); g.boardErr != nil {
 		g.board = DefaultBoard()
 	}
 	return g, nil

@@ -712,7 +712,7 @@ func (m Model) sendStatus() {
 	}
 }
 
-// slotHint names the first Ready row when a build Task in alerts reached Done
+// slotHint names the first Up next row when a build Task in alerts reached Done
 // and v has a free WIP slot. It never starts the Issue. The rows come from
 // issueRows, not m.issues, so the filter never hides the hint.
 func (m Model) slotHint(v scheduler.BoardView, alerts []scheduler.TaskView) string {
@@ -723,7 +723,7 @@ func (m Model) slotHint(v scheduler.BoardView, alerts []scheduler.TaskView) stri
 		return ""
 	}
 	for _, r := range m.issueRows(v.Tasks) {
-		if r.Group != groupReady {
+		if r.Group != groupUpNext {
 			continue
 		}
 		slots := "slots"

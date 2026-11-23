@@ -18,20 +18,20 @@ import (
 )
 
 // This file holds the work view's Issue rows: the user's own Issues that
-// have no Task on the Board, in the Ready and Backlog groups.
+// have no Task on the Board, in the Up next and Backlog groups.
 
 const (
-	groupReady   = "Ready"
+	groupUpNext  = "Up next"
 	groupBacklog = "Backlog"
 	mineEvery    = 60 * time.Second
 )
 
-// issueGroup puts an Issue in Ready or Backlog by its Kind and its Linear
+// issueGroup puts an Issue in Up next or Backlog by its Kind and its Linear
 // state type or local status. Any other state is in no group. A GitHub
 // Issue has no status: githubGroup places it by its labels.
 var issueGroup = map[string]map[string]string{
-	scheduler.KindLinear: {"unstarted": groupReady, "backlog": groupBacklog, "triage": groupBacklog},
-	scheduler.KindLocal:  {string(localissues.Todo): groupReady, string(localissues.Backlog): groupBacklog},
+	scheduler.KindLinear: {"unstarted": groupUpNext, "backlog": groupBacklog, "triage": groupBacklog},
+	scheduler.KindLocal:  {string(localissues.Todo): groupUpNext, string(localissues.Backlog): groupBacklog},
 }
 
 var closedLocal = map[localissues.Status]bool{localissues.Done: true, localissues.Canceled: true}
@@ -81,7 +81,7 @@ func (r issueRow) priorityText() string {
 	return priorityGlyph[0]
 }
 
-// issueRows makes the Issue rows: the Issues in Ready or Backlog that no Task
+// issueRows makes the Issue rows: the Issues in Up next or Backlog that no Task
 // on the Board holds. An ID matches a Task's ID exactly, as each has its
 // canonical form. backlog is the label that puts a GitHub Issue in Backlog.
 func issueRows(lin []linear.Issue, loc []localissues.Issue, gh []github.OwnIssue, backlog string, tasks []scheduler.TaskView) []issueRow {
@@ -160,13 +160,13 @@ func issueRows(lin []linear.Issue, loc []localissues.Issue, gh []github.OwnIssue
 }
 
 // githubGroup puts a GitHub Issue in Backlog when it carries the backlog
-// label, and in Ready when it does not. GitHub matches label names without
+// label, and in Up next when it does not. GitHub matches label names without
 // case, and so does the Board.
 func githubGroup(labels []string, backlog string) string {
 	if backlog != "" && slices.ContainsFunc(labels, func(l string) bool { return strings.EqualFold(l, backlog) }) {
 		return groupBacklog
 	}
-	return groupReady
+	return groupUpNext
 }
 
 // shortRef names a blocker in the note: #12 in the Issue's own repository,

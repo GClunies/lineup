@@ -59,9 +59,9 @@ func rowKeys(rows []issueRow) []string {
 }
 
 func TestEachStateLandsInItsGroupOrInNone(t *testing.T) {
-	linearCases := map[string]string{"triage": groupBacklog, "backlog": groupBacklog, "unstarted": groupReady,
+	linearCases := map[string]string{"triage": groupBacklog, "backlog": groupBacklog, "unstarted": groupUpNext,
 		"started": "", "completed": "", "canceled": ""}
-	localCases := map[localissues.Status]string{localissues.Backlog: groupBacklog, localissues.Todo: groupReady,
+	localCases := map[localissues.Status]string{localissues.Backlog: groupBacklog, localissues.Todo: groupUpNext,
 		localissues.Started: "", localissues.InReview: "", localissues.Done: "", localissues.Canceled: ""}
 	for _, st := range localissues.Statuses {
 		if _, ok := localCases[st]; !ok {
@@ -128,7 +128,7 @@ func TestIssueRowsSortUnblockedThenPriorityThenLevelThenID(t *testing.T) {
 		{"natural ID order last",
 			[]linear.Issue{mineIssue("ENG-10", "unstarted", 2), mineIssue("ENG-9", "unstarted", 2), mineIssue("APP-30", "unstarted", 2)}, nil,
 			[]string{"APP-30", "ENG-9", "ENG-10"}},
-		{"Backlog before Ready",
+		{"Backlog before Up next",
 			[]linear.Issue{mineIssue("ENG-1", "backlog", 1), mineIssue("ENG-2", "triage", 1), mineIssue("ENG-3", "unstarted", 4, "ENG-1")},
 			[]localissues.Issue{localIssue(1, localissues.Backlog), localIssue(2, localissues.Todo)},
 			[]string{"ENG-1", "ENG-2", "LOCAL-1", "LOCAL-2", "ENG-3"}},
@@ -258,7 +258,7 @@ func TestUnblockedNeedsEveryBlockerDoneOrCanceled(t *testing.T) {
 }
 
 // mineEnv is a tracker env whose work view has Issue rows: two Linear Issues
-// in Ready and Backlog, and LOCAL-1 in Ready.
+// in Up next and Backlog, and LOCAL-1 in Up next.
 func mineEnv(t *testing.T) (*workEnv, localissues.Store) {
 	t.Helper()
 	e := newWorkEnv(t, acme)
@@ -271,13 +271,13 @@ func mineEnv(t *testing.T) (*workEnv, localissues.Store) {
 	return e, store
 }
 
-func TestTheWorkViewShowsReadyAndBacklogInTheirPlaces(t *testing.T) {
+func TestTheWorkViewShowsUpNextAndBacklogInTheirPlaces(t *testing.T) {
 	e, _ := mineEnv(t)
 	v := fixture()
 	e.m = openAll(feed(e.m, boardMsg(v)))
 	e.m.width = 200
 	out := ansi.Strip(e.m.View())
-	inOrder(t, out, "Needs you 2", "Backlog 1", "ENG-20", "Ready 2", "ENG-9", "LOCAL-1", "Working 3", "Waiting 1", "Done 1")
+	inOrder(t, out, "Needs you 2", "Backlog 1", "ENG-20", "Up next 2", "ENG-9", "LOCAL-1", "Working 3", "Waiting 1", "Done 1")
 }
 
 func TestJAndKMoveAcrossTaskAndIssueRows(t *testing.T) {
@@ -289,7 +289,7 @@ func TestJAndKMoveAcrossTaskAndIssueRows(t *testing.T) {
 		seen = append(seen, e.m.sel)
 		e.press("j")
 	}
-	want := []string{"ENG-588", "ENG-590", "group:Backlog", "ENG-20", "group:Ready", "ENG-9", "LOCAL-1", "group:Working", "ENG-601",
+	want := []string{"ENG-588", "ENG-590", "group:Backlog", "ENG-20", "group:Up next", "ENG-9", "LOCAL-1", "group:Working", "ENG-601",
 		"WEB-12", "ENG-592", "group:Waiting", "ENG-571", "group:Done", "ENG-560", "ENG-560", "ENG-560", "ENG-560"}
 	if !slices.Equal(seen, want) {
 		t.Fatalf("j moved through %v, want %v", seen, want)
