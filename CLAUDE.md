@@ -1,5 +1,12 @@
 # lineup
 
+## Intent
+
+- Before you change or judge lineup's behavior, read `docs/product-intent/README.md` and the relevant domain file. Before you change or judge lineup's internal design, read `docs/architecture-intent/README.md` and the relevant domain file.
+- A conflict with a statement is a bug or a blocker. If the user states a different intent, change the statement to match it, in the same PR as the code.
+- If no statement covers a behavior, ask the user. Do not treat the gap as a "no". Add the answer as a new statement.
+- Write no ADR and no spec.
+
 ## Merging
 
 - A PR merges only after the CI suite (the `test` job) passes on it. The ruleset "CI must pass" requires `test` on `main`. For a stack, push each parent branch first, then add it to that ruleset before its child PR opens. The ruleset rejects a direct push of an unchecked commit, so a branch that is already in it cannot receive its first push. Remove a branch from the ruleset after its stack lands.

@@ -333,7 +333,7 @@ var intros = map[lifecycle.Stage]string{
 	lifecycle.Responding: "Reviewers left feedback on the pull request for this Task. Respond to it.",
 }
 
-// draftRule holds back each reply to a person that is not a fix, by ADR 0026.
+// draftRule holds back each reply to a person that is not a fix (PROD-WORKER-003).
 // A Worker posts as the user, so the user approves each such reply first.
 // %[1]s is the Task's ID.
 const draftRule = "Post a reply to a person only when the reply reports a fix: the change that the person asks for, in a commit that you push. " +

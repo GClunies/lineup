@@ -34,7 +34,7 @@ Live lanes run on this machine, not on cloud VMs. Lineup is a solo TUI on Rex, a
 - [ ] Follow this dependency graph. Start dependent work only after its parent merges, or base it on the parent branch when the execution playbook stacks.
   - [ ] S1a is first. It branches from `main`.
   - [ ] S1b after S1a. S1c after S1b. S1d after S1c. The stack is `keep-tab-at-end`, `one-worker`, `restore-tab`, `hub-asks`.
-- [ ] Hold the file boundaries. S1a touches only `internal/lifecycle/*`, `internal/scheduler/*`, `internal/board/*`, `GLOSSARY.md`, `docs/spec/*`, `docs/adr/0017-*`. S1b touches only `internal/lifecycle/*`, `internal/scheduler/*`, `internal/harness/claude/*`, `internal/config/*`, `cmd/lineup/wire.go`, `GLOSSARY.md`, `docs/spec/*`, `docs/adr/0004-*`, `docs/adr/0018-*`. S1c touches only `internal/lifecycle/*`, `internal/scheduler/*`, `internal/config/*`, `internal/board/*`, `cmd/lineup/cli.go`, `cmd/lineup/main.go`, `cmd/lineup/*_test.go`, `GLOSSARY.md`, `docs/spec/*`. S1d touches only `cmd/lineup/agent/CLAUDE.md`, `cmd/lineup/hub_test.go`, `docs/spec/mvp.md`.
+- [ ] Hold the file boundaries. S1a touches only `internal/lifecycle/*`, `internal/scheduler/*`, `internal/board/*`, `GLOSSARY.md`, `docs/product-intent/*` (PROD-TABS-005). S1b touches only `internal/lifecycle/*`, `internal/scheduler/*`, `internal/harness/claude/*`, `internal/config/*`, `cmd/lineup/wire.go`, `GLOSSARY.md`, `docs/product-intent/*`, `docs/architecture-intent/*` (PROD-WORKER-001, ARCH-HARNESS-002). S1c touches only `internal/lifecycle/*`, `internal/scheduler/*`, `internal/config/*`, `internal/board/*`, `cmd/lineup/cli.go`, `cmd/lineup/main.go`, `cmd/lineup/*_test.go`, `GLOSSARY.md`, `docs/product-intent/*`. S1d touches only `cmd/lineup/agent/CLAUDE.md`, `cmd/lineup/hub_test.go`, `docs/product-intent/*`.
 - [ ] Hold the review gate. S1a, S1b, S1c, and S1d change an interaction. They wait for the operator's review in chat with screenshots and a video before merge.
 
 ### PR mechanics, for every PR
@@ -86,8 +86,8 @@ Each live lane runs on this machine at the PR head, in a worktree that `wt` crea
 - [ ] Edit `internal/board/view.go`.
 - [ ] Edit `internal/board/review_view.go`.
 - [ ] Edit `internal/board/board_test.go`.
-- [ ] Edit `GLOSSARY.md`, `docs/spec/mvp.md`, and `docs/spec/reviews.md`.
-- [ ] Create `docs/adr/0017-the-user-closes-every-task-tab.md`.
+- [ ] Edit `GLOSSARY.md`, PROD-TABS-006, and PROD-REVIEW-012.
+- [ ] Write PROD-TABS-005.
 
 **Build.**
 
@@ -98,8 +98,8 @@ Each live lane runs on this machine at the PR head, in a worktree that `wt` crea
 - [ ] In `api.go`, `archive` on a Done Task with a `WindowID` applies `TaskClosed{}` first, then sets `Archived`.
 - [ ] In `scheduler.go`, the Done filter near `doneShownFor` keeps a Done Task on the Board while its `WindowID` is set.
 - [ ] In `internal/board/model.go`, `x` on a Done Task with a live tab asks `close <task>'s tab and worktree? (y/n)` and sends `close`. On a Done Task with no tab it sends `archive`, as today. Update the hints in `view.go` and the help text in `view.go` and `review_view.go`.
-- [ ] Write ADR 0017. Only the user closes a Task tab. Task end keeps the tab and worktree. A Done Task's tab that the user closes removes its worktree and an empty Repo session.
-- [ ] Update `GLOSSARY.md` (Task, Board, Archived), `docs/spec/mvp.md` lines 15, 461, and 468, and `docs/spec/reviews.md` line 276.
+- [ ] Write PROD-TABS-005. Only the user closes a Task tab. Task end keeps the tab and worktree. A Done Task's tab that the user closes removes its worktree and an empty Repo session.
+- [ ] Update `GLOSSARY.md` (Task, Board, Archived), PROD-TABS-006, PROD-TABS-009, and PROD-REVIEW-012.
 
 **You see.**
 
@@ -164,9 +164,9 @@ Each live lane runs on this machine at the PR head, in a worktree that `wt` crea
 - [ ] Edit `internal/config/config.go`.
 - [ ] Edit `internal/config/config_test.go`.
 - [ ] Edit `cmd/lineup/wire.go`.
-- [ ] Edit `GLOSSARY.md` and `docs/spec/mvp.md`.
-- [ ] Edit `docs/adr/0004-fresh-worker-per-stage.md`.
-- [ ] Create `docs/adr/0018-one-worker-for-each-task.md`.
+- [ ] Edit `GLOSSARY.md` and PROD-WORKER-001.
+- [ ] Edit ARCH-HARNESS-002.
+- [ ] Write PROD-WORKER-001.
 
 **Build.**
 
@@ -183,8 +183,8 @@ Each live lane runs on this machine at the PR head, in a worktree that `wt` crea
 - [ ] Set `Record.Conversation` to a new UUID when a build Task's first Worker starts. Pass it as `--session-id` in `wire.go`. Update the comment in `record.go` lines 45-47.
 - [ ] For a review Task, a rerun of Reviewing keeps the Conversation and types the review prompt. Delete the new UUID at `scheduler.go` lines 405-410.
 - [ ] In `config.go`, reject `model` and `effort` under every `[stage.<key>]` other than `default`, `working`, and `reviewing`, with the message `stage.<key>.model: a Task keeps the model of the Stage its Worker starts in`. `skill` stays per Stage, because the typed prompt carries it.
-- [ ] Write ADR 0018. One Worker for each Task. It supersedes ADR 0004. Mark ADR 0004 superseded.
-- [ ] Update `GLOSSARY.md` (Worker, Stage) and `docs/spec/mvp.md` lines 231 and 304.
+- [ ] Write PROD-WORKER-001 and ARCH-HARNESS-002. One Worker for each Task. The fresh Worker for each Stage becomes a `Not:` line of ARCH-HARNESS-002.
+- [ ] Update `GLOSSARY.md` (Worker, Stage) and PROD-WORKER-001.
 
 **You see.**
 
@@ -254,7 +254,7 @@ Each live lane runs on this machine at the PR head, in a worktree that `wt` crea
 - [ ] Edit `internal/board/board_test.go` and `internal/board/review_test.go`.
 - [ ] Edit `cmd/lineup/cli.go` and `cmd/lineup/main.go`.
 - [ ] Create `cmd/lineup/open_test.go`.
-- [ ] Edit `GLOSSARY.md`, `docs/spec/mvp.md`, and `docs/spec/reviews.md`.
+- [ ] Edit `GLOSSARY.md`, PROD-TABS-012, PROD-WORKER-009, and PROD-REVIEW-015.
 
 **Build.**
 
@@ -273,7 +273,7 @@ Each live lane runs on this machine at the PR head, in a worktree that `wt` crea
 - [ ] Add `open` to `clientCommands` in `cli.go`. Add the usage line `lineup open <task>  focus the Task's tab, or restore its closed Worker` to `main.go`.
 - [ ] In `internal/board/model.go`, `enter` sends `open` for every started Task. The hint reads `restore the Worker` when the row has no live tab.
 - [ ] Back up `~/.config/lineup/config.toml`, then delete its `restarts = 2` line before the head Scheduler starts. The loader rejects unknown keys at `config.go` line 407.
-- [ ] Update `GLOSSARY.md` (Needs you, Loop budget), `docs/spec/mvp.md` lines 172, 184, 231, 265, 283-285, 325, and 610, and `docs/spec/reviews.md` lines 233-241, 262, and 369.
+- [ ] Update `GLOSSARY.md` (Needs you, Loop budget), PROD-LIFE-012 to PROD-LIFE-015, PROD-TABS-012, PROD-WORKER-009, and PROD-REVIEW-015.
 
 **You see.**
 
@@ -330,7 +330,7 @@ Each live lane runs on this machine at the PR head, in a worktree that `wt` crea
 
 - [ ] Edit `cmd/lineup/agent/CLAUDE.md`.
 - [ ] Edit `cmd/lineup/hub_test.go`.
-- [ ] Edit `docs/spec/mvp.md`.
+- [ ] Edit PROD-ORCH-003.
 
 **Build.**
 
@@ -406,7 +406,7 @@ Unproven. The hunk pane's behavior after a resumed review Worker, which lane S1c
 
 ## Appendix B. Alternatives rejected
 
-**A fresh Worker for each Stage in the same tab.** ADR 0004 chose it for a model per Stage and a focused context. No config uses a per-Stage model, and the Working Worker holds the context that CI debug needs. The fresh Worker also forces a new tab each Stage, which is the behavior the user wants gone.
+**A fresh Worker for each Stage in the same tab.** The design that ARCH-HARNESS-002 rejects chose it for a model per Stage and a focused context. No config uses a per-Stage model, and the Working Worker holds the context that CI debug needs. The fresh Worker also forces a new tab each Stage, which is the behavior the user wants gone.
 
 **Split the tab and keep the old Worker's pane.** It closes nothing, but panes pile up with each Stage, and two agents share one worktree.
 
@@ -431,8 +431,8 @@ Unproven. The hunk pane's behavior after a resumed review Worker, which lane S1c
 
 ## Appendix D. Links and reading list
 
-Read before editing. `GLOSSARY.md`, `docs/spec/mvp.md`, `docs/spec/reviews.md`, `docs/adr/0004-fresh-worker-per-stage.md`, `docs/adr/0012-a-review-is-a-task-kind.md`, `docs/adr/0016-one-front-agent.md`, and `CLAUDE.md`.
+Read before editing. `GLOSSARY.md`, `docs/product-intent/`, ARCH-HARNESS-002, ARCH-REVIEW-001, ARCH-ORCH-001, and `CLAUDE.md`.
 
-S1b and S1c get `pstack/skills/architect/SKILL.md` for `deliver` and the op `open`. S1b gets `pstack/skills/interrogate/SKILL.md`, because it reverses ADR 0004.
+S1b and S1c get `pstack/skills/architect/SKILL.md` for `deliver` and the op `open`. S1b gets `pstack/skills/interrogate/SKILL.md`, because it reverses the fresh Worker for each Stage, the `Not:` line of ARCH-HARNESS-002.
 
 The trail follows `pstack/skills/show-me-your-work/SKILL.md`. Keep it local unless a PR's verdict is contested.

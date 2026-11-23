@@ -505,8 +505,8 @@ func TestASpentRespondingBudgetNamesTheOpenThreads(t *testing.T) {
 	}
 }
 
-// ADR 0013 keeps the bot's rounds apart from people's rounds, so open bot
-// threads on a score that passes spend a review cycle.
+// Open bot threads on a score that passes spend a review cycle, so the bot's
+// rounds stay apart from people's rounds (PROD-LAND-013).
 func TestBotThreadsOnAPassingScoreSpendAReviewCycle(t *testing.T) {
 	five := 5
 	p := userPolicy

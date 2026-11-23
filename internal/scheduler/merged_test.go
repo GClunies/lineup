@@ -313,7 +313,7 @@ func TestADoneTaskThatIsNotClosingKeepsItsRestoredShell(t *testing.T) {
 	}
 }
 
-// ADR 0024: each end of a review Task closes its tab, so close_tab changes nothing for it.
+// Each end of a review Task closes its tab, so close_tab changes nothing for it (PROD-REVIEW-012).
 func TestAMergedReviewIgnoresCloseTab(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, closeMerged(newClock(), 7*24*time.Hour))
 	h.gh.setReview(openPR(7, "h1"))
