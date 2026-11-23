@@ -15,7 +15,10 @@ const usage = `usage: lineup [command]
 
   lineup                       open the Hub in Rex
   lineup serve                 run the Scheduler in the foreground
-  lineup restart               install the Scheduler's launchd agent and restart it
+  lineup restart               restart the Scheduler, then open each Hub tab again: each
+                               Board runs the installed lineup, and the Orchestrator starts
+                               a new session
+  lineup restart scheduler     install the Scheduler's launchd agent and restart only it
   lineup stop                  stop the Scheduler until the next restart or login
   lineup logs                  follow the Scheduler's log
   lineup board                 run the Board: your build Tasks and your Issues
@@ -78,7 +81,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return openHub()
+		return openHub(hubRepair)
 	}
 	if cmd, ok := clientCommands[args[0]]; ok {
 		return cmd(scheduler.Client{Path: socketPath()}, args[1:], os.Stdout)
@@ -89,7 +92,9 @@ func run(args []string) error {
 	case "board":
 		return runBoard(args[1:])
 	case "restart":
-		return cmdRestart()
+		return cmdRestart(args[1:], os.Stdout, restartScheduler, openHub)
+	case "hub": // openHub's detached copy runs this, so usage leaves it out
+		return runHub(args[1:])
 	case "stop":
 		return cmdStop()
 	case "logs":

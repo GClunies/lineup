@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -341,5 +343,45 @@ func TestRestartRefusesABadPrefix(t *testing.T) {
 	}
 	if len(*calls) != 0 {
 		t.Fatalf("restart with a reserved prefix ran %q", *calls)
+	}
+}
+
+func TestLineupRestartRestartsTheSchedulerThenTheHub(t *testing.T) {
+	bad := errors.New("the Scheduler keeps running on the old config")
+	for _, c := range []struct {
+		name      string
+		args      []string
+		scheduler error
+		calls     []string
+		err       error
+	}{
+		{"lineup restart", nil, nil, []string{"scheduler", "hub fresh"}, nil},
+		{"lineup restart scheduler", []string{"scheduler"}, nil, []string{"scheduler"}, nil},
+		{"a config that does not load", nil, bad, []string{"scheduler"}, bad},
+		{"an unknown argument", []string{"board"}, nil, nil, errUsage},
+		{"two arguments", []string{"scheduler", "hub"}, nil, nil, errUsage},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var calls []string
+			scheduler := func() error {
+				calls = append(calls, "scheduler")
+				return c.scheduler
+			}
+			hub := func(m hubMode) error {
+				calls = append(calls, map[hubMode]string{hubRepair: "hub repair", hubFresh: "hub fresh"}[m])
+				return nil
+			}
+			var out bytes.Buffer
+			err := cmdRestart(c.args, &out, scheduler, hub)
+			if !errors.Is(err, c.err) || (c.err == nil) != (err == nil) {
+				t.Fatalf("err %v, want %v", err, c.err)
+			}
+			if !slices.Equal(calls, c.calls) {
+				t.Errorf("calls %q, want %q", calls, c.calls)
+			}
+			if want := slices.Contains(c.calls, "scheduler") && c.scheduler == nil; strings.Contains(out.String(), restarted) != want {
+				t.Errorf("printed %q", out.String())
+			}
+		})
 	}
 }
