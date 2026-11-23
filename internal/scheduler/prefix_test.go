@@ -53,8 +53,8 @@ func TestAnAdHocTaskOfAPrefixedRepoTakesThePrefix(t *testing.T) {
 		}
 		return len(sessions) == 1
 	})
-	if s, ok := sessions["HOD-3 block linear writes"]; !ok || s != "session:hod" {
-		t.Errorf("tabs = %v, want the tab HOD-3 block linear writes in session:hod", sessions)
+	if s, ok := sessions["HOD-3 block linear writes"]; !ok || s != "session:acme/hod" {
+		t.Errorf("tabs = %v, want the tab HOD-3 block linear writes in session:acme/hod", sessions)
 	}
 }
 

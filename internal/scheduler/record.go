@@ -34,7 +34,8 @@ type Record struct {
 	Text     string `json:"text,omitempty"`
 	Repo     string `json:"repo"`
 	RepoSlug string `json:"repo_slug"`
-	// Session is the Rex session: the Repo's label.
+	// Session is the label of the Rex session: the Repo key for a build Task,
+	// reviewSession for a review Task.
 	Session   string `json:"session"`
 	RepoLabel string `json:"repo_label,omitempty"`
 	// Branch is "" for a review Task: lineup makes no branch for it.
@@ -184,16 +185,15 @@ func textTitle(text string) string {
 	return strings.TrimRight(head, titleTail)
 }
 
-// HubSession is the Rex session of the Hub. The Scheduler removes a Repo
-// session after its last Task, so no Repo session may take this name.
+// HubSession is the Rex session of the Hub. No Repo session takes this name,
+// because a Repo key always holds a "/".
 const HubSession = "my-lineup"
 
-// sessionLabel is the Repo's folder name, with its parent folder added when
-// another Repo on the Board has the same folder name, or when the folder name
-// is HubSession.
-func sessionLabel(repo string, others []string) string {
+// repoLabel is the Board's name for the Repo: its folder name, with its parent
+// folder added when another Repo on the Board has the same folder name.
+func repoLabel(repo string, others []string) string {
 	base := filepath.Base(repo)
-	if base == HubSession || slices.ContainsFunc(others, func(o string) bool { return o != repo && filepath.Base(o) == base }) {
+	if slices.ContainsFunc(others, func(o string) bool { return o != repo && filepath.Base(o) == base }) {
 		return filepath.Base(filepath.Dir(repo)) + "-" + base
 	}
 	return base

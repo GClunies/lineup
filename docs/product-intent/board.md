@@ -85,3 +85,7 @@ When a build Task reaches Done and the started build Tasks are fewer than the WI
 ## PROD-BOARD-021: The Board shows its cache when the Scheduler is offline
 
 While the Board cannot reach the Scheduler, it shows the view that the Scheduler last saved, and the header shows `scheduler offline, showing cache: run lineup restart` in pink. The Board tries to connect again every 2 s. When it connects, the alert leaves and the live view replaces the cache.
+
+## PROD-BOARD-022: A Task names its Repo by the Repo's folder
+
+The Repo of a Task on the Board, in `lineup ls`, and in `lineup show` is the folder name of the Repo, for example `data`. If two Repos of Tasks on the Board share a folder name, each name adds the parent folder, for example `acme-data`.

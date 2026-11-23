@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -117,6 +118,24 @@ func (c *Client) EnsureSession(ctx context.Context, label string) (string, error
 		}
 	}
 	return v.ID, nil
+}
+
+// RenameSession gives the session the label, unless another session has it.
+// Rex lets two sessions share a label, and EnsureSession would then find
+// either one. A missing session is no error.
+func (c *Client) RenameSession(ctx context.Context, session, label string) error {
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+	ss, err := c.Sessions(ctx)
+	if err != nil {
+		return err
+	}
+	if slices.ContainsFunc(ss, func(s Session) bool { return s.Label == label }) ||
+		!slices.ContainsFunc(ss, func(s Session) bool { return s.ID == session }) {
+		return nil
+	}
+	_, err = c.run(ctx, "session", "rename", session, label)
+	return err
 }
 
 // NewWindow opens a tab that runs argv. With keep, the tab stays open after

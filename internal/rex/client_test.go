@@ -26,6 +26,8 @@ case "$1 $2" in
 "session new")
 	sleep 0.2; echo "$3" >> "$state"
 	printf '{"session_id":"id-%s","initial_windows":[]}\n' "$3" ;;
+"session rename")
+	echo "$3 $4" >> "$state.renamed" ;;
 esac
 `
 	bin := filepath.Join(dir, "rex")
@@ -52,6 +54,21 @@ func TestEnsureSessionCreatesOneSessionForConcurrentCallers(t *testing.T) {
 	b, _ := os.ReadFile(state)
 	if n := strings.Count(string(b), "data\n"); n != 1 || ids[0] != ids[1] {
 		t.Fatalf("created %d data sessions, ids %q", n, ids)
+	}
+}
+
+func TestRenameSessionLeavesATakenLabelAndAMissingSession(t *testing.T) {
+	c, state := fakeRex(t)
+	os.WriteFile(state, []byte("data\nacme/web\n"), 0o644)
+	ctx := context.Background()
+	for _, call := range [][2]string{{"id-data", "acme/data"}, {"id-web", "acme/web"}, {"id-gone", "acme/gone"}} {
+		if err := c.RenameSession(ctx, call[0], call[1]); err != nil {
+			t.Fatalf("RenameSession(%s, %s): %v", call[0], call[1], err)
+		}
+	}
+	b, _ := os.ReadFile(state + ".renamed")
+	if got, want := string(b), "id-data acme/data\n"; got != want {
+		t.Fatalf("renames = %q, want %q", got, want)
 	}
 }
 

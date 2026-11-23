@@ -129,7 +129,7 @@ func TestWithCloseTabOffAMergeKeepsTheTabAndTheWorktree(t *testing.T) {
 func TestAMergedTaskClosesItsTabWhenTheWorkerIsIdle(t *testing.T) {
 	h, _ := mergeWith(t, "idle", closeMerged(newClock(), 7*24*time.Hour))
 	h.waitTabClosedByLineup()
-	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:data"}) })
+	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:acme/data"}) })
 	v := h.task("ENG-1")
 	if v.Note != "#42 merged · worktree until Nov 14" || v.Worktree == "" {
 		t.Fatalf("task = %+v, want its worktree kept until Nov 14", v)
