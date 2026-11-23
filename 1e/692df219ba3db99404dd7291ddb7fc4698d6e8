@@ -1,0 +1,27 @@
+internal/rex/client_test.go
+  s_42ed9e806a4615::t_1ef3710ace423b 8
+  s_42ed9e806a4615::t_70d7fc4f453dcc 142-179
+internal/rex/client.go
+  s_42ed9e806a4615::t_6f5bb7220f6157 317-340
+  s_42ed9e806a4615::t_ef0db783b1d21a 259
+  s_42ed9e806a4615::t_c2c62a7a1804e8 244-245
+  s_42ed9e806a4615::t_dab4f0644018b5 28-29
+internal/rex/integration_test.go
+  s_42ed9e806a4615::t_5040b03fe64ecc 195-199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1e692df219ba3db99404dd7291ddb7fc4698d6e8",
+  "prompts": {},
+  "sessions": {
+    "s_42ed9e806a4615": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "854ddd4a-5137-4106-bc62-dbf704a711d4",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
