@@ -60,6 +60,8 @@ type Record struct {
 	// reaches the Task. The JSON key keeps its old name: a stored record holds
 	// it, and recovery opens a second pane beside a Worker whose key it lost.
 	SideBlockID string `json:"hunk_block_id,omitempty"`
+	// Side is what the side pane runs. A Record from before it has none.
+	Side *sidePane `json:"side,omitempty"`
 	// WorkerStage is the Stage of the prompt that the Task's Worker got last.
 	// It is nil until a Worker opens.
 	WorkerStage *lifecycle.Stage `json:"worker_stage,omitempty"`

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -88,6 +89,30 @@ func (p rexPort) Blocks(ctx context.Context, session string) (map[string]bool, e
 		}
 	}
 	return live, nil
+}
+
+// Panes reads the process of each block in the tab. A block whose process
+// Rex cannot read, for example one that closed since, keeps its label and has
+// no program.
+func (p rexPort) Panes(ctx context.Context, session, window string) ([]scheduler.Pane, error) {
+	v, err := p.c.View(ctx, session)
+	if err != nil {
+		if rex.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []scheduler.Pane
+	for _, w := range v.Windows {
+		if w.ID != window {
+			continue
+		}
+		for i, b := range w.BlockIDs {
+			program, _ := p.c.Foreground(ctx, session, b)
+			out = append(out, scheduler.Pane{BlockID: b, Label: w.Labels[i], Program: program})
+		}
+	}
+	return out, nil
 }
 
 func (p rexPort) ProgramStatus(ctx context.Context, session, block string) (scheduler.Status, error) {
@@ -251,6 +276,14 @@ func (p worktreePort) Remove(ctx context.Context, repo, branch string) error {
 		return fmt.Errorf("%w: %w", scheduler.ErrUncommitted, err)
 	}
 	return err
+}
+
+func (p worktreePort) DiffBase(ctx context.Context, wt string) (string, error) {
+	base, err := worktree.DiffBase(ctx, wt)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", fmt.Errorf("%w: %w", scheduler.ErrNoWorktree, err)
+	}
+	return base, err
 }
 
 func (p worktreePort) AddReview(ctx context.Context, repo string, pr scheduler.ReviewPR) (string, error) {
