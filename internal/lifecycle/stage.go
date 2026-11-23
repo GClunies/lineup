@@ -10,8 +10,7 @@ import (
 type Stage int
 
 const (
-	Queued Stage = iota
-	Working
+	Working Stage = iota
 	CIRunning
 	CIDebug
 	InReview
@@ -24,7 +23,7 @@ const (
 
 // Kind is the sort of work that a Task does. A build Task makes the user's own
 // PR. A review Task reviews someone else's PR. Each Kind has its own Stages,
-// and Queued and Done belong to both.
+// and Done belongs to both.
 type Kind int
 
 const (
@@ -83,7 +82,6 @@ const (
 	GroupNeedsYou Group = iota
 	GroupWorking
 	GroupWaiting
-	GroupQueued
 	GroupDone
 )
 
@@ -94,7 +92,6 @@ var stages = [...]struct {
 	group Group
 	kinds kindSet
 }{
-	Queued:      {"Queued", "queued", OwnerUser, GroupQueued, build | review},
 	Working:     {"Working", "working", OwnerAgent, GroupWorking, build},
 	CIRunning:   {"CI running", "ci_running", OwnerCI, GroupWaiting, build},
 	CIDebug:     {"CI debug", "ci_debug", OwnerAgent, GroupWorking, build},
@@ -126,7 +123,7 @@ func (s Stage) Agent() bool { return stages[s].owner == OwnerAgent }
 
 // Started reports whether a Task in the Stage has started: it counts toward
 // the WIP cap for a build Task, and toward its queue's slots for a review Task.
-func (s Stage) Started() bool { return s != Queued && s != Done }
+func (s Stage) Started() bool { return s != Done }
 
 // MarshalText saves the Stage by its key, so that the store does not depend on
 // the order of the constants.
@@ -148,7 +145,7 @@ func ParseStage(key string) (Stage, error) {
 }
 
 func (g Group) String() string {
-	return [...]string{"Needs you", "Working", "Waiting", "Queued", "Done"}[g]
+	return [...]string{"Needs you", "Working", "Waiting", "Done"}[g]
 }
 
 // Reason says why a Task has the Needs you flag. The empty Reason is no flag.
@@ -202,4 +199,7 @@ const (
 	OutcomeClosed   Outcome = "closed"
 	OutcomeReviewed Outcome = "reviewed"
 	OutcomeSkipped  Outcome = "skipped"
+	// OutcomeRemoved is a Task that lineup stored before an add started each
+	// Task, and that never started.
+	OutcomeRemoved Outcome = "removed"
 )

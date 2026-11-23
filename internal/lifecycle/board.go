@@ -142,20 +142,36 @@ func NewBoard(cap int) *Board {
 	return &Board{Cap: cap, Slots: map[string]int{}, Tasks: map[string]*Task{}}
 }
 
-// Add puts a Queued build Task on the Board. Its PR has no Feedback yet, so
-// each comment counts as new.
-func (b *Board) Add(id string, p Policy) *Task {
-	t := &Task{ID: id, Stage: Queued, Policy: p, Left: p.Budgets, Taken: &time.Time{}}
+// Add puts a build Task on the Board and starts it in Working. A full WIP cap
+// refuses the Task unless overCap is the user's yes, and the Board then holds
+// nothing new. The Task's PR has no Feedback yet, so each comment counts as new.
+func (b *Board) Add(id string, p Policy, overCap bool) (*Task, []Effect, error) {
+	full := b.Started() >= b.Cap
+	if full && !overCap {
+		return nil, nil, ErrWIPCapFull
+	}
+	t := newTask(id, KindBuild, p)
+	t.OverCap = full
 	b.Tasks[id] = t
-	return t
+	return t, []Effect{TrackerStatus{"started"}, PromptWorker{Working}}, nil
 }
 
-// AddReview puts a Queued review Task on the Board. queue is "" for a review
-// that the user asked for.
-func (b *Board) AddReview(id, queue string, p Policy) *Task {
-	t := b.Add(id, p)
-	t.Kind, t.Queue = KindReview, queue
-	return t
+// AddReview puts a review Task on the Board and starts it in Reviewing. queue
+// is "" for a review that the user asked for. A queue whose slots are full, or
+// full shared slots, refuse the Task, and the Board then holds nothing new.
+func (b *Board) AddReview(id, queue string, p Policy) (*Task, []Effect, error) {
+	if queue != "" && (b.QueueStarted(queue) >= b.Slots[queue] ||
+		b.SharedSlots > 0 && b.QueuesStarted() >= b.SharedSlots) {
+		return nil, nil, ErrSlotsFull
+	}
+	t := newTask(id, KindReview, p)
+	t.Queue = queue
+	b.Tasks[id] = t
+	return t, []Effect{PromptWorker{Reviewing}}, nil
+}
+
+func newTask(id string, k Kind, p Policy) *Task {
+	return &Task{ID: id, Kind: k, Stage: k.FirstStage(), Policy: p, Left: p.Budgets, Taken: &time.Time{}}
 }
 
 // Started counts the started build Tasks. Review Tasks never count toward the WIP cap.
@@ -198,24 +214,6 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 	notAllowed := &NotAllowedError{Signal: s.Name(), Stage: t.Stage}
 
 	switch s := s.(type) {
-	case Start:
-		if t.Stage != Queued {
-			return nil, notAllowed
-		}
-		if t.Kind == KindReview {
-			if t.Queue != "" && (b.QueueStarted(t.Queue) >= b.Slots[t.Queue] ||
-				b.SharedSlots > 0 && b.QueuesStarted() >= b.SharedSlots) {
-				return nil, ErrSlotsFull
-			}
-			return t.startAgent(Reviewing), nil
-		}
-		if b.Started() >= b.Cap && !s.OverCap {
-			return nil, ErrWIPCapFull
-		}
-		t.OverCap = s.OverCap && b.Started() >= b.Cap
-		t.enter(Working)
-		return []Effect{TrackerStatus{"started"}, PromptWorker{Working}}, nil
-
 	case PRMerge:
 		if t.Stage != ReadyToLand {
 			return nil, notAllowed
@@ -248,7 +246,7 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 		return nil, nil
 
 	case Rerun:
-		if !s.Stage.Agent() || !t.Kind.Has(s.Stage) || t.Stage == Queued || t.Stage == Done {
+		if !s.Stage.Agent() || !t.Kind.Has(s.Stage) || t.Stage == Done {
 			return nil, notAllowed
 		}
 		effects := t.startAgent(s.Stage)
@@ -257,7 +255,7 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 		return effects, nil
 
 	case PRMerged:
-		if t.Stage == Done || t.Stage == Queued {
+		if t.Stage == Done {
 			return nil, nil
 		}
 		return t.finish(OutcomeMerged), nil

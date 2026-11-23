@@ -9,7 +9,8 @@ import (
 
 func reviewIn(stage Stage, queue string) (*Board, *Task) {
 	b := NewBoard(1)
-	t := b.AddReview("R", queue, policy)
+	b.Slots[queue] = 1
+	t, _, _ := b.AddReview("R", queue, policy)
 	t.Stage = stage
 	return b, t
 }
@@ -25,7 +26,6 @@ func TestReviewTransitions(t *testing.T) {
 		effects []Effect
 		outcome Outcome
 	}{
-		{"start", Queued, Start{}, Reviewing, "", []Effect{PromptWorker{Reviewing}}, ""},
 		{"done with findings", Reviewing, WorkerDone{ContractMet: true}, ReviewReady, "", nil, ""},
 		{"done without findings", Reviewing, WorkerDone{ContractMet: false}, Reviewing, ReasonStopped, nil, ""},
 		{"reviewed while reviewing", Reviewing, PRReviewed{}, Done, "", ended, OutcomeReviewed},
@@ -38,10 +38,8 @@ func TestReviewTransitions(t *testing.T) {
 		{"tab closed when ready", ReviewReady, TabClosed{}, ReviewReady, "", nil, ""},
 		{"worker exits when ready", ReviewReady, WorkerExited{Code: 0}, ReviewReady, "", nil, ""},
 		{"worker fails when ready", ReviewReady, WorkerExited{Code: 1}, ReviewReady, "", nil, ""},
-		{"user closes while queued", Queued, TaskClosed{}, Done, "", ended, OutcomeClosed},
 		{"user closes while reviewing", Reviewing, TaskClosed{}, Done, "", ended, OutcomeClosed},
 		{"user closes when ready", ReviewReady, TaskClosed{}, Done, "", ended, OutcomeClosed},
-		{"user skips while queued", Queued, TaskClosed{Skipped: true}, Done, "", ended, OutcomeSkipped},
 		{"user skips while reviewing", Reviewing, TaskClosed{Skipped: true}, Done, "", ended, OutcomeSkipped},
 		{"user skips when ready", ReviewReady, TaskClosed{Skipped: true}, Done, "", ended, OutcomeSkipped},
 		{"rerun the review", ReviewReady, Rerun{Reviewing}, Reviewing, "", []Effect{PromptWorker{Reviewing}}, ""},
@@ -64,55 +62,53 @@ func TestReviewTransitions(t *testing.T) {
 	}
 }
 
+// refusesReview reports whether the Board refuses a review Task of the queue
+// with ErrSlotsFull and holds nothing new.
+func refusesReview(b *Board, id, queue string) bool {
+	task, effects, err := b.AddReview(id, queue, policy)
+	_, held := b.Tasks[id]
+	return errors.Is(err, ErrSlotsFull) && task == nil && effects == nil && !held
+}
+
 func TestAReviewStartsOnlyWithAFreeSlot(t *testing.T) {
 	b := NewBoard(5)
 	b.Slots["platform"] = 1
-	first := b.AddReview("R-1", "platform", policy)
-	second := b.AddReview("R-2", "platform", policy)
-	asked := b.AddReview("R-3", "", policy)
-	gone := b.AddReview("R-4", "a queue that left the config", policy)
-	if _, err := b.Apply("R-1", Start{}); err != nil || first.Stage != Reviewing {
-		t.Fatalf("first start: stage %s err %v", first.Stage, err)
+	first, effects, err := b.AddReview("R-1", "platform", policy)
+	if err != nil || first.Stage != Reviewing || first.Kind != KindReview || !reflect.DeepEqual(effects, []Effect{PromptWorker{Reviewing}}) {
+		t.Fatalf("first add: task %+v, effects %#v, err %v", first, effects, err)
 	}
-	if _, err := b.Apply("R-2", Start{OverCap: true}); !errors.Is(err, ErrSlotsFull) || second.Stage != Queued {
-		t.Fatalf("second start: stage %s err %v, want ErrSlotsFull in Queued", second.Stage, err)
+	if !refusesReview(b, "R-2", "platform") {
+		t.Fatal("a second review of a full queue started")
 	}
-	if _, err := b.Apply("R-4", Start{}); !errors.Is(err, ErrSlotsFull) || gone.Stage != Queued {
-		t.Fatalf("start in a queue with no slots: stage %s err %v", gone.Stage, err)
+	if !refusesReview(b, "R-4", "a queue that left the config") {
+		t.Fatal("a review of a queue with no slots started")
 	}
-	if _, err := b.Apply("R-3", Start{}); err != nil || asked.Stage != Reviewing {
-		t.Fatalf("a review with no queue: stage %s err %v", asked.Stage, err)
+	if asked, _, err := b.AddReview("R-3", "", policy); err != nil || asked.Stage != Reviewing {
+		t.Fatalf("a review with no queue: %+v err %v", asked, err)
 	}
 	b.Apply("R-1", PRReviewed{})
-	if _, err := b.Apply("R-2", Start{}); err != nil || second.Stage != Reviewing {
-		t.Fatalf("start after a slot freed: stage %s err %v", second.Stage, err)
+	if second, _, err := b.AddReview("R-2", "platform", policy); err != nil || second.Stage != Reviewing {
+		t.Fatalf("add after a slot freed: %+v err %v", second, err)
 	}
 }
 
 func TestAReviewStartsOnlyWithAFreeSharedSlot(t *testing.T) {
 	b := NewBoard(5)
 	b.Slots["first"], b.Slots["second"], b.SharedSlots = 3, 3, 2
-	a := b.AddReview("R-1", "first", policy)
-	c := b.AddReview("R-2", "second", policy)
-	full := b.AddReview("R-3", "first", policy)
-	asked := b.AddReview("R-4", "", policy)
-	for _, id := range []string{"R-1", "R-2"} {
-		if _, err := b.Apply(id, Start{}); err != nil {
-			t.Fatalf("%s: %v", id, err)
-		}
+	a, _, _ := b.AddReview("R-1", "first", policy)
+	c, _, _ := b.AddReview("R-2", "second", policy)
+	if !refusesReview(b, "R-3", "first") {
+		t.Fatal("a review past the shared slots started")
 	}
-	if _, err := b.Apply("R-3", Start{}); !errors.Is(err, ErrSlotsFull) || full.Stage != Queued {
-		t.Fatalf("start past the shared slots: stage %s err %v, want ErrSlotsFull", full.Stage, err)
-	}
-	if _, err := b.Apply("R-4", Start{}); err != nil || asked.Stage != Reviewing {
-		t.Fatalf("a review with no queue: stage %s err %v", asked.Stage, err)
+	if asked, _, err := b.AddReview("R-4", "", policy); err != nil || asked.Stage != Reviewing {
+		t.Fatalf("a review with no queue: %+v err %v", asked, err)
 	}
 	b.Apply("R-1", PRReviewed{})
 	if a.Stage != Done {
 		t.Fatalf("R-1 stage %s, want Done", a.Stage)
 	}
-	if _, err := b.Apply("R-3", Start{}); err != nil || full.Stage != Reviewing || c.Stage != Reviewing {
-		t.Fatalf("start after a shared slot freed: stage %s err %v", full.Stage, err)
+	if full, _, err := b.AddReview("R-3", "first", policy); err != nil || full.Stage != Reviewing || c.Stage != Reviewing {
+		t.Fatalf("add after a shared slot freed: %+v err %v", full, err)
 	}
 }
 
@@ -121,9 +117,7 @@ func TestAReviewStartsOnlyWithAFreeSharedSlot(t *testing.T) {
 func TestAReviewReadyTaskKeepsItsSlotWithoutItsWorker(t *testing.T) {
 	b := NewBoard(5)
 	b.Slots["platform"] = 1
-	ready := b.AddReview("R-1", "platform", policy)
-	next := b.AddReview("R-2", "platform", policy)
-	b.Apply("R-1", Start{})
+	ready, _, _ := b.AddReview("R-1", "platform", policy)
 	b.Apply("R-1", WorkerDone{ContractMet: true})
 	for _, s := range []Signal{TabClosed{}, WorkerExited{Code: 0}, WorkerExited{Code: 130}} {
 		if effects, err := b.Apply("R-1", s); err != nil || effects != nil {
@@ -133,18 +127,17 @@ func TestAReviewReadyTaskKeepsItsSlotWithoutItsWorker(t *testing.T) {
 			t.Fatalf("%s: stage %s group %s, %d started", s.Name(), ready.Stage, ready.Group(), b.QueueStarted("platform"))
 		}
 	}
-	if _, err := b.Apply("R-2", Start{}); !errors.Is(err, ErrSlotsFull) || next.Stage != Queued {
-		t.Fatalf("start with the slot held: stage %s err %v, want ErrSlotsFull", next.Stage, err)
+	if !refusesReview(b, "R-2", "platform") {
+		t.Fatal("a review started with the slot held")
 	}
 }
 
 func TestReviewsStayOutsideTheWIPCap(t *testing.T) {
 	b := NewBoard(1)
-	b.Add("B-1", policy)
-	review := b.AddReview("R-1", "", policy)
-	b.Apply("B-1", Start{})
-	if _, err := b.Apply("R-1", Start{}); err != nil || review.Stage != Reviewing {
-		t.Fatalf("review start with the cap full: stage %s err %v", review.Stage, err)
+	b.Add("B-1", policy, false)
+	review, _, err := b.AddReview("R-1", "", policy)
+	if err != nil || review.Stage != Reviewing {
+		t.Fatalf("review add with the cap full: %+v err %v", review, err)
 	}
 	if b.Started() != 1 || b.OverCap() != 0 || review.OverCap {
 		t.Fatalf("started %d over cap %d, want only the build Task counted", b.Started(), b.OverCap())
@@ -165,7 +158,7 @@ func TestEachKindRerunsOnlyItsOwnStages(t *testing.T) {
 	}
 	for _, c := range cases {
 		b := NewBoard(5)
-		task := b.Add("T", policy)
+		task, _, _ := b.Add("T", policy, false)
 		task.Kind, task.Stage = c.kind, c.stage
 		_, err := b.Apply("T", Rerun{c.rerun})
 		var na *NotAllowedError

@@ -159,7 +159,7 @@ func TestInvalidValuesFailAtLoad(t *testing.T) {
 		"cap":        "[defaults]\nwip_cap = 0\n",
 		"interval":   "[defaults]\npoll_interval = \"soon\"\n",
 		"budget":     "[defaults.budgets]\nci_debug = -1\n",
-		"stage":      "[defaults.stage.queued]\nmodel = \"x\"\n",
+		"stage":      "[defaults.stage.done]\nmodel = \"x\"\n",
 		"user stage": "[defaults.stage.review_ready]\nmodel = \"x\"\n",
 		"repo cap":   "[repos.\"o/r\"]\nwip_cap = 0\n",
 		"event":      "[linear.w.status.ENG]\nbogus = \"x\"\n",

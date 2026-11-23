@@ -28,10 +28,10 @@ const usage = `usage: lineup [command]
                                and [repos."owner/repo"] tables, and from trackers
                                lists to tracker keys
 
-  lineup add <ISSUE>           put an Issue on the Board: ENG-614, owner/repo#12, LOCAL-7, or HOD-3
-  lineup add --repo <repo> "<text>"
+  lineup add [--over-cap] [--set key=value]... <ISSUE> | --repo <repo> "<text>"
+                               start a Task for an Issue (ENG-614, owner/repo#12, LOCAL-7,
+                               or HOD-3), or for the text in the Repo
   lineup next-id [<repo>]      print the ID of the Repo's next Local Issue, for example HOD-4
-  lineup start [--over-cap] <task>
   lineup review <PR URL>       review someone else's PR; it posts only what you decide
   lineup reviews [--json]      list each review queue: its started reviews and the PRs that wait
   lineup reviews pause | resume

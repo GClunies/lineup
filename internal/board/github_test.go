@@ -59,7 +59,7 @@ func (g fakeGH) failing(t *testing.T, on bool) {
 }
 
 // githubEnv is mineEnv with the GitHub Tracker on for octo, one checkout
-// with the key octo/sandbox, and a queued Task that holds octo/sandbox#16.
+// with the key octo/sandbox, and a Working Task that holds octo/sandbox#16.
 // *on turns the Tracker off.
 func githubEnv(t *testing.T) (*workEnv, fakeGH, *bool) {
 	t.Helper()
@@ -72,7 +72,7 @@ func githubEnv(t *testing.T) (*workEnv, fakeGH, *bool) {
 		Checkouts: func() []config.Checkout { return []config.Checkout{{Path: "/repos/octo/sandbox", Key: "octo/sandbox"}} },
 	}
 	e.m = feed(e.m, boardMsg(scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{
-		tv("octo/sandbox#16", lifecycle.Queued, "sandbox", "Add a GREETING.md", "", 0),
+		tv("octo/sandbox#16", lifecycle.Working, "sandbox", "Add a GREETING.md", "", 0),
 	}}))
 	e.m = openAll(drain(e.m, e.m.loadMine()))
 	e.m.width = 200
@@ -124,7 +124,7 @@ func TestTheBoardShowsTheUsersOwnGitHubIssues(t *testing.T) {
 		})
 	}
 	out := screen(e.m)
-	inOrder(t, out, "Backlog 2", "sandbox#10", "Ready 5", "sandbox#12", "sandbox#14", "sandbox#11", "Queued 1", "sandbox#16")
+	inOrder(t, out, "Backlog 2", "sandbox#10", "Ready 5", "sandbox#12", "sandbox#14", "sandbox#11", "Working 1", "sandbox#16")
 	if l := lineOf(t, out, "sandbox#11"); !strings.Contains(l, "Drop old API keys") || !strings.Contains(l, "blocked") {
 		t.Errorf("the sandbox#11 row must show its title and blocked: %q", l)
 	}
@@ -164,7 +164,7 @@ func TestAGitHubRowNeedsACheckoutWithItsRepoKeyInAnyCase(t *testing.T) {
 func TestATaskHoldsAGitHubRowOnlyByTheExactID(t *testing.T) {
 	e, _, _ := githubEnv(t)
 	v := e.m.board
-	v.Tasks = append(v.Tasks, tv("Octo/Sandbox#12", lifecycle.Queued, "sandbox", "Split billing ingest", "", 0))
+	v.Tasks = append(v.Tasks, tv("Octo/Sandbox#12", lifecycle.Working, "sandbox", "Split billing ingest", "", 0))
 	e.m = feed(e.m, boardMsg(v))
 	if _, ok := githubRows(e.m)["octo/sandbox#12"]; !ok {
 		t.Fatal("a Task with another case of the ID hid octo/sandbox#12")
@@ -184,8 +184,8 @@ func TestSOnAGitHubRowAddsAndStartsTheIssue(t *testing.T) {
 	e, _, _ := githubEnv(t)
 	e.m.sel = "octo/sandbox#12"
 	e.press("s", "enter")
-	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "start"}) {
-		t.Fatalf("ops %v", got)
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add"}) {
+		t.Fatalf("ops %v, want one add", got)
 	}
 	if a := lastAdd(t, e); a.Issue != "octo/sandbox#12" || a.Kind != scheduler.KindGitHub {
 		t.Fatalf("add %+v", a)

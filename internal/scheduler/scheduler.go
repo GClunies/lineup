@@ -145,7 +145,12 @@ func New(d Deps) (*Scheduler, error) {
 	if err != nil {
 		return nil, err
 	}
+	var removed []*Record
 	for id, data := range raw {
+		data, never, err := migrate(data)
+		if err != nil {
+			return nil, fmt.Errorf("task %s: %w", id, err)
+		}
 		r := &Record{}
 		if err := json.Unmarshal(data, r); err != nil {
 			return nil, fmt.Errorf("task %s: %w", id, err)
@@ -155,6 +160,12 @@ func New(d Deps) (*Scheduler, error) {
 		}
 		s.recs[r.ID] = r
 		s.board.Tasks[r.ID] = &r.Task
+		if never {
+			removed = append(removed, r)
+		}
+	}
+	for _, r := range removed {
+		s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: "remove", From: legacyQueued.name, To: r.Stage.String(), Detail: "never started"})
 	}
 	return s, nil
 }
@@ -231,8 +242,7 @@ func (s *Scheduler) flagSilentPrompts() {
 	}
 }
 
-// apply runs one Signal through the reducer, records the change, and queues
-// the Effects on the Task's lane.
+// apply runs one Signal through the reducer, then records the change.
 func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error {
 	from, flag, flagDetail, outcome := r.Stage, r.Flag, r.FlagDetail, r.Outcome
 	effects, err := s.board.Apply(r.ID, sig)
@@ -242,8 +252,19 @@ func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error 
 	if r.Stage == from && r.Flag == flag && r.FlagDetail == flagDetail && r.Outcome == outcome && len(effects) == 0 {
 		return nil
 	}
-	if r.Stage != from {
-		r.StageSince = s.now()
+	s.transition(r, store.Event{Signal: sig.Name(), From: from.String(), Detail: detail}, effects)
+	return nil
+}
+
+// transition records a change of the Task: it saves ev with the Task's new
+// Stage, and queues the Effects on the Task's lane. ev.From is "" for a Task
+// that the change put on the Board. An empty ev.Detail takes the Task's flag.
+func (s *Scheduler) transition(r *Record, ev store.Event, effects []lifecycle.Effect) {
+	ev.TaskID, ev.At, ev.To = r.ID, s.now(), r.Stage.String()
+	moved := ev.From != ev.To
+	if moved {
+		r.StageSince = ev.At
+
 		if r.Stage == lifecycle.Done {
 			s.markMerged(r)
 		}
@@ -256,14 +277,14 @@ func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error 
 	if r.Pending != nil && *r.Pending != r.Stage {
 		r.Pending = nil
 	}
-	if detail == "" {
-		detail = string(r.Flag)
+	if ev.Detail == "" {
+		ev.Detail = string(r.Flag)
 		if r.FlagDetail != "" {
-			detail += ": " + r.FlagDetail
+			ev.Detail += ": " + r.FlagDetail
 		}
 	}
-	s.d.Log.Info("transition", "task", r.ID, "signal", sig.Name(), "from", from.String(), "to", r.Stage.String(), "detail", detail)
-	s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: sig.Name(), From: from.String(), To: r.Stage.String(), Detail: detail})
+	s.d.Log.Info("transition", "task", r.ID, "signal", ev.Signal, "from", ev.From, "to", ev.To, "detail", ev.Detail)
+	s.save(r, ev)
 	if len(effects) > 0 {
 		s.enqueue(r.ID, func(ctx context.Context) {
 			for _, e := range effects {
@@ -271,10 +292,9 @@ func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error 
 			}
 		})
 	}
-	if r.Stage != from && r.Stage == lifecycle.CIRunning {
+	if moved && r.Stage == lifecycle.CIRunning {
 		s.replayPR(r)
 	}
-	return nil
 }
 
 // markMerged readies a build Task that just merged for tidy, when [merged]
@@ -717,7 +737,7 @@ func (s *Scheduler) resumeFallback(r *Record, code int) {
 // lostPrompt puts a typed prompt back in Pending when its Worker ended before it
 // reported working on the prompt.
 func (s *Scheduler) lostPrompt(r *Record) {
-	if r.WorkerState == promptedState && r.WorkerStage == r.Stage && r.Pending == nil {
+	if r.WorkerState == promptedState && r.WorkerStage != nil && *r.WorkerStage == r.Stage && r.Pending == nil {
 		s.pend(r, r.Stage)
 	}
 }
@@ -1091,7 +1111,7 @@ const doneCountedFor = 48 * time.Hour
 func (s *Scheduler) view() BoardView {
 	v := BoardView{Cap: s.board.Cap, Started: s.board.Started(), OverCap: s.board.OverCap(), ReviewsPaused: s.paused, Skips: s.skips}
 	for _, r := range s.list() {
-		if r.Stage == lifecycle.Done && s.now().Sub(r.StageSince) < doneCountedFor {
+		if r.Stage == lifecycle.Done && r.Outcome != lifecycle.OutcomeRemoved && s.now().Sub(r.StageSince) < doneCountedFor {
 			v.Done = append(v.Done, r.StageSince)
 		}
 		if r.Stage == lifecycle.Done && (r.Archived || !r.keepsWork() && s.now().Sub(r.StageSince) > doneShownFor) {

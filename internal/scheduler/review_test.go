@@ -346,30 +346,6 @@ func TestReviewOfAStoppedReviewRunsItAgain(t *testing.T) {
 	}
 }
 
-func TestReviewOfAQueuedReviewStartsIt(t *testing.T) {
-	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
-	h.gh.setReview(openPR(7, "h1"))
-	h.s.call(func() {
-		r := &Record{
-			Title: "data#7 Fix the tooltip", Repo: "/repos/acme/data", RepoSlug: "acme/data", Session: reviewSession,
-			Review: &ReviewPR{Repo: "acme/data", Number: 7, URL: prURL7, Head: "h1", Base: "main"}, CreatedAt: h.s.now(), StageSince: h.s.now(),
-		}
-		r.ID = h.s.reviewID(*r.Review)
-		r.Task = *h.s.board.AddReview(r.ID, "", lifecycle.Policy{})
-		h.s.board.Tasks[r.ID] = &r.Task
-		h.s.recs[r.ID] = r
-	})
-	if v := h.task("PR-7"); v.Stage != "Queued" {
-		t.Fatalf("Task = %+v, want Queued", v)
-	}
-
-	res := h.review(prURL7)
-	if res.ID != "PR-7" || res.Action != ReviewStarted {
-		t.Fatalf("review of the Queued Task = %+v, want PR-7 started", res)
-	}
-	h.waitTab("claude reviewing")
-}
-
 func TestReviewOfARunningReviewChangesNothing(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.setReview(openPR(7, "h1"))
@@ -499,7 +475,6 @@ func TestTheBranchPollSkipsReviewTasks(t *testing.T) {
 	h.gh.setReview(openPR(7, "h1"))
 	h.review(prURL7)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.waitTab("claude reviewing")
 	eventually(t, "a branch poll", func() bool {
 		h.gh.mu.Lock()
@@ -724,7 +699,6 @@ func TestReviewTasksStayOutsideTheWIPCap(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "cap", N: 1})
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.gh.setReview(openPR(7, "h1"))
 	if res := h.review(prURL7); res.Stage != "Reviewing" {
 		t.Fatalf("review with the cap full = %+v", res)
@@ -823,7 +797,6 @@ var hunkDiff = []string{"sh", "-c", `b=$(git symbolic-ref -q --short refs/remote
 func TestEachBuildWorkerTabOpensItsDiffInHunkBesideIt(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 	conversation := h.lastSpec().Conversation
@@ -845,7 +818,6 @@ func TestEachBuildWorkerTabOpensItsDiffInHunkBesideIt(t *testing.T) {
 func TestAClosedBuildWorkerClosesItsSidePane(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 	h.waitSplit(1)
@@ -859,7 +831,6 @@ func TestAClosedBuildWorkerClosesItsSidePane(t *testing.T) {
 func TestSidePaneEventsLeaveTheBuildTaskAsItWas(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 	pane := h.waitSplit(1)
@@ -1129,7 +1100,6 @@ func TestABuildWorkerQuestionOnlyFlagsTheTask(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
 	h.gh.set(PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}, 42)
 	h.do(Request{Op: "add", Issue: "ENG-1"})
-	h.do(Request{Op: "start", Task: "ENG-1"})
 	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
 	worker := h.waitTab("claude working")
 	h.rex.events <- RexEvent{Kind: EvStatus, BlockID: worker.BlockID, Status: Status{State: "blocked", Kind: "question"}}

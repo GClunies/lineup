@@ -277,7 +277,7 @@ func TestTheWorkViewShowsReadyAndBacklogInTheirPlaces(t *testing.T) {
 	e.m = openAll(feed(e.m, boardMsg(v)))
 	e.m.width = 200
 	out := ansi.Strip(e.m.View())
-	inOrder(t, out, "Needs you 2", "Backlog 1", "ENG-20", "Ready 2", "ENG-9", "LOCAL-1", "Queued 1", "Working 2", "Waiting 1", "Done 1")
+	inOrder(t, out, "Needs you 2", "Backlog 1", "ENG-20", "Ready 2", "ENG-9", "LOCAL-1", "Working 3", "Waiting 1", "Done 1")
 }
 
 func TestJAndKMoveAcrossTaskAndIssueRows(t *testing.T) {
@@ -289,8 +289,8 @@ func TestJAndKMoveAcrossTaskAndIssueRows(t *testing.T) {
 		seen = append(seen, e.m.sel)
 		e.press("j")
 	}
-	want := []string{"ENG-588", "ENG-590", "group:Backlog", "ENG-20", "group:Ready", "ENG-9", "LOCAL-1", "group:Queued", "ENG-601",
-		"group:Working", "WEB-12", "ENG-592", "group:Waiting", "ENG-571", "group:Done", "ENG-560", "ENG-560", "ENG-560"}
+	want := []string{"ENG-588", "ENG-590", "group:Backlog", "ENG-20", "group:Ready", "ENG-9", "LOCAL-1", "group:Working", "ENG-601",
+		"WEB-12", "ENG-592", "group:Waiting", "ENG-571", "group:Done", "ENG-560", "ENG-560", "ENG-560", "ENG-560"}
 	if !slices.Equal(seen, want) {
 		t.Fatalf("j moved through %v, want %v", seen, want)
 	}
@@ -303,7 +303,7 @@ func TestJAndKMoveAcrossTaskAndIssueRows(t *testing.T) {
 	}
 }
 
-func TestSOnALinearIssueRowAddsItAsLinearThenStarts(t *testing.T) {
+func TestSOnALinearIssueRowStartsItWithOneAdd(t *testing.T) {
 	e, _ := mineEnv(t)
 	e.m.sel = "ENG-9"
 	if f := footerAt(e.m, 100); !strings.Contains(f, "s start") || !strings.Contains(f, "o open the Issue") {
@@ -315,8 +315,8 @@ func TestSOnALinearIssueRowAddsItAsLinearThenStarts(t *testing.T) {
 	}
 	delete(e.wrote, "w1/my")
 	e.press("enter")
-	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "start"}) {
-		t.Fatalf("ops %v, want add then start", got)
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add"}) {
+		t.Fatalf("ops %v, want one add", got)
 	}
 	if add := e.sched.calls[0]; add.Issue != "ENG-9" || add.Kind != scheduler.KindLinear || add.Repo != "" {
 		t.Fatalf("add %+v, want ENG-9 with Kind linear", add)
@@ -335,8 +335,8 @@ func TestSOnALocalIssueRowWithNoRepoAsksAndWritesTheRepoBack(t *testing.T) {
 		t.Fatalf("no Repo picker on the work view:\n%s", v)
 	}
 	e.press("enter")
-	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "add", "start"}) {
-		t.Fatalf("ops %v, want add, add with the Repo, then start", got)
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "add"}) {
+		t.Fatalf("ops %v, want add, then add with the Repo", got)
 	}
 	if add := lastAdd(t, e); add.Issue != "LOCAL-1" || add.Kind != scheduler.KindLocal || add.Repo != "/Users/g/repos/acme/data" {
 		t.Fatalf("add %+v, want LOCAL-1 with Kind local and the picked Repo", add)

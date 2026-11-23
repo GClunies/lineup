@@ -64,7 +64,7 @@ func statusOf(t *testing.T, task scheduler.TaskView) string {
 
 func TestEveryStageAndFlagHasAStatusOfAtMostTwoWords(t *testing.T) {
 	stages := map[lifecycle.Stage]string{
-		lifecycle.Queued: "queued", lifecycle.Working: "working", lifecycle.CIRunning: "CI running", lifecycle.CIDebug: "CI debug",
+		lifecycle.Working: "working", lifecycle.CIRunning: "CI running", lifecycle.CIDebug: "CI debug",
 		lifecycle.InReview: "in review", lifecycle.Responding: "responding", lifecycle.ReadyToLand: "ready", lifecycle.Done: "done",
 		lifecycle.Reviewing: "reviewing", lifecycle.ReviewReady: "review ready",
 	}
@@ -180,7 +180,7 @@ func TestTheStripWrapsALongTitleAndNoteAtSixtyColumns(t *testing.T) {
 
 func TestOnAHeadingTheStripCountsTheRows(t *testing.T) {
 	m := newModel(&fakeClient{}, fixture())
-	for g, want := range map[string][]string{"Working": {" Working", " 2 rows"}, "Done": {" Done", " 1 row"}} {
+	for g, want := range map[string][]string{"Working": {" Working", " 3 rows"}, "Done": {" Done", " 1 row"}} {
 		m.sel = headingKey(g)
 		if got := strip(m, 100); len(got) < 3 || !slices.Equal(got[1:3], want) {
 			t.Errorf("on the %s heading the strip shows %q, want %q", g, got, want)

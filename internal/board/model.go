@@ -100,6 +100,8 @@ type (
 		label, task string
 		note        string // follows "ok" in the status line
 		err         error
+		// add is the add of a start, which the cap prompt sends again.
+		add scheduler.Request
 	}
 	captureMsg struct {
 		gen  int
@@ -128,8 +130,9 @@ type Model struct {
 	statusE bool
 
 	mode          mode
-	pendingTask   string // Task the current prompt is about
-	pendingOp     string // close or archive, for the y/n prompt
+	pendingTask   string            // Task the current prompt is about
+	pendingAdd    scheduler.Request // the add of the start that the cap prompt is about
+	pendingOp     string            // close or archive, for the y/n prompt
 	pendingAsk    string
 	width, height int
 
@@ -519,10 +522,6 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-	case "s":
-		if ok && t.Group == "Queued" {
-			return m, m.op("start", scheduler.Request{Op: "start", Task: t.ID})
-		}
 	case "o":
 		if ok {
 			if u := firstNonEmpty(t.PRURL, t.IssueURL); u != "" {
@@ -562,21 +561,22 @@ func (m Model) issueKey(r issueRow, k string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// capKey answers the cap prompt. o sends the start's add again over the cap,
+// and c raises the cap by one, then sends the add again.
 func (m Model) capKey(k string) (tea.Model, tea.Cmd) {
-	id := m.pendingTask
+	add := m.pendingAdd
 	m.mode = modeNormal
 	switch k {
 	case "o":
-		return m, m.op("start", scheduler.Request{Op: "start", Task: id, OverCap: true})
+		add.OverCap = true
+		return m, m.add(add)
 	case "c":
-		n := m.board.Cap + 1
-		c := m.client
+		n, c, start := m.board.Cap+1, m.client, m.add(add)
 		return m, func() tea.Msg {
 			if err := c.Do(scheduler.Request{Op: "cap", N: n}, nil); err != nil {
-				return opMsg{label: "cap", task: id, err: err}
+				return opMsg{label: "cap", task: add.Issue, err: err}
 			}
-			err := c.Do(scheduler.Request{Op: "start", Task: id}, nil)
-			return opMsg{label: "start", task: id, err: err}
+			return start()
 		}
 	}
 	m.setStatus("start cancelled", false)
@@ -599,7 +599,7 @@ func (m Model) afterOp(msg opMsg) (tea.Model, tea.Cmd) {
 			return m, m.loadMine()
 		}
 	case msg.label == "start" && msg.err.Error() == capFull:
-		m.mode, m.pendingTask = modeCap, msg.task
+		m.mode, m.pendingAdd = modeCap, msg.add
 		return m.withPromptMenu(), nil
 	default:
 		m.setStatus(what+": "+msg.err.Error(), true)

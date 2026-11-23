@@ -94,7 +94,7 @@ func TestAgentRoleLeavesNeedsYouToThePalette(t *testing.T) {
 		t.Fatalf("the role has no Questions section:\n%s", role)
 	}
 	questions, _, _ = strings.Cut(questions, "\n## ")
-	for _, want := range []string{"`AskUserQuestion`", "`wip cap full`", "`lineup start --over-cap <task>`", "`no Repo mapping`"} {
+	for _, want := range []string{"`AskUserQuestion`", "`wip cap full`", "`--over-cap`", "`no Repo mapping`"} {
 		if !strings.Contains(questions, want) {
 			t.Errorf("the Questions section has no %s", want)
 		}
@@ -159,7 +159,7 @@ func permits(t *testing.T, settings, cmd string) (allow, deny bool) {
 
 func TestAgentSettingsUnionAllowsEveryLineupCommand(t *testing.T) {
 	cmds := []string{
-		"lineup add ENG-1", "lineup start ENG-1", "lineup merge ENG-1",
+		"lineup add ENG-1", "lineup add --over-cap ENG-1", "lineup merge ENG-1",
 		"lineup review https://github.com/o/r/pull/1", "lineup reviews --json", "lineup steer R-1 hi",
 		"linear issue update ENG-1", "linear issue relation add ENG-1 blocks ENG-2", "gh issue edit 12",
 		"gh pr view 1", "gh search prs --review-requested @me",

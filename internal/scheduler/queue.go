@@ -22,8 +22,8 @@ const pausedKey = "reviews_paused"
 
 // fill starts the review Tasks that the queues want. Only one fill runs at a
 // time: a fill that is due while another runs is skipped. The candidate
-// check, the count, the add, and the start happen in one loop call, so a
-// second fill in the same state starts nothing.
+// check, the count, and the add, which starts the Task, happen in one loop
+// call, so a second fill in the same state starts nothing.
 func (s *Scheduler) fill(ctx context.Context) {
 	if len(s.d.Queues) == 0 || !s.filling.CompareAndSwap(false, true) {
 		return
@@ -301,13 +301,9 @@ func queueStarted(records []*Record) int {
 	return n
 }
 
-// applyFill starts and adds what the plan names. Only the loop calls it.
+// applyFill adds what the plan names, and each add starts its Task. Only the
+// loop calls it.
 func (s *Scheduler) applyFill(p fillPlan) {
-	for _, id := range p.Start {
-		if err := s.apply(s.recs[id], lifecycle.Start{}, ""); err != nil {
-			s.d.Log.Error("review queue start", "task", id, "err", err)
-		}
-	}
 	for _, a := range p.Add {
 		pr := a.PR
 		_, err := s.addReview(reviewAdd{
@@ -355,12 +351,11 @@ type fillInput struct {
 	Repos map[string]queueRepo
 }
 
-// fillPlan is what one fill does: it starts the Queued review Tasks in
-// Start, then adds and starts a review Task for each PR in Add. Ranked is
-// each queue's candidates that have a Repo, in rank order.
+// fillPlan is what one fill does: it adds and starts a review Task for each
+// PR in Add. Ranked is each queue's candidates that have a Repo, in rank
+// order.
 type fillPlan struct {
 	Ranked map[string][]github.Candidate
-	Start  []string
 	Add    []fillAdd
 }
 
@@ -372,9 +367,8 @@ type fillAdd struct {
 
 // planFill decides what one fill starts. The first queue in config order
 // owns a PR that several queues find, so a later queue never ranks it. Each
-// queue starts its Queued review Tasks first, then its top-ranked
-// candidates, until its started count reaches its slots or the started
-// count of all queues reaches the shared slots. A queue that is full leaves
+// queue starts its top-ranked candidates, until its started count reaches
+// its slots or the started count of all queues reaches the shared slots. A queue that is full leaves
 // its PRs waiting, and the next fill gives them the first free slot before a
 // later queue's PRs. A fill starts at most one review in each Repo, because
 // each start fetches into the Repo's main checkout.
@@ -413,25 +407,9 @@ func planFill(in fillInput) fillPlan {
 	busy := map[string]bool{}
 	for _, q := range in.Queues {
 		free := q.Slots
-		var queued []*Record
 		for _, r := range in.Records {
-			switch {
-			case r.Review == nil || r.Queue != q.Name:
-			case r.Stage == lifecycle.Queued:
-				queued = append(queued, r)
-			case r.Stage.Started():
+			if r.Review != nil && r.Queue == q.Name && r.Stage.Started() {
 				free--
-			}
-		}
-		for _, r := range queued {
-			if free <= 0 || shared <= 0 {
-				break
-			}
-			if !busy[r.Repo] {
-				p.Start = append(p.Start, r.ID)
-				busy[r.Repo] = true
-				free--
-				shared--
 			}
 		}
 		for _, c := range p.Ranked[q.Name] {

@@ -2,7 +2,6 @@ package board
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -67,7 +66,7 @@ func (f *fakeClient) ops() []string {
 }
 
 var groupOf = map[lifecycle.Stage]string{
-	lifecycle.Queued: "Queued", lifecycle.Working: "Working", lifecycle.CIRunning: "Waiting", lifecycle.CIDebug: "Working",
+	lifecycle.Working: "Working", lifecycle.CIRunning: "Waiting", lifecycle.CIDebug: "Working",
 	lifecycle.InReview: "Waiting", lifecycle.Responding: "Working", lifecycle.ReadyToLand: "Needs you",
 	lifecycle.Done: "Done", lifecycle.Reviewing: "Working", lifecycle.ReviewReady: "Needs you",
 }
@@ -85,7 +84,7 @@ func fixture() scheduler.BoardView {
 	done := tv("ENG-560", lifecycle.Done, "data", "Rename config options", "#4601 merged", 2*time.Hour)
 	done.Outcome = "merged"
 	return scheduler.BoardView{Cap: 5, Started: 4, Tasks: []scheduler.TaskView{
-		tv("ENG-601", lifecycle.Queued, "data", "Drop legacy views", "", 0),
+		tv("ENG-601", lifecycle.Working, "data", "Drop legacy views", "", 0),
 		done,
 		tv("ENG-571", lifecycle.InReview, "data", "Rate limit login", "#4636 ● commented · 1 open thread", 26*time.Hour),
 		tv("WEB-12", lifecycle.Responding, "web", "Fix map tooltip", "#4650 ○ no review yet · answering review", 5*time.Minute),
@@ -164,8 +163,8 @@ func TestGroupOrderAndSelection(t *testing.T) {
 		t.Fatalf("initial selection = %s", m.sel)
 	}
 	m, _ = press(m, "j", "j")
-	if m.sel != headingKey("Queued") {
-		t.Fatalf("after jj = %s, want the Queued heading", m.sel)
+	if m.sel != headingKey("Working") {
+		t.Fatalf("after jj = %s, want the Working heading", m.sel)
 	}
 	m, _ = press(m, "j")
 	if m.sel != "ENG-601" {
@@ -197,7 +196,6 @@ func TestKeyGating(t *testing.T) {
 		sel, key, op string
 	}{
 		{"ENG-590", "a", ""},
-		{"ENG-601", "s", "start"},
 		{"WEB-12", "s", ""},
 		{"WEB-12", "m", ""},
 		{"ENG-590", "m", ""},
@@ -314,51 +312,6 @@ func TestNOnTheCloseOfADoneTaskKeepsTheTab(t *testing.T) {
 	}
 }
 
-func startFull(t *testing.T) (*fakeClient, Model) {
-	f := &fakeClient{errs: map[string]error{"start": errors.New("wip cap full")}}
-	m := newModel(f, fixture())
-	m.sel = "ENG-601"
-	m, cmd := press(m, "s")
-	m = run(m, cmd)
-	if m.mode != modeCap {
-		t.Fatalf("mode = %v, want the cap prompt", m.mode)
-	}
-	return f, m
-}
-
-func TestCapPromptOverCap(t *testing.T) {
-	f, m := startFull(t)
-	if !strings.Contains(m.footer(), "start once over the cap (o) or raise the cap to 6 (c)?") {
-		t.Fatalf("footer = %q", m.footer())
-	}
-	_, cmd := press(m, "o")
-	cmd()
-	last := f.calls[len(f.calls)-1]
-	if last.Op != "start" || !last.OverCap || last.Task != "ENG-601" {
-		t.Fatalf("last call = %+v", last)
-	}
-}
-
-func TestCapPromptRaise(t *testing.T) {
-	f, m := startFull(t)
-	_, cmd := press(m, "c")
-	cmd()
-	if got := f.ops(); !slices.Equal(got, []string{"start", "cap", "start"}) {
-		t.Fatalf("ops = %v", got)
-	}
-	if f.calls[1].N != 6 || f.calls[2].OverCap {
-		t.Fatalf("calls = %+v", f.calls)
-	}
-}
-
-func TestCapPromptCancel(t *testing.T) {
-	f, m := startFull(t)
-	m, cmd := press(m, "esc")
-	if cmd != nil || m.mode != modeNormal || len(f.calls) != 1 {
-		t.Fatal("any other key cancels")
-	}
-}
-
 func TestOverCapHeaderAndOffline(t *testing.T) {
 	v := fixture()
 	v.OverCap = 1
@@ -398,7 +351,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 	v.Tasks = append(v.Tasks, rtv("R-3", lifecycle.Reviewing, "data#7 Fix the tooltip", urlBase, time.Hour))
 	m := New(v, Options{Client: &fakeClient{}, Notify: func(s string) { toasts = append(toasts, s) }, Status: log.record})
 	m.width, m.height = 160, 30
-	if out := m.View(); strings.Contains(out, "R-3") || headingCount(ansi.Strip(out), "Working") != 2 {
+	if out := m.View(); strings.Contains(out, "R-3") || headingCount(ansi.Strip(out), "Working") != 3 {
 		t.Fatalf("the work board shows the review Task:\n%s", out)
 	}
 	m, _ = press(m, "j", "j", "j", "j", "j", "j", "j")
@@ -420,7 +373,7 @@ func TestTheWorkViewHoldsOnlyBuildTasks(t *testing.T) {
 func TestAgeAndRows(t *testing.T) {
 	m := openAll(newModel(&fakeClient{}, fixture()))
 	out := m.View()
-	for _, w := range []string{"Needs you 2", "Working 2", "Waiting 1", "Queued 1", "Done 1", "12m", "1d", "today", "done"} {
+	for _, w := range []string{"Needs you 2", "Working 3", "Waiting 1", "Done 1", "12m", "1d", "today", "done"} {
 		if !strings.Contains(out, w) {
 			t.Errorf("view lacks %q", w)
 		}
@@ -500,7 +453,7 @@ func TestZoomHook(t *testing.T) {
 }
 
 func cacheFixture(n int) scheduler.BoardView {
-	groups := []lifecycle.Stage{lifecycle.ReadyToLand, lifecycle.Working, lifecycle.InReview, lifecycle.Queued, lifecycle.Done}
+	groups := []lifecycle.Stage{lifecycle.ReadyToLand, lifecycle.Working, lifecycle.InReview, lifecycle.Responding, lifecycle.Done}
 	v := scheduler.BoardView{Cap: 8, Started: 20}
 	for i := 0; i < n; i++ {
 		v.Tasks = append(v.Tasks, tv(fmt.Sprintf("ENG-%d", 500+i), groups[i%len(groups)], "data", fmt.Sprintf("A task title number %d", i), "note text", time.Duration(i)*time.Minute))
@@ -626,7 +579,7 @@ func TestFooterShowsTheKeysForTheSelection(t *testing.T) {
 		want, not []string
 	}{
 		{"ENG-700", []string{"m merge"}, []string{"s start"}},
-		{"ENG-601", []string{"s start"}, []string{"m merge"}},
+		{"ENG-601", []string{"x close"}, []string{"s start", "m merge"}},
 		{"ENG-560", []string{"f details"}, []string{"x close", "s start"}},
 	}
 	for _, c := range cases {
@@ -1150,19 +1103,6 @@ func TestEnterOnALiveWorkerOffersTheWorker(t *testing.T) {
 	m.sel = "ENG-590"
 	if !strings.Contains(m.footer(), "enter go to the Worker") || strings.Contains(m.footer(), "restore the Worker") {
 		t.Fatalf("footer = %q, want the go-to hint", m.footer())
-	}
-}
-
-func TestEnterOnAQueuedTaskOffersNoRestore(t *testing.T) {
-	f := &fakeClient{}
-	v := fixture()
-	queued := tv("ENG-701", lifecycle.Queued, "data", "Later", "", time.Minute)
-	queued.Live = false
-	v.Tasks = append(v.Tasks, queued)
-	m := newModel(f, v)
-	m.sel = "ENG-701"
-	if strings.Contains(m.footer(), "restore the Worker") {
-		t.Fatalf("footer = %q, want no restore for a Task that has not started", m.footer())
 	}
 }
 
