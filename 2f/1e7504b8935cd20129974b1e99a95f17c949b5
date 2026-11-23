@@ -1,0 +1,33 @@
+internal/board/view.go
+  s_fb56ce352cbfde::t_e9355bb15fbe30 225-227,229-230
+  s_fb56ce352cbfde::t_24fa03e342e6a8 228
+docs/spec/one-board.md
+  s_fb56ce352cbfde::t_10a169fc3262a1 125
+internal/scheduler/record.go
+  s_fb56ce352cbfde::t_30b7550c280623 330-331
+  s_fb56ce352cbfde::t_ce72875f0eef65 252
+  s_fb56ce352cbfde::t_27a67255a35887 340-352
+  s_fb56ce352cbfde::t_1011e1b62e8355 170-172
+internal/scheduler/note_test.go
+  s_fb56ce352cbfde::t_3e83f890144c28 79-90
+docs/spec/mvp.md
+  s_fb56ce352cbfde::t_2cef8f0af0f8b2 515
+internal/board/followup_test.go
+  s_fb56ce352cbfde::t_7a830b4e779a2b 175-190
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2f1e7504b8935cd20129974b1e99a95f17c949b5",
+  "prompts": {},
+  "sessions": {
+    "s_fb56ce352cbfde": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fae7e67-0800-4a66-b7d1-8d3e076d23e4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
