@@ -1,0 +1,22 @@
+docs/spec/mvp.md
+  s_59f22b65e91f8e::t_91c56dd51280d0 357-395
+  s_59f22b65e91f8e::t_2449ba402b35fd 653
+  s_59f22b65e91f8e::t_29c02fbb4a5d65 815
+  s_59f22b65e91f8e::t_cd748369014c3e 816-817
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "45d53f986e878ab923cdf14d0d61f70ade2ec900",
+  "prompts": {},
+  "sessions": {
+    "s_59f22b65e91f8e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebd739c9-7583-4350-b806-9bd20a91bffe",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
