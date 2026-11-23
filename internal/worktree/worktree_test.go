@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -42,6 +43,23 @@ func setup(t *testing.T) (bin, repo, marker string) {
 	bin = filepath.Join(root, "wt")
 	os.WriteFile(bin, []byte("#!/bin/sh\nexec "+real+" --config "+cfg+" \"$@\"\n"), 0o755)
 	return bin, repo, marker
+}
+
+func TestHooksListsTheUsersAndTheReposHooks(t *testing.T) {
+	bin, repo, _ := setup(t)
+	os.MkdirAll(filepath.Join(repo, ".config"), 0o755)
+	os.WriteFile(filepath.Join(repo, ".config", "wt.toml"), []byte("[post-start]\ncopy = \"wt step copy-ignored\"\n"), 0o644)
+	got, err := Hooks(context.Background(), bin, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Hook{
+		{Type: "pre-start", Source: "user", Name: "mark", Template: "echo ran >> " + filepath.Join(filepath.Dir(repo), "prestart.txt")},
+		{Type: "post-start", Source: "project", Name: "copy", Template: "wt step copy-ignored"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("hooks %+v, want %+v", got, want)
+	}
 }
 
 func TestCreatePathRemove(t *testing.T) {
