@@ -1031,3 +1031,47 @@ func TestEnterOnAQueuedTaskOffersNoRestore(t *testing.T) {
 		t.Fatalf("footer = %q, want no restore for a Task that has not started", m.footer())
 	}
 }
+
+// idBoard has two Working Tasks with short IDs and a Done Task with a GitHub
+// ID, 95 columns wide.
+func idBoard() Model {
+	done := tv("GClunies/lineup#108", lifecycle.Done, "lineup", "Show only main checkouts as Repos", "#127 merged", 2*time.Hour)
+	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Started: 2, Tasks: []scheduler.TaskView{
+		tv("ah-63", lifecycle.Working, "lineup", "setup and brainstorming session", "", 24*time.Hour),
+		tv("ah-64", lifecycle.Working, "lineup", "Start a sessions to explore the ideas and UI here", "", 5*time.Hour),
+		done,
+	}})
+	m.width = 95
+	return m
+}
+
+// idCells is the width of the ID column on the row that shows id, read as the
+// cells from the ID to the title.
+func idCells(t *testing.T, out, id, title string) int {
+	t.Helper()
+	l := lineOf(t, out, id)
+	return cellOf(l, title) - cellOf(l, id) - 2
+}
+
+func TestTheIDColumnFitsTheRowsOnScreen(t *testing.T) {
+	closed := screen(withClosed(idBoard(), "Done"))
+	if got := idCells(t, closed, "ah-64", "Start a sessions"); got != 5 {
+		t.Errorf("with Done closed the ID column is %d cells, want 5:\n%s", got, closed)
+	}
+	if l := lineOf(t, closed, "ah-64"); !strings.Contains(l, "Start a sessions to explore the ideas and UI here") {
+		t.Errorf("the title must take the cells that the ID column frees: %q", l)
+	}
+
+	open := screen(openAll(idBoard()))
+	if got := idCells(t, open, "lineup#108", "Show only"); got != 10 {
+		t.Errorf("with Done open the ID column is %d cells, want 10 for lineup#108:\n%s", got, open)
+	}
+	if strings.Contains(open, "GClunies/") {
+		t.Errorf("the ID column must show a GitHub ID without its owner:\n%s", open)
+	}
+
+	filtered, _ := press(openAll(idBoard()), "/", "ah-")
+	if out := screen(filtered); idCells(t, out, "ah-64", "Start a sessions") != 5 {
+		t.Errorf("a filter that hides lineup#108 must narrow the ID column to 5 cells:\n%s", out)
+	}
+}
