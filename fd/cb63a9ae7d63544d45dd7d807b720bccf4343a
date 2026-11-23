@@ -1,0 +1,33 @@
+cmd/lineup/service.go
+  s_e11d2764142426::t_012d6337e3f306 218-220
+internal/scheduler/api.go
+  s_e11d2764142426::t_998312e9bdc1ea 323-324
+cmd/lineup/wire_test.go
+  s_e11d2764142426::t_797fca0025c85f 5
+  s_e11d2764142426::t_998312e9bdc1ea 116,119-120,125-131,269-270,279
+cmd/lineup/wire.go
+  s_e11d2764142426::t_998312e9bdc1ea 555-556,561,563-569,573,577,580-583,586,590,593
+internal/scheduler/scheduler_test.go
+  s_e11d2764142426::t_998312e9bdc1ea 596
+internal/scheduler/ports.go
+  s_e11d2764142426::t_998312e9bdc1ea 239-241
+cmd/lineup/service_test.go
+  s_e11d2764142426::t_f9727fbf76ecec 6,199-234
+  s_e11d2764142426::t_8d77b50bc1ca97 235-236
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fdcb63a9ae7d63544d45dd7d807b720bccf4343a",
+  "prompts": {},
+  "sessions": {
+    "s_e11d2764142426": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "897669b3-25eb-4faa-a470-711b11ae407a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
