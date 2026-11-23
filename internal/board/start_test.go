@@ -161,6 +161,31 @@ func TestTheRepoPickerFiltersAndRemembersTheRepoOfTheProject(t *testing.T) {
 	}
 }
 
+// An Issue that fits more than one Repo offers only those Repos.
+func TestTheRepoPickerOffersOnlyTheReposThatTheAskNames(t *testing.T) {
+	e := startEnv(t)
+	e.sched.errs["add"] = &scheduler.RepoAsk{Issue: "ENG-9", Repos: []string{"crexi/backend", "crexi/data"}}
+	e.press("s", "enter")
+	if e.m.mode != modeRepo {
+		t.Fatalf("mode %d, status %q, want the Repo picker", e.m.mode, e.m.status)
+	}
+	if len(e.reposKinds) != 0 {
+		t.Fatalf("the picker asked for every Repo of %q", e.reposKinds)
+	}
+	v := e.m.View()
+	if !strings.Contains(v, "crexi/backend") || !strings.Contains(v, "crexi/data") || strings.Contains(v, "acme/web") {
+		t.Fatalf("picker:\n%s", v)
+	}
+	delete(e.sched.errs, "add")
+	e.press("d", "a", "enter")
+	if c := lastAdd(t, e); c.Repo != "crexi/data" || c.Issue != "ENG-9" {
+		t.Fatalf("second add = %+v", c)
+	}
+	if got := e.sched.ops(); !slices.Equal(got, []string{"add", "add", "start"}) {
+		t.Fatalf("ops = %v", got)
+	}
+}
+
 // The Repo picker asks for the Repos of the row's Kind, so it offers no Repo
 // of another Tracker.
 func TestTheRepoPickerAsksForTheReposOfTheRowsKind(t *testing.T) {

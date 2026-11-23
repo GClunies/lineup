@@ -171,17 +171,22 @@ type Ref struct {
 }
 
 type Issue struct {
-	ID          string   `json:"id"`
-	Identifier  string   `json:"identifier"`
-	Title       string   `json:"title"`
-	URL         string   `json:"url"`
-	BranchName  string   `json:"branchName"`
-	Description string   `json:"description,omitempty"` // set by Issue only
-	Priority    int      `json:"priority"`              // 1 urgent … 4 low, 0 none
-	State       State    `json:"state"`
-	Team        Team     `json:"team"`
-	Project     *Project `json:"project"`
-	Assignee    *Person  `json:"assignee"`
+	ID          string `json:"id"`
+	Identifier  string `json:"identifier"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	BranchName  string `json:"branchName"`
+	Description string `json:"description,omitempty"` // set by Issue only
+	// Labels are the names of the Issue's labels. Set by Issue only.
+	Labels []string `json:"labels,omitempty"`
+	// Links are the URLs of the Issue's attachments, for example the PRs
+	// that Linear's GitHub integration links. Set by Issue only.
+	Links    []string `json:"links,omitempty"`
+	Priority int      `json:"priority"` // 1 urgent … 4 low, 0 none
+	State    State    `json:"state"`
+	Team     Team     `json:"team"`
+	Project  *Project `json:"project"`
+	Assignee *Person  `json:"assignee"`
 	// Blockers are the open Issues that block this one through a "blocks"
 	// relation, in any Project. Linear's first 20 relations are read.
 	Blockers []Ref `json:"blockers,omitempty"`
@@ -204,6 +209,16 @@ func isOpen(stateType string) bool { return stateType != "completed" && stateTyp
 // issueWire is an Issue as Linear sends it, with the relations pointing at it.
 type issueWire struct {
 	Issue
+	LabelNodes struct {
+		Nodes []struct {
+			Name string `json:"name"`
+		} `json:"nodes"`
+	} `json:"labels"`
+	Attachments struct {
+		Nodes []struct {
+			URL string `json:"url"`
+		} `json:"nodes"`
+	} `json:"attachments"`
 	InverseRelations struct {
 		Nodes []struct {
 			Type  string `json:"type"` // blocks | duplicate | related | similar
@@ -217,6 +232,12 @@ type issueWire struct {
 
 func (w issueWire) issue() Issue {
 	is := w.Issue
+	for _, l := range w.LabelNodes.Nodes {
+		is.Labels = append(is.Labels, l.Name)
+	}
+	for _, a := range w.Attachments.Nodes {
+		is.Links = append(is.Links, a.URL)
+	}
 	closed := 0
 	for _, r := range w.InverseRelations.Nodes {
 		switch {
@@ -320,12 +341,13 @@ func (c *Client) MyIssues(ctx context.Context) ([]Issue, error) {
 	return issues(ws), err
 }
 
-// Issue reads one Issue, with its description, by identifier such as "ENG-123".
+// Issue reads one Issue, with its description, labels, and attachment links,
+// by identifier such as "ENG-123".
 func (c *Client) Issue(ctx context.Context, identifier string) (Issue, error) {
 	var res struct {
 		Issue issueWire `json:"issue"`
 	}
-	q := `query($id: String!) { issue(id: $id) { ...IssueFields description } }` + issueFields
+	q := `query($id: String!) { issue(id: $id) { ...IssueFields description labels(first: 50) { nodes { name } } attachments(first: 50) { nodes { url } } } }` + issueFields
 	if err := c.query(ctx, q, map[string]any{"id": identifier}, &res); err != nil {
 		return Issue{}, err
 	}
@@ -468,6 +490,11 @@ func (c *Client) AssignToMe(ctx context.Context, issueID string) error {
 		return err
 	}
 	return c.updateIssue(ctx, issueID, map[string]any{"assigneeId": me})
+}
+
+// SetDescription replaces the Issue's description.
+func (c *Client) SetDescription(ctx context.Context, issueID, description string) error {
+	return c.updateIssue(ctx, issueID, map[string]any{"description": description})
 }
 
 // SetStatusByName moves the Issue to the workflow state of its team with that

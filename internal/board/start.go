@@ -1,6 +1,7 @@
 package board
 
 import (
+	"errors"
 	"os"
 	"slices"
 	"strings"
@@ -13,8 +14,8 @@ import (
 )
 
 // This file holds the start that s opens on an Issue row: the skill picker,
-// then the Repo picker when the Issue has no Repo mapping, then the add and
-// the start of the Task.
+// then the Repo picker when the Issue has no Repo mapping or fits more than
+// one Repo, then the add and the start of the Task.
 
 const (
 	// noSkill is the first row of the skill picker.
@@ -48,6 +49,9 @@ type (
 	needRepoMsg struct {
 		row   issueRow
 		skill string
+		// repos are the Repos to pick from. nil lists every Repo of the
+		// row's Kind.
+		repos []string
 	}
 	reposMsg struct{ repos []string }
 )
@@ -133,7 +137,13 @@ func (m Model) startTask(r issueRow, repo, skill string) tea.Cmd {
 		var v scheduler.TaskView
 		err := c.Do(scheduler.Request{Op: "add", Issue: r.ID, Kind: r.Kind, Repo: repo}, &v)
 		if err != nil {
-			if repo == "" && strings.Contains(err.Error(), noMapping) {
+			var ask *scheduler.RepoAsk
+			switch {
+			case repo != "":
+			case errors.As(err, &ask):
+				need.repos = ask.Repos
+				return need
+			case strings.Contains(err.Error(), noMapping):
 				return need
 			}
 			return opMsg{label: "add", task: r.ID, err: err}
@@ -159,7 +169,10 @@ func (m Model) startMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 	case needRepoMsg:
 		m.mode, m.pick, m.st.skill = modeRepo, msg.row, msg.skill
 		m.st.repoIn.SetValue("")
-		m.st.repoCur = 0
+		m.st.repoCur, m.st.repos = 0, msg.repos
+		if msg.repos != nil {
+			return m, m.st.repoIn.Focus(), true
+		}
 		return m, tea.Batch(m.loadRepos(), m.st.repoIn.Focus()), true
 	case reposMsg:
 		m.st.repos, m.st.repoCur = msg.repos, 0

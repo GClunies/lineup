@@ -315,13 +315,30 @@ Rex brings back each tab after its restart, with the same IDs, but as a login sh
 
 At its end, recovery runs the check that the Scheduler runs at each poll. So a worktree whose `keep_worktree_days` passed while the Scheduler was down goes before the first poll. Recovery can find a merged Task whose tab is gone while the Task waits for an idle Worker. The user did not close that tab, so recovery keeps the worktree for `keep_worktree_days` from the start.
 
+## Pick the Repo of a Linear Issue
+
+Each Issue works in one Repo. Work across Repos is split into one Issue for each Repo, and `blocks` relations join these Issues. The candidates of a Linear Issue are the Repos whose `teams` list holds the Issue's team. Two Repos can list one team, for example PD on `crexi/backend` and on `crexi/data`.
+
+lineup takes these steps in order. It stops at the first step that names exactly one candidate:
+
+1. One candidate: lineup uses it, and reads nothing from Linear.
+2. The Issue names its Repo: a line `Repo: <owner>/<repo>` in the description, or a label `repo:<name>`. A label can give the Repo key or the part of the key after the slash. Case does not count.
+3. The Project's Repo: the Repo that the user picked in the Board's Repo picker for the Issue's Project.
+4. Links: the GitHub URLs in the description and in the Issue's attachments, for example the PRs that Linear links to the Issue.
+5. Content: a model reads the Issue's title and description. It also reads the first 1500 bytes of the `README.md` of each candidate, else of its `CLAUDE.md`. lineup runs `claude -p --safe-mode --model haiku --tools ""` for this step. The JSON schema of the answer allows only the candidates and `unsure`. A model that fails, or that takes more than 1 minute, counts as `unsure`.
+6. Ask: `lineup add` fails with `<ISSUE> fits more than one Repo, so pick a Repo: <candidates>. Then run lineup add --repo <repo> <ISSUE>`. The Orchestrator asks the user with `AskUserQuestion`. The Board opens its Repo picker with only the candidates.
+
+After step 4 or 5, lineup writes the line `Repo: <owner>/<repo>` at the end of the Issue's description. It removes each other `Repo:` line from the description. After step 6, lineup writes the line when the user passes a candidate with `--repo` and the Issue does not name that candidate. The next start then stops at step 2. lineup writes nothing after steps 1, 2, and 3.
+
+When the Issue's team is on no Repo, the Issue gets the Project's Repo. Without a Project's Repo, `lineup add` fails with `no Repo mapping`. Then the Board's Repo picker lists each Repo whose Tracker is Linear.
+
 ## Start a Task
 
 This sequence runs in the background. The Board shows only the Task as it changes Stage.
 
 1. The Scheduler checks the WIP cap. If the cap is full, the Board asks the user to start this Task once over the cap or to raise the cap. A start over the cap shows `+1 over` in the header.
 2. The Scheduler assigns the Issue to the user and sets the `started` status from the team's status map. See [Linear status map](#linear-status-map).
-3. The Scheduler picks the Repo. The Repo comes from the team or Project mapping in the configuration. If no mapping exists, a fuzzy picker opens and remembers the choice for that Project.
+3. The Scheduler picks the Repo. A Linear Issue gets its Repo as [Pick the Repo of a Linear Issue](#pick-the-repo-of-a-linear-issue) says. A GitHub Issue gets the checkout of its repository. A Local Issue gets the Repo of its prefix, else the Repo of its `repo` field. If no Repo fits, a fuzzy picker opens. For a Linear Issue, the picker remembers the choice for the Issue's Project.
 4. The Scheduler creates the Repo session if it does not exist, and then a setup tab for the Task with `--focus=false --keep-open`.
 5. In that tab, the Scheduler runs `wt switch --create <branch>`. The branch is Linear's `branchName` for the Issue. The worktrunk `copy` steps and `pre-start` hooks set up the worktree.
 6. The Claude adapter marks the worktree as trusted. Claude stores this in `projects[<real path>].hasTrustDialogAccepted` in the `.claude.json` of the Claude configuration folder that the Repo uses. Without this step, the Worker stops at a trust prompt that reports no program status. The rules for this step:
@@ -392,7 +409,7 @@ The top level holds the keys that apply once: `roots`, `start_skills`, `linear_c
 
 `[defaults]` holds each key that a Repo can override: `wip_cap`, `poll_interval`, `[budgets]`, `[review_bot]`, `[landing_bar]`, and `[stage.*]`. A layer key at the top level stops the load, for example with `wip_cap belongs in [defaults]. Run lineup config migrate to move it`.
 
-`[repos."<key>"]` holds the keys of `[defaults]`, and `teams`, `tracker`, and `prefix`. `teams` and `prefix` need an `<owner>/<repo>` key. `tracker` can go in both forms.
+`[repos."<key>"]` holds the keys of `[defaults]`, and `teams`, `tracker`, and `prefix`. `teams` and `prefix` need an `<owner>/<repo>` key. `tracker` can go in both forms. Two Repos can list one team. [Pick the Repo of a Linear Issue](#pick-the-repo-of-a-linear-issue) tells how lineup then picks the Repo of each Issue.
 
 ### Repo keys and checkouts
 
@@ -617,7 +634,7 @@ Backlog and Done start closed, and `[board] collapsed` changes that. `enter` or 
 | `f` | Show the detail pane at full screen, and back. On an Issue row, the pane shows the Issue's description. |
 | `m` | Merge the PR (Ready to land) |
 | `x` | Close the Task, after a confirmation. On a Done Task with a tab, close the tab and remove the worktree, after a confirmation. On a Done Task with no tab, archive it and remove its kept worktree, after a confirmation. |
-| `s` | Start a Queued Task. On an Issue row, open the skill picker, then add the Issue as a Task and start it. The first row of the picker is `just go`, which starts with no skill. The other rows are the skills in `start_skills`. Typed text filters these rows, and a typed name that is not in the list becomes its own row. The picker drops a leading `/`. When no Repo mapping exists, the Repo picker opens next. |
+| `s` | Start a Queued Task. On an Issue row, open the skill picker, then add the Issue as a Task and start it. The first row of the picker is `just go`, which starts with no skill. The other rows are the skills in `start_skills`. Typed text filters these rows, and a typed name that is not in the list becomes its own row. The picker drops a leading `/`. When no Repo mapping exists, the Repo picker opens next with each Repo of the row's Tracker. When the Issue fits more than one Repo and nothing in the Issue picks one, the picker lists only those Repos. |
 | `c` | On an Issue row, change the status. A Linear row lists the workflow states of its team, and a local row lists the local statuses. |
 | `o` | Open the PR or the Issue in the browser. A local Issue opens in `$EDITOR`. |
 | `n` | Capture a new Issue at a Destination, `local` by default. `tab` picks a Linear team or Project. A local Issue shows and opens Backlog and selects the new row. See `docs/spec/one-board.md`. |

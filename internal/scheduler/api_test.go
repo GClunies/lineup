@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
 )
@@ -174,7 +177,7 @@ func TestAskDraftsFlagsARespondingTaskWithTheCount(t *testing.T) {
 // clashConfig maps no Issue to a Repo, because two checkouts have its key.
 type clashConfig struct{ fakeConfig }
 
-func (clashConfig) RepoForIssue(is Issue) (string, error) {
+func (clashConfig) RepoForIssue(_ context.Context, is Issue) (string, error) {
 	return "", fmt.Errorf("%w for %s: 2 checkouts have the key acme/data: /a and /b", ErrNoRepo, is.Identifier)
 }
 
@@ -187,10 +190,65 @@ func TestAddKeepsWhyAnIssueHasNoRepo(t *testing.T) {
 	}
 }
 
+// askConfig fits each Issue to two Repos, and nothing in the Issue picks
+// one. It keeps each Repo that the user picks.
+type askConfig struct {
+	fakeConfig
+	picked *[]string
+}
+
+func (askConfig) RepoForIssue(_ context.Context, is Issue) (string, error) {
+	return "", &RepoAsk{Issue: is.Identifier, Repos: []string{"acme/api", "acme/data"}}
+}
+
+func (c askConfig) PickedRepo(_ context.Context, is Issue, repo string) error {
+	*c.picked = append(*c.picked, is.Identifier+" "+repo)
+	return nil
+}
+
+// The CLI and the Board get the Repos to ask about through the socket.
+func TestAnAddThatMustAskSendsTheReposOverTheSocket(t *testing.T) {
+	var picked []string
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil, func(d *Deps) { d.Config = askConfig{picked: &picked} })
+	dir, err := os.MkdirTemp("", "lineup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	path := filepath.Join(dir, "s.sock")
+	go h.s.Serve(ctx, path)
+	c := Client{Path: path}
+	for range 200 {
+		if err = c.Do(Request{Op: "add", Issue: "ENG-1"}, nil); err == nil || !strings.Contains(err.Error(), "not running") {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	var ask *RepoAsk
+	if !errors.As(err, &ask) || ask.Issue != "ENG-1" || !slices.Equal(ask.Repos, []string{"acme/api", "acme/data"}) {
+		t.Fatalf("add: err %#v, want a RepoAsk for ENG-1", err)
+	}
+	if want := "ENG-1 fits more than one Repo, so pick a Repo: acme/api, acme/data. Then run lineup add --repo <repo> ENG-1"; err.Error() != want {
+		t.Fatalf("add: err %q, want %q", err, want)
+	}
+	if len(picked) != 0 {
+		t.Fatalf("an add with no Repo recorded a pick: %q", picked)
+	}
+	var v TaskView
+	if err := c.Do(Request{Op: "add", Issue: "ENG-1", Repo: "data"}, &v); err != nil || v.ID != "ENG-1" {
+		t.Fatalf("add with the picked Repo: %+v %v", v, err)
+	}
+	if !slices.Equal(picked, []string{"ENG-1 /repos/acme/data"}) {
+		t.Fatalf("picked %q, want the Repo that the user passed", picked)
+	}
+}
+
 // noCheckoutConfig has no checkout, so it maps no Issue to a Repo.
 type noCheckoutConfig struct{ fakeConfig }
 
-func (noCheckoutConfig) RepoForIssue(is Issue) (string, error) {
+func (noCheckoutConfig) RepoForIssue(_ context.Context, is Issue) (string, error) {
 	return "", fmt.Errorf("%w for %s", ErrNoRepo, is.Identifier)
 }
 

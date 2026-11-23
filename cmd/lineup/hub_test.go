@@ -94,7 +94,7 @@ func TestAgentRoleLeavesNeedsYouToThePalette(t *testing.T) {
 		t.Fatalf("the role has no Questions section:\n%s", role)
 	}
 	questions, _, _ = strings.Cut(questions, "\n## ")
-	for _, want := range []string{"`AskUserQuestion`", "`wip cap full`", "`lineup start --over-cap <task>`", "`no Repo mapping`"} {
+	for _, want := range []string{"`AskUserQuestion`", "`wip cap full`", "`lineup start --over-cap <task>`", "`no Repo mapping`", "`pick a Repo`"} {
 		if !strings.Contains(questions, want) {
 			t.Errorf("the Questions section has no %s", want)
 		}

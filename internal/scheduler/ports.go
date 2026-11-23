@@ -261,8 +261,12 @@ type Tracker interface {
 type Config interface {
 	Policy(repo string, overrides map[string]string) (lifecycle.Policy, error)
 	// RepoForIssue picks the Repo that the Issue maps to. The error wraps
-	// ErrNoRepo when no mapping exists, and says why.
-	RepoForIssue(is Issue) (repo string, err error)
+	// ErrNoRepo when no mapping exists, and says why. It is a *RepoAsk when
+	// the Issue fits more than one Repo and nothing in it picks one.
+	RepoForIssue(ctx context.Context, is Issue) (repo string, err error)
+	// PickedRepo records the Repo that the user passed for the Issue, so
+	// that the next add finds it in the Issue.
+	PickedRepo(ctx context.Context, is Issue, repo string) error
 	// ResolveRepo turns a name such as "data", an owner/repo key, or a path
 	// into a Repo's main checkout.
 	ResolveRepo(name string) (string, error)
