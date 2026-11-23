@@ -1,0 +1,27 @@
+cmd/lineup/wire.go
+  s_fb56ce352cbfde::t_bd5ae9d3308a05 311
+internal/scheduler/ports.go
+  s_fb56ce352cbfde::t_14bcbda3568f86 149-152
+internal/harness/claude/claude_test.go
+  s_fb56ce352cbfde::t_682aaacf6b89b5 180,185,313,324,331-353,357,362
+internal/harness/claude/claude.go
+  s_fb56ce352cbfde::t_8f3e9b2b8642ec 209-217
+  s_fb56ce352cbfde::t_47ee3be528ad8d 170-177
+  s_fb56ce352cbfde::t_6115c5a71117f6 190-192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f44a6969e0af49266468f6a578a3f9b92267e684",
+  "prompts": {},
+  "sessions": {
+    "s_fb56ce352cbfde": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fae7e67-0800-4a66-b7d1-8d3e076d23e4",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
