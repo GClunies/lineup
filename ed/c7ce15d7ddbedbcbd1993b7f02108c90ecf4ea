@@ -1,0 +1,21 @@
+internal/board/view.go
+  s_a56bd72ec7104f::t_ade0dd751c8989 256,393
+internal/board/mouse.go
+  s_a56bd72ec7104f::t_e7e72646610f65 70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "edc7ce15d7ddbedbcbd1993b7f02108c90ecf4ea",
+  "prompts": {},
+  "sessions": {
+    "s_a56bd72ec7104f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7def645d-2c6a-46b8-912b-a30a82ff8bc6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
