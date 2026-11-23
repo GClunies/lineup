@@ -1,0 +1,59 @@
+docs/spec/mvp.md
+  s_62e3808e7f1359::t_5fac51e3922f4c 528
+  s_62e3808e7f1359::t_1a1c73143ed760 418-419
+  s_62e3808e7f1359::t_cf725c971a5451 427
+  s_62e3808e7f1359::t_176c99db74c96a 236
+  s_62e3808e7f1359::t_5468f9899eb21e 387
+  s_62e3808e7f1359::t_e5d28b4ee353b8 372
+  s_62e3808e7f1359::t_2e52bb5ae93565 425
+  s_62e3808e7f1359::t_a3847d39a0bb90 379
+  s_62e3808e7f1359::t_f6980f6c048f1a 411
+docs/spec/trackers.md
+  s_62e3808e7f1359::t_8999b06ecd719f 62
+  s_62e3808e7f1359::t_390b41784f6d27 100-108
+  s_62e3808e7f1359::t_f2586ac4c952a9 66-78
+  s_62e3808e7f1359::t_ad5e7e5ca267ba 140
+  s_62e3808e7f1359::t_4146113c80f9de 112,116
+  s_62e3808e7f1359::t_8aa9f5505f9c2b 181
+  s_62e3808e7f1359::t_b409001d9cc08a 129
+  s_62e3808e7f1359::t_7d9f172c22e812 136
+  s_62e3808e7f1359::t_ca08efecb7d763 88,90,93-95,97
+  s_62e3808e7f1359::t_7c868f74ccf8f1 122,124,126
+  s_62e3808e7f1359::t_ec6dff74ab2e33 64
+  s_62e3808e7f1359::t_b56d5410a2196d 196
+  s_62e3808e7f1359::t_e7276ae2222c98 257-259
+  s_62e3808e7f1359::t_0a22566bd171ec 192
+  s_62e3808e7f1359::t_83c76ae1f3d68f 174
+  s_62e3808e7f1359::t_484b2a1e726c54 138
+  s_62e3808e7f1359::t_6d7589b5844bfb 65
+docs/spec/one-board.md
+  s_62e3808e7f1359::t_c1d26c3f95e4c4 249
+  s_62e3808e7f1359::t_1a184b7ff66251 36
+  s_62e3808e7f1359::t_fdb968ded4870f 40
+  s_62e3808e7f1359::t_7933a2ae9ae2e7 72
+  s_62e3808e7f1359::t_36e2d00f0346a4 43
+  s_62e3808e7f1359::t_2b7c77d83bf360 120
+  s_62e3808e7f1359::t_dd9bedcd6cd300 167
+docs/spec/reviews.md
+  s_62e3808e7f1359::t_049c6b246cad38 145
+GLOSSARY.md
+  s_62e3808e7f1359::t_84ed8e330438ab 54
+  s_62e3808e7f1359::t_3824379861038b 58
+  s_62e3808e7f1359::t_d7c14a98bf6cab 21-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "729aec0d89e01d36648049b3fda21b978908900f",
+  "prompts": {},
+  "sessions": {
+    "s_62e3808e7f1359": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc4c19bf-2d88-4b96-8b28-9396d6a5563c",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
