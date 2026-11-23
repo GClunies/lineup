@@ -68,7 +68,7 @@ lineup always needs `gh` for PRs, so a signed-in `gh` does not make GitHub a Tra
 | Tracker | How lineup picks the Repo | If nothing matches |
 |---|---|---|
 | Linear | The team or Project mapping, as in the MVP | The fuzzy picker, as in the MVP |
-| GitHub | The checkout below the roots whose Repo key is the Issue's repository. Of several such checkouts, the one whose folder name is the repository's name. | `lineup add` fails and names the repository. The user clones it below a root, or adds its folder to `roots`. |
+| GitHub | The one checkout below the roots whose Repo key is the Issue's repository | `lineup add` fails and names the repository. The user clones it below a root, or adds its folder to `roots`. If two checkouts have the key, the error names both. |
 | Local | The Repo whose prefix starts the ID, else the Issue's `repo:` field, resolved as `lineup add --repo` resolves a name | The fuzzy picker. lineup writes the choice back to `repo:`. |
 
 ### Locked Repos

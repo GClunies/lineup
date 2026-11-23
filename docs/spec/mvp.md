@@ -387,7 +387,7 @@ The top level holds the keys that apply once: `roots`, `start_skills`, `linear_c
 
 ### Repo keys and checkouts
 
-`roots` lists the folders that hold the checkouts. It has no default. lineup looks at each root, at each folder in it, and at each folder in those. A folder with a `.git` entry is a checkout, and lineup does not look inside a checkout. lineup skips each folder whose name starts with a dot. lineup walks the roots each time that it needs the checkouts, so a new clone shows up without a restart.
+`roots` lists the folders that hold the checkouts. It has no default. lineup looks at each root, at each folder in it, and at each folder in those. A folder with a `.git` folder is a checkout. A folder with a `.git` file is a linked worktree or a submodule. It is not a checkout. lineup does not look inside either folder. lineup skips each folder whose name starts with a dot. lineup walks the roots each time that it needs the checkouts, so a new clone shows up without a restart.
 
 lineup names each checkout by its `origin` remote. This name is the Repo key:
 
@@ -396,11 +396,12 @@ lineup names each checkout by its `origin` remote. This name is the Repo key:
 
 A key in the file is `<owner>/<repo>` for one Repo, or `<owner>/*` for each Repo of one owner. No other glob form exists. Keys ignore case, as GitHub names do. Two keys that differ only in case stop the load.
 
-Several checkouts can have one key, for example a Repo and its git worktrees. Each of them takes the settings of the key.
+Each key has one checkout. A linked worktree of a Repo is never a checkout, so it never shares the Repo's key. If two clones have one key, `lineup restart` writes a warning that names both paths. lineup then picks no checkout for that key until you remove one clone from the roots.
 
 - `lineup add --repo <name>` and a Local Issue's `repo:` take a folder name, an `<owner>/<repo>` key, or a path. A path starts with `/`, `~/`, or `.`.
 - If two checkouts have the folder name, the error lists their keys, for example `2 checkouts named de-interview-exercise: pass crexi-dev/de-interview-exercise or crexi/de-interview-exercise`.
-- A key names its one checkout. Of several checkouts with the key, it names the checkout whose folder name is the repo part of the key, for example `~/repos/crexi/data` for `crexi/data`.
+- A key names its one checkout. If two checkouts have the key, the error names both, for example `2 checkouts have the key crexi/data: /home/u/repos/crexi/data and /home/u/old/data: pass a path`.
+- A path must be a checkout. A path to a linked worktree fails with `<path> is not a main git checkout`.
 - A GitHub Issue goes to the checkout of its repository's key.
 - The Repo picker lists the checkouts below the roots.
 
