@@ -202,8 +202,7 @@ func (s *Scheduler) flagSilentPrompts() {
 	}
 }
 
-// apply runs one Signal through the reducer, records the change, and queues
-// the Effects on the Task's lane.
+// apply runs one Signal through the reducer, then records the change.
 func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error {
 	from, flag, flagDetail, outcome := r.Stage, r.Flag, r.FlagDetail, r.Outcome
 	effects, err := s.board.Apply(r.ID, sig)
@@ -213,8 +212,18 @@ func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error 
 	if r.Stage == from && r.Flag == flag && r.FlagDetail == flagDetail && r.Outcome == outcome && len(effects) == 0 {
 		return nil
 	}
-	if r.Stage != from {
-		r.StageSince = s.now()
+	s.transition(r, store.Event{Signal: sig.Name(), From: from.String(), Detail: detail}, effects)
+	return nil
+}
+
+// transition records a change of the Task: it saves ev with the Task's new
+// Stage, and queues the Effects on the Task's lane. ev.From is "" for a Task
+// that the change put on the Board. An empty ev.Detail takes the Task's flag.
+func (s *Scheduler) transition(r *Record, ev store.Event, effects []lifecycle.Effect) {
+	ev.TaskID, ev.At, ev.To = r.ID, s.now(), r.Stage.String()
+	moved := ev.From != ev.To
+	if moved {
+		r.StageSince = ev.At
 	}
 	for _, e := range effects {
 		if p, ok := e.(lifecycle.PromptWorker); ok {
@@ -224,14 +233,14 @@ func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error 
 	if r.Pending != nil && *r.Pending != r.Stage {
 		r.Pending = nil
 	}
-	if detail == "" {
-		detail = string(r.Flag)
+	if ev.Detail == "" {
+		ev.Detail = string(r.Flag)
 		if r.FlagDetail != "" {
-			detail += ": " + r.FlagDetail
+			ev.Detail += ": " + r.FlagDetail
 		}
 	}
-	s.d.Log.Info("transition", "task", r.ID, "signal", sig.Name(), "from", from.String(), "to", r.Stage.String(), "detail", detail)
-	s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: sig.Name(), From: from.String(), To: r.Stage.String(), Detail: detail})
+	s.d.Log.Info("transition", "task", r.ID, "signal", ev.Signal, "from", ev.From, "to", ev.To, "detail", ev.Detail)
+	s.save(r, ev)
 	if len(effects) > 0 {
 		s.enqueue(r.ID, func(ctx context.Context) {
 			for _, e := range effects {
@@ -239,10 +248,9 @@ func (s *Scheduler) apply(r *Record, sig lifecycle.Signal, detail string) error 
 			}
 		})
 	}
-	if r.Stage != from && r.Stage == lifecycle.CIRunning {
+	if moved && r.Stage == lifecycle.CIRunning {
 		s.replayPR(r)
 	}
-	return nil
 }
 
 // replayPR applies the stored PR's pr-seen, so a Task that enters CI running
