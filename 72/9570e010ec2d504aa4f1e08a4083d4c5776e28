@@ -1,0 +1,102 @@
+cmd/lineup/cli_test.go
+  s_71f8798a60822c::t_ce089e7d983848 10-19
+internal/config/migrate_test.go
+  s_71f8798a60822c::t_4533a36f78bacd 85-88
+internal/scheduler/ports.go
+  s_71f8798a60822c::t_12e71e78de8b4a 264-269
+cmd/lineup/wire.go
+  s_71f8798a60822c::t_5b3c7da7215782 613-617,619-683,685
+  s_71f8798a60822c::t_7f0bb2ddef5816 416-423
+  s_71f8798a60822c::t_c8e4c1b18d92c0 22
+  s_71f8798a60822c::t_2a48ca8ada1060 4,11
+  s_71f8798a60822c::t_e5bd757801d216 562-575
+  s_71f8798a60822c::t_08e592fac2596f 583
+internal/scheduler/client.go
+  s_71f8798a60822c::t_88f254f78d78f2 28-30
+internal/config/config_test.go
+  s_71f8798a60822c::t_b33de902c28a16 395-406
+  s_71f8798a60822c::t_591e671492cc24 409-410
+internal/linear/client_test.go
+  s_71f8798a60822c::t_78585934d9064d 10
+  s_71f8798a60822c::t_bd6211d8125913 202-203,209-210
+  s_71f8798a60822c::t_11be6ff4da9476 211,310-322
+cmd/lineup/serve.go
+  s_71f8798a60822c::t_281691324c8626 106,108
+  s_71f8798a60822c::t_518f26ecbe1b76 115-116
+cmd/lineup/agent/linear.md
+  s_71f8798a60822c::t_0b88db4a950e93 17-18
+cmd/lineup/hub_test.go
+  s_71f8798a60822c::t_26090c7c4f38b3 97
+GLOSSARY.md
+  s_71f8798a60822c::t_da951298cdcc1d 10
+cmd/lineup/judge.go
+  s_71f8798a60822c::t_abb6d8be80edb9 12
+  s_71f8798a60822c::t_230fc681c3c7f4 53
+  s_71f8798a60822c::t_690ebc463b9bb3 1-11,13-52,54-115
+internal/scheduler/scheduler_test.go
+  s_71f8798a60822c::t_ea02c01631afb2 617-622
+cmd/lineup/wire_test.go
+  s_71f8798a60822c::t_bd9b1cb07b729b 117,120,123,126,131,270,277,280,283
+internal/board/start.go
+  s_71f8798a60822c::t_7ff8ebf2f6cbd2 172-175
+  s_71f8798a60822c::t_0e44330372c8e3 52-54
+  s_71f8798a60822c::t_cf22324faf3f82 4
+  s_71f8798a60822c::t_9bdaf759991c43 17-18
+  s_71f8798a60822c::t_053488ea37c1ae 140-146
+internal/config/config.go
+  s_71f8798a60822c::t_65f836aadd9683 908-910
+  s_71f8798a60822c::t_31fd963d6133e2 966-969,971-972,975
+internal/route/route_test.go
+  s_71f8798a60822c::t_adb2415624b43d 1-121
+internal/scheduler/api.go
+  s_71f8798a60822c::t_f486029f677ddc 42-43
+  s_71f8798a60822c::t_83068af90aa989 56-67
+  s_71f8798a60822c::t_1f6130e5264591 118
+  s_71f8798a60822c::t_18456eca44f4af 350-352,354-355,365-368
+  s_71f8798a60822c::t_5ef354e3a456d5 369
+cmd/lineup/route_test.go
+  s_71f8798a60822c::t_08480fdc2ba4cc 6,219,240
+  s_71f8798a60822c::t_dfff01d9aab82d 1-5,7-218,220-239,241-251
+internal/scheduler/api_test.go
+  s_71f8798a60822c::t_b579322df5b2d4 251
+  s_71f8798a60822c::t_3c1a7e2652542b 180
+  s_71f8798a60822c::t_e3fd5b866fcd8c 7,9,12
+  s_71f8798a60822c::t_a1431a875b7d44 193-247
+internal/board/start_test.go
+  s_71f8798a60822c::t_14e384412d73d2 164-188
+internal/route/route.go
+  s_71f8798a60822c::t_8f6cfea0a71267 1-31,33-138
+  s_71f8798a60822c::t_fd099037f40584 32
+internal/linear/client.go
+  s_71f8798a60822c::t_ef78cac197a76a 180-183
+  s_71f8798a60822c::t_7f8f60ddeb493d 212-221
+  s_71f8798a60822c::t_3c8882f969f01d 344-345
+  s_71f8798a60822c::t_ecc9e842ea3911 350
+  s_71f8798a60822c::t_bb3056b29ae755 235-240
+  s_71f8798a60822c::t_5e2355adcab92e 495-499
+  s_71f8798a60822c::t_a0f2bd2db37a4b 174-179,184-189
+cmd/lineup/agent/CLAUDE.md
+  s_71f8798a60822c::t_c2d53b88dee5fb 67-68
+  s_71f8798a60822c::t_b0e24b31f268be 116
+docs/spec/mvp.md
+  s_71f8798a60822c::t_00e5e1308409be 341
+  s_71f8798a60822c::t_525a5ec9e586cf 637
+  s_71f8798a60822c::t_c5265e5c912714 318-334
+  s_71f8798a60822c::t_27f927dffafd93 412
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "729570e010ec2d504aa4f1e08a4083d4c5776e28",
+  "prompts": {},
+  "sessions": {
+    "s_71f8798a60822c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "337c443f-2122-42b4-8650-a69c4ac89b2b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
