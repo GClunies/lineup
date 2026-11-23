@@ -84,10 +84,6 @@ local function notDone(t)
   return t.stage_key ~= "done"
 end
 
-local function started(t)
-  return t.stage_key ~= "done"
-end
-
 -- add runs lineup add with args, and the add starts the Task. If the WIP cap
 -- is full, it asks to start the Task once over the cap. name names the Task in
 -- the choices, and leave is the choice that starts nothing.
@@ -339,7 +335,7 @@ rex.action{
   category = "Lineup",
   keywords = "lineup rerun retry again stage prompt",
   run = function(ctx, args)
-    local task, reason = pickTask("Run a Stage of which Task?", "No Task has started", started)
+    local task, reason = pickTask("Run a Stage of which Task?", "No Task has started", notDone)
     if task == nil then
       return { answered = false, reason = reason }
     end
