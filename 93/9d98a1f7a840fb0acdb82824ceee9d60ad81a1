@@ -1,0 +1,47 @@
+GLOSSARY.md
+  s_698ec92ac9ba5d::t_a4e44123ce4dfc 110
+  s_698ec92ac9ba5d::t_87b137331d9925 92
+docs/architecture-intent/orchestrator.md
+  s_698ec92ac9ba5d::t_f2de1cb0715e5b 7
+cmd/lineup/hub.go
+  s_698ec92ac9ba5d::t_760d95ebd66fcd 124,128,130-132,143,146-151
+docs/product-intent/orchestrator.md
+  s_698ec92ac9ba5d::t_7ccba01b46e596 7
+cmd/lineup/hub_test.go
+  s_698ec92ac9ba5d::t_2007528e3aba6b 308
+  s_698ec92ac9ba5d::t_df20ca0d32bad9 400
+  s_698ec92ac9ba5d::t_081ddbd7d0b979 416
+  s_698ec92ac9ba5d::t_41f865e70d82fc 277-278
+  s_698ec92ac9ba5d::t_84beea8625b591 252,259-263
+  s_698ec92ac9ba5d::t_521ffa02c4dc87 406
+  s_698ec92ac9ba5d::t_d6f25a5ca38b03 469
+  s_698ec92ac9ba5d::t_dfdaee44a0da57 131-132,134,136
+  s_698ec92ac9ba5d::t_1e6a5c60947909 346,349-360,363-364,370-381,383-396
+docs/product-intent/board.md
+  s_698ec92ac9ba5d::t_d95503da6e87a4 7
+  s_698ec92ac9ba5d::t_8392505dc12915 75
+  s_698ec92ac9ba5d::t_710f5910876fd7 73
+cmd/lineup/agent/CLAUDE.md
+  s_698ec92ac9ba5d::t_7cb4686d141d27 123
+  s_698ec92ac9ba5d::t_ac0b1394f1a859 3
+docs/product-intent/reviews.md
+  s_698ec92ac9ba5d::t_0262acf976e7b4 59
+docs/product-intent/tabs.md
+  s_698ec92ac9ba5d::t_f18346b95157c6 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "939d98a1f7a840fb0acdb82824ceee9d60ad81a1",
+  "prompts": {},
+  "sessions": {
+    "s_698ec92ac9ba5d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "218d5a6f-4820-418a-a7e3-0ee82b6dd73a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
