@@ -1,0 +1,23 @@
+docs/product-intent/configuration.md
+  s_531f4d7f871cde::t_1709efc3b19990 11
+  s_531f4d7f871cde::t_5c361f54dc636f 15
+docs/product-intent/tabs.md
+  s_531f4d7f871cde::t_9b879322340e89 76-79
+  s_531f4d7f871cde::t_b0921b26d97bb0 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e8add26431efe5171f1dfd88293ab72b239483e2",
+  "prompts": {},
+  "sessions": {
+    "s_531f4d7f871cde": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1a3909c8-7fe1-44ff-abab-d3e5467f84da",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
