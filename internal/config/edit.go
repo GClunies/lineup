@@ -147,6 +147,40 @@ func (s Setting) FileKey(w Where) string {
 	return key
 }
 
+// BuiltIn is the plain name of the default value of a key.
+const BuiltIn = "built-in"
+
+// Name is the plain name of the level in the config panel: your file, all
+// Repos, all <owner> Repos, or this Repo.
+func (w Where) Name() string {
+	switch w.Level {
+	case LevelTop:
+		return "your file"
+	case LevelDefaults:
+		return "all Repos"
+	case LevelOwner:
+		return "all " + strings.TrimSuffix(w.Table, "/*") + " Repos"
+	}
+	return "this Repo"
+}
+
+// Place is the plain name of a layer of the setting: the Name of its level,
+// and Every Stage when the layer is the [stage.default] key of a Stage key.
+func (s Setting) Place(l Layer) string {
+	if l.Path != s.Path {
+		return l.At.Name() + ", " + stageTitle("default")
+	}
+	return l.At.Name()
+}
+
+// SetIn is the plain name of the place whose value applies, or BuiltIn.
+func (s Setting) SetIn() string {
+	if s.By == nil {
+		return BuiltIn
+	}
+	return s.Place(Layer{At: *s.By, Path: cmp.Or(s.From, s.Path)})
+}
+
 // Source names the level of the value: default, [defaults], or the key of
 // a Repo table, and the stage.default table that gives the value.
 func (s Setting) Source() string {

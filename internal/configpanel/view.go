@@ -26,7 +26,7 @@ var (
 
 func (m Model) View() string {
 	rule := dim.Render(strings.Repeat("─", max(m.width, 1)))
-	top := []string{bold.Render(" lineup config") + dim.Render("  "+m.file.Path), m.tabLine()}
+	top := stack(bold.Render(" lineup config")+dim.Render("  "+m.file.Path), m.tabLine(), m.legend())
 	if m.readOnly() {
 		top = append(top, m.wrap(bad, "config: "+m.file.LoadErr.Error())...)
 		top = append(top, bad.Render(" Read-only: fix the file, then open the panel again."))
@@ -83,6 +83,23 @@ func stack(parts ...any) []string {
 	return out
 }
 
+// legend names the levels of the tab in their order, the last of which wins
+// (PROD-CONFIG-013).
+func (m Model) legend() []string {
+	switch {
+	case m.tab == tabGlobal:
+		return m.wrap(dim, "A value in your file beats the "+config.BuiltIn+" value.")
+	case m.repo == "":
+		return nil
+	}
+	owner, _, _ := strings.Cut(m.repo, "/")
+	names := []string{config.BuiltIn}
+	for _, w := range []config.Where{{Level: config.LevelDefaults}, {Level: config.LevelOwner, Table: owner + "/*"}, {Level: config.LevelRepo}} {
+		names = append(names, w.Name())
+	}
+	return m.wrap(dim, "Later wins: "+strings.Join(names, " → ")+" ("+m.repo+")")
+}
+
 func (m Model) tabLine() string {
 	global, repo := " Global ", " Repo: "+cmpOr(m.repo, "none")+" ▾ "
 	if m.tab == tabGlobal {
@@ -91,7 +108,7 @@ func (m Model) tabLine() string {
 	return " " + dim.Render(global) + "  " + head.Render("["+repo+"]") + dim.Render("   tab switches · r picks the Repo")
 }
 
-// table is the SETTING, VALUE, and SET BY columns of the rows in sight,
+// table is the SETTING, VALUE, and SET IN columns of the rows in sight,
 // with the selected row in sight. A closed group sums up its settings.
 func (m Model) table(h int) []string {
 	if len(m.rows) == 0 {
@@ -103,46 +120,46 @@ func (m Model) table(h int) []string {
 		}
 		return nil
 	}
-	type cells struct{ name, value, by string }
+	type cells struct{ name, value, in string }
 	lines := make([]cells, len(m.rows))
-	nameW, byW := len("SETTING"), len("SET BY")
+	nameW, inW := len("SETTING"), len("SET IN")
 	for i, r := range m.rows {
 		var c cells
 		marker := "  "
 		switch {
 		case r.set != nil:
-			c.value, c.by = plain(r.set.Value), r.set.Source()
+			c.value, c.in = plain(r.set.Value), r.set.SetIn()
 		case m.isOpen(r.node):
 			marker = "▾ "
 		default:
 			marker = "▸ "
-			c.value, c.by = summary(r.node)
+			c.value, c.in = summary(r.node)
 		}
 		c.name = strings.Repeat("  ", r.depth) + marker + r.title
 		lines[i] = c
-		nameW, byW = max(nameW, ansi.StringWidth(c.name)), max(byW, ansi.StringWidth(c.by))
+		nameW, inW = max(nameW, ansi.StringWidth(c.name)), max(inW, ansi.StringWidth(c.in))
 	}
 	valW := len("VALUE")
 	for _, c := range lines {
 		valW = max(valW, ansi.StringWidth(c.value))
 	}
-	nameW, byW = min(nameW, max(m.width*2/5, 24)), min(byW, max(m.width/3, 14))
-	valW = min(valW, max(m.width-nameW-byW-6, 10))
+	nameW, inW = min(nameW, max(m.width*2/5, 24)), min(inW, max(m.width/3, 14))
+	valW = min(valW, max(m.width-nameW-inW-6, 10))
 	cell := func(s string, w int) string { return fmt.Sprintf("%-*s", w, ansi.Truncate(s, w, "…")) }
-	out := []string{dim.Render("  " + cell("SETTING", nameW) + "  " + cell("VALUE", valW) + "  SET BY")}
+	out := []string{dim.Render("  " + cell("SETTING", nameW) + "  " + cell("VALUE", valW) + "  SET IN")}
 	if l := m.filterLine(); l != "" {
 		out = append(out, l)
 	}
 	rows := make([]string, len(m.rows))
 	for i, c := range lines {
-		by := ansi.Truncate(c.by, byW, "…")
-		line := cell(c.name, nameW) + "  " + cell(c.value, valW) + "  " + by
+		in := ansi.Truncate(c.in, inW, "…")
+		line := cell(c.name, nameW) + "  " + cell(c.value, valW) + "  " + in
 		r := m.rows[i]
 		switch {
 		case i == m.sel:
 			rows[i] = selRow.Render("▶ " + line)
 		case r.set == nil:
-			rows[i] = "  " + bold.Render(cell(c.name, nameW)) + "  " + dim.Render(cell(c.value, valW)+"  "+by)
+			rows[i] = "  " + bold.Render(cell(c.name, nameW)) + "  " + dim.Render(cell(c.value, valW)+"  "+in)
 		case r.set.By == nil:
 			rows[i] = dim.Render("  " + line)
 		default:
@@ -155,36 +172,33 @@ func (m Model) table(h int) []string {
 }
 
 // summary sums up the settings of a closed group: their values when it holds
-// at most three and no subgroup, else how many of them a level sets. by
-// names each level whose value applies to one of them.
-func summary(n *node) (value, by string) {
+// at most three and no subgroup, else how many of them a level sets. in is
+// the place that sets them all, or mixed when they differ.
+func summary(n *node) (value, in string) {
 	leaves := n.leaves()
-	var values, levels []string
+	var values []string
 	set, small := 0, len(leaves) <= 3
-	var seen []config.Where
-	for _, s := range leaves {
+	for i, s := range leaves {
 		values = append(values, plain(s.Value))
 		if s.Key.Type == config.TypeQueue {
 			small = false
 		}
 		if s.By != nil {
 			set++
-			if !slices.Contains(seen, *s.By) {
-				seen = append(seen, *s.By)
-			}
+		}
+		if where := s.SetIn(); i == 0 {
+			in = where
+		} else if where != in {
+			in = "mixed"
 		}
 	}
 	for _, k := range n.kids {
 		small = small && k.set != nil
 	}
-	slices.SortStableFunc(seen, func(a, b config.Where) int { return int(a.Level) - int(b.Level) })
-	for _, w := range seen {
-		levels = append(levels, w.String())
-	}
 	if small {
-		return strings.Join(values, " · "), strings.Join(levels, ", ")
+		return strings.Join(values, " · "), in
 	}
-	return fmt.Sprintf("%d of %d set", set, len(leaves)), strings.Join(levels, ", ")
+	return fmt.Sprintf("%d of %d set", set, len(leaves)), in
 }
 
 // plain writes a TOML list of strings as its items with commas between them,
@@ -239,7 +253,7 @@ func (m Model) levelList() []string {
 	}
 	out := []string{" " + bold.Render(verb)}
 	for i, w := range m.levels {
-		line := w.String() + m.levelNote(w)
+		line := w.Name() + m.levelNote(w)
 		if i == m.levelAt {
 			out = append(out, selRow.Render("▶  "+line))
 		} else {
@@ -306,13 +320,10 @@ func (m Model) detailOf(r *node) []string {
 	if s.By == nil && s.Value != def {
 		def += " (" + s.Value + ")"
 	}
-	levels := []level{{"default", def}}
+	levels := []level{{config.BuiltIn, def}}
 	applies := 0
 	for _, l := range s.Layers {
-		name, value := l.At.String(), "·"
-		if l.Path != s.Path {
-			name += " (" + l.Path[:strings.LastIndex(l.Path, ".")] + ")"
-		}
+		name, value := s.Place(l), "·"
 		if l.Set {
 			value, applies = plain(l.Value), len(levels)
 		}
@@ -343,7 +354,7 @@ func (m Model) detailOf(r *node) []string {
 // statusLines are the editor, the status, and the restart that waits.
 func (m Model) statusLines() []string {
 	var out []string
-	at := m.at.String() + m.levelNote(m.at)
+	at := m.at.Name() + m.levelNote(m.at)
 	switch m.mode {
 	case modePick:
 		var items []string
@@ -354,13 +365,13 @@ func (m Model) statusLines() []string {
 				items = append(items, " "+c+" ")
 			}
 		}
-		out = append(out, " Set "+m.edit.Label+" at "+at+": "+strings.Join(items, " "))
+		out = append(out, " Set "+m.edit.Label+" in "+at+": "+strings.Join(items, " "))
 	case modeInput:
 		hint := ""
 		if m.edit.Key.Type == config.TypeList {
 			hint = dim.Render("  items with commas between them")
 		}
-		out = append(out, " Set "+m.edit.Label+" at "+at+":"+hint, " > "+m.input.View())
+		out = append(out, " Set "+m.edit.Label+" in "+at+":"+hint, " > "+m.input.View())
 	}
 	switch {
 	case m.status != "" && m.bad:

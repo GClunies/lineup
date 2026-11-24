@@ -107,7 +107,7 @@ func cmdConfigKeys(args []string, out io.Writer) error {
 		}
 		return w.Flush()
 	}
-	fmt.Fprintf(w, "KEY\tVALUE FOR %s\tSET BY\n", *repo)
+	fmt.Fprintf(w, "KEY\tVALUE FOR %s\tSET IN\n", *repo)
 	for _, s := range v.Settings {
 		fmt.Fprintf(w, "%s\t%s\t%s\n", s.Path, s.Value, s.Source)
 	}

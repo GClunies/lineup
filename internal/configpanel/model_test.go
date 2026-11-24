@@ -201,16 +201,16 @@ func (p *panel) levelChoices(t *testing.T, prompt string) []string {
 func TestTheGlobalTabShowsTheTopKeysAndTheDefaults(t *testing.T) {
 	p := newPanel(t, fixture)
 	v := p.view()
-	for _, want := range []string{"[ Global ]", "Repo: acme/api ▾", "SETTING", "VALUE", "SET BY", "→ or enter open · ← close · / filter · q quit"} {
+	for _, want := range []string{"[ Global ]", "Repo: acme/api ▾", "A value in your file beats the built-in value.", "SETTING", "VALUE", "SET IN", "→ or enter open · ← close · / filter · q quit"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("the view has no %q:\n%s", want, v)
 		}
 	}
 	for path, want := range map[string]string{
-		"roots":            "Roots ~/repos top level",
-		"wip_cap":          "WIP cap 7 [defaults]",
-		"budgets.ci_debug": "CI debug 1 [defaults]",
-		"poll_interval":    "Poll interval 30s default",
+		"roots":            "Roots ~/repos your file",
+		"wip_cap":          "WIP cap 7 all Repos",
+		"budgets.ci_debug": "CI debug 1 all Repos",
+		"poll_interval":    "Poll interval 30s built-in",
 	} {
 		if got := p.rowLine(t, path); got != want {
 			t.Errorf("row %q, want %q", got, want)
@@ -229,15 +229,16 @@ func TestTheGlobalTabShowsTheTopKeysAndTheDefaults(t *testing.T) {
 func TestTheRepoTabShowsTheLevelOfEachKey(t *testing.T) {
 	p := newPanel(t, fixture)
 	p.press("tab")
-	if v := p.view(); !strings.Contains(v, "[ Repo: acme/api ▾ ]") || strings.Contains(v, "not set up") {
+	if v := p.view(); !strings.Contains(v, "[ Repo: acme/api ▾ ]") || strings.Contains(v, "not set up") ||
+		!strings.Contains(v, "Later wins: built-in → all Repos → all acme Repos → this Repo (acme/api)") {
 		t.Fatalf("the Repo tab:\n%s", v)
 	}
 	for path, want := range map[string]string{
-		"wip_cap":            "WIP cap 2 acme/api",
-		"poll_interval":      "Poll interval 20s acme/*",
-		"budgets.ci_debug":   "CI debug 1 [defaults]",
-		"budgets.responding": "Responding 3 default",
-		"tracker":            "Tracker linear acme/*",
+		"wip_cap":            "WIP cap 2 this Repo",
+		"poll_interval":      "Poll interval 20s all acme Repos",
+		"budgets.ci_debug":   "CI debug 1 all Repos",
+		"budgets.responding": "Responding 3 built-in",
+		"tracker":            "Tracker linear all acme Repos",
 	} {
 		if got := p.rowLine(t, path); got != want {
 			t.Errorf("row %q, want %q", got, want)
@@ -247,7 +248,7 @@ func TestTheRepoTabShowsTheLevelOfEachKey(t *testing.T) {
 	if v := p.view(); !strings.Contains(v, "[ Repo: acme/web ▾ ]") || !strings.Contains(v, "acme/web is not set up") {
 		t.Fatalf("after the pick of acme/web:\n%s", v)
 	}
-	if got := p.rowLine(t, "wip_cap"); got != "WIP cap 7 [defaults]" {
+	if got := p.rowLine(t, "wip_cap"); got != "WIP cap 7 all Repos" {
 		t.Errorf("acme/web row %q", got)
 	}
 }
@@ -263,7 +264,7 @@ func TestASaveWritesTheFileAndRunsTheRestartOnEnter(t *testing.T) {
 	if v := p.view(); !strings.Contains(v, "Saved. Applies after: lineup restart scheduler.") || !strings.Contains(v, "enter runs it · esc skips") {
 		t.Fatalf("no restart offer:\n%s", v)
 	}
-	if got := p.rowLine(t, "wip_cap"); got != "WIP cap 4 acme/api" {
+	if got := p.rowLine(t, "wip_cap"); got != "WIP cap 4 this Repo" {
 		t.Errorf("after the save, row %q", got)
 	}
 	p.press("enter")
@@ -312,14 +313,14 @@ func TestLSetsTheKeyAtTheLevelThatTheUserPicks(t *testing.T) {
 	p.press("tab")
 	p.to(t, "budgets.ci_debug")
 	p.press("l")
-	if got, want := p.levelChoices(t, "Set CI debug at which level?"), []string{"[defaults] replaces its value", "acme/*", "acme/api"}; !slices.Equal(got, want) {
+	if got, want := p.levelChoices(t, "Set CI debug at which level?"), []string{"all Repos replaces its value", "all acme Repos", "this Repo"}; !slices.Equal(got, want) {
 		t.Errorf("the level list offers %q, want %q", got, want)
 	}
 	p.press("k", "enter", "backspace", "2", "enter")
 	if want := "tracker = \"linear\"\n[repos.\"acme/*\".budgets]\nci_debug = 2\n"; !strings.Contains(p.file(t), want) {
 		t.Fatalf("the file is\n%s", p.file(t))
 	}
-	if got := p.rowLine(t, "budgets.ci_debug"); got != "CI debug 2 acme/*" {
+	if got := p.rowLine(t, "budgets.ci_debug"); got != "CI debug 2 all acme Repos" {
 		t.Errorf("row %q", got)
 	}
 }
@@ -329,8 +330,8 @@ func TestPrefixOffersOnlyTheRepoTable(t *testing.T) {
 	p.press("tab")
 	p.to(t, "prefix")
 	p.press("l")
-	if got := p.levelChoices(t, "Set ID prefix at which level?"); !slices.Equal(got, []string{"acme/api"}) {
-		t.Fatalf("the level list offers %q, and prefix takes only acme/api", got)
+	if got := p.levelChoices(t, "Set ID prefix at which level?"); !slices.Equal(got, []string{"this Repo"}) {
+		t.Fatalf("the level list offers %q, and prefix takes only the Repo table", got)
 	}
 }
 
@@ -339,14 +340,14 @@ func TestXRemovesTheKeyFromALevelThatSetsIt(t *testing.T) {
 	p.press("tab")
 	p.to(t, "wip_cap")
 	p.press("x")
-	if got := p.levelChoices(t, "Remove WIP cap from which level?"); !slices.Equal(got, []string{"[defaults]", "acme/api"}) {
+	if got := p.levelChoices(t, "Remove WIP cap from which level?"); !slices.Equal(got, []string{"all Repos", "this Repo"}) {
 		t.Fatalf("the level list offers %q, want the levels that set it", got)
 	}
 	p.press("enter")
 	if want := strings.Replace(fixture, "wip_cap = 2\n", "", 1); p.file(t) != want {
 		t.Fatalf("the file is\n%s", p.file(t))
 	}
-	if got := p.rowLine(t, "wip_cap"); got != "WIP cap 7 [defaults]" {
+	if got := p.rowLine(t, "wip_cap"); got != "WIP cap 7 all Repos" {
 		t.Errorf("row %q", got)
 	}
 	p.press("esc")
@@ -361,7 +362,7 @@ func TestAnEnumTakesAPickList(t *testing.T) {
 	p := newPanel(t, fixture)
 	p.to(t, "landing_bar.checks")
 	p.press("enter")
-	if v := p.view(); !strings.Contains(v, "Set Checks at [defaults]: [all]  required") {
+	if v := p.view(); !strings.Contains(v, "Set Checks in all Repos: [all]  required") {
 		t.Fatalf("no pick list:\n%s", v)
 	}
 	p.press("right", "enter")
@@ -375,7 +376,7 @@ func TestASetOnARepoWithNoTableWritesItsTable(t *testing.T) {
 	p.press("tab", "r", "acme/web", "enter")
 	p.to(t, "wip_cap")
 	p.press("enter")
-	if v := p.view(); !strings.Contains(v, "Set WIP cap at acme/web  not set up: the save writes its table") {
+	if v := p.view(); !strings.Contains(v, "Set WIP cap in this Repo  not set up: the save writes its table") {
 		t.Fatalf("no offer to write the table:\n%s", v)
 	}
 	p.press("ctrl+u", "3", "enter")
@@ -394,7 +395,7 @@ func TestAFileThatDoesNotLoadOpensReadOnly(t *testing.T) {
 	if !strings.Contains(v, "config: "+p.path+":") || !strings.Contains(v, "Read-only") {
 		t.Fatalf("no loader error:\n%s", v)
 	}
-	if got := p.rowLine(t, "wip_cap"); got != "WIP cap 7 [defaults]" {
+	if got := p.rowLine(t, "wip_cap"); got != "WIP cap 7 all Repos" {
 		t.Errorf("a file that does not load shows row %q", got)
 	}
 	p.to(t, "wip_cap")
@@ -410,7 +411,7 @@ func TestAFileThatDoesNotLoadOpensReadOnly(t *testing.T) {
 func TestTheFilterShowsTheMatchesWithTheirGroupsOpen(t *testing.T) {
 	p := newPanel(t, fixture)
 	p.press("/", "budgets")
-	for _, want := range []string{"▾ Defaults for every Repo", "▾ Loop budgets", "CI debug 1 [defaults]", "Responding 3 default"} {
+	for _, want := range []string{"▾ Defaults for every Repo", "▾ Loop budgets", "CI debug 1 all Repos", "Responding 3 built-in"} {
 		if !p.has(want) {
 			t.Errorf("the filter does not show %q:\n%s", want, p.view())
 		}
@@ -420,23 +421,23 @@ func TestTheFilterShowsTheMatchesWithTheirGroupsOpen(t *testing.T) {
 	}
 	// The filter matches the labels and the groups too.
 	p.press("esc", "/", "pass score")
-	if !p.has("Lowest pass score the bot's top score default") || p.has("Bot none: no gate default") {
+	if !p.has("Lowest pass score the bot's top score built-in") || p.has("Bot none: no gate built-in") {
 		t.Errorf("the filter on a label:\n%s", p.view())
 	}
 	p.press("enter", "j", "j", "j")
-	if got := p.selLine(t); got != "Lowest pass score the bot's top score default" {
+	if got := p.selLine(t); got != "Lowest pass score the bot's top score built-in" {
 		t.Fatalf("selected %q", got)
 	}
 	// esc clears the filter and keeps the selected setting in sight.
 	p.press("esc")
-	if got := p.selLine(t); got != "Lowest pass score the bot's top score default" || !p.has("▸ Capacity 7 · 30s [defaults]") {
+	if got := p.selLine(t); got != "Lowest pass score the bot's top score built-in" || !p.has("▸ Capacity 7 · 30s mixed") {
 		t.Errorf("after esc, selected %q in\n%s", got, p.view())
 	}
 }
 
 func TestTheReviewQueuesShowAndDoNotEdit(t *testing.T) {
 	p := newPanel(t, fixture+"\n[[review.queues]]\nname = \"team\"\nrepo = [\"acme/api\"]\n")
-	if got := p.rowLine(t, "review.queues[0]"); got != `team repo = ["acme/api"] top level` {
+	if got := p.rowLine(t, "review.queues[0]"); got != `team repo = ["acme/api"] your file` {
 		t.Errorf("row %q", got)
 	}
 	p.to(t, "review.queues[0]")
@@ -449,11 +450,11 @@ func TestTheReviewQueuesShowAndDoNotEdit(t *testing.T) {
 func TestGroupsStartClosedWithASummaryOfTheirSettings(t *testing.T) {
 	p := newPanel(t, fixture)
 	for _, want := range []string{
-		"▸ Folders and skills ~/repos · none top level",
-		"▸ Local Tracker false · ~/.local/share/lineup/issues",
-		"▸ GitHub labels 0 of 5 set",
-		"▸ Board and Hub layout 0 of 5 set",
-		"▸ Defaults for every Repo 2 of 28 set [defaults]",
+		"▸ Folders and skills ~/repos · none mixed",
+		"▸ Local Tracker false · ~/.local/share/lineup/issues built-in",
+		"▸ GitHub labels 0 of 5 set built-in",
+		"▸ Board and Hub layout 0 of 5 set built-in",
+		"▸ Defaults for every Repo 2 of 28 set mixed",
 	} {
 		if !p.has(want) {
 			t.Errorf("the Global tab has no line %q:\n%s", want, p.view())
@@ -461,12 +462,12 @@ func TestGroupsStartClosedWithASummaryOfTheirSettings(t *testing.T) {
 	}
 	p.press("tab")
 	for _, want := range []string{
-		"▸ Repo linear · none · none acme/*",
-		"▸ Capacity 2 · 20s acme/*, acme/api",
-		"▸ Loop budgets 1 · 3 [defaults]",
-		"▸ Review bot greptile · 5 · 3 acme/api",
-		"▸ Landing bar required · replied · required",
-		"▸ Workers 0 of 16 set",
+		"▸ Repo linear · none · none mixed",
+		"▸ Capacity 2 · 20s mixed",
+		"▸ Loop budgets 1 · 3 mixed",
+		"▸ Review bot greptile · 5 · 3 mixed",
+		"▸ Landing bar required · replied · required built-in",
+		"▸ Workers 0 of 16 set built-in",
 	} {
 		if !p.has(want) {
 			t.Errorf("the Repo tab has no line %q:\n%s", want, p.view())
@@ -484,11 +485,11 @@ func TestArrowsAndEnterOpenAndCloseAGroup(t *testing.T) {
 	p.press("tab")
 	p.toGroup(t, "Capacity")
 	p.press("right")
-	if !p.has("▾ Capacity") || !p.has("WIP cap 2 acme/api") || !p.has("Poll interval 20s acme/*") {
+	if !p.has("▾ Capacity") || !p.has("WIP cap 2 this Repo") || !p.has("Poll interval 20s all acme Repos") {
 		t.Fatalf("→ does not open Capacity:\n%s", p.view())
 	}
 	p.press("right")
-	if got := p.selLine(t); got != "WIP cap 2 acme/api" {
+	if got := p.selLine(t); got != "WIP cap 2 this Repo" {
 		t.Errorf("→ on an open group selects %q, want its first setting", got)
 	}
 	p.press("left")
@@ -496,15 +497,15 @@ func TestArrowsAndEnterOpenAndCloseAGroup(t *testing.T) {
 		t.Errorf("← on a setting selects %q, want its group", got)
 	}
 	p.press("left")
-	if !p.has("▸ Capacity 2 · 20s acme/*, acme/api") || p.has("WIP cap 2 acme/api") {
+	if !p.has("▸ Capacity 2 · 20s mixed") || p.has("WIP cap 2 this Repo") {
 		t.Errorf("← does not close Capacity:\n%s", p.view())
 	}
 	p.press("enter")
-	if !p.has("WIP cap 2 acme/api") {
+	if !p.has("WIP cap 2 this Repo") {
 		t.Errorf("enter does not open Capacity:\n%s", p.view())
 	}
 	p.press("enter", "l", "x")
-	if p.has("WIP cap 2 acme/api") || p.m.mode != modeList || p.file(t) != fixture {
+	if p.has("WIP cap 2 this Repo") || p.m.mode != modeList || p.file(t) != fixture {
 		t.Errorf("enter, l, and x on a group:\n%s", p.view())
 	}
 }
@@ -519,16 +520,16 @@ func TestTheDetailShowsTheValueAtEachLevel(t *testing.T) {
 		path  string
 		lines []string
 	}{
-		{"budgets.responding", []string{"Loop budgets › Responding", "default 3 ◀ applies", "[defaults] ·", "acme/* ·", "acme/api ·"}},
-		{"budgets.ci_debug", []string{"default 3", "[defaults] 1 ◀ applies", "acme/* ·", "acme/api ·"}},
-		{"poll_interval", []string{"default 30s", "[defaults] ·", "acme/* 20s ◀ applies", "acme/api ·"}},
+		{"budgets.responding", []string{"Loop budgets › Responding", "built-in 3 ◀ applies", "all Repos ·", "all acme Repos ·", "this Repo ·"}},
+		{"budgets.ci_debug", []string{"built-in 3", "all Repos 1 ◀ applies", "all acme Repos ·", "this Repo ·"}},
+		{"poll_interval", []string{"built-in 30s", "all Repos ·", "all acme Repos 20s ◀ applies", "this Repo ·"}},
 		{"wip_cap", []string{"Capacity › WIP cap", "How many build Tasks can be started at one time.",
-			"default 5", "[defaults] 7", "acme/* ·", "acme/api 2 ◀ applies",
+			"built-in 5", "all Repos 7", "all acme Repos ·", "this Repo 2 ◀ applies",
 			`File key: [repos."acme/api"] wip_cap · int`, "Applies after: lineup restart scheduler"}},
-		{"stage.working.model", []string{"Workers › Stage Working › Model", "default claude-opus-5-5",
-			"[defaults] (stage.default) m1 ◀ applies", "[defaults] ·", "acme/* ·", "acme/api ·",
+		{"stage.working.model", []string{"Workers › Stage Working › Model", "built-in claude-opus-5-5",
+			"all Repos, Every Stage m1 ◀ applies", "all Repos ·", "all acme Repos ·", "this Repo ·",
 			`File key: [repos."acme/api".stage.working] model · string`}},
-		{"review_bot.min_review_score", []string{"default the bot's top score (5) ◀ applies", "acme/api ·"}},
+		{"review_bot.min_review_score", []string{"built-in the bot's top score (5) ◀ applies", "this Repo ·"}},
 		{"landing_bar.checks", []string{`File key: [repos."acme/api".landing_bar] checks · enum · all, required`}},
 	} {
 		p.to(t, c.path)
@@ -540,7 +541,7 @@ func TestTheDetailShowsTheValueAtEachLevel(t *testing.T) {
 	}
 	p.press("tab")
 	p.to(t, "roots")
-	for _, want := range []string{"Folders and skills › Roots", "default none", "top level ~/repos ◀ applies", "File key: roots · list"} {
+	for _, want := range []string{"Folders and skills › Roots", "built-in none", "your file ~/repos ◀ applies", "File key: roots · list"} {
 		if !p.has(want) {
 			t.Errorf("roots: the detail has no line %q:\n%s", want, p.view())
 		}
@@ -595,16 +596,35 @@ func TestTabAndTheRepoPickerKeepTheSelectedKey(t *testing.T) {
 	p := newPanel(t, fixture)
 	p.to(t, "wip_cap")
 	p.press("tab")
-	if got := p.selLine(t); got != "WIP cap 2 acme/api" {
+	if got := p.selLine(t); got != "WIP cap 2 this Repo" {
 		t.Errorf("after tab, selected %q, want WIP cap of acme/api", got)
 	}
 	p.press("r", "web", "enter")
-	if got := p.selLine(t); got != "WIP cap 7 [defaults]" {
+	if got := p.selLine(t); got != "WIP cap 7 all Repos" {
 		t.Errorf("after the pick of acme/web, selected %q", got)
 	}
 	p.to(t, "tracker")
 	p.press("tab")
-	if got := p.selLine(t); got != "▸ Folders and skills ~/repos · none top level" {
+	if got := p.selLine(t); got != "▸ Folders and skills ~/repos · none mixed" {
 		t.Errorf("a key that the Global tab lacks selects %q, want the first row", got)
+	}
+}
+
+// TestAGroupNamesThePlaceThatSetsAllOfItsSettings checks the SET IN column
+// of a closed group: the one place that sets all of its settings, else mixed,
+// and a Stage key that takes the value of Every Stage.
+func TestAGroupNamesThePlaceThatSetsAllOfItsSettings(t *testing.T) {
+	p := newPanel(t, fixture+"[repos.\"acme/*\".budgets]\nci_debug = 2\nresponding = 4\n[defaults.stage.default]\nmodel = \"m1\"\n")
+	p.press("tab")
+	for _, want := range []string{"▸ Loop budgets 2 · 4 all acme Repos", "▸ Capacity 2 · 20s mixed", "▸ Workers 3 of 16 set mixed"} {
+		if !p.has(want) {
+			t.Errorf("the Repo tab has no line %q:\n%s", want, p.view())
+		}
+	}
+	if got := p.rowLine(t, "stage.working.model"); got != "Model m1 all Repos, Every Stage" {
+		t.Errorf("row %q, want the value of Every Stage in all Repos", got)
+	}
+	if got := p.rowLine(t, "stage.working.effort"); got != "Effort high built-in" {
+		t.Errorf("row %q", got)
 	}
 }

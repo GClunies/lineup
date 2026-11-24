@@ -32,7 +32,7 @@ The Scheduler and the Board read the config file only when they start. After the
 
 ## PROD-CONFIG-008: One panel shows every setting in groups with plain names
 
-`lineup config` opens the config panel, with a Global tab and a Repo tab. Each tab is a tree of groups with plain names, such as Review bot › Lowest pass score. Each group starts closed and sums up its settings and the levels that set them. The Global tab holds the top-level keys, and the `[defaults]` keys in a group of their own. The Repo tab holds the keys of one Repo that the user picks from the checkouts below `roots`. Each setting shows the value that applies and the level that sets it.
+`lineup config` opens the config panel, with a Global tab and a Repo tab. Each tab is a tree of groups with plain names, such as Review bot › Lowest pass score. Each group starts closed and sums up its settings. Its SET IN column names the level that sets all of them, or `mixed`. The Global tab holds the top-level keys, and the `[defaults]` keys in a group of their own. The Repo tab holds the keys of one Repo from the checkouts below `roots`. Each setting shows the value that applies and the level that sets it.
 
 ## PROD-CONFIG-009: The panel writes only a change that loads
 
@@ -48,4 +48,8 @@ After a save, the panel names the restart that the change needs: `lineup restart
 
 ## PROD-CONFIG-012: The panel shows the value of a setting at each level
 
-The selected setting in the config panel shows its doc and one line for each level, from the default up: `default`, `[defaults]`, the owner table, and the Repo table, each with its value there. A mark shows the level that applies. A Stage key also shows each `[stage.default]` value that it falls back to. Then the panel names the key as the file writes it, and the restart that a change needs.
+The selected setting in the config panel shows its doc and one line for each level, from the built-in value up, each with its value there. A mark shows the level that applies. A Stage key also shows each `[stage.default]` value that it falls back to. Then the panel names the key as the file writes it, and the restart that a change needs.
+
+## PROD-CONFIG-013: The panel names each level in plain words
+
+The config panel names each level by a plain name: `built-in` for the default, `your file` for the top level, `all Repos` for `[defaults]`, `all <owner> Repos` for the owner table, and `this Repo` for the Repo table. A Stage key that takes the value of `[stage.default]` adds `Every Stage`, as in `all Repos, Every Stage`. A line below the tabs names the levels of the tab in order, and the last level that sets a value wins. The level picker uses the same names.
