@@ -1,0 +1,56 @@
+internal/config/migrate_test.go
+  s_531f4d7f871cde::t_a49b9b5f37198d 262-297,300-306
+  s_531f4d7f871cde::t_2c642dfa21909d 298-299
+internal/config/config_test.go
+  s_531f4d7f871cde::t_3c5bb9da7e7a74 314
+  s_531f4d7f871cde::t_4dee4d461dddba 1070,1072-1092,1094-1110,1112-1123,1127-1145,1147-1152,1155-1157
+  s_531f4d7f871cde::t_2bcabff722a17a 1071
+internal/scheduler/scheduler_test.go
+  s_531f4d7f871cde::t_5ceb9b2da5e4e3 728-732
+cmd/lineup/wire.go
+  s_531f4d7f871cde::t_01dce137f32517 764-768
+internal/scheduler/ports.go
+  s_531f4d7f871cde::t_ccc7ad58cce60e 305-318
+internal/scheduler/scheduler.go
+  s_531f4d7f871cde::t_4b7115595dfc2e 298-300,302-306,313-319,321-322,324
+  s_531f4d7f871cde::t_36f1458c9b9a67 547
+  s_531f4d7f871cde::t_6cacfb118f6ba4 1093
+  s_531f4d7f871cde::t_569af601ca4d10 320
+internal/config/config.go
+  s_531f4d7f871cde::t_c2edb67a83fe3a 222-223
+  s_531f4d7f871cde::t_6cfa2091e672a8 262,852-868,872
+  s_531f4d7f871cde::t_57496773bf226d 192-194,196-197,200-218,224-225,227,229,234-261
+  s_531f4d7f871cde::t_945d937c1c6d2c 749-753
+  s_531f4d7f871cde::t_453c887601d6c4 18
+  s_531f4d7f871cde::t_44b39adb3abfce 935-938
+  s_531f4d7f871cde::t_6392b554612c32 970-971
+  s_531f4d7f871cde::t_5434006402a6b6 124,129
+  s_531f4d7f871cde::t_a5f447d4dc44e7 263
+cmd/lineup/wire_test.go
+  s_531f4d7f871cde::t_18cf6a07b390cd 13
+  s_531f4d7f871cde::t_6744e2d0c68d27 137-152
+internal/scheduler/merged_test.go
+  s_531f4d7f871cde::t_f9c6d08bf31191 250-322
+  s_531f4d7f871cde::t_728018b03bb272 82-91,93-99,101
+  s_531f4d7f871cde::t_ab2130d43bba59 6-7
+internal/scheduler/record.go
+  s_531f4d7f871cde::t_6a060187a38421 87-88
+cmd/lineup/serve.go
+  s_531f4d7f871cde::t_5e49376c2814ab 117-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3145859b3377304d9c82b2f592e6ec0dbbb29853",
+  "prompts": {},
+  "sessions": {
+    "s_531f4d7f871cde": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1a3909c8-7fe1-44ff-abab-d3e5467f84da",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
