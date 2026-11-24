@@ -157,17 +157,22 @@ func TestIdleShellReadsOnlyALoginShellWithNothingInItsForeground(t *testing.T) {
 }
 
 // The records come from a live Rex at API revision 18: a side pane that lineup
-// split, a plain split where the user typed hunk, a Worker, and a kept block.
+// split, a plain split where the user typed hunk, a Worker, a rexweb pane,
+// and a kept block.
 func TestForegroundNamesTheProgramThatABlockRuns(t *testing.T) {
-	cases := []struct{ name, out, want string }{
-		{"a side pane", `{"last_exit":null,"child":{"pid":28928,"name":"hunk","path":"/opt/homebrew/Cellar/hunk/0.24.1/libexec/hunk","cwd":"/wt/data.pd-762"},"foreground":{"pid":28928,"name":"hunk","path":"/opt/homebrew/Cellar/hunk/0.24.1/libexec/hunk","cwd":"/wt/data.pd-762"},"home":"/Users/g"}`, "hunk"},
-		{"hunk typed in a shell", `{"last_exit":null,"child":{"pid":11749,"name":"login","path":"/usr/bin/login"},"foreground":{"pid":12015,"name":"hunk","path":"/opt/homebrew/Cellar/hunk/0.24.1/libexec/hunk","cwd":"/wt/data.pd-762"},"ancestors":[{"pid":11753,"name":"zsh","path":"/bin/zsh"},{"pid":11749,"name":"login","path":"/usr/bin/login"}],"home":"/Users/g"}`, "hunk"},
-		{"a Worker", `{"last_exit":null,"child":{"pid":22873,"name":"2.1.323","path":"/Users/g/.local/share/claude/versions/2.1.323"},"foreground":{"pid":22873,"name":"2.1.323","cwd":"/wt/data.pd-762"},"home":"/Users/g"}`, "2.1.323"},
-		{"a kept block after exit 0", `{"last_exit":{"exit_code":0},"home":"/Users/g"}`, ""},
+	cases := []struct {
+		name, out string
+		want      Process
+	}{
+		{"a side pane", `{"last_exit":null,"child":{"pid":28928,"name":"hunk","path":"/opt/homebrew/Cellar/hunk/0.24.1/libexec/hunk","cwd":"/wt/data.pd-762"},"foreground":{"pid":28928,"name":"hunk","path":"/opt/homebrew/Cellar/hunk/0.24.1/libexec/hunk","cwd":"/wt/data.pd-762"},"home":"/Users/g"}`, Process{"hunk", 28928}},
+		{"hunk typed in a shell", `{"last_exit":null,"child":{"pid":11749,"name":"login","path":"/usr/bin/login"},"foreground":{"pid":12015,"name":"hunk","path":"/opt/homebrew/Cellar/hunk/0.24.1/libexec/hunk","cwd":"/wt/data.pd-762"},"ancestors":[{"pid":11753,"name":"zsh","path":"/bin/zsh"},{"pid":11749,"name":"login","path":"/usr/bin/login"}],"home":"/Users/g"}`, Process{"hunk", 12015}},
+		{"a Worker", `{"last_exit":null,"child":{"pid":22873,"name":"2.1.323","path":"/Users/g/.local/share/claude/versions/2.1.323"},"foreground":{"pid":22873,"name":"2.1.323","cwd":"/wt/data.pd-762"},"home":"/Users/g"}`, Process{"2.1.323", 22873}},
+		{"a rexweb pane", `{"last_exit":null,"child":{"pid":62174,"user_id":504,"user":"g","name":"bash","path":"/bin/bash","invoked_path":"/bin/bash","argv0":"/bin/bash","cwd":"/wt/data.review-pr-5132"},"foreground":{"pid":62174,"user_id":504,"user":"g","name":"bash","path":"/bin/bash","invoked_path":"/bin/bash","argv0":"/bin/bash","cwd":"/wt/data.review-pr-5132"},"home":"/Users/g"}`, Process{"bash", 62174}},
+		{"a kept block after exit 0", `{"last_exit":{"exit_code":0},"home":"/Users/g"}`, Process{}},
 	}
 	for _, c := range cases {
 		if got, err := foreground([]byte(c.out)); err != nil || got != c.want {
-			t.Errorf("%s: foreground = %q, %v, want %q", c.name, got, err, c.want)
+			t.Errorf("%s: foreground = %+v, %v, want %+v", c.name, got, err, c.want)
 		}
 	}
 	if _, err := foreground([]byte("not json")); err == nil {

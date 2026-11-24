@@ -1134,6 +1134,19 @@ func TestRecoveryKeepsALiveSidePane(t *testing.T) {
 	}
 }
 
+// The Record's pane counts as a side pane whatever its label and program,
+// for example when lineup cannot read its argv.
+func TestRecoveryKeepsTheRecordsSidePaneWhateverItRuns(t *testing.T) {
+	live := &tab{Window: Window{"session:reviews", "window:live", "block:live"}, argv: []string{"claude", "reviewing"}}
+	named := &split{BlockID: "split:9", window: "window:live", label: "PD-668: Say that the backend stacks released the overlay tiles buckets by cbsmit…", program: "bash"}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{named}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReviewTab(lifecycle.ReviewReady, "window:live", "block:live", "split:9"), func(d *Deps) { d.Rex = rex })
+	h.still("R-3", lifecycle.ReviewReady)
+	if got := rex.allSplits(); len(got) != 1 || got[0].closed {
+		t.Fatalf("side panes %+v, want the named pane only, open", got)
+	}
+}
+
 // A review Worker's tab keeps one rexweb pane across restarts. rexweb names
 // its block after the page, and bash runs the rexweb-pane script. Recovery
 // keeps the Record's pane, closes the panes that earlier restarts left, and

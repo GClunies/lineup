@@ -195,8 +195,8 @@ func TestAWindowOutlivesItsAnchorWhileASplitRuns(t *testing.T) {
 	if len(view.Windows) != 1 || !slices.Equal(view.Windows[0].BlockIDs, []string{split}) || !slices.Equal(view.Windows[0].Labels, []string{"side"}) {
 		t.Fatalf("view %+v, want the window with the split %s only, labeled side", view, split)
 	}
-	if name, err := c.Foreground(ctx, sess, split); err != nil || name != "sleep" {
-		t.Fatalf("Foreground = %q, %v, want sleep", name, err)
+	if p, err := c.Foreground(ctx, sess, split); err != nil || p.Name != "sleep" || p.PID == 0 {
+		t.Fatalf("Foreground = %+v, %v, want sleep and its process ID", p, err)
 	}
 }
 
