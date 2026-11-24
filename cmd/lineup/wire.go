@@ -206,7 +206,7 @@ func (p *githubPort) Poll(ctx context.Context, keys []scheduler.PRKey) (map[sche
 		if err != nil {
 			return nil, err
 		}
-		out[scheduler.PRKey{Repo: k.Repo, Branch: k.Branch, Bot: k.Bot}] = scheduler.PRSnapshot{Number: pr.Number, URL: pr.URL, Raw: raw}
+		out[scheduler.PRKey{Repo: k.Repo, Branch: k.Branch, Bot: k.Bot}] = scheduler.PRSnapshot{Number: pr.Number, URL: pr.URL, ClosedAt: pr.ClosedAt, Raw: raw}
 	}
 	return out, nil
 }
@@ -270,8 +270,8 @@ func (p worktreePort) Path(ctx context.Context, repo, branch string) (string, er
 	return path, err
 }
 
-func (p worktreePort) Remove(ctx context.Context, repo, branch string) error {
-	err := worktree.Remove(ctx, p.bin, repo, branch)
+func (p worktreePort) Remove(ctx context.Context, repo, branch, path string) error {
+	err := worktree.Remove(ctx, p.bin, repo, branch, path)
 	if errors.Is(err, worktree.ErrUncommitted) {
 		return fmt.Errorf("%w: %w", scheduler.ErrUncommitted, err)
 	}

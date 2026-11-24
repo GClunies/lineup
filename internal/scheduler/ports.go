@@ -128,9 +128,11 @@ type Worktrees interface {
 	// CreateArgv is the command that creates and sets up the worktree in the Task tab.
 	CreateArgv(repo, branch string) []string
 	Path(ctx context.Context, repo, branch string) (string, error)
-	// Remove removes the branch's worktree. The error wraps ErrUncommitted
-	// when the worktree holds uncommitted changes, and the worktree stays.
-	Remove(ctx context.Context, repo, branch string) error
+	// Remove removes the worktree at path, whatever branch it holds now, or
+	// the branch's worktree when no worktree is at path. The error wraps
+	// ErrUncommitted when the worktree holds uncommitted changes, and the
+	// worktree stays.
+	Remove(ctx context.Context, repo, branch, path string) error
 	// DiffBase is the merge-base of the worktree's HEAD with the default
 	// branch. The error wraps ErrNoWorktree when the worktree's folder is gone.
 	DiffBase(ctx context.Context, worktree string) (string, error)

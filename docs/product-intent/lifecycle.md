@@ -81,3 +81,7 @@ If a gap of the Landing bar finds its Loop budget spent, the Task gets the flag 
 ## PROD-LIFE-020: A silent Worker gets a flag after one minute
 
 If a Stage prompt waits 1 minute for a Worker that has sent no program status, the Task gets the flag `worker silent`. The Task gets the same flag when a Worker that received a typed prompt does not report `working` within 1 minute. lineup then types nothing more into that Worker. The flag clears when the Worker reports `working`. A Task that already has a flag keeps that flag.
+
+## PROD-LIFE-021: A new Task ignores the PR of an earlier Task
+
+A build Task reads no PR that merged or closed before the Task started. So a new add of an Issue whose earlier PR merged starts new work in Working. The Task moves on when the Worker opens a new PR from the branch.

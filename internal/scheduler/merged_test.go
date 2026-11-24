@@ -63,7 +63,7 @@ func TestAStoppedSchedulerRemovesAWorktreeWhoseDaysEndedAtItsStart(t *testing.T)
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seed, func(d *Deps) { d.PollInterval = time.Hour })
 	eventually(t, "the due worktree removed", func() bool { return h.task("ENG-DUE").Worktree == "" })
 	time.Sleep(100 * time.Millisecond)
-	if got := h.worktreesRemoved(); !slices.Equal(got, []string{"b-ENG-DUE"}) {
+	if got := h.worktreesRemoved(); !slices.Equal(got, []string{"/worktrees/b-ENG-DUE"}) {
 		t.Fatalf("removed %v, want only the worktree whose days ended", got)
 	}
 	if v := h.task("ENG-KEPT"); v.Worktree == "" || !strings.Contains(v.Note, "worktree until ") {
@@ -215,7 +215,7 @@ func TestAKeptWorktreeGoesWhenItsDaysEnd(t *testing.T) {
 	}
 	c.add(time.Minute)
 	eventually(t, "the worktree removed", func() bool { return h.task("ENG-1").Worktree == "" })
-	if got, v := h.worktreesRemoved(), h.task("ENG-1"); !slices.Equal(got, []string{"ada/eng-1-billing"}) || v.Note != "#42 merged" {
+	if got, v := h.worktreesRemoved(), h.task("ENG-1"); !slices.Equal(got, []string{filepath.Join(h.wt.root, "eng-1-billing")}) || v.Note != "#42 merged" {
 		t.Fatalf("removed %v, task %+v, want one removal and the merge note", got, v)
 	}
 }
@@ -223,7 +223,9 @@ func TestAKeptWorktreeGoesWhenItsDaysEnd(t *testing.T) {
 func TestWithZeroDaysTheWorktreeGoesWithTheTab(t *testing.T) {
 	h, _ := mergeWith(t, "idle", closeMerged(newClock(), 0))
 	h.waitTabClosedByLineup()
-	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	eventually(t, "the worktree removed", func() bool {
+		return slices.Equal(h.worktreesRemoved(), []string{filepath.Join(h.wt.root, "eng-1-billing")})
+	})
 }
 
 func TestAKeptWorktreeWithUncommittedChangesStaysUntilItIsClean(t *testing.T) {
@@ -259,7 +261,9 @@ func TestTheUsersCloseRemovesAKeptWorktreeAtOnce(t *testing.T) {
 			h, _ := mergeWith(t, "idle", closeMerged(newClock(), 7*24*time.Hour))
 			h.waitTabClosedByLineup()
 			h.do(Request{Op: op, Task: "ENG-1"})
-			eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+			eventually(t, "the worktree removed", func() bool {
+				return slices.Equal(h.worktreesRemoved(), []string{filepath.Join(h.wt.root, "eng-1-billing")})
+			})
 			eventually(t, "the removed worktree to leave the Task", func() bool { return h.task("ENG-1").Worktree == "" })
 		})
 	}
@@ -268,7 +272,9 @@ func TestTheUsersCloseRemovesAKeptWorktreeAtOnce(t *testing.T) {
 func TestTheUsersCloseOfAClosingTabRemovesTheWorktreeAtOnce(t *testing.T) {
 	h, worker := mergeWith(t, "working", closeMerged(newClock(), 7*24*time.Hour))
 	h.rex.userCloses(worker)
-	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	eventually(t, "the worktree removed", func() bool {
+		return slices.Equal(h.worktreesRemoved(), []string{filepath.Join(h.wt.root, "eng-1-billing")})
+	})
 	eventually(t, "the removed worktree to leave the Task", func() bool { return h.task("ENG-1").Worktree == "" })
 	if v := h.task("ENG-1"); v.Note != "#42 merged" {
 		t.Fatalf("note = %q, want the merge note alone", v.Note)

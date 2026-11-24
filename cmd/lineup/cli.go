@@ -36,7 +36,7 @@ var clientCommands = map[string]func(c scheduler.Client, args []string, out io.W
 	"rerun":   cmdRerun,
 	"open":    cmdOpen,
 	"merge":   simple("merge"),
-	"close":   simple("close"),
+	"close":   cmdClose,
 	"archive": simple("archive"),
 }
 
@@ -443,6 +443,22 @@ func cmdOpen(c scheduler.Client, args []string, out io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(out, "%s %s: %s\n", res.ID, res.Action, res.Title)
+	return nil
+}
+
+// cmdClose ends the Task. It prints why lineup kept the Task's worktree, if
+// lineup kept it (PROD-TABS-020).
+func cmdClose(c scheduler.Client, args []string, out io.Writer) error {
+	if len(args) != 1 {
+		return fmt.Errorf("%w: lineup close <task>", errUsage)
+	}
+	var why string
+	if err := c.Do(scheduler.Request{Op: "close", Task: args[0]}, &why); err != nil {
+		return err
+	}
+	if why != "" {
+		fmt.Fprintln(out, why)
+	}
 	return nil
 }
 

@@ -32,3 +32,9 @@ Because: Claude deletes a conversation after `cleanupPeriodDays`, 30 days by def
 A review Worker runs in the Repo's main checkout, which the adapter trusts. It reads the PR's code in the review worktree through `--add-dir <review worktree>`, with no permission prompt. A restored review Worker gets the same folder and the same flag. No Worker runs with a review worktree as its folder.
 
 Because: Claude runs the `.claude` settings and hooks of the folder that it starts in.
+
+## ARCH-TREE-006: lineup removes a build worktree by the path that setup recorded
+
+When setup ends, lineup records the path of the build Task's worktree. Each removal finds the worktree at that path in `wt list`, whatever branch it holds now, and runs `wt remove` with the path. lineup looks the worktree up by the Task's branch only when no worktree is at the recorded path.
+
+Because: a Worker or the user can switch the worktree to another branch, and a lookup by branch then misses the worktree and leaves it on disk.

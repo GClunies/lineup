@@ -623,10 +623,12 @@ func (w *fakeWorktrees) CreateArgv(_, branch string) []string { return []string{
 func (w *fakeWorktrees) Path(_ context.Context, _, branch string) (string, error) {
 	return filepath.Join(w.root, filepath.Base(branch)), nil
 }
-func (w *fakeWorktrees) Remove(_ context.Context, _, branch string) error {
+
+// Remove logs the path of each try, or the branch when the Task has no path.
+func (w *fakeWorktrees) Remove(_ context.Context, _, branch, path string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.removed = append(w.removed, branch)
+	w.removed = append(w.removed, cmp.Or(path, branch))
 	if w.dirty {
 		return fmt.Errorf("%w: %s", ErrUncommitted, branch)
 	}
@@ -986,7 +988,9 @@ func TestADoneTabTheUserClosesRemovesTheWorktree(t *testing.T) {
 		t.Fatalf("removed %v before the user closed the tab", got)
 	}
 	h.rex.userCloses(worker)
-	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	eventually(t, "the worktree removed", func() bool {
+		return slices.Equal(h.worktreesRemoved(), []string{filepath.Join(h.wt.root, "eng-1-billing")})
+	})
 	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:acme/data"}) })
 	if v := h.task("ENG-1"); v.Stage != "Done" || v.Outcome != "merged" || v.Tab || v.Live {
 		t.Fatalf("task = %+v, want Done, merged, with no tab", v)
@@ -1010,7 +1014,9 @@ func TestClosingADoneTaskClosesItsTabAndRemovesTheWorktree(t *testing.T) {
 	h, worker := doneWithATab(t)
 	h.do(Request{Op: "close", Task: "ENG-1"})
 	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude working")) == 0 })
-	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	eventually(t, "the worktree removed", func() bool {
+		return slices.Equal(h.worktreesRemoved(), []string{filepath.Join(h.wt.root, "eng-1-billing")})
+	})
 	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:acme/data"}) })
 	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
 	h.still("ENG-1", lifecycle.Done)
@@ -1056,7 +1062,7 @@ func seedDoneWithAWorktree(id string) func(*store.Store) {
 
 func TestRecoveryRemovesTheWorktreeOfADoneTaskWhoseCleanupNeverRan(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedDoneWithAWorktree("ENG-crash"))
-	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"b-ENG-crash"}) })
+	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"/worktrees/b-ENG-crash"}) })
 	eventually(t, "the removed worktree to leave the Task", func() bool { return h.task("ENG-crash").Worktree == "" })
 }
 
@@ -1086,7 +1092,9 @@ func TestArchiveClosesAnOpenTab(t *testing.T) {
 		t.Fatalf("board after archive = %v", ids)
 	}
 	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude working")) == 0 })
-	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	eventually(t, "the worktree removed", func() bool {
+		return slices.Equal(h.worktreesRemoved(), []string{filepath.Join(h.wt.root, "eng-1-billing")})
+	})
 	if v := h.task("ENG-1"); v.Outcome != "merged" {
 		t.Fatalf("task = %+v, want the merged outcome kept", v)
 	}

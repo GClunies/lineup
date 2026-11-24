@@ -577,25 +577,30 @@ func (s *Scheduler) cleanup(ctx context.Context, r Record) {
 	s.removeSession(ctx, r)
 }
 
-// removeWorktree removes a build Task's worktree. A worktree with uncommitted
-// changes stays, and tidy tries again at each tick until the user commits or
-// discards them. Any other error changes nothing.
+// removeWorktree removes a build Task's worktree at the path that setup
+// recorded, also after a switch to another branch (ARCH-TREE-006). A worktree
+// that lineup cannot remove stays, with the reason in the note, and tidy tries
+// again at each tick, for example until the user commits or discards the
+// uncommitted changes.
 func (s *Scheduler) removeWorktree(ctx context.Context, r Record) {
-	err := s.d.Worktrees.Remove(ctx, r.Repo, r.Branch)
-	switch {
-	case err == nil:
-		s.update(r.ID, func(r *Record) { r.Worktree, r.WorktreeKept, r.KeepUntil = "", false, time.Time{} })
-	case errors.Is(err, ErrUncommitted):
-		s.d.Log.Warn("keep worktree", "task", r.ID, "err", err)
+	err := s.d.Worktrees.Remove(ctx, r.Repo, r.Branch, r.Worktree)
+	if err == nil {
 		s.update(r.ID, func(r *Record) {
-			r.WorktreeKept = true
-			if r.KeepUntil.IsZero() {
-				r.KeepUntil = s.now()
-			}
+			r.Worktree, r.WorktreeKept, r.WorktreeError, r.KeepUntil = "", false, "", time.Time{}
 		})
-	default:
-		s.d.Log.Error("remove worktree", "task", r.ID, "err", err)
+		return
 	}
+	why := err.Error()
+	if errors.Is(err, ErrUncommitted) {
+		why = ""
+	}
+	s.d.Log.Warn("keep worktree", "task", r.ID, "err", err)
+	s.update(r.ID, func(r *Record) {
+		r.WorktreeKept, r.WorktreeError = true, why
+		if r.KeepUntil.IsZero() {
+			r.KeepUntil = s.now()
+		}
+	})
 }
 
 // removeSession removes the Task's Repo session after the Repo's last
@@ -887,7 +892,9 @@ func (s *Scheduler) pollTasks(ctx context.Context, ids []string) {
 		for key, id := range keys {
 			cur, ok := res[key]
 			r := s.recs[id]
-			if !ok || r == nil {
+			// A PR that ended before the Task began is an earlier Task's
+			// (PROD-LIFE-021).
+			if !ok || r == nil || r.PR == nil && !cur.ClosedAt.IsZero() && cur.ClosedAt.Before(r.CreatedAt) {
 				continue
 			}
 			sigs := s.d.GitHub.Signals(r.PR, &cur)
