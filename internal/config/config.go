@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -161,12 +162,13 @@ type layer struct {
 	Budgets      *budgetsFile         `toml:"budgets"`
 	ReviewBot    *reviewBotFile       `toml:"review_bot"`
 	LandingBar   *landingBarFile      `toml:"landing_bar"`
+	Merged       *mergedFile          `toml:"merged"`
 	Stage        map[string]stageFile `toml:"stage"`
 	QA           *qaFile              `toml:"qa"`
 }
 
 // layerKeys are the keys of a layer.
-var layerKeys = []string{"wip_cap", "poll_interval", "budgets", "review_bot", "landing_bar", "stage"}
+var layerKeys = []string{"wip_cap", "poll_interval", "budgets", "review_bot", "landing_bar", "merged", "stage"}
 
 // repoTable is a [repos."<key>"] table. Its key is owner/repo for one Repo,
 // or owner/* for every Repo of one owner.
@@ -229,32 +231,79 @@ type globalFile struct {
 	// QA is the top-level [qa] table, which holds only slots.
 	QA     qaFile     `toml:"qa"`
 	Board  boardFile  `toml:"board"`
-	Merged mergedFile `toml:"merged"`
 	Layout layoutFile `toml:"layout"`
 }
 
-// mergedFile is the [merged] table: what lineup does with a build Task's tab
-// and worktree after its PR merges.
+// mergedFile is a [merged] table: what lineup does with a build Task's tab
+// and worktree after its PR merges. A layer can leave out a key and take it
+// from a lower layer, as in [budgets].
 type mergedFile struct {
-	CloseTab         bool `toml:"close_tab"`
-	KeepWorktreeDays *int `toml:"keep_worktree_days"`
+	CloseTab         *bool `toml:"close_tab"`
+	KeepWorktreeDays *int  `toml:"keep_worktree_days"`
 }
 
-func (f mergedFile) days() int {
-	if f.KeepWorktreeDays == nil {
-		return defaultKeepWorktreeDays
+// Merged is what lineup does with a build Task's tab and worktree after its
+// PR merges.
+type Merged struct {
+	// CloseTab closes the tab once the Worker is not busy.
+	CloseTab bool
+	// KeepWorktree is how long lineup keeps the worktree after the tab's close.
+	KeepWorktree time.Duration
+}
+
+// over sets each key that the table f of a higher layer sets.
+func (m *Merged) over(f *mergedFile) {
+	if f == nil {
+		return
 	}
-	return *f.KeepWorktreeDays
+	if f.CloseTab != nil {
+		m.CloseTab = *f.CloseTab
+	}
+	if f.KeepWorktreeDays != nil {
+		m.KeepWorktree = time.Duration(*f.KeepWorktreeDays) * 24 * time.Hour
+	}
 }
 
-func (f mergedFile) check() error {
-	switch d := f.days(); {
+// checkKeepDays refuses a keep_worktree_days below 0, or above the days that
+// Claude keeps a conversation.
+func checkKeepDays(d int) error {
+	switch {
 	case d < 0:
-		return fmt.Errorf("merged.keep_worktree_days: %d must be 0 or more", d)
+		return fmt.Errorf("%d must be 0 or more", d)
 	case d > maxKeepWorktreeDays:
-		return fmt.Errorf("merged.keep_worktree_days: %d is more than %d, the days that Claude keeps a conversation", d, maxKeepWorktreeDays)
+		return fmt.Errorf("%d is more than %d, the days that Claude keeps a conversation", d, maxKeepWorktreeDays)
 	}
 	return nil
+}
+
+// resolveMerged applies the [merged] tables of the layers, lowest first, then
+// the close_tab and keep_worktree_days overrides. A bad override gives the
+// value of the tables with the error.
+func resolveMerged(layers []layer, overrides map[string]string) (Merged, error) {
+	m := Merged{KeepWorktree: defaultKeepWorktreeDays * 24 * time.Hour}
+	for _, l := range layers {
+		m.over(l.Merged)
+	}
+	var o mergedFile
+	if v, ok := overrides["close_tab"]; ok {
+		if v != "true" && v != "false" {
+			return m, fmt.Errorf("override close_tab must be true or false, got %q", v)
+		}
+		closeTab := v == "true"
+		o.CloseTab = &closeTab
+	}
+	if v, ok := overrides["keep_worktree_days"]; ok {
+		d, err := strconv.Atoi(v)
+		if err != nil {
+			return m, fmt.Errorf("override keep_worktree_days must be a number of days, got %q", v)
+		}
+		if err := checkKeepDays(d); err != nil {
+			return m, fmt.Errorf("override keep_worktree_days: %w", err)
+		}
+		o.KeepWorktreeDays = &d
+	}
+	m.over(&o)
+	return m, nil
 }
 
 // PRFilter picks pull requests. Its keys are named after GitHub's search
@@ -369,16 +418,6 @@ func (g *Global) QASlots() int {
 	return *g.file.QA.Slots
 }
 
-// CloseMergedTab reports whether lineup closes a build Task's tab when its PR
-// merges, once the Worker is idle.
-func (g *Global) CloseMergedTab() bool { return g.file.Merged.CloseTab }
-
-// KeepWorktree is how long lineup keeps a merged build Task's worktree after
-// it closes the Task's tab.
-func (g *Global) KeepWorktree() time.Duration {
-	return time.Duration(g.file.Merged.days()) * 24 * time.Hour
-}
-
 // LocalIssuesDir is the Local Tracker's folder.
 func (g *Global) LocalIssuesDir() string {
 	if d := strings.TrimSpace(g.file.LocalIssuesDir); d != "" {
@@ -471,9 +510,6 @@ func parseGlobal(globalPath, data string) (*Global, error) {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	if err := g.file.QA.checkTop(); err != nil {
-		return nil, fmt.Errorf("%s: %w", globalPath, err)
-	}
-	if err := g.file.Merged.check(); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	if _, err := g.file.Layout.resolve(); err != nil {
@@ -779,6 +815,11 @@ func (g *Global) validate(l *layer, where string) error {
 			}
 		}
 	}
+	if m := l.Merged; m != nil && m.KeepWorktreeDays != nil {
+		if err := checkKeepDays(*m.KeepWorktreeDays); err != nil {
+			return fmt.Errorf("%s: merged.keep_worktree_days: %w", where, err)
+		}
+	}
 	for key := range l.Stage {
 		if key == "default" {
 			continue
@@ -877,13 +918,27 @@ func expand(home, p string) string {
 	return p
 }
 
+// layers are the layers of the Repo at repoPath, lowest first: [defaults],
+// the Repo's owner/* table, the Repo's owner/repo table.
+func (g *Global) layers(repoPath string) []layer {
+	out := []layer{g.file.Defaults}
+	for _, t := range g.tables(g.keyOf(repoPath)) {
+		out = append(out, t.layer)
+	}
+	return out
+}
+
+// Merged applies the [merged] tables of the Repo's layers, then the Task
+// overrides. A bad override gives the value of the file with the error, so a
+// caller can still act on it.
+func (g *Global) Merged(repoPath string, overrides map[string]string) (Merged, error) {
+	return resolveMerged(g.layers(repoPath), overrides)
+}
+
 // Resolve applies the layers for one Repo and the Task overrides, lowest
 // first: [defaults], the Repo's owner/* table, the Repo's owner/repo table.
 func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved, error) {
-	layers := []layer{g.file.Defaults}
-	for _, t := range g.tables(g.keyOf(repoPath)) {
-		layers = append(layers, t.layer)
-	}
+	layers := g.layers(repoPath)
 	res := Resolved{
 		WIPCap:       defaultWIPCap,
 		PR:           true,
@@ -955,6 +1010,10 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 	if err := applyOverrides(&res, overrides); err != nil {
 		return Resolved{}, err
 	}
+	// The Scheduler reads [merged] at the merge, so Resolve only checks its overrides.
+	if _, err := resolveMerged(layers, overrides); err != nil {
+		return Resolved{}, err
+	}
 
 	if res.Claude, err = g.claudePath(); err != nil {
 		return Resolved{}, err
@@ -986,6 +1045,8 @@ func applyOverrides(res *Resolved, overrides map[string]string) error {
 			res.PR = v == "true"
 		case "harness":
 			return errHarnessGone
+		case "close_tab", "keep_worktree_days":
+			// resolveMerged reads them.
 		case "model", "effort", "skill", "command":
 			for st, sc := range res.Stages {
 				switch k {

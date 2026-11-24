@@ -4,7 +4,7 @@ This document states the current intended experience for which Issues the Board 
 
 ## PROD-ISSUE-001: The Board holds the user's own Issues that have no Task
 
-The Board shows the user's own Issues that have no Task as Issue rows, so the user plans the what and the Worker plans the how. The user's own Issues are the Linear Issues assigned to the user in each signed-in workspace, the local Issues, and the user's own GitHub Issues. An Issue row shows the ID, the title, a status word, the Linear priority, and the Repo when it is known.
+The Board shows the user's own Issues that have no Task as Issue rows, so the user plans the what and the Worker plans the how. The user's own Issues are the Linear Issues assigned to the user in each signed-in workspace, the local Issues, and the user's own GitHub Issues. An Issue row shows the ID, the title, a status word, the Linear priority, and the Repo when it is known. A Linear Issue row names its Repo, for example `data` for `crexi/data`, when exactly one Repo lists its team in `teams`.
 
 ## PROD-ISSUE-002: The Tracker state puts an Issue in Up next or Backlog
 

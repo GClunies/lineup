@@ -1,6 +1,7 @@
 package board
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -260,5 +261,55 @@ func TestAFailedFirstGitHubReadLeavesTheOtherRows(t *testing.T) {
 	e.m = drain(e.m, e.m.loadMine())
 	if !strings.Contains(e.m.status, "GitHub Issues: ") || len(githubRows(e.m)) != 0 || len(e.m.issues) == 0 {
 		t.Fatalf("status %q rows %v", e.m.status, rowIDs(e.m.issues))
+	}
+}
+
+// staleGH is a gh whose search still returns octo/sandbox#19 after it
+// closes, as GitHub's search index does for a few seconds. #20 is blocked
+// by #19. The file closed makes #19 closed in the search hit and in
+// GraphQL (PROD-ISSUE-006).
+type staleGH struct{ bin, closed string }
+
+func newStaleGH(t *testing.T) staleGH {
+	t.Helper()
+	dir := t.TempDir()
+	g := staleGH{bin: filepath.Join(dir, "gh"), closed: filepath.Join(dir, "closed")}
+	hit := func(n int, state, body string) string {
+		return fmt.Sprintf(`{"assignees":[{"login":"octo"}],"author":{"login":"octo"},"body":%q,"isPullRequest":false,"labels":[],"number":%d,"state":%q,"repository":{"nameWithOwner":"octo/sandbox"},"title":"Issue %d","url":"https://github.com/octo/sandbox/issues/%d"}`, body, n, state, n, n)
+	}
+	script := `#!/bin/sh
+state=open; gql=OPEN
+if [ -f "` + g.closed + `" ]; then state=closed; gql=CLOSED; fi
+case "$*" in
+"search issues"*--assignee*) echo '[` + hit(20, "open", "Blocked by #19") + `,` + hit(19, "'$state'", "") + `]' ;;
+"search issues"*) echo '[]' ;;
+"api graphql"*) echo '{"data":{"i0":{"issueOrPullRequest":{"state":"'$gql'"}}}}' ;;
+*) echo "unexpected: $*" >&2; exit 1 ;;
+esac
+`
+	if err := os.WriteFile(g.bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+func TestAGitHubRowIsUnblockedAtTheFirstRefreshAfterItsBlockerCloses(t *testing.T) {
+	e, _ := mineEnv(t)
+	g := newStaleGH(t)
+	e.m.opts.GitHub = GitHub{
+		Login:     func() (string, bool, error) { return "octo", true, nil },
+		Client:    &github.Client{Bin: g.bin},
+		Checkouts: func() []config.Checkout { return []config.Checkout{{Path: "/repos/octo/sandbox", Key: "octo/sandbox"}} },
+	}
+	e.m = drain(e.m, e.m.loadMine())
+	if got := githubRows(e.m)["octo/sandbox#20"].status(); got != "blocked" {
+		t.Fatalf("#20 is %q while #19 is open, want blocked", got)
+	}
+	if err := os.WriteFile(g.closed, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.m = drain(e.m, e.m.loadMine())
+	if got := githubRows(e.m)["octo/sandbox#20"].status(); got != "unblocked" {
+		t.Fatalf("#20 is %q after #19 closed, want unblocked", got)
 	}
 }

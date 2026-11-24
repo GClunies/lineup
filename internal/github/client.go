@@ -38,7 +38,8 @@ type Review struct {
 type PR struct {
 	Number           int
 	URL              string
-	State            string // OPEN, MERGED, CLOSED
+	State            string    // OPEN, MERGED, CLOSED
+	ClosedAt         time.Time // when the PR merged or closed, or zero while it is open
 	IsDraft          bool
 	HeadSHA          string
 	MergeStateStatus string
@@ -112,7 +113,7 @@ func (c *Client) Viewer(ctx context.Context) (string, error) {
 
 const prFields = `
 fragment F on PullRequest {
-  number url state isDraft headRefOid mergeStateStatus reviewDecision
+  number url state closedAt isDraft headRefOid mergeStateStatus reviewDecision
   mergeCommit { oid } mergedAt
   reviewRequests { totalCount }
   latestReviews(first: 50) { nodes { author { __typename login } state submittedAt } }
@@ -224,6 +225,7 @@ type gqlPR struct {
 	Number           int        `json:"number"`
 	URL              string     `json:"url"`
 	State            string     `json:"state"`
+	ClosedAt         time.Time  `json:"closedAt"`
 	IsDraft          bool       `json:"isDraft"`
 	HeadRefOid       string     `json:"headRefOid"`
 	MergeStateStatus string     `json:"mergeStateStatus"`
@@ -408,6 +410,7 @@ func (g gqlPR) toPR() *PR {
 		Number:           g.Number,
 		URL:              g.URL,
 		State:            g.State,
+		ClosedAt:         g.ClosedAt,
 		IsDraft:          g.IsDraft,
 		HeadSHA:          g.HeadRefOid,
 		MergeStateStatus: g.MergeStateStatus,

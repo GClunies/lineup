@@ -333,28 +333,36 @@ func idleShell(out []byte) (bool, error) {
 	return v.Child.Path == loginShell && len(v.Ancestors) <= 1, nil
 }
 
-// Foreground returns the name of the program in a block's foreground, such as
-// hunk, or "" in a kept block whose command exited.
-func (c *Client) Foreground(ctx context.Context, session, block string) (string, error) {
+// Process is the program in a block's foreground: its name, such as hunk, and
+// its process ID.
+type Process struct {
+	Name string
+	PID  int
+}
+
+// Foreground returns the program in a block's foreground, or the zero Process
+// in a kept block whose command exited.
+func (c *Client) Foreground(ctx context.Context, session, block string) (Process, error) {
 	out, err := c.run(ctx, "block", "call", "-s", session, "-b", block, "process")
 	if err != nil {
-		return "", err
+		return Process{}, err
 	}
 	return foreground(out)
 }
 
 // foreground reads the record of the process method. A program that the user
 // typed in a plain tab's shell is in the foreground too.
-func foreground(out []byte) (string, error) {
+func foreground(out []byte) (Process, error) {
 	var v struct {
 		Foreground struct {
 			Name string `json:"name"`
+			PID  int    `json:"pid"`
 		} `json:"foreground"`
 	}
 	if err := json.Unmarshal(out, &v); err != nil {
-		return "", err
+		return Process{}, err
 	}
-	return v.Foreground.Name, nil
+	return Process(v.Foreground), nil
 }
 
 // LastExit returns the exit code of a block's command after it exits in a block

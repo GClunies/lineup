@@ -108,8 +108,8 @@ func (p rexPort) Panes(ctx context.Context, session, window string) ([]scheduler
 			continue
 		}
 		for i, b := range w.BlockIDs {
-			program, _ := p.c.Foreground(ctx, session, b)
-			out = append(out, scheduler.Pane{BlockID: b, Label: w.Labels[i], Program: program})
+			fg, _ := p.c.Foreground(ctx, session, b)
+			out = append(out, scheduler.Pane{BlockID: b, Label: w.Labels[i], Program: fg.Name, Args: procArgs(fg.PID)})
 		}
 	}
 	return out, nil
@@ -206,7 +206,7 @@ func (p *githubPort) Poll(ctx context.Context, keys []scheduler.PRKey) (map[sche
 		if err != nil {
 			return nil, err
 		}
-		out[scheduler.PRKey{Repo: k.Repo, Branch: k.Branch, Bot: k.Bot}] = scheduler.PRSnapshot{Number: pr.Number, URL: pr.URL, Raw: raw,
+		out[scheduler.PRKey{Repo: k.Repo, Branch: k.Branch, Bot: k.Bot}] = scheduler.PRSnapshot{Number: pr.Number, URL: pr.URL, ClosedAt: pr.ClosedAt, Raw: raw,
 			MergeCommit: pr.MergeCommit, MergedAt: pr.MergedAt}
 	}
 	return out, nil
@@ -271,8 +271,8 @@ func (p worktreePort) Path(ctx context.Context, repo, branch string) (string, er
 	return path, err
 }
 
-func (p worktreePort) Remove(ctx context.Context, repo, branch string) error {
-	err := worktree.Remove(ctx, p.bin, repo, branch)
+func (p worktreePort) Remove(ctx context.Context, repo, branch, path string) error {
+	err := worktree.Remove(ctx, p.bin, repo, branch, path)
 	if errors.Is(err, worktree.ErrUncommitted) {
 		return fmt.Errorf("%w: %w", scheduler.ErrUncommitted, err)
 	}
@@ -891,6 +891,11 @@ func (p configPort) SetUp(repo string) (string, bool) { return p.cfg.SetUp(repo)
 func (p configPort) QA(repo string) (scheduler.QA, error) {
 	res, err := p.cfg.Resolve(repo, nil)
 	return scheduler.QA(res.QA), err
+}
+
+func (p configPort) Merged(repo string, overrides map[string]string) (scheduler.Merged, error) {
+	m, err := p.cfg.Merged(repo, overrides)
+	return scheduler.Merged{CloseTab: m.CloseTab, KeepWorktree: m.KeepWorktree}, err
 }
 
 func (p configPort) RepoForGitHub(slug string) (string, bool) { return p.cfg.CheckoutFor(slug) }

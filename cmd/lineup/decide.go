@@ -25,6 +25,10 @@ func request(op string) func(scheduler.Client, scheduler.TaskView, string, io.Wr
 	}
 }
 
+func closeIt(c scheduler.Client, t scheduler.TaskView, _ string, out io.Writer) error {
+	return cmdClose(c, []string{t.ID}, out)
+}
+
 func openWorker(c scheduler.Client, t scheduler.TaskView, _ string, out io.Writer) error {
 	return cmdOpen(c, []string{t.ID}, out)
 }
@@ -32,7 +36,7 @@ func openWorker(c scheduler.Client, t scheduler.TaskView, _ string, out io.Write
 var (
 	openTab   = choice{ID: "open", Title: "Open the tab", run: openWorker}
 	restore   = choice{ID: "open", Title: "Restore the Worker", run: openWorker}
-	closeTask = choice{ID: "close", Title: "Close the Task", run: request("close")}
+	closeTask = choice{ID: "close", Title: "Close the Task", run: closeIt}
 	merge     = choice{ID: "merge", Title: "Merge the PR", run: request("merge")}
 	rerun     = choice{ID: "rerun", Title: "Run the Stage again", run: func(c scheduler.Client, t scheduler.TaskView, _ string, _ io.Writer) error {
 		return c.Do(scheduler.Request{Op: "rerun", Task: t.ID, Stage: t.StageKey}, nil)

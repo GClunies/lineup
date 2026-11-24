@@ -1134,17 +1134,36 @@ func TestRecoveryKeepsALiveSidePane(t *testing.T) {
 	}
 }
 
-// A review Worker's tab keeps one side pane too. rexweb-pane shows the PR in
-// a plain split where the user started it.
-func TestRecoveryClosesASecondSidePaneOfAReviewWorker(t *testing.T) {
+// The Record's pane counts as a side pane whatever its label and program,
+// for example when lineup cannot read its argv.
+func TestRecoveryKeepsTheRecordsSidePaneWhateverItRuns(t *testing.T) {
 	live := &tab{Window: Window{"session:reviews", "window:live", "block:live"}, argv: []string{"claude", "reviewing"}}
-	typed := &split{BlockID: "split:8", window: "window:live", label: "shell", program: "rexweb-pane"}
-	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{sideAt("split:9", "window:live"), typed}}
+	named := &split{BlockID: "split:9", window: "window:live", label: "PD-668: Say that the backend stacks released the overlay tiles buckets by cbsmit…", program: "bash"}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{named}}
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReviewTab(lifecycle.ReviewReady, "window:live", "block:live", "split:9"), func(d *Deps) { d.Rex = rex })
-	eventually(t, "the second pane closed", func() bool { return rex.allSplits()[1].closed })
 	h.still("R-3", lifecycle.ReviewReady)
-	if got := rex.allSplits(); len(got) != 2 || got[0].closed {
-		t.Fatalf("side panes %+v, want the named pane open and no new pane", got)
+	if got := rex.allSplits(); len(got) != 1 || got[0].closed {
+		t.Fatalf("side panes %+v, want the named pane only, open", got)
+	}
+}
+
+// A review Worker's tab keeps one rexweb pane across restarts. rexweb names
+// its block after the page, and bash runs the rexweb-pane script. Recovery
+// keeps the Record's pane, closes the panes that earlier restarts left, and
+// opens none. The user's bash shell stays.
+func TestRecoveryKeepsOneRexwebPaneOfAReviewWorker(t *testing.T) {
+	live := &tab{Window: Window{"session:reviews", "window:live", "block:live"}, argv: []string{"claude", "reviewing"}}
+	rexweb := func(block string) *split {
+		return &split{BlockID: block, window: "window:live", label: "PD-668: Say that the backend stacks released the overlay tiles buckets by cbsmit…",
+			program: "bash", args: []string{"/bin/bash", "/Users/me/Applications/RexWeb.app/Contents/Resources/rexweb-pane", prURL7}}
+	}
+	shell := &split{BlockID: "split:6", window: "window:live", label: "shell", program: "bash", args: []string{"-bash"}}
+	rex := &fakeRex{events: make(chan RexEvent, 16), tabs: []*tab{live}, splits: []*split{rexweb("split:7"), rexweb("split:8"), rexweb("split:9"), shell}}
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedReviewTab(lifecycle.ReviewReady, "window:live", "block:live", "split:9"), func(d *Deps) { d.Rex = rex })
+	eventually(t, "the older rexweb panes closed", func() bool { got := rex.allSplits(); return got[0].closed && got[1].closed })
+	h.still("R-3", lifecycle.ReviewReady)
+	if got := rex.allSplits(); len(got) != 4 || got[2].closed || got[3].closed {
+		t.Fatalf("panes %+v, want the named pane and the user's shell open, and no new pane", got)
 	}
 	if v := h.task("R-3"); !v.Live || v.Flag != "" {
 		t.Fatalf("task = %+v, want its Worker kept", v)

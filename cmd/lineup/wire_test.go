@@ -264,6 +264,22 @@ func TestAGitHubIssueMapsToTheCheckoutWhoseOriginIsItsRepository(t *testing.T) {
 	}
 }
 
+// The Scheduler gets each key of [merged] for the Repo, and the error of a
+// bad override with the value of the file.
+func TestMergedComesFromTheTablesOfTheRepo(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	app := gitCheckout(t, filepath.Join(home, "code", "acme", "app"), "git@github.com:acme/app.git")
+	p := configPort{cfg: loadConfig(t, "[defaults.merged]\nkeep_worktree_days = 2\n\n[repos.\"acme/app\".merged]\nclose_tab = true\n")}
+	want := scheduler.Merged{CloseTab: true, KeepWorktree: 2 * 24 * time.Hour}
+	if m, err := p.Merged(app, nil); err != nil || m != want {
+		t.Errorf("Merged = %+v %v, want %+v", m, err, want)
+	}
+	if m, err := p.Merged(app, map[string]string{"close_tab": "maybe"}); err == nil || m != want {
+		t.Errorf("a bad override: %+v %v, want an error and %+v", m, err, want)
+	}
+}
+
 // An empty [repos."owner/repo"] table sets the Repo up. An owner/* table
 // does not.
 func TestARepoIsSetUpByItsOwnTable(t *testing.T) {
@@ -439,7 +455,7 @@ func TestTheWorktreePortNamesUncommittedChanges(t *testing.T) {
 	wt := filepath.Join(t.TempDir(), "wt")
 	list := `{"items":[{"branch":"eng-1","worktree":{"path":"` + dir + `"}}]}`
 	os.WriteFile(wt, []byte("#!/bin/sh\necho '"+list+"'\n"), 0o755)
-	if err := (worktreePort{wt}).Remove(context.Background(), t.TempDir(), "eng-1"); !errors.Is(err, scheduler.ErrUncommitted) {
+	if err := (worktreePort{wt}).Remove(context.Background(), t.TempDir(), "eng-1", dir); !errors.Is(err, scheduler.ErrUncommitted) {
 		t.Fatalf("Remove of a dirty worktree: err = %v, want scheduler.ErrUncommitted", err)
 	}
 }

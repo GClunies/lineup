@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -52,18 +53,25 @@ func reviewSide(url string) []string {
 	return []string{"sh", "-c", `for a in "$HOME/Applications/RexWeb.app" /Applications/RexWeb.app; do p=$a/Contents/Resources/rexweb-pane; [ -x "$p" ] && exec "$p" "$1"; done; GH_TOKEN=$(gh auth token) exec hunk gh pr "$1"`, "side", url}
 }
 
-// sidePanes are the blocks of the Worker's tab that show a diff or a PR: each
-// block but the Worker's that has the label side, or that runs hunk or
-// rexweb-pane. The user can type hunk in a plain split, whose label is shell
-// (ARCH-REX-012).
-func sidePanes(panes []Pane, worker string) []string {
+// sidePanes are the blocks of the Worker's tab that show a diff or a PR: the
+// Record's side pane, and each other block but the Worker's that has the label
+// side, or that runs hunk or rexweb-pane. The user can type hunk in a plain
+// split, whose label is shell. rexweb names its block after the page, and bash
+// runs the rexweb-pane script (ARCH-REX-012).
+func sidePanes(panes []Pane, worker, side string) []string {
 	var out []string
 	for _, p := range panes {
-		if p.BlockID != worker && (p.Label == "side" || p.Program == "hunk" || p.Program == "rexweb-pane") {
+		if p.BlockID != worker && (p.BlockID == side || p.Label == "side" || runs(p, "hunk") || runs(p, "rexweb-pane")) {
 			out = append(out, p.BlockID)
 		}
 	}
 	return out
+}
+
+// runs tells whether the program in the pane's foreground is name, or is an
+// interpreter that runs the script name.
+func runs(p Pane, name string) bool {
+	return p.Program == name || len(p.Args) > 1 && filepath.Base(p.Args[1]) == name
 }
 
 // liveSide reads the Task and the side pane that its Worker needs. ok is false
@@ -142,7 +150,7 @@ func (s *Scheduler) recoverSide(ctx context.Context, id string) {
 		s.d.Log.Warn("side pane", "task", id, "err", err)
 		return
 	}
-	s.syncSide(ctx, r, sidePanes(panes, r.BlockID), want)
+	s.syncSide(ctx, r, sidePanes(panes, r.BlockID, r.SideBlockID), want)
 }
 
 // checkSides queues a check of each live Worker's side pane on its lane, one

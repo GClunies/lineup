@@ -60,4 +60,4 @@ lineup names each Worker after its tab label, which starts with the Task ID, or 
 
 ## PROD-WORKER-015: A Worker tab never holds a second side pane
 
-lineup opens a Worker's side pane at each start and restore of the Worker. At its own start, lineup finds the side panes in each live Worker's tab, keeps one, and closes the others. A plain split where the user started `hunk` counts as a side pane too. lineup replaces the kept pane when it shows another worktree or base, and opens one when none is left. When the Task's worktree is gone, its pane closes. A failed split leaves the Worker without a pane.
+lineup opens a Worker's side pane at each start and restore of the Worker. At its own start, lineup finds the side panes in each live Worker's tab, keeps one, and closes the others. A plain split where the user started `hunk` counts as a side pane too, and so does each rexweb pane, whatever page it shows. lineup replaces the kept pane when it shows another worktree or base, and opens one when none is left. When the Task's worktree is gone, its pane closes. A failed split leaves the Worker without a pane.

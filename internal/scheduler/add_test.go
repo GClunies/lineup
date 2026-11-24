@@ -171,3 +171,25 @@ func TestAStoredWorkerStageOfQueuedLoadsAsNoWorker(t *testing.T) {
 		}
 	}
 }
+
+// The Issue's earlier Task merged its PR from the same branch. A new add
+// starts new work: the PR that ended before the Task moves it nowhere, and a
+// new PR from the branch does (PROD-LIFE-021).
+func TestAReAddIgnoresThePRThatEndedBeforeIt(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	key := PRKey{Repo: "acme/data", Branch: "ada/eng-1-billing"}
+	h.gh.set(key, 41, "pr-merged")
+	h.gh.endedAt(key, time.Now().Add(-72*time.Hour))
+	h.do(Request{Op: "add", Issue: "ENG-1"})
+	h.rex.exits(h.waitTab("wt ada/eng-1-billing"), 0)
+	h.waitTab("claude working")
+	time.Sleep(100 * time.Millisecond) // 5 polls
+	if v := h.task("ENG-1"); v.Stage != "Working" || v.PRNumber != 0 {
+		t.Fatalf("task = %s with PR #%d, want Working with no PR", v.Stage, v.PRNumber)
+	}
+	h.gh.set(key, 42, "pr-merged")
+	h.waitStage("ENG-1", lifecycle.Done)
+	if v := h.task("ENG-1"); v.PRNumber != 42 {
+		t.Fatalf("PR #%d, want the new PR #42", v.PRNumber)
+	}
+}

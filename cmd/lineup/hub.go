@@ -665,6 +665,7 @@ func boardOptions(path string) board.Options {
 	opts.LocalIssues = g.LocalIssuesDir()
 	opts.LocalPrefixes = g.Prefixes()
 	opts.Teams = g.TeamKeys()
+	opts.TeamRepos = g.ReposForTeam
 	opts.GitHub = board.GitHub{
 		Login:     func() (string, bool, error) { return github.TrackerLogin(stateDir()) },
 		Backlog:   g.GitHubBacklogLabel(),

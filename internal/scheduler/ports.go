@@ -22,9 +22,13 @@ type Window struct{ SessionID, WindowID, BlockID string }
 
 type Status struct{ State, Kind, Msg string }
 
-// Pane is one block of a tab: its label and the name of the program in its
-// foreground, such as hunk.
-type Pane struct{ BlockID, Label, Program string }
+// Pane is one block of a tab: its label, and the name and argv of the
+// program in its foreground, such as hunk. A script's interpreter is the
+// program, and the script is its first argument.
+type Pane struct {
+	BlockID, Label, Program string
+	Args                    []string
+}
 
 type Rex interface {
 	EnsureSession(ctx context.Context, label string) (string, error)
@@ -68,9 +72,11 @@ type PRKey struct{ Repo, Branch, Bot string }
 // PRSnapshot is the GitHub adapter's view of one PR, kept opaque here so the
 // Scheduler can store it and hand it back for edge detection.
 type PRSnapshot struct {
-	Number int             `json:"number"`
-	URL    string          `json:"url"`
-	Raw    json.RawMessage `json:"raw"`
+	Number int    `json:"number"`
+	URL    string `json:"url"`
+	// ClosedAt is when the PR merged or closed, or zero while it is open.
+	ClosedAt time.Time       `json:"closed_at,omitzero"`
+	Raw      json.RawMessage `json:"raw"`
 	// MergeCommit and MergedAt are the merge of a merged PR, which its QA
 	// Task checks out (ARCH-QA-005).
 	MergeCommit string    `json:"merge_commit,omitempty"`
@@ -130,9 +136,11 @@ type Worktrees interface {
 	// CreateArgv is the command that creates and sets up the worktree in the Task tab.
 	CreateArgv(repo, branch string) []string
 	Path(ctx context.Context, repo, branch string) (string, error)
-	// Remove removes the branch's worktree. The error wraps ErrUncommitted
-	// when the worktree holds uncommitted changes, and the worktree stays.
-	Remove(ctx context.Context, repo, branch string) error
+	// Remove removes the worktree at path, whatever branch it holds now, or
+	// the branch's worktree when no worktree is at path. The error wraps
+	// ErrUncommitted when the worktree holds uncommitted changes, and the
+	// worktree stays.
+	Remove(ctx context.Context, repo, branch, path string) error
 	// DiffBase is the merge-base of the worktree's HEAD with the default
 	// branch. The error wraps ErrNoWorktree when the worktree's folder is gone.
 	DiffBase(ctx context.Context, worktree string) (string, error)
@@ -329,6 +337,20 @@ type Config interface {
 	// QA is the [qa] table of the Repo's layer. It reads files, so only
 	// lanes and API handlers call it.
 	QA(repo string) (QA, error)
+	// Merged is what lineup does after the PR of a build Task in the Repo
+	// merges, from the Repo's [merged] tables and the Task's overrides. An
+	// error comes with a value that the caller can still use: the value of
+	// the tables, without the bad override.
+	Merged(repo string, overrides map[string]string) (Merged, error)
+}
+
+// Merged is what lineup does with a build Task's tab and worktree after its
+// PR merges.
+type Merged struct {
+	// CloseTab closes the tab once the Worker is not busy.
+	CloseTab bool
+	// KeepWorktree is how long lineup keeps the worktree after the tab's close.
+	KeepWorktree time.Duration
 }
 
 // LocalIssues is the Local Tracker's folder, as the ad hoc Task IDs need it.

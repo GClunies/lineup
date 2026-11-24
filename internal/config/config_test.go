@@ -311,6 +311,7 @@ func TestTheOldFormFailsAtLoadAndNamesTheMigration(t *testing.T) {
 		"stage.default = { model = \"m\" }\n":               "stage belongs in [defaults]",
 		"[review_bot]\nname = \"greptile\"\n":               "review_bot belongs in [defaults]",
 		"[github.labels]\nstarted = \"x\"\n[landing_bar]\n": "landing_bar belongs in [defaults]",
+		"[merged]\nclose_tab = true\n":                      "merged belongs in [defaults]. Run lineup config migrate to move it",
 	} {
 		path := write(t, filepath.Join(t.TempDir(), "config.toml"), text)
 		if _, err := Load(path); err == nil || !strings.HasPrefix(err.Error(), path+": "+want) {
@@ -1066,29 +1067,93 @@ func TestCheckPrefixTeamsRefusesAPrefixThatEqualsATeamKeyInAnyCase(t *testing.T)
 	}
 }
 
-func TestMergedClosesNoTabAndKeepsAWeekByDefault(t *testing.T) {
-	g := load(t, "")
-	if g.CloseMergedTab() || g.KeepWorktree() != 7*24*time.Hour {
-		t.Errorf("defaults: close_tab %v, keep %s, want false and 7 days", g.CloseMergedTab(), g.KeepWorktree())
-	}
-	g = load(t, "[merged]\nclose_tab = true\nkeep_worktree_days = 0\n")
-	if !g.CloseMergedTab() || g.KeepWorktree() != 0 {
-		t.Errorf("set: close_tab %v, keep %s, want true and 0", g.CloseMergedTab(), g.KeepWorktree())
-	}
-	if g := load(t, "[merged]\nkeep_worktree_days = 30\n"); g.KeepWorktree() != 30*24*time.Hour {
-		t.Errorf("30 days: keep %s", g.KeepWorktree())
+// Each key of [merged] layers on its own, from [defaults] to the Repo's own
+// table (PROD-CONFIG-002).
+func TestMergedLayersEachKeyFromTheDefaultsToTheRepo(t *testing.T) {
+	g, home := loadFixture(t, `
+[defaults.merged]
+close_tab = false
+
+[repos."crexi/*".merged]
+close_tab = true
+keep_worktree_days = 3
+
+[repos."crexi/data".merged]
+keep_worktree_days = 1
+`)
+	gitCheckout(t, home, "repos/crexi/backend", "git@github.com:crexi/backend.git")
+	for rel, want := range map[string]Merged{
+		"repos/gclunies/lineup": {CloseTab: false, KeepWorktree: 7 * day},
+		"repos/crexi/backend":   {CloseTab: true, KeepWorktree: 3 * day},
+		"repos/crexi/data":      {CloseTab: true, KeepWorktree: 1 * day},
+	} {
+		if got, err := g.Merged(filepath.Join(home, rel), nil); err != nil || got != want {
+			t.Errorf("%s: %+v %v, want %+v", rel, got, err, want)
+		}
 	}
 }
 
-func TestBadMergedConfigFailsAtLoad(t *testing.T) {
-	for name, c := range map[string]struct{ text, want string }{
-		"more than 30": {"[merged]\nkeep_worktree_days = 31\n", "merged.keep_worktree_days: 31 is more than 30"},
-		"negative":     {"[merged]\nkeep_worktree_days = -1\n", "merged.keep_worktree_days: -1"},
-		"unknown key":  {"[merged]\nclose_tabs = true\n", "unknown keys"},
+const day = 24 * time.Hour
+
+func TestMergedClosesNoTabAndKeepsAWeekByDefault(t *testing.T) {
+	for text, want := range map[string]Merged{
+		"":                                      {CloseTab: false, KeepWorktree: 7 * day},
+		"[defaults.merged]\nclose_tab = true\n": {CloseTab: true, KeepWorktree: 7 * day},
+		"[defaults.merged]\nkeep_worktree_days = 0\n":  {KeepWorktree: 0},
+		"[defaults.merged]\nkeep_worktree_days = 30\n": {KeepWorktree: 30 * day},
 	} {
-		if err := loadErr(t, c.text); err == nil || !strings.Contains(err.Error(), c.want) {
-			t.Errorf("%s: err = %v, want %q", name, err, c.want)
+		g := load(t, text)
+		// Merged never needs the claude binary.
+		g.lookPath = func(string) (string, error) { return "", os.ErrNotExist }
+		if got, err := g.Merged(t.TempDir(), nil); err != nil || got != want {
+			t.Errorf("%q: %+v %v, want %+v", text, got, err, want)
 		}
+	}
+}
+
+func TestBadMergedConfigFailsAtLoadAndNamesItsTable(t *testing.T) {
+	for text, want := range map[string]string{
+		"[repos.\"crexi/data\".merged]\nkeep_worktree_days = 31\n": `repos."crexi/data": merged.keep_worktree_days: 31 is more than 30, the days that Claude keeps a conversation`,
+		"[repos.\"crexi/*\".merged]\nkeep_worktree_days = -1\n":    `repos."crexi/*": merged.keep_worktree_days: -1 must be 0 or more`,
+		"[defaults.merged]\nkeep_worktree_days = 31\n":             "defaults: merged.keep_worktree_days: 31 is more than 30",
+		"[defaults.merged]\nclose_tabs = true\n":                   "unknown keys: defaults.merged.close_tabs",
+	} {
+		if err := loadErr(t, text); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err = %v, want %q", text, err, want)
+		}
+	}
+}
+
+// A Task override of close_tab or keep_worktree_days beats every table. A bad
+// one fails lineup add, and Merged then gives the value of the file with the
+// error (PROD-CONFIG-004).
+func TestAMergedOverrideBeatsTheTables(t *testing.T) {
+	g, home := loadFixture(t, "[repos.\"crexi/data\".merged]\nclose_tab = false\nkeep_worktree_days = 1\n")
+	data := filepath.Join(home, "repos/crexi/data")
+	good := map[string]string{"close_tab": "true", "keep_worktree_days": "2", "model": "m"}
+	if got, err := g.Merged(data, good); err != nil || got != (Merged{CloseTab: true, KeepWorktree: 2 * day}) {
+		t.Errorf("good overrides: %+v %v, want the tab closed and 2 days", got, err)
+	}
+	if _, err := g.Resolve(data, good); err != nil {
+		t.Errorf("Resolve refused good overrides: %v", err)
+	}
+	for _, bad := range []map[string]string{
+		{"close_tab": "maybe"},
+		{"keep_worktree_days": "31"},
+		{"keep_worktree_days": "-1"},
+		{"keep_worktree_days": "two"},
+		{"close_tab": "true", "keep_worktree_days": "31"},
+	} {
+		got, err := g.Merged(data, bad)
+		if err == nil || got != (Merged{KeepWorktree: 1 * day}) {
+			t.Errorf("%v: %+v %v, want an error and the value of the file", bad, got, err)
+		}
+		if _, err := g.Resolve(data, bad); err == nil {
+			t.Errorf("%v: Resolve accepted it", bad)
+		}
+	}
+	if _, err := g.Merged(data, map[string]string{"keep_worktree_days": "31"}); err == nil || !strings.Contains(err.Error(), "keep_worktree_days: 31 is more than 30") {
+		t.Errorf("err = %v, want it to name the key and the 30-day limit", err)
 	}
 }
 

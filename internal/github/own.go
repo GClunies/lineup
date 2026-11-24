@@ -62,9 +62,10 @@ func (g ghOwn) mine(login string) bool {
 // OwnIssues lists the open Issues of the account login that are its own,
 // in every repository, with the state of each blocker. It runs two
 // searches, one for the assigned Issues and one for the unassigned Issues
-// that login opened, then one GraphQL call for the blockers that the
-// searches did not return. A failed blocker read still returns the Issues,
-// with each of those blockers open, and the error.
+// that login opened, then one GraphQL call for the state of every blocker.
+// A search hit does not prove a blocker open, as the search index returns
+// an Issue for a few seconds after it closes. A failed blocker read still
+// returns the Issues, with each blocker open, and the error.
 func (c *Client) OwnIssues(ctx context.Context, login string) ([]OwnIssue, error) {
 	var own []OwnIssue
 	seen := map[string]bool{}
@@ -90,19 +91,19 @@ func (c *Client) OwnIssues(ctx context.Context, login string) ([]OwnIssue, error
 			own = append(own, is)
 		}
 	}
-	var unknown []string
+	var blockers []string
 	for i := range own {
 		for _, id := range BlockedBy(own[i].Repo, own[i].Body) {
 			own[i].Blockers = append(own[i].Blockers, Blocker{ID: id, Open: true})
-			if !seen[id] && !slices.Contains(unknown, id) {
-				unknown = append(unknown, id)
+			if !slices.Contains(blockers, id) {
+				blockers = append(blockers, id)
 			}
 		}
 	}
-	if len(unknown) == 0 {
+	if len(blockers) == 0 {
 		return own, nil
 	}
-	closed, err := c.closedIssues(ctx, unknown)
+	closed, err := c.closedIssues(ctx, blockers)
 	for i := range own {
 		for j, b := range own[i].Blockers {
 			own[i].Blockers[j].Open = !closed[b.ID]
