@@ -1,0 +1,33 @@
+cmd/lineup/wire.go
+  s_6fdf04ba241df3::t_587a0c4e8a5987 355
+internal/harness/claude/claude.go
+  s_6fdf04ba241df3::t_6ecabd650de302 465-466,468-469
+  s_6fdf04ba241df3::t_32135f0d2775c0 511-522
+  s_6fdf04ba241df3::t_750734ef50a16b 245
+  s_6fdf04ba241df3::t_054b32c7bb3a08 218-221
+  s_6fdf04ba241df3::t_da7c78d7d283ae 292-298
+  s_6fdf04ba241df3::t_93bd649057da8d 572,577,580,582,586-587,592,594,596-597
+  s_6fdf04ba241df3::t_056dbe3c21f4bd 499
+  s_6fdf04ba241df3::t_1e5497de71842c 553-571,573-576,578-579,581,583-584,588-591,593,595,598-600
+  s_6fdf04ba241df3::t_e66d519093681d 260-269
+  s_6fdf04ba241df3::t_ade9fa367df7ca 585
+internal/harness/claude/claude_test.go
+  s_6fdf04ba241df3::t_7ca6bc33e5bdb1 180,185,303-304,315,326,338,359,364,599-668,670-672
+  s_6fdf04ba241df3::t_af0f8e8e2d604c 669
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "93a40475b38db19494073fdf1af978b213f9a2de",
+  "prompts": {},
+  "sessions": {
+    "s_6fdf04ba241df3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1e03a85-2a6e-48c0-9cd0-da25aaf02f13",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
