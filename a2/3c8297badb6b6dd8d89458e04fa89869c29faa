@@ -1,0 +1,53 @@
+docs/product-intent/board.md
+  s_bf72fd9c4c96b6::t_61f7ee314233af 96-100
+  s_bf72fd9c4c96b6::t_33fbe682b30529 23
+  s_bf72fd9c4c96b6::t_f63e499ad9a948 55
+internal/board/team_test.go
+  s_bf72fd9c4c96b6::t_657eec2c0becf6 201-229,232,234-246,248-262,264-277,279-283,285-294,296-299,301-310,312-377
+  s_bf72fd9c4c96b6::t_83afcbba4e1109 230-231,233,247,263,278,284,295,300,311
+  s_bf72fd9c4c96b6::t_769195d524075a 5
+internal/board/model.go
+  s_bf72fd9c4c96b6::t_a108d1249c5410 281-290
+  s_bf72fd9c4c96b6::t_774fc713500969 308-310
+  s_bf72fd9c4c96b6::t_53831ca805eb92 322-326
+  s_bf72fd9c4c96b6::t_8d1f44fbf2509e 338-346
+  s_bf72fd9c4c96b6::t_21e396cb26466e 242-248
+  s_bf72fd9c4c96b6::t_a0f0b801520759 543-545
+  s_bf72fd9c4c96b6::t_17020d1b827494 237-240,251
+internal/board/groups.go
+  s_bf72fd9c4c96b6::t_29a94450ebfa2a 39-41,46
+  s_bf72fd9c4c96b6::t_7124db7330bd85 33-38
+  s_bf72fd9c4c96b6::t_e04d144bd33f4f 60
+  s_bf72fd9c4c96b6::t_96ed4e579bf081 66-67,71-81
+  s_bf72fd9c4c96b6::t_2e0e10d3375404 18-19,21-24
+internal/board/view.go
+  s_bf72fd9c4c96b6::t_867e00db70dd0e 246,620-627,630-631,633-635
+  s_bf72fd9c4c96b6::t_d885e9f9c70437 564-565,569-570
+  s_bf72fd9c4c96b6::t_93d5ae798a4931 692
+  s_bf72fd9c4c96b6::t_4c54613c24bda9 243-245
+  s_bf72fd9c4c96b6::t_c17c762e376bd9 322-324
+  s_bf72fd9c4c96b6::t_aa7268bc08e1d7 579
+  s_bf72fd9c4c96b6::t_573d0a668c1e37 526-529,532
+  s_bf72fd9c4c96b6::t_1e639e50603afd 268-275
+  s_bf72fd9c4c96b6::t_b06192402bbbf4 568
+  s_bf72fd9c4c96b6::t_05c9104c6c2d27 571
+internal/board/mouse.go
+  s_bf72fd9c4c96b6::t_4b44ac975f2c8f 58-59
+  s_bf72fd9c4c96b6::t_604933dfe90a21 69-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a23c8297badb6b6dd8d89458e04fa89869c29faa",
+  "prompts": {},
+  "sessions": {
+    "s_bf72fd9c4c96b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d110540c-12b1-4dbe-8598-a4176736437e",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
