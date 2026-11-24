@@ -1,0 +1,52 @@
+cmd/lineup/agent/CLAUDE.md
+  s_3f62d37256047d::t_36ee717388874f 88
+cmd/lineup/config_test.go
+  s_3f62d37256047d::t_0a65fbad2cb24e 151-153
+internal/configpanel/model.go
+  s_3f62d37256047d::t_84ae72a200839a 370
+  s_3f62d37256047d::t_426b01dd176415 371
+internal/config/catalog.go
+  s_3f62d37256047d::t_28a4ddee0d0dc0 82-83
+  s_3f62d37256047d::t_72da446e709fbb 186
+  s_3f62d37256047d::t_630c96337ec69a 282
+  s_3f62d37256047d::t_a4c40374a25fbf 50-52
+  s_3f62d37256047d::t_3e90f93edcb0e3 277-281,283-302
+internal/configpanel/view.go
+  s_3f62d37256047d::t_0f4db11a3e6eed 418-419,421-422
+  s_3f62d37256047d::t_e8cce1b54f84b5 165
+  s_3f62d37256047d::t_6c755dee9ba4d3 181
+  s_3f62d37256047d::t_e53d714fcf713a 180
+  s_3f62d37256047d::t_af6f973a50485d 130-131
+  s_3f62d37256047d::t_c5e8eb57e6ba64 325-327
+cmd/lineup/config.go
+  s_3f62d37256047d::t_b4018dd836c608 84
+  s_3f62d37256047d::t_b57932be84d448 85-86
+internal/configpanel/model_test.go
+  s_3f62d37256047d::t_1b7ed3d7089ed0 679-682
+  s_3f62d37256047d::t_83963a3a9aa391 660-678,683-726
+internal/config/edit.go
+  s_3f62d37256047d::t_621907eb55a0ab 205-206
+  s_3f62d37256047d::t_0ff29ba28c8198 219
+  s_3f62d37256047d::t_0efd06500aaed7 218
+  s_3f62d37256047d::t_7c42c86d103092 246-248,250-253
+  s_3f62d37256047d::t_f867f50e065f00 101-103
+  s_3f62d37256047d::t_b20a7c22d4d5a9 249
+docs/product-intent/configuration.md
+  s_3f62d37256047d::t_7cf495f4465f81 60-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5938a8b8880bc423fa18d537e2346ddf1567d168",
+  "prompts": {},
+  "sessions": {
+    "s_3f62d37256047d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "918a36da-c6bf-4dae-acbd-698584050738",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
