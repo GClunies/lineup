@@ -10,6 +10,7 @@ import (
 var (
 	ErrWIPCapFull  = errors.New("wip cap full")
 	ErrSlotsFull   = errors.New("review slots full")
+	ErrQASlotsFull = errors.New("qa slots full")
 	ErrUnknownTask = errors.New("unknown task")
 )
 
@@ -107,6 +108,13 @@ type Task struct {
 	// poll has not set Taken yet. A review edge starts a round before the
 	// poll's pr-seen, so the facts of that pr-seen are the ones the round takes.
 	Take bool `json:"take,omitempty"`
+	// NextCheck is when a QA Task in QA waiting checks again, and Deadline is
+	// when it stops waiting for a verdict (PROD-QA-008).
+	NextCheck time.Time `json:"next_check,omitzero"`
+	Deadline  time.Time `json:"deadline,omitzero"`
+	// Verdict is the QA Worker's last word: the reason of its wait, its
+	// summary, its findings, or the fix Issue.
+	Verdict string `json:"verdict,omitempty"`
 }
 
 // ReviewCycle is the review cycle that the Task is in, or nil.
@@ -135,7 +143,10 @@ type Board struct {
 	// SharedSlots is how many review Tasks of all queues together can be
 	// started at one time. 0 sets no shared cap.
 	SharedSlots int
-	Tasks       map[string]*Task
+	// QASlots is how many QA Tasks can be in Verifying at one time. 0 sets
+	// no cap (PROD-QA-007).
+	QASlots int
+	Tasks   map[string]*Task
 }
 
 func NewBoard(cap int) *Board {
@@ -170,6 +181,15 @@ func (b *Board) AddReview(id, queue string, p Policy) (*Task, []Effect, error) {
 	return t, []Effect{PromptWorker{Reviewing}}, nil
 }
 
+// AddQA puts a QA Task on the Board in QA waiting, due now. deadline ends
+// its wait for a verdict. A QA Task takes no WIP slot, so no cap refuses it.
+func (b *Board) AddQA(id string, p Policy, now, deadline time.Time) *Task {
+	t := newTask(id, KindQA, p)
+	t.Stage, t.NextCheck, t.Deadline = QAWaiting, now, deadline
+	b.Tasks[id] = t
+	return t
+}
+
 func newTask(id string, k Kind, p Policy) *Task {
 	return &Task{ID: id, Kind: k, Stage: k.FirstStage(), Policy: p, Left: p.Budgets, Taken: &time.Time{}}
 }
@@ -192,6 +212,11 @@ func (b *Board) QueueStarted(queue string) int {
 // QueuesStarted counts the started review Tasks that any queue added.
 func (b *Board) QueuesStarted() int {
 	return b.count(func(t *Task) bool { return t.Kind == KindReview && t.Queue != "" })
+}
+
+// QAChecking counts the QA Tasks in Verifying, which hold the QA slots.
+func (b *Board) QAChecking() int {
+	return b.count(func(t *Task) bool { return t.Kind == KindQA && t.Stage == Verifying })
 }
 
 func (b *Board) count(match func(*Task) bool) int {
@@ -224,6 +249,9 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 		if t.Stage == Done {
 			return []Effect{Cleanup{}}, nil
 		}
+		if t.Kind == KindQA {
+			return t.finish(OutcomeClosed), nil
+		}
 		if t.Kind == KindReview {
 			if s.Skipped {
 				return t.finish(OutcomeSkipped), nil
@@ -255,10 +283,40 @@ func (b *Board) Apply(id string, s Signal) ([]Effect, error) {
 		return effects, nil
 
 	case PRMerged:
-		if t.Stage == Done {
+		if t.Stage == Done || t.Kind == KindQA {
 			return nil, nil
 		}
 		return t.finish(OutcomeMerged), nil
+
+	case QADue:
+		if t.Stage != QAWaiting || t.Flag != "" {
+			return nil, nil
+		}
+		if b.QASlots > 0 && b.QAChecking() >= b.QASlots {
+			return nil, ErrQASlotsFull
+		}
+		return t.startAgent(Verifying), nil
+
+	case QAWait, QAPass, QAFail:
+		if t.Kind != KindQA || t.Stage == Done {
+			return nil, notAllowed
+		}
+		return t.verdict(s), nil
+
+	case QAAccept, QAFixFiled, QARecheck:
+		if t.Stage != QAFailed {
+			return nil, notAllowed
+		}
+		switch s := s.(type) {
+		case QAAccept:
+			return t.finish(OutcomeAccepted), nil
+		case QAFixFiled:
+			t.Verdict = "fix filed: " + s.Issue
+			return t.finish(OutcomeFixFiled), nil
+		case QARecheck:
+			t.Deadline = s.Deadline
+			return t.startAgent(Verifying), nil
+		}
 	}
 
 	if !t.Stage.Started() {
@@ -364,17 +422,42 @@ func (t *Task) observe(s Signal) []Effect {
 			return t.finish(OutcomeReviewed)
 		}
 
+	case QAExpired:
+		if t.Stage == QAWaiting {
+			t.enter(QAFailed)
+			t.Verdict = s.Detail
+		}
+
 	case PRClosed:
 		if t.Kind == KindReview {
 			return t.finish(OutcomeClosed)
 		}
-		if t.Flag == "" {
+		if t.Kind == KindBuild && t.Flag == "" {
 			detail := "closed without a merge"
 			if s.Number != 0 {
 				detail = fmt.Sprintf("#%d %s", s.Number, detail)
 			}
 			t.flag(ReasonPRClosed, detail)
 		}
+	}
+	return nil
+}
+
+// verdict applies the QA Worker's verdict. A wait never passes the deadline.
+func (t *Task) verdict(s Signal) []Effect {
+	switch s := s.(type) {
+	case QAWait:
+		t.enter(QAWaiting)
+		t.NextCheck, t.Verdict = s.Until, s.Reason
+		if !t.Deadline.IsZero() && t.NextCheck.After(t.Deadline) {
+			t.NextCheck = t.Deadline
+		}
+	case QAPass:
+		t.Verdict = s.Summary
+		return t.finish(OutcomePassed)
+	case QAFail:
+		t.enter(QAFailed)
+		t.Verdict = s.Findings
 	}
 	return nil
 }
@@ -555,14 +638,27 @@ func (t *Task) ready() []Effect {
 	return nil
 }
 
-// finish ends the Task. A review Task has no Tracker to tell.
+// finish ends the Task. A review Task has no Tracker to tell. A QA Task
+// tells the Tracker only of a pass (PROD-QA-009, PROD-QA-010).
 func (t *Task) finish(o Outcome) []Effect {
 	t.enter(Done)
 	t.Outcome = o
-	// A review ends in the user's review, or in a PR that nobody can review
-	// any more, so its tab has nothing left to show.
-	if t.Kind == KindReview {
+	switch t.Kind {
+	case KindReview:
+		// A review ends in the user's review, or in a PR that nobody can
+		// review any more, so its tab has nothing left to show.
 		return []Effect{Cleanup{}}
+	case KindQA:
+		switch o {
+		case OutcomeClosed:
+			return []Effect{Cleanup{}}
+		case OutcomePassed, OutcomeAccepted:
+			return []Effect{TrackerStatus{"qa_passed"}, Cleanup{WhenIdle: true}}
+		}
+		return []Effect{Cleanup{WhenIdle: true}}
+	}
+	if o == OutcomeMerged {
+		return []Effect{TrackerStatus{string(o)}, StartQA{}}
 	}
 	return []Effect{TrackerStatus{string(o)}}
 }
