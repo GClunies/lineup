@@ -1,6 +1,7 @@
 package board
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
+	"github.com/gclunies/lineup/internal/config"
+	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/linear"
 	"github.com/gclunies/lineup/internal/scheduler"
@@ -342,6 +345,105 @@ func TestARowShowsItsTitleAsOneLineWithNoURL(t *testing.T) {
 		menu, _ := tap(t, m, id)
 		if got := strings.Split(screen(menu), "\n")[2]; got != " "+id+"  "+want {
 			t.Errorf("%s: the menu title is %q, want %q", id, got, id+"  "+want)
+		}
+	}
+}
+
+// A Follow-up row below the screen does not widen the status column. Its
+// Tracker state is a long Linear state name, and Follow-up is the last group,
+// below 40 Up next rows (PROD-BOARD-023).
+func TestARowOffScreenDoesNotWidenTheStatusColumn(t *testing.T) {
+	waiting := lissue("PD-714", "Ship the QA build", "Waiting for Code Review")
+	waiting.State.Type = "started"
+	mine := []linear.Issue{waiting}
+	for i := 1; i <= 40; i++ {
+		mine = append(mine, mineIssue(fmt.Sprintf("PD-%d", i), "unstarted", 2))
+	}
+	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{shipped("PD-714")}})
+	m.lay = newSections(config.Board{Order: []string{"Needs you", "Backlog", "Team", "Up next", "Working", "Waiting", "Done", "Follow-up"}})
+	m = feed(m, mineIssuesMsg{ws: acme, live: true, issues: mine})
+	m.sel = "PD-1"
+	out := viewAt(m, 100)
+	if strings.Contains(out, "PD-714") {
+		t.Fatalf("PD-714 must be below the screen:\n%s", out)
+	}
+	// The priority column starts 2 cells after the status column ends.
+	if l := lineOf(t, out, "PD-1 "); cellOf(l, "▂▄▆")-cellOf(l, "up next") != len("up next")+2 {
+		t.Errorf("the status column must fit up next, the widest status on screen: %q", l)
+	}
+	m.sel = "PD-714"
+	out = viewAt(m, 100)
+	if l := lineOf(t, out, "PD-714"); !strings.Contains(l, "Waiting for Code Review") {
+		t.Fatalf("the PD-714 row must show its Tracker state: %q", l)
+	}
+	if l := lineOf(t, out, "PD-40 "); cellOf(l, "▂▄▆")-cellOf(l, "up next") != len("Waiting for Code Review")+2 {
+		t.Errorf("with PD-714 on screen the status column must be 23 cells: %q\n%s", l, out)
+	}
+}
+
+// issueBoard is the Board of the example in Issue 157.
+// PD-688 is the one row with a skill. PD-704 and PD-248 are Linear rows of
+// team PD, and snowcap#101 is a GitHub row with no priority.
+func issueBoard() Model {
+	draft := tv("PD-688", lifecycle.CIRunning, "data",
+		"DE - Collapse sale transactions within 30 days into one headline sale in the property record stream", "draft", 9*24*time.Hour)
+	draft.Flag, draft.Group, draft.Skill, draft.PRNumber = "draft", "Needs you", "pstack:poteto-mode", 5136
+	upNext := mineIssue("PD-704", "unstarted", 2)
+	upNext.Title, upNext.Team = "Auto calculate cap rate if broker marks the listing as NNN", linear.Team{ID: "t2", Key: "PD"}
+	team := teamIssue("PD-248", "backlog", 3)
+	team.Title, team.Unblocked = "Pipeline: Lambda Container Execution", true
+	snowcap := github.OwnIssue{Issue: github.Issue{Repo: "datacoves/snowcap", Number: 101,
+		Title: "Docs generator: make docs drops pages and links", State: "OPEN"}}
+	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Started: 1, Tasks: []scheduler.TaskView{draft}})
+	m.opts.Teams = []string{"PD"}
+	return feed(m, mineIssuesMsg{ws: acme, live: true, issues: []linear.Issue{upNext}},
+		mineIssuesMsg{ws: acme, live: true, team: true, issues: []linear.Issue{team}},
+		mineGitHubMsg{issues: []github.OwnIssue{snowcap}})
+}
+
+// At 109 columns the status column fits unblocked, the skill of the one row
+// that has one shows only in the strip, and the title gets the rest
+// (PROD-BOARD-023, PROD-BOARD-007).
+func TestTheColumnsFitTheirWordsAndTheTitleGetsTheRest(t *testing.T) {
+	m := issueBoard()
+	m.sel = "PD-688"
+	out := viewAt(m, 109)
+	for _, id := range []string{"PD-688", "PD-704", "snowcap#101", "PD-248"} {
+		l := lineOf(t, out, id)
+		if lipgloss.Width(l) > 109 {
+			t.Errorf("the %s row is %d cells wide at 109 columns: %q", id, lipgloss.Width(l), l)
+		}
+		if strings.Contains(l, "poteto-mode") {
+			t.Errorf("the skill fills 1 of 4 rows, so its column must not show: %q", l)
+		}
+	}
+	l := lineOf(t, out, "PD-688")
+	status, age := cellOf(l, "draft"), cellOf(l, "9d")
+	if status < 0 || age-status != len("unblocked")+2 {
+		t.Errorf("the status column must be 9 cells, as wide as unblocked: %q\n%s", l, out)
+	}
+	if title := status - cellOf(l, "DE - Collapse") - 2; title < 60 {
+		t.Errorf("the title gets %d cells at 109 columns, want at least 60: %q", title, l)
+	}
+	if !strings.Contains(l, "data") {
+		t.Errorf("the Repo column shows on half the rows, so it must show: %q", l)
+	}
+	if f := footerAt(m, 109); !strings.Contains(f, "\n PD-688 · CI running · data · poteto-mode · #5136 · draft\n") {
+		t.Errorf("the strip must name the skill after the Repo:\n%s", f)
+	}
+}
+
+// GitHub rows have no priority, so the priority column takes no cells and the
+// Repo follows the status word (PROD-BOARD-023).
+func TestAColumnThatNoRowFillsTakesNoCells(t *testing.T) {
+	own := func(n int) github.OwnIssue {
+		return github.OwnIssue{Issue: github.Issue{Repo: "datacoves/snowcap", Number: n, Title: fmt.Sprintf("Docs page %d", n), State: "OPEN"}}
+	}
+	m := feed(newModel(&fakeClient{}, scheduler.BoardView{Cap: 5}), mineGitHubMsg{issues: []github.OwnIssue{own(101), own(102)}})
+	out := viewAt(m, 100)
+	for _, id := range []string{"snowcap#101", "snowcap#102"} {
+		if l := lineOf(t, out, id); !strings.HasSuffix(strings.TrimRight(l, " "), "up next  snowcap") {
+			t.Errorf("the %s row must show its Repo 2 cells after its status: %q", id, l)
 		}
 	}
 }

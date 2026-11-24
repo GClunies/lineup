@@ -88,7 +88,7 @@ func (m Model) rowAt(x, y int) string {
 	if x >= w {
 		return ""
 	}
-	rows := m.rowLines(w)
+	rows := m.rowLines(w, h)
 	texts := make([]string, len(rows))
 	for i, r := range rows {
 		texts[i] = r.text
