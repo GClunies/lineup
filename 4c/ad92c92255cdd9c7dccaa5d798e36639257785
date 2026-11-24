@@ -1,0 +1,34 @@
+internal/github/github_test.go
+  s_6fdf04ba241df3::t_40c1816c0d4bf1 202-213
+internal/github/client.go
+  s_6fdf04ba241df3::t_0f333f8d3ce05c 116
+  s_6fdf04ba241df3::t_a6dac39c5c9574 418
+  s_6fdf04ba241df3::t_9717a20f54acb3 63-67
+  s_6fdf04ba241df3::t_3675fb6cf73f14 224-230
+  s_6fdf04ba241df3::t_69300565658151 201-218
+  s_6fdf04ba241df3::t_c6edd6acbd54e3 231-232
+internal/github/issues_test.go
+  s_6fdf04ba241df3::t_80543ec3a0f4f3 143-147
+  s_6fdf04ba241df3::t_ca72614249fa70 138-142,148-160
+  s_6fdf04ba241df3::t_08ea33668dc8f1 60-67
+internal/github/issues.go
+  s_6fdf04ba241df3::t_0012df55caeace 83-97
+internal/github/testdata/merged.json
+  s_6fdf04ba241df3::t_4cc4bc64ae9afd 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4cad92c92255cdd9c7dccaa5d798e36639257785",
+  "prompts": {},
+  "sessions": {
+    "s_6fdf04ba241df3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1e03a85-2a6e-48c0-9cd0-da25aaf02f13",
+        "model": "unknown"
+      },
+      "human_author": null
+    }
+  }
+}
