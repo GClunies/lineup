@@ -233,3 +233,16 @@ func TestABoardWithoutAHookSkipsThatReport(t *testing.T) {
 		t.Errorf("with no Notify, the Board reported %v, want [2]", got)
 	}
 }
+
+// Rex titles a toast's banner with the OSC 777 title, then names the session,
+// my-lineup. An empty title keeps lineup to that one name (PROD-BOARD-023).
+func TestToastNamesLineupOnce(t *testing.T) {
+	var out bytes.Buffer
+	text := "1 slot free, next ENG-611: Move the retry job"
+	if err := Toast(&out, text); err != nil {
+		t.Fatalf("Toast: %v", err)
+	}
+	if got, want := out.String(), "\x1b]777;notify;;"+text+"\x07"; got != want {
+		t.Errorf("Toast wrote %q, want %q", got, want)
+	}
+}

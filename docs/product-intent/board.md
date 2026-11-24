@@ -89,3 +89,7 @@ While the Board cannot reach the Scheduler, it shows the view that the Scheduler
 ## PROD-BOARD-022: A Task names its Repo by the Repo's folder
 
 The Repo of a Task on the Board, in `lineup ls`, and in `lineup show` is the folder name of the Repo, for example `data`. If two Repos of Tasks on the Board share a folder name, each name adds the parent folder, for example `acme-data`.
+
+## PROD-BOARD-023: A toast names lineup once
+
+Each toast from the Board names lineup once. Its banner shows the `my-lineup` session name and then the toast text, with no `lineup` title above them.
