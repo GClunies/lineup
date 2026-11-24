@@ -1,0 +1,20 @@
+internal/linear/client.go
+  s_bf72fd9c4c96b6::t_0a44bac83103b4 15
+  s_bf72fd9c4c96b6::t_506b1c9fcbe71b 345-347,349-351,353
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ffa1447d893b332ad4eac9249a56316df0ccdc4",
+  "prompts": {},
+  "sessions": {
+    "s_bf72fd9c4c96b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d110540c-12b1-4dbe-8598-a4176736437e",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
