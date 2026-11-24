@@ -85,6 +85,17 @@ func TestTheCatalogListsEachDecodedKey(t *testing.T) {
 		if k.Doc == "" || k.Default == "" || k.Restart == "" || len(k.Levels) == 0 {
 			t.Errorf("%s: an entry needs a doc, a default, a restart, and its levels: %+v", k.Path, k)
 		}
+		if len(k.Group) == 0 || slices.Contains(k.Group, "") || k.Label == "" {
+			t.Errorf("%s: an entry needs a group and a label: %q %q", k.Path, k.Group, k.Label)
+		}
+		// Each placeholder names a group or the label, so that two concrete
+		// keys of one entry never share a place. A queue takes its own name.
+		for _, p := range strings.Split(k.Path, ".") {
+			named := strings.Contains(strings.Join(append(slices.Clone(k.Group), k.Label), "\x00"), p)
+			if isPlaceholder(p) && k.Type != TypeQueue && !named {
+				t.Errorf("%s: no group or label names %s", k.Path, p)
+			}
+		}
 	}
 	for path := range where {
 		if !slices.ContainsFunc(Catalog, func(k Key) bool { return placeholdersErased(k.Path) == path }) {
@@ -157,6 +168,33 @@ func TestEncodeWritesTheTOMLOfEachType(t *testing.T) {
 	} {
 		if got, err := key(c.path).Encode(c.in); err == nil {
 			t.Errorf("%s: Encode(%q) = %s, want an error", c.path, c.in, got)
+		}
+	}
+}
+
+func TestEachKeyHasAPlainPlace(t *testing.T) {
+	for path, want := range map[string]string{
+		"linear.acme.status.ENG.in_review": "Linear › Workspace acme › Statuses for team ENG › In review",
+		"linear.acme.client_id":            "Linear › Workspace acme › OAuth app",
+		"linear_client_id":                 "Linear › OAuth app",
+		"github.labels.started":            "GitHub labels › At start",
+		"github.labels.backlog":            "GitHub labels › Backlog",
+		"stage.default.model":              "Workers › Every Stage › Model",
+		"stage.ci_debug.skill":             "Workers › Stage CI debug › Skill",
+		"review_bot.min_review_score":      "Review bot › Lowest pass score",
+	} {
+		k, ok := keyFor(path)
+		if !ok {
+			t.Fatalf("no entry for %s", path)
+		}
+		group, label := k.place(path)
+		if got := strings.Join(append(group, label), " › "); got != want {
+			t.Errorf("%s is at %q, want %q", path, got, want)
+		}
+	}
+	for _, ev := range trackerEvents {
+		if eventNames[ev] == "" {
+			t.Errorf("the event %s has no plain name", ev)
 		}
 	}
 }
