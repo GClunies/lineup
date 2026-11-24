@@ -1,0 +1,133 @@
+cmd/lineup/cli.go
+  s_3f62d37256047d::t_dd79e3c433b95c 39,436-451
+cmd/lineup/close_test.go
+  s_3f62d37256047d::t_790a16b0728f4f 1-32
+cmd/lineup/decide.go
+  s_3f62d37256047d::t_5ae004e81dcae9 28-31,39
+cmd/lineup/hub.go
+  s_3f62d37256047d::t_3432494f22332e 668
+cmd/lineup/procargs_darwin.go
+  s_3f62d37256047d::t_bb7dd252556935 1-33
+cmd/lineup/procargs_other.go
+  s_3f62d37256047d::t_3e83a154c56ce4 1-22
+cmd/lineup/procargs_test.go
+  s_3f62d37256047d::t_c25db36d5ac77b 1-44
+cmd/lineup/serve.go
+  s_3f62d37256047d::t_ba76bfed75cce9 117-125
+cmd/lineup/wire.go
+  s_3f62d37256047d::t_9fa44aeaf1ed0f 111-112,209,273-274,764-768
+cmd/lineup/wire_test.go
+  s_3f62d37256047d::t_6651a23c33c58a 13,137-152,328
+docs/architecture-intent/rex.md
+  s_3f62d37256047d::t_ce999d356dc447 73,75
+docs/architecture-intent/worktrees.md
+  s_3f62d37256047d::t_0bbfccf21ff885 35-40
+docs/product-intent/board.md
+  s_3f62d37256047d::t_5bf410edeab1d0 23,31,55,92-107
+docs/product-intent/configuration.md
+  s_3f62d37256047d::t_d5047445ec25b6 11,15
+docs/product-intent/issues.md
+  s_3f62d37256047d::t_d3e6b39a355e06 7
+docs/product-intent/lifecycle.md
+  s_3f62d37256047d::t_1c883079b722ab 84-87
+docs/product-intent/tabs.md
+  s_3f62d37256047d::t_bdc7479a52b14c 31,76-83
+docs/product-intent/workers.md
+  s_3f62d37256047d::t_4c03d5a0fb3e51 63
+go.mod
+  s_6fdf04ba241df3::t_23b1eda2fdf885 13
+internal/board/github.go
+  s_3f62d37256047d::t_fb52c3f6c0dfe3 63
+internal/board/github_test.go
+  s_3f62d37256047d::t_5dd5a09e4f085a 4,266-315
+internal/board/groups.go
+  s_3f62d37256047d::t_4b39b4d027716b 18-19,21-24,33-41,46,60,66-67,71-81
+internal/board/issues.go
+  s_3f62d37256047d::t_3af8744854c36b 91,110,118,175-178,180-185,249-264
+internal/board/issues_test.go
+  s_3f62d37256047d::t_9028e2cf5a1828 78,83,137,193-194,234,252,387,449
+internal/board/model.go
+  s_3f62d37256047d::t_934220de88255f 66-68,237-240,242-248,251,281-290,308-310,322-326,338-346,543-545
+internal/board/mouse.go
+  s_3f62d37256047d::t_d3925e201abcc8 58-59,69-71,95
+internal/board/run.go
+  s_3f62d37256047d::t_09e31b82869f11 53-55,57
+internal/board/status_test.go
+  s_3f62d37256047d::t_e0a1d38d105e25 236-248
+internal/board/team_test.go
+  s_3f62d37256047d::t_fdd44ccedebe49 5,201-412
+internal/board/view.go
+  s_3f62d37256047d::t_7265ad094ee683 7,87,90-93,238-239,242-246,265-284,333-335,370,373,389,391,425,428-431,490-494,496,500-507,534-546,573,575-591,621,631-635,637-647,703
+internal/board/view_test.go
+  s_3f62d37256047d::t_f9cb3984e3c65c 4,16-17,351-476
+internal/config/config.go
+  s_3f62d37256047d::t_510f2ecbaa44e9 18,127,132,195-197,199-200,203-221,225-228,230,232,237-266,752-756,855-871,875,938-941,973-974
+internal/config/config_test.go
+  s_3f62d37256047d::t_d66a57b0835359 314,1070-1092,1094-1110,1112-1123,1127-1145,1147-1152,1155-1157
+internal/config/migrate.go
+  s_3f62d37256047d::t_3ef076b3a05234 646-648
+internal/config/migrate_test.go
+  s_3f62d37256047d::t_de32692e91e064 221-306
+internal/github/client.go
+  s_3f62d37256047d::t_ac60ca17e16a46 41-42,112,202-209,388
+internal/github/own.go
+  s_3f62d37256047d::t_e7ab748db193b6 65-68,94,98-99,103,106
+internal/github/own_test.go
+  s_3f62d37256047d::t_8f206e6590f33d 85-86,93
+internal/github/testdata/own_blockers.json
+  s_3f62d37256047d::t_29c60728eb3c35 1
+internal/linear/client.go
+  s_3f62d37256047d::t_d64f32db0d33a9 15,345-347,349-351,353
+internal/rex/client.go
+  s_3f62d37256047d::t_f9e52a007aa7e7 336-345,348,355,359,363,365
+internal/rex/client_test.go
+  s_3f62d37256047d::t_96f289a751ef3b 160-161,163-171,175
+internal/rex/integration_test.go
+  s_3f62d37256047d::t_ca7b8150cbda58 198-199
+internal/scheduler/add_test.go
+  s_3f62d37256047d::t_8071d5ec190268 174-195
+internal/scheduler/api.go
+  s_3f62d37256047d::t_4402585435517c 211,302-328
+internal/scheduler/merged_test.go
+  s_3f62d37256047d::t_b78f8ee19cfcba 6-7,30-57,66,110-119,121-127,129,218,226-228,264-266,275-277,284-356
+internal/scheduler/ports.go
+  s_3f62d37256047d::t_89c62f92cb93ee 25-31,75-79,135-139,313-326
+internal/scheduler/record.go
+  s_3f62d37256047d::t_e5b619394f565d 4,86,88-92,479
+internal/scheduler/review_test.go
+  s_3f62d37256047d::t_da5618188b7b13 1137-1139,1141-1161,1163,1165-1166
+internal/scheduler/scheduler.go
+  s_3f62d37256047d::t_114e3ca00402a3 298-300,302-306,313,317-326,547,580-584,586-587,589,591,593-603,895-897,1100
+internal/scheduler/scheduler_test.go
+  s_3f62d37256047d::t_4226ae1e0d440f 45-47,52,218,480-488,567-568,628-630,633,637-643,749-753,993-995,1019-1021,1067,1097-1099
+internal/scheduler/side.go
+  s_3f62d37256047d::t_a2db3e0129d6a5 7,52-57,60,67-72,149
+internal/worktree/worktree.go
+  s_3f62d37256047d::t_37642aa694fcc7 56-57,60,64,66,68-69,72-89,107-113,117-129,131
+internal/worktree/worktree_test.go
+  s_3f62d37256047d::t_3b999772aaf060 92,148-181,195,202,209-229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f414bd585963c59aa9af81c52dee73af09df7691",
+  "prompts": {},
+  "sessions": {
+    "s_3f62d37256047d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "918a36da-c6bf-4dae-acbd-698584050738",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_6fdf04ba241df3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1e03a85-2a6e-48c0-9cd0-da25aaf02f13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
