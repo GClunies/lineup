@@ -218,6 +218,47 @@ wip_cap = 1
 	}
 }
 
+// A file in the current form keeps its Repo tables when a layer key at the
+// top level moves to [defaults] (PROD-CONFIG-006).
+func TestMigrateMovesALayerKeyBesideTheRepoTables(t *testing.T) {
+	old := `roots = ["~/repos"]
+
+[defaults]
+wip_cap = 3
+
+[repos."crexi/data"]
+tracker = "linear"
+teams = ["PD"]
+
+# The bar of every Repo.
+[landing_bar]
+threads = "resolved" # mine
+`
+	path := write(t, filepath.Join(t.TempDir(), "config.toml"), old)
+	if msg, err := Migrate(path); err != nil || !strings.HasPrefix(msg, "Rewrote "+path) {
+		t.Fatalf("Migrate = %q %v", msg, err)
+	}
+	want := `roots = ["~/repos"]
+
+[defaults]
+wip_cap = 3
+
+[repos."crexi/data"]
+tracker = "linear"
+teams = ["PD"]
+
+# The bar of every Repo.
+[defaults.landing_bar]
+threads = "resolved" # mine
+`
+	if got, _ := os.ReadFile(path); string(got) != want {
+		t.Errorf("migrated file:\n%s\nwant\n%s", got, want)
+	}
+	if _, err := Load(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMigrateRefusesWhatNoTableCanReplace(t *testing.T) {
 	home := fixtureHome(t)
 	gitCheckout(t, home, "deep/a/b/c", "")

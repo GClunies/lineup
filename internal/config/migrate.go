@@ -643,6 +643,9 @@ func rewrite(items []item, repos []oldRepo, roots []string) (string, error) {
 				}
 				section = 'r'
 				it.lines = replaceLast(it.lines, "[repos."+strconv.Quote(repos[entry].key)+"]"+after)
+			case head == "repos" && len(repos) == 0:
+				// A file with no [[repos]] tables has its Repo tables in the current form.
+				section = 0
 			case head == "repos":
 				if entry < 0 {
 					return "", fmt.Errorf("line %d: a repos table comes before the first [[repos]] table", it.line)
