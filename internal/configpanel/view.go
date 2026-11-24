@@ -294,14 +294,15 @@ func (m Model) detail() []string {
 	if !ok {
 		return nil
 	}
-	// The pane keeps the height of the tallest detail of the tab, so the
-	// tree does not jump as the selection moves.
+	// The pane keeps the height of the tallest detail of the tab, up to a
+	// third of the screen, so the tree does not jump as the selection moves
+	// and keeps most of a short screen.
 	tallest := 0
 	for i := range m.all {
 		tallest = max(tallest, len(m.detailOf(&node{set: &m.all[i]})))
 	}
 	out := m.detailOf(r.node)
-	for len(out) < min(tallest, m.height/2) {
+	for len(out) < min(tallest, m.height/3) {
 		out = append(out, "")
 	}
 	return out

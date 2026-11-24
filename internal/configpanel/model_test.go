@@ -593,6 +593,20 @@ func TestThePanelFitsTheTerminal(t *testing.T) {
 	}
 }
 
+func TestAShortTerminalShowsEveryClosedGroup(t *testing.T) {
+	p := newPanel(t, fixture)
+	next, _ := p.m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	p.m = next.(Model)
+	p.press("tab")
+	tree := strings.SplitN(p.view(), "SET IN", 2)[1]
+	tree = strings.SplitN(tree, "─", 2)[0]
+	for _, g := range []string{"Repo", "Capacity", "Loop budgets", "Review bot", "Merge requirements", "After a merge", "Workers"} {
+		if !strings.Contains(tree, "▸ "+g) {
+			t.Errorf("80x24: the tree does not show the group %s:\n%s", g, p.view())
+		}
+	}
+}
+
 func TestTabAndTheRepoPickerKeepTheSelectedKey(t *testing.T) {
 	p := newPanel(t, fixture)
 	p.to(t, "wip_cap")
