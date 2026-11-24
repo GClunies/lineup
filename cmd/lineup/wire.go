@@ -352,7 +352,7 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec, prompt
 	if err != nil {
 		return nil, nil, err
 	}
-	argv, env := claude.Command(res.Claude, dir, res.Stages[w.Kind.FirstStage()], w.Conversation, w.Name, prompt, w.ReadOnly, addDirs...)
+	argv, env := claude.Command(res.Claude, dir, res.Stages[w.Kind.FirstStage()], w.Kind, w.Conversation, w.Name, prompt, w.ReadOnly, addDirs...)
 	return argv, env, nil
 }
 
