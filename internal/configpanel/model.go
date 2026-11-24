@@ -367,6 +367,8 @@ func (m Model) startEdit(pickLevel, remove bool) (tea.Model, tea.Cmd) {
 		return m.say("The file does not load, so the panel only shows it. Fix the file, then open the panel again.", true), nil
 	case s.Key.Type == config.TypeQueue:
 		return m.say("Edit the review queues in the file: "+m.file.Path, true), nil
+	case s.Off != "":
+		return m.say(s.Label+": "+s.Off+". The panel does not edit it here.", true), nil
 	}
 	m.edit, m.remove = s, remove
 	if remove {

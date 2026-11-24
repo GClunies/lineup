@@ -127,6 +127,8 @@ func (m Model) table(h int) []string {
 		var c cells
 		marker := "  "
 		switch {
+		case r.set != nil && r.set.Off != "":
+			c.value = r.set.Off
 		case r.set != nil:
 			c.value, c.in = plain(r.set.Value), r.set.SetIn()
 		case m.isOpen(r.node):
@@ -160,7 +162,7 @@ func (m Model) table(h int) []string {
 			rows[i] = selRow.Render("▶ " + line)
 		case r.set == nil:
 			rows[i] = "  " + bold.Render(cell(c.name, nameW)) + "  " + dim.Render(cell(c.value, valW)+"  "+in)
-		case r.set.By == nil:
+		case r.set.By == nil || r.set.Off != "":
 			rows[i] = dim.Render("  " + line)
 		default:
 			rows[i] = "  " + line
@@ -175,7 +177,8 @@ func (m Model) table(h int) []string {
 // at most three and no subgroup, else how many of them a level sets. in is
 // the place that sets them all, or mixed when they differ.
 func summary(n *node) (value, in string) {
-	leaves := n.leaves()
+	// A setting that does not apply here is left out.
+	leaves := slices.DeleteFunc(n.leaves(), func(s config.Setting) bool { return s.Off != "" })
 	var values []string
 	set, small := 0, len(leaves) <= 3
 	for i, s := range leaves {
@@ -319,6 +322,9 @@ func (m Model) detailOf(r *node) []string {
 	s := *r.set
 	crumbs := slices.Concat(m.crumbs(s), []string{s.Label})
 	out := stack(bold.Render(" "+strings.Join(crumbs, " › ")), m.wrap(lipgloss.NewStyle(), s.Key.Doc))
+	if s.Key.Type == config.TypeNote {
+		return out
+	}
 
 	type level struct{ name, value string }
 	def := s.Key.Default
@@ -409,8 +415,11 @@ func (m Model) footer() []string {
 		keys = "the restart runs"
 	default:
 		keys = "enter edit · l set at level · x remove · ← group · / filter · q quit"
-		if r, ok := m.selectedRow(); ok && r.set == nil {
+		switch r, ok := m.selectedRow(); {
+		case ok && r.set == nil:
 			keys = "→ or enter open · ← close · / filter · q quit"
+		case ok && r.set.Off != "":
+			keys = "← group · / filter · q quit"
 		}
 	}
 	return m.wrap(dim, keys)

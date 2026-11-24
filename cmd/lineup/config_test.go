@@ -148,6 +148,9 @@ func TestConfigKeysNamesTheValueAndTheLevelForARepo(t *testing.T) {
 			t.Errorf("%s = %+v, want %+v", want.Path, s, want)
 		}
 	}
+	if _, ok := got["stage.ci_debug"]; ok {
+		t.Error("--repo lists the note of CI debug, which is no key")
+	}
 	if v.Repo != "acme/api" || len(v.Keys) != len(config.Catalog) {
 		t.Errorf("repo %q with %d keys, want acme/api with the catalog", v.Repo, len(v.Keys))
 	}

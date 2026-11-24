@@ -57,3 +57,7 @@ The config panel names each level by a plain name: `built-in` for the default, `
 ## PROD-CONFIG-014: A selected group says what it is
 
 The selected top group in the config panel shows a one-line doc above the rows that it holds. The doc names what the group is and how it relates to the other groups. For example, Merge requirements is the Landing bar, and the review bot's score is one more requirement.
+
+## PROD-CONFIG-015: A row that does not apply says why
+
+The config panel shows a setting that does not apply as a dim row that says why, and it does not edit that row. For a Repo whose Tracker is not linear, Linear teams says `only with the Linear Tracker`. Stage CI debug and Stage Responding each start with the row Model and effort, which says `those of Working (same Worker)`. A group leaves these rows out of its sum.

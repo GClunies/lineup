@@ -657,3 +657,70 @@ func TestASelectedGroupShowsItsDoc(t *testing.T) {
 		t.Errorf("the Global tab shows no doc of its defaults:\n%s", p.view())
 	}
 }
+
+// TestARowThatDoesNotApplyShowsWhy checks the dim rows that say why a setting
+// does not apply: Linear teams of a Repo whose Tracker is not linear, and the
+// model and effort of a Stage that runs in the Worker of Working. Neither
+// row edits, and a group leaves them out of its sum.
+func TestARowThatDoesNotApplyShowsWhy(t *testing.T) {
+	text := strings.Replace(fixture, "wip_cap = 2\n", "wip_cap = 2\ntracker = \"github\"\n", 1)
+	p := newPanel(t, text)
+	p.press("tab")
+	if !p.has("▸ Repo github · none mixed") {
+		t.Errorf("the Repo group does not leave Linear teams out:\n%s", p.view())
+	}
+	if got := p.rowLine(t, "teams"); got != "Linear teams only with the Linear Tracker" {
+		t.Errorf("row %q, want the Tracker that Linear teams needs", got)
+	}
+	p.press("enter")
+	if v := p.view(); !strings.Contains(v, "Linear teams: only with the Linear Tracker. The panel does not edit it here.") || p.m.mode != modeList {
+		t.Errorf("enter on Linear teams:\n%s", v)
+	}
+	lin := newPanel(t, fixture)
+	lin.press("tab")
+	if got := lin.rowLine(t, "teams"); got != "Linear teams none built-in" {
+		t.Errorf("with the Linear Tracker, row %q", got)
+	}
+
+	note := "Model and effort those of Working (same Worker)"
+	for _, stage := range []string{"ci_debug", "responding"} {
+		if got := p.rowLine(t, "stage."+stage); got != note {
+			t.Errorf("Stage %s: row %q, want %q", stage, got, note)
+		}
+	}
+	p.to(t, "stage.working.model")
+	p.to(t, "stage.reviewing.model")
+	lines := strings.Split(p.view(), "\n")
+	notes := 0
+	for i, l := range lines {
+		if strings.Join(strings.Fields(strings.TrimPrefix(l, "▶")), " ") != note {
+			continue
+		}
+		notes++
+		if prev := strings.TrimSpace(lines[i-1]); prev != "▾ Stage CI debug" && prev != "▾ Stage Responding" {
+			t.Errorf("the note follows %q, want the title of its Stage", prev)
+		}
+	}
+	if notes != 2 {
+		t.Errorf("%d notes, want one each for CI debug and Responding:\n%s", notes, p.view())
+	}
+	p.to(t, "stage.ci_debug")
+	for _, want := range []string{"Workers › Stage CI debug › Model and effort",
+		"CI debug runs in the Worker that Working started, so it keeps the model and the effort of that Worker. Set them under Stage Working or Every Stage.",
+		"← group · / filter · q quit"} {
+		if !p.has(want) {
+			t.Errorf("the detail of the note has no line %q:\n%s", want, p.view())
+		}
+	}
+	if v := p.view(); strings.Contains(v, "File key:") {
+		t.Errorf("the note names a file key:\n%s", v)
+	}
+	p.press("enter", "l", "x")
+	if p.file(t) != text || p.m.mode != modeList {
+		t.Errorf("enter, l, and x on the note:\n%s", p.view())
+	}
+	p.press("tab")
+	if got := p.rowLine(t, "stage.responding"); got != note {
+		t.Errorf("the Global tab: row %q, want %q", got, note)
+	}
+}

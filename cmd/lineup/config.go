@@ -81,6 +81,9 @@ func cmdConfigKeys(args []string, out io.Writer) error {
 	}
 	if *repo != "" {
 		for _, s := range f.Settings(*repo) {
+			if s.Key.Type == config.TypeNote {
+				continue
+			}
 			v.Settings = append(v.Settings, configSetting{Path: s.Path, Group: s.Group, Label: s.Label, Value: s.Value, Source: s.Source()})
 		}
 	}

@@ -47,6 +47,9 @@ const (
 	// TypeQueue is a [[review.queues]] entry, which the catalog shows and
 	// does not edit.
 	TypeQueue ValueType = "queue"
+	// TypeNote is a row of the panel that is no key of the file. It says why
+	// a group lacks a key, as the model of a Stage that keeps its Worker.
+	TypeNote ValueType = "note"
 )
 
 // The restarts that apply a change. The Board and the Hub read some keys,
@@ -76,6 +79,8 @@ type Key struct {
 	Doc     string `json:"doc"`
 	// Restart is the command that applies a change of the key.
 	Restart string `json:"restart"`
+	// Tracker is the one Tracker that the key works with, or "" for each.
+	Tracker string `json:"tracker,omitempty"`
 }
 
 // Group is a top group of the config panel, and its doc: what the group is,
@@ -178,7 +183,7 @@ var Catalog = []Key{
 		Levels: []Level{LevelOwner, LevelRepo}, Type: TypeEnum, Values: TrackerKinds, Default: "none", Restart: RestartAll,
 		Doc: "The one Tracker whose Issues the Repo takes. A Repo with none takes only ad hoc Tasks."},
 	{Path: "teams", Group: []string{"Repo"}, Label: "Linear teams",
-		Levels: []Level{LevelRepo}, Type: TypeList, Default: "none", Restart: RestartAll,
+		Levels: []Level{LevelRepo}, Type: TypeList, Default: "none", Restart: RestartAll, Tracker: "linear",
 		Doc: "The Linear teams whose Issues map to the Repo. It works only with the Linear Tracker."},
 	{Path: "prefix", Group: []string{"Repo"}, Label: "ID prefix",
 		Levels: []Level{LevelRepo}, Type: TypeString, Default: "none", Restart: RestartAll,
@@ -268,6 +273,32 @@ var placeNames = map[string]func(part string) string{
 
 // eventNames are the plain names of the lifecycle events of a Tracker map.
 var eventNames = map[string]string{"started": "At start", "in_review": "In review", "merged": "Merged", "closed": "Closed"}
+
+// trackerNames are the plain names of the Trackers.
+var trackerNames = map[string]string{"linear": "Linear", "github": "GitHub", "local": "Local"}
+
+// workerNotes give a row for each agent Stage that runs in the Worker of an
+// earlier Stage, in place of the model and the effort that it cannot set
+// (PROD-WORKER-002, PROD-CONFIG-015).
+func workerNotes() []Setting {
+	var out []Setting
+	for _, st := range lifecycle.Stages() {
+		if !st.Agent() || st.StartsWorker() {
+			continue
+		}
+		first := lifecycle.KindBuild.FirstStage()
+		if !lifecycle.KindBuild.Has(st) {
+			first = lifecycle.KindReview.FirstStage()
+		}
+		k := Key{Path: "stage." + st.Key(), Group: []string{"Workers", stageTitle(st.Key())}, Label: "Model and effort",
+			Levels: layerLevels, Type: TypeNote,
+			Doc: fmt.Sprintf("%s runs in the Worker that %s started, so it keeps the model and the effort of that Worker. Set them under %s or %s.",
+				st, first, stageTitle(first.Key()), stageTitle("default"))}
+		out = append(out, Setting{Key: k, Path: k.Path, Group: k.Group, Label: k.Label,
+			Off: "those of " + first.String() + " (same Worker)"})
+	}
+	return out
+}
 
 // stageTitle is the title of the group of a [stage.<key>] table.
 func stageTitle(key string) string {

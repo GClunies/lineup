@@ -98,6 +98,9 @@ type Setting struct {
 	// [stage.<key>] table with no value takes the one of [stage.default]
 	// (ARCH-CONFIG-002).
 	From string
+	// Off says why the setting does not apply on the tab, or "". The panel
+	// shows it in place of the value and does not edit the setting.
+	Off string
 	// Layers lists each place that the value can come from, lowest first:
 	// each level that sets the stage.default key of a stage key, then each
 	// level where Path itself can sit. The last one that sets a value is the
@@ -199,7 +202,8 @@ func (s Setting) Source() string {
 // layers it: [defaults], then the owner/* table, then the owner/repo table.
 // The tables match the Repo key in any case, and a table that the file does
 // not have is a level that sets nothing. It reads Raw, so it works on a file
-// that does not load.
+// that does not load. A TypeNote row leads the group of each Stage that keeps
+// the model of its Worker.
 func (f *File) Settings(repoKey string) []Setting {
 	layers := []Where{{Level: LevelDefaults}}
 	if repoKey != "" {
@@ -211,7 +215,8 @@ func (f *File) Settings(repoKey string) []Setting {
 			layers = append(layers, w)
 		}
 	}
-	var out []Setting
+	// The notes come first, so each one leads the group of its Stage.
+	out := workerNotes()
 	for _, k := range Catalog {
 		var at []Where
 		switch {
@@ -238,6 +243,14 @@ func (f *File) Settings(repoKey string) []Setting {
 	// The keys of one Stage go together, default first, then in lifecycle
 	// order. The stage keys are the last of the catalog.
 	slices.SortStableFunc(out, func(a, b Setting) int { return stageRank(a.Path) - stageRank(b.Path) })
+	// A key of one Tracker does not apply to a Repo with another Tracker.
+	if t := slices.IndexFunc(out, func(s Setting) bool { return s.Path == "tracker" }); t >= 0 {
+		for i, s := range out {
+			if s.Key.Tracker != "" && out[t].Value != s.Key.Tracker {
+				out[i].Off = "only with the " + trackerNames[s.Key.Tracker] + " Tracker"
+			}
+		}
+	}
 	// With no min_review_score, the gate takes the top score of the bot.
 	name := slices.IndexFunc(out, func(s Setting) bool { return s.Path == "review_bot.name" })
 	for i, s := range out {
