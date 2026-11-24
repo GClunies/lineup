@@ -1,0 +1,50 @@
+internal/config/repoinit_test.go
+  s_750b1f65664701::t_9c1d1cdb57f477 95
+  s_750b1f65664701::t_b9a2a741e5cb82 27
+  s_750b1f65664701::t_a4ecb5a934a94a 177-184
+  s_750b1f65664701::t_e62c38f934af19 99
+  s_750b1f65664701::t_e137fcd7f5d831 126-128
+  s_750b1f65664701::t_e82cd6ff7b8395 251-277
+  s_750b1f65664701::t_a5b6a9c4c47b57 52,58
+cmd/lineup/agent/CLAUDE.md
+  s_750b1f65664701::t_eb3ef30d78781b 56-57
+  s_750b1f65664701::t_b120d7a3fe16f8 73
+  s_750b1f65664701::t_c648d57ee154d5 58
+cmd/lineup/repo.go
+  s_750b1f65664701::t_06482e3a65ddd7 235-241
+  s_750b1f65664701::t_6ac72998437ee3 68-69
+  s_750b1f65664701::t_8331b1cf90de91 65-67,70-71
+internal/config/config.go
+  s_750b1f65664701::t_c670ae8db4aa3b 606,614,616-618
+  s_750b1f65664701::t_bbf9992a3c8168 628-684
+cmd/lineup/main.go
+  s_750b1f65664701::t_d5e35471ffe9b7 43
+cmd/lineup/repo_test.go
+  s_750b1f65664701::t_8ebd149556bd90 176,179-180
+  s_750b1f65664701::t_938137e91903b5 122
+  s_750b1f65664701::t_898b85a014ad99 181
+cmd/lineup/hub_test.go
+  s_750b1f65664701::t_0937caa44155a8 123-141
+docs/product-intent/orchestrator.md
+  s_750b1f65664701::t_4f0e65bb0cdeaa 43
+internal/config/repoinit.go
+  s_750b1f65664701::t_997abdd94bf4f7 27
+docs/product-intent/repos.md
+  s_750b1f65664701::t_def363bde94d7d 52-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "99df96291a089c3c0f8e794f150475e36c953f1f",
+  "prompts": {},
+  "sessions": {
+    "s_750b1f65664701": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "391a8ca9-c9b9-46a7-89e0-0dbc843223c9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
