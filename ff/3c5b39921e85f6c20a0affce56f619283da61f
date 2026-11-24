@@ -1,0 +1,26 @@
+internal/worktree/review.go
+  s_6fdf04ba241df3::t_84fdb1f46a32bf 75
+  s_6fdf04ba241df3::t_31f6da898438de 32-42,46-66
+  s_6fdf04ba241df3::t_931e4b66e6cfdf 43-45
+  s_6fdf04ba241df3::t_1290bd170a4765 17-19
+internal/worktree/worktree.go
+  s_6fdf04ba241df3::t_182f747e8bae18 83-88,91,93
+internal/worktree/qa_test.go
+  s_6fdf04ba241df3::t_7b08641c897bfe 1-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ff3c5b39921e85f6c20a0affce56f619283da61f",
+  "prompts": {},
+  "sessions": {
+    "s_6fdf04ba241df3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1e03a85-2a6e-48c0-9cd0-da25aaf02f13",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
