@@ -331,6 +331,33 @@ func TestLineupShowPrintsTheLandingBar(t *testing.T) {
 	}
 }
 
+// lineup show prints the files that a build Task changed after the Landing
+// bar, and no block when the Task changed none.
+func TestLineupShowPrintsTheChangedFiles(t *testing.T) {
+	head := "ENG-590  Add billing model\nReady to land in data (ada/eng-590-billing)\nLanding bar\n  ✓ required checks passed\n"
+	for _, tc := range []struct {
+		files []string
+		want  string
+	}{
+		{[]string{"README.md", "models/billing.sql"}, head + "Changed files\n  README.md\n  models/billing.sql\nusage  unknown\n"},
+		{nil, head + "usage  unknown\n"},
+	} {
+		data, err := json.Marshal(scheduler.TaskDetail{TaskView: scheduler.TaskView{ID: "ENG-590", Repo: "data", Stage: "Ready to land", Title: "Add billing model"},
+			Branch: "ada/eng-590-billing", Bar: []string{"✓ required checks passed"}, Files: tc.files})
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, _ := fakeScheduler(t, map[string]scheduler.Response{"show": {OK: true, Data: data}})
+		var out bytes.Buffer
+		if err := cmdShow(c, []string{"ENG-590"}, &out); err != nil {
+			t.Fatal(err)
+		}
+		if out.String() != tc.want {
+			t.Errorf("files %q: out = %q, want %q", tc.files, out.String(), tc.want)
+		}
+	}
+}
+
 func reviewsReply(t *testing.T, v scheduler.ReviewsView) scheduler.Response {
 	data, err := json.Marshal(v)
 	if err != nil {

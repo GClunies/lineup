@@ -54,7 +54,10 @@ type TaskDetail struct {
 	TaskView
 	Branch string `json:"branch"`
 	// Bar is the Landing bar's checklist, one line for each item.
-	Bar    []string      `json:"bar,omitempty"`
+	Bar []string `json:"bar,omitempty"`
+	// Files are the files that a build Task's worktree changed since its
+	// DiffBase, relative to the worktree, sorted.
+	Files  []string      `json:"files,omitempty"`
 	Events []store.Event `json:"events"`
 }
 
@@ -341,17 +344,32 @@ func (s *Scheduler) signal(id string, sig lifecycle.Signal) error {
 	return s.with(id, func(r *Record) error { return s.apply(r, sig, "") })
 }
 
+// show is the detail of the Task. A build Task's detail lists the files that
+// its worktree changed, and none when the folder is gone (PROD-WORKER-016).
+// git reads them outside the loop, so a slow git holds up no other Task.
 func (s *Scheduler) show(ctx context.Context, id string) (TaskDetail, error) {
 	var d TaskDetail
 	var w WorkerSpec
+	var build string // the worktree of a build Task
 	err := s.with(id, func(r *Record) error {
 		d.TaskView, d.Branch, d.Bar, w = r.view(), r.Branch, r.checklist(), r.usageSpec()
+		if r.Review == nil && r.Kind != lifecycle.KindQA {
+			build = r.Worktree
+		}
 		return nil
 	})
 	if err != nil {
 		return d, err
 	}
 	d.Usage = s.d.Harness.Usage(ctx, []WorkerSpec{w})[0]
+	if build != "" {
+		switch files, err := s.d.Worktrees.Changed(ctx, build); {
+		case err == nil:
+			d.Files = files
+		case !errors.Is(err, ErrNoWorktree):
+			s.d.Log.Warn("changed files", "task", d.ID, "err", err)
+		}
+	}
 	d.Events, err = s.d.Store.Events(d.ID)
 	return d, err
 }

@@ -355,6 +355,12 @@ func cmdShow(c scheduler.Client, args []string, out io.Writer) error {
 			fmt.Fprintln(out, "  "+line)
 		}
 	}
+	if len(d.Files) > 0 {
+		fmt.Fprintln(out, "Changed files")
+		for _, f := range d.Files {
+			fmt.Fprintln(out, "  "+f)
+		}
+	}
 	for _, line := range d.Usage.Lines() {
 		fmt.Fprintln(out, line)
 	}

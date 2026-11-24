@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -102,6 +103,30 @@ func DiffBase(ctx context.Context, dir string) (string, error) {
 		branch = "origin/main"
 	}
 	return git(ctx, dir, "merge-base", "HEAD", branch)
+}
+
+// Changed lists the files that the worktree dir changed since its DiffBase,
+// relative to dir, sorted, each once: the committed changes, the uncommitted
+// changes to tracked files, and the untracked files that git does not ignore.
+// A rename lists both paths. A missing dir gives the error of os.Stat, which
+// wraps fs.ErrNotExist.
+func Changed(ctx context.Context, dir string) ([]string, error) {
+	base, err := DiffBase(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	// -z gives each path as it is, with no quotes around special characters.
+	tracked, err := git(ctx, dir, "diff", "--name-only", "--no-renames", "-z", base)
+	if err != nil {
+		return nil, err
+	}
+	untracked, err := git(ctx, dir, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return nil, err
+	}
+	files := strings.FieldsFunc(tracked+"\x00"+untracked, func(r rune) bool { return r == 0 })
+	slices.Sort(files)
+	return slices.Compact(files), nil
 }
 
 // Remove deletes the worktree at path, whatever branch it holds now, or else

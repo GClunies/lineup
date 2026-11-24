@@ -144,6 +144,11 @@ type Worktrees interface {
 	// DiffBase is the merge-base of the worktree's HEAD with the default
 	// branch. The error wraps ErrNoWorktree when the worktree's folder is gone.
 	DiffBase(ctx context.Context, worktree string) (string, error)
+	// Changed lists the files that the worktree changed since its DiffBase,
+	// relative to the worktree, sorted: its commits, its uncommitted changes
+	// to tracked files, and its untracked files that git does not ignore. The
+	// error wraps ErrNoWorktree when the worktree's folder is gone.
+	Changed(ctx context.Context, worktree string) ([]string, error)
 	// AddReview fetches the PR into the Repo's main checkout, then adds the
 	// review worktree, detached at the PR's head, if it is missing. It
 	// returns the worktree's path.
