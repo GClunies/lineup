@@ -36,7 +36,7 @@ type Record struct {
 	Repo     string `json:"repo"`
 	RepoSlug string `json:"repo_slug"`
 	// Session is the label of the Rex session: the Repo key for a build Task,
-	// reviewSession for a review Task.
+	// reviewSession for a review Task, and qaSession for a QA Task.
 	Session   string `json:"session"`
 	RepoLabel string `json:"repo_label,omitempty"`
 	// Branch is "" for a review Task: lineup makes no branch for it.
@@ -44,7 +44,8 @@ type Record struct {
 	Issue     *Issue            `json:"issue,omitempty"`
 	Overrides map[string]string `json:"overrides,omitempty"`
 	// Worktree is the Task's worktree. A build Task's Worker works in it. A
-	// review Task's Worker reads the PR's code in it and works in the Repo.
+	// review or QA Task's Worker reads the PR's code in it and works in the
+	// Repo.
 	Worktree string `json:"worktree,omitempty"`
 	// Review is the PR that a review Task reviews, fixed when it is added.
 	// Only a review Task has one.
@@ -76,7 +77,11 @@ type Record struct {
 	// "prompted" from a typed prompt until the Worker's next status.
 	WorkerState string `json:"worker_state,omitempty"`
 
+	// PR is a build Task's PR at the latest poll. A QA Task keeps its build
+	// Task's PR from the merge.
 	PR *PRSnapshot `json:"pr,omitempty"`
+	// MaxWait is the max_wait that set a QA Task's deadline.
+	MaxWait time.Duration `json:"max_wait,omitempty"`
 	// LatestHead is a review Task's PR head at the latest poll, and
 	// ReviewedHead is the head that its findings file names.
 	LatestHead   string `json:"latest_head,omitempty"`
@@ -89,7 +94,8 @@ type Record struct {
 	// not uncommitted changes, for example an error of wt remove.
 	WorktreeError string `json:"worktree_error,omitempty"`
 	// CloseAtIdle is true from a build Task's merge, with close_tab on for
-	// the Task, until lineup closes its tab.
+	// the Task, or from a QA Task's end while its Worker works, until lineup
+	// closes its tab.
 	CloseAtIdle bool `json:"close_at_idle,omitempty"`
 	// KeepUntil is when lineup removes the worktree of a Done build Task that
 	// has no tab. Zero means no removal is due.
@@ -113,12 +119,16 @@ var (
 // tabLabel names the Task's tab and its Worker's conversation. It is the
 // Task's ID and its title, cut at a word to tabLabelWidth characters with a
 // closing "…". A GitHub ID loses its owner, because the Repo session names it
-// (PROD-TABS-003). A review's title loses its repo#n prefix, its issue key,
-// and its commit type, because the ID already names the PR.
+// (PROD-TABS-003), and a QA Task keeps QA- before it (PROD-QA-002). A
+// review's title loses its repo#n prefix, its issue key, and its commit type,
+// because the ID already names the PR.
 func (r *Record) tabLabel() string {
 	id := r.ID
 	if KindOf(id, nil) == KindGitHub {
 		_, id, _ = strings.Cut(id, "/")
+		if r.Kind == lifecycle.KindQA {
+			id = qaPrefix + id
+		}
 	}
 	title := r.Title
 	if r.Review != nil {
@@ -237,6 +247,12 @@ type TaskView struct {
 	// WorktreeNote says why lineup keeps the Task's worktree. The note ends
 	// with it too, and a Follow-up row, whose note is the Tracker state, adds it.
 	WorktreeNote string `json:"worktree_note,omitempty"`
+	// NextCheck is a QA Task's next check in QA waiting, and Deadline ends
+	// its wait for a verdict (PROD-QA-012). Verdict is its Worker's last
+	// word.
+	NextCheck time.Time `json:"next_check,omitzero"`
+	Deadline  time.Time `json:"deadline,omitzero"`
+	Verdict   string    `json:"verdict,omitempty"`
 	// Usage is nil when it is unknown. Only show, and ls with Usage, read it,
 	// so the Board's watch stream never holds it.
 	Usage *Usage `json:"usage"`
@@ -335,7 +351,7 @@ func (r *Record) keepsTab() bool { return r.Stage == lifecycle.Done && r.WindowI
 // keepsWork reports whether a Done Task keeps its tab, or a Done build Task
 // its worktree, which the user's close removes.
 func (r *Record) keepsWork() bool {
-	return r.Stage == lifecycle.Done && (r.WindowID != "" || r.Review == nil && r.Worktree != "")
+	return r.Stage == lifecycle.Done && (r.WindowID != "" || r.Kind == lifecycle.KindBuild && r.Worktree != "")
 }
 
 // doneState is where a Done build Task stands with its tab and its worktree.
@@ -343,8 +359,8 @@ func (r *Record) keepsWork() bool {
 type doneState int
 
 const (
-	// doneOther is any other Task: one that is not Done, a review Task, or a
-	// Done build Task that lineup has nothing to do for.
+	// doneOther is any other Task: one that is not Done, a review or QA
+	// Task, or a Done build Task that lineup has nothing to do for.
 	doneOther doneState = iota
 	// closing waits for a Worker that is not busy, then lineup closes the tab.
 	closing
@@ -357,7 +373,7 @@ const (
 
 func (r *Record) done() doneState {
 	switch {
-	case r.Stage != lifecycle.Done || r.Review != nil:
+	case r.Stage != lifecycle.Done || r.Kind != lifecycle.KindBuild:
 		return doneOther
 	case r.WindowID != "" && r.CloseAtIdle:
 		return closing
@@ -394,6 +410,12 @@ func (r *Record) view() TaskView {
 	if r.Review != nil {
 		v.PRNumber, v.PRURL, v.ReviewHead = r.Review.Number, r.Review.URL, r.Review.Head
 	}
+	if r.Kind == lifecycle.KindQA {
+		v.Deadline, v.Verdict = r.Deadline, r.Verdict
+		if r.Stage == lifecycle.QAWaiting {
+			v.NextCheck = r.NextCheck
+		}
+	}
 	if r.Stage.Started() {
 		v.Optional = r.Standing.Optional
 	}
@@ -409,9 +431,12 @@ func (r *Record) view() TaskView {
 
 // note says what the Task does now. A build Task with a PR also says where the
 // PR's review stands, for example "#42 ✓ approved · ready to land". A review
-// Task says what it does, or how it ended, after the PR number. A flag
-// replaces the note.
+// Task says what it does, or how it ended, after the PR number. A QA Task
+// has its own note. A flag replaces the note.
 func (r *Record) note(pr int) string {
+	if r.Kind == lifecycle.KindQA {
+		return r.qaNote()
+	}
 	var lead []string
 	if pr != 0 {
 		lead = append(lead, fmt.Sprintf("#%d", pr))

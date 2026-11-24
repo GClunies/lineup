@@ -37,6 +37,7 @@ Each entry is a bullet `- [<Domain name>](<domain file>.md): <what the domain co
 - [Lifecycle](lifecycle.md): how a build Task moves from its start to Done.
 - [Orchestrator](orchestrator.md): the one agent that the user talks to in the Hub.
 - [Palette](palette.md): the choices for each Task that needs the user, and the actions in the Rex command palette.
+- [QA](qa.md): how QA Tasks start after a merge, check the merged change, and end.
 - [Repos](repos.md): how lineup finds Repos, sets them up, and picks the Repo of each Task.
 - [Reviews](reviews.md): how review queues fill, and how review Tasks run and end.
 - [Service](service.md): how the Scheduler runs and recovers, and which tools it needs.

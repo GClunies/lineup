@@ -131,6 +131,9 @@ local AGENT_STAGES = {
   review = {
     { id = "reviewing", title = "Reviewing" },
   },
+  qa = {
+    { id = "verifying", title = "Verifying" },
+  },
 }
 
 local MODELS = { "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1" }

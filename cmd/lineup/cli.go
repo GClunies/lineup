@@ -31,6 +31,7 @@ var clientCommands = map[string]func(c scheduler.Client, args []string, out io.W
 	"decide":  cmdDecide,
 	"steer":   cmdSteer,
 	"ask":     cmdAsk,
+	"qa":      cmdQA,
 	"set":     cmdSet,
 	"cap":     cmdCap,
 	"rerun":   cmdRerun,
@@ -401,6 +402,22 @@ func cmdAsk(c scheduler.Client, args []string, out io.Writer) error {
 	}
 	fs.Usage()
 	return errUsage
+}
+
+// cmdQA is the QA Worker's own command. It reports one check: wait sets the
+// next check, and pass or fail ends it (PROD-QA-005).
+func cmdQA(c scheduler.Client, args []string, out io.Writer) error {
+	req := scheduler.Request{Op: "qa"}
+	switch {
+	case len(args) == 4 && args[1] == "wait":
+		req.Value, req.Text = args[2], args[3]
+	case len(args) == 3 && (args[1] == "pass" || args[1] == "fail"):
+		req.Text = args[2]
+	default:
+		return fmt.Errorf(`%w: lineup qa <task> wait <when> "<reason>" | pass "<summary>" | fail "<findings>"`, errUsage)
+	}
+	req.Task, req.Key = args[0], args[1]
+	return c.Do(req, nil)
 }
 
 func cmdSet(c scheduler.Client, args []string, out io.Writer) error {

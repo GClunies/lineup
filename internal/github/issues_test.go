@@ -57,6 +57,14 @@ func TestLabelChangeKeepsOneLifecycleLabel(t *testing.T) {
 	if _, _, ok := LabelChange(map[string]string{"started": "in progress"}, "in_review"); ok {
 		t.Fatal("an unmapped event changed labels")
 	}
+	// A QA pass is a lifecycle event like started (PROD-TRACK-012).
+	if _, _, ok := LabelChange(lifecycleLabels, "qa_passed"); ok {
+		t.Fatal("an unmapped qa_passed changed labels")
+	}
+	qa := map[string]string{"started": "in progress", "in_review": "in review", "qa_passed": "verified"}
+	if add, remove, ok := LabelChange(qa, "qa_passed"); !ok || add != "verified" || !reflect.DeepEqual(remove, []string{"in progress", "in review"}) {
+		t.Fatalf("qa_passed: %q %q %v", add, remove, ok)
+	}
 	for _, end := range []string{"merged", "closed"} {
 		add, remove, ok := LabelChange(lifecycleLabels, end)
 		if !ok || add != "" || !reflect.DeepEqual(remove, []string{"in progress", "in review"}) {
@@ -124,6 +132,29 @@ func TestAnUnmappedEventWritesNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(log); err == nil {
 		t.Fatalf("gh ran: %q", calls(t, log))
+	}
+}
+
+// A fix Issue opens in the build Issue's repository, assigned to the user
+// (PROD-QA-011). gh prints the new URL.
+func TestCreateIssueAssignsTheUser(t *testing.T) {
+	dir := t.TempDir()
+	bin, log := filepath.Join(dir, "gh"), filepath.Join(dir, "calls.log")
+	script := `#!/bin/sh
+printf '%s\n' "$(IFS='|'; echo "$*")" >> "` + log + `"
+echo https://github.com/o/r/issues/31
+`
+	os.WriteFile(bin, []byte(script), 0o755)
+	is, err := (&Client{Bin: bin}).CreateIssue(context.Background(), "o/r", "Fix QA of o/r#7: t", "findings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Issue{Repo: "o/r", Number: 31, Title: "Fix QA of o/r#7: t", Body: "findings", URL: "https://github.com/o/r/issues/31", State: "OPEN"}
+	if !reflect.DeepEqual(is, want) {
+		t.Fatalf("issue\n got %#v\nwant %#v", is, want)
+	}
+	if got := calls(t, log); !reflect.DeepEqual(got, []string{"issue|create|--repo|o/r|--title|Fix QA of o/r#7: t|--body|findings|--assignee|@me"}) {
+		t.Fatalf("calls %q", got)
 	}
 }
 

@@ -57,6 +57,6 @@ The adapter computes a Task's usage from its conversation files at each request,
 
 ## ARCH-HARNESS-010: Only the start Stage sets the model and the effort
 
-A Worker keeps the model and the effort of the Stage that it starts in: Working for a build Task, Reviewing for a review Task. The config load rejects `model` and `effort` under every other `[stage.<key>]` table. `skill` and `command` stay for each Stage, because the typed prompt carries them. A changed `model` override applies when the Task's next Worker starts.
+A Worker keeps the model and the effort of the Stage that it starts in: Working for a build Task, Reviewing for a review Task, and Verifying for a QA Task. The config load rejects `model` and `effort` under every other `[stage.<key>]` table. `skill` and `command` stay for each Stage, because the typed prompt carries them. A changed `model` override applies when the Task's next Worker starts.
 
 Because: one Worker serves every Stage of a Task, so a later Stage has no start where a model can apply.

@@ -44,16 +44,25 @@ var (
 	answer = choice{ID: "answer", Title: "Answer here", TakesText: true, run: func(c scheduler.Client, t scheduler.TaskView, text string, _ io.Writer) error {
 		return c.Do(scheduler.Request{Op: "steer", Task: t.ID, Text: text}, nil)
 	}}
+	fix     = choice{ID: "fix", Title: "Start a fix Task", run: startFix}
+	accept  = choice{ID: "accept", Title: "Accept the result", run: request("qa-accept")}
+	recheck = choice{ID: "recheck", Title: "Check again", run: request("qa-recheck")}
 )
 
-// A build Task in Needs you with no flag is Ready to land, the only build Stage
-// in that group.
-const readyToLand lifecycle.Reason = ""
+// startFix files the fix Issue of a failed QA Task and names it, because the
+// user starts it as any Issue (PROD-QA-011).
+func startFix(c scheduler.Client, t scheduler.TaskView, _ string, out io.Writer) error {
+	var id string
+	if err := c.Do(scheduler.Request{Op: "qa-fix", Task: t.ID}, &id); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "Filed %s. Start it with lineup add %s.\n", id, id)
+	return nil
+}
 
 // choicesFor lists the choices for each Needs you reason in the order that the
 // palette shows them, the default first.
 var choicesFor = map[lifecycle.Reason][]choice{
-	readyToLand:                 {merge, openTab},
 	lifecycle.ReasonTabClosed:   {restore, closeTask},
 	lifecycle.ReasonQuestion:    {answer, openTab},
 	lifecycle.ReasonStopped:     {openTab, closeTask},
@@ -62,17 +71,21 @@ var choicesFor = map[lifecycle.Reason][]choice{
 	lifecycle.ReasonSetupFailed: {openTab, closeTask},
 }
 
-// reviewReady holds the choices for a review Task in Needs you with no flag,
-// which is Review ready, the only review Stage in that group.
-var reviewReady = []choice{openTab, closeTask}
+// unflagged lists the choices for a Task in Needs you with no flag, by its
+// Kind. Such a Task is in the one user Stage of its Kind: Ready to land,
+// Review ready, or QA failed (PROD-PALETTE-001, PROD-QA-010).
+var unflagged = map[lifecycle.Kind][]choice{
+	lifecycle.KindBuild:  {merge, openTab},
+	lifecycle.KindReview: {openTab, closeTask},
+	lifecycle.KindQA:     {fix, accept, recheck, openTab},
+}
 
 // choicesOf lists the choices for t. A typed answer needs a Worker to read it.
 func choicesOf(t scheduler.TaskView) []choice {
-	reason := lifecycle.Reason(t.Flag)
-	cs, ok := choicesFor[reason]
+	cs, ok := choicesFor[lifecycle.Reason(t.Flag)]
 	switch {
-	case t.Kind == lifecycle.KindReview && reason == readyToLand:
-		cs = reviewReady
+	case t.Flag == "":
+		cs = unflagged[t.Kind]
 	case !ok:
 		cs = []choice{openTab}
 	}
@@ -89,7 +102,7 @@ type decision struct {
 
 func decisions(v scheduler.BoardView) []decision {
 	ds := []decision{}
-	for _, kind := range []lifecycle.Kind{lifecycle.KindBuild, lifecycle.KindReview} {
+	for _, kind := range []lifecycle.Kind{lifecycle.KindBuild, lifecycle.KindReview, lifecycle.KindQA} {
 		for _, t := range v.OfKind(kind).Tasks {
 			if t.Group == lifecycle.GroupNeedsYou.String() {
 				ds = append(ds, decision{t, choicesOf(t)})
@@ -163,7 +176,7 @@ func printDecisions(ds []decision, asJSON bool, out io.Writer) error {
 		}
 		fmt.Fprintf(out, "%s  %s  %s\n", d.ID, note, d.Title)
 		for _, ch := range d.Choices {
-			fmt.Fprintf(out, "  %-6s  %s\n", ch.ID, ch.Title)
+			fmt.Fprintf(out, "  %-7s  %s\n", ch.ID, ch.Title)
 		}
 	}
 	return nil

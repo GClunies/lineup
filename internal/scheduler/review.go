@@ -253,8 +253,8 @@ func (s *Scheduler) startOpenReview(key ReviewKey) (ReviewResult, bool, error) {
 	return ReviewResult{}, false, nil
 }
 
-// repoLock serializes the git steps of review Tasks in one Repo, because each
-// fetches into the Repo's main checkout. Only lanes take it, never the loop.
+// repoLock serializes the git steps of review and QA Tasks in one Repo,
+// because each fetches into the Repo's main checkout. Only lanes take it, never the loop.
 func (s *Scheduler) repoLock(repo string) *sync.Mutex {
 	s.locksMu.Lock()
 	defer s.locksMu.Unlock()

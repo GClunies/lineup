@@ -19,26 +19,32 @@ const (
 	Done
 	Reviewing
 	ReviewReady
+	QAWaiting
+	Verifying
+	QAFailed
 )
 
 // Kind is the sort of work that a Task does. A build Task makes the user's own
-// PR. A review Task reviews someone else's PR. Each Kind has its own Stages,
-// and Done belongs to both.
+// PR. A review Task reviews someone else's PR. A QA Task checks a merged
+// change after it runs (ARCH-QA-001). Each Kind has its own Stages, and Done
+// belongs to each.
 type Kind int
 
 const (
 	KindBuild Kind = iota
 	KindReview
+	KindQA
 )
 
-var kindNames = [...]string{KindBuild: "build", KindReview: "review"}
+var kindNames = [...]string{KindBuild: "build", KindReview: "review", KindQA: "qa"}
 
 func (k Kind) String() string { return kindNames[k] }
 
 // Has reports whether a Task of this Kind can be in the Stage.
 func (k Kind) Has(s Stage) bool { return stages[s].kinds&(1<<k) != 0 }
 
-var firstStages = [...]Stage{KindBuild: Working, KindReview: Reviewing}
+// A QA Task starts in QA waiting, and its Worker starts in Verifying.
+var firstStages = [...]Stage{KindBuild: Working, KindReview: Reviewing, KindQA: Verifying}
 
 // FirstStage is the Stage that a Task of this Kind starts its Worker in. The
 // Worker keeps the model and effort of this Stage for the Task's whole life.
@@ -64,6 +70,7 @@ type kindSet uint8
 const (
 	build  = kindSet(1 << KindBuild)
 	review = kindSet(1 << KindReview)
+	qa     = kindSet(1 << KindQA)
 )
 
 type Owner int
@@ -74,6 +81,8 @@ const (
 	OwnerCI
 	OwnerReviewers
 	OwnerNone
+	// OwnerClock is lineup's clock, which starts each due QA check.
+	OwnerClock
 )
 
 type Group int
@@ -98,9 +107,12 @@ var stages = [...]struct {
 	InReview:    {"In review", "in_review", OwnerReviewers, GroupWaiting, build},
 	Responding:  {"Responding", "responding", OwnerAgent, GroupWorking, build},
 	ReadyToLand: {"Ready to land", "ready_to_land", OwnerUser, GroupNeedsYou, build},
-	Done:        {"Done", "done", OwnerNone, GroupDone, build | review},
+	Done:        {"Done", "done", OwnerNone, GroupDone, build | review | qa},
 	Reviewing:   {"Reviewing", "reviewing", OwnerAgent, GroupWorking, review},
 	ReviewReady: {"Review ready", "review_ready", OwnerUser, GroupNeedsYou, review},
+	QAWaiting:   {"QA waiting", "qa_waiting", OwnerClock, GroupWaiting, qa},
+	Verifying:   {"Verifying", "verifying", OwnerAgent, GroupWorking, qa},
+	QAFailed:    {"QA failed", "qa_failed", OwnerUser, GroupNeedsYou, qa},
 }
 
 // Stages lists every Stage of every Kind.
@@ -199,6 +211,11 @@ const (
 	OutcomeClosed   Outcome = "closed"
 	OutcomeReviewed Outcome = "reviewed"
 	OutcomeSkipped  Outcome = "skipped"
+	// A QA Task ends passed by its Worker's pass, accepted by the user's
+	// accept of a fail, or fix filed by the user's fix Issue.
+	OutcomePassed   Outcome = "passed"
+	OutcomeAccepted Outcome = "accepted"
+	OutcomeFixFiled Outcome = "fix filed"
 	// OutcomeRemoved is a Task that lineup stored before an add started each
 	// Task, and that never started.
 	OutcomeRemoved Outcome = "removed"

@@ -45,12 +45,12 @@ func (t TaskView) AlertText() string {
 
 // Alerts returns the build Tasks of v whose Attention is new since seen, and
 // records each one's Attention in seen. A Task that needs nothing leaves seen,
-// so it alerts again the next time it needs the user. A review Task never
-// alerts: the user answers it in its own tab.
+// so it alerts again the next time it needs the user. A review Task or a QA
+// Task never alerts (PROD-BOARD-019).
 func Alerts(seen map[string]string, v BoardView) []TaskView {
 	var out []TaskView
 	for _, t := range v.Tasks {
-		if t.Kind == lifecycle.KindReview {
+		if t.Kind != lifecycle.KindBuild {
 			continue
 		}
 		a := t.Attention()

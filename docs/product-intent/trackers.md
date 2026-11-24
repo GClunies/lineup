@@ -28,7 +28,7 @@ By default, a Linear sign-in uses lineup's own Linear OAuth app, which any works
 
 ## PROD-TRACK-007: An ID ignores case and shows in one form
 
-Each command that takes an Issue or a Task takes its ID in any case, so `eng-614`, `Eng-614`, and `ENG-614` name one Task. lineup shows Linear IDs, local Issue IDs, ad hoc Task IDs, and review Task IDs in upper case, for example `HOD-3` and `AH-65`. It shows a GitHub ID in the form that GitHub gives. Branch names and the file names of local Issues are in lower case. The Board, `lineup ls`, `lineup show`, `lineup next-id`, and the Orchestrator's instructions use these forms.
+Each command that takes an Issue or a Task takes its ID in any case, so `eng-614`, `Eng-614`, and `ENG-614` name one Task. lineup shows Linear IDs, local Issue IDs, ad hoc Task IDs, review Task IDs, and QA Task IDs in upper case, for example `HOD-3`, `AH-65`, and `QA-ENG-12`. It shows a GitHub ID in the form that GitHub gives, also after `QA-`. Branch names and the file names of local Issues are in lower case. The Board, `lineup ls`, `lineup show`, `lineup next-id`, and the Orchestrator's instructions use these forms.
 
 ## PROD-TRACK-008: Each Repo takes the Issues of one Tracker
 
@@ -38,17 +38,17 @@ The `tracker` key of a Repo's table names the one Tracker whose Issues the Repo 
 
 The `prefix` key of a `[repos."<owner>/<repo>"]` table gives the local Issues and ad hoc Tasks of the Repo IDs of the form `<PREFIX>-<n>`, for example `HOD-3`. A Repo with no prefix uses `LOCAL-<n>` and `AH-<n>`. The prefix can be in any case. Each prefix numbers on its own. The next number is one more than the highest number of the prefix among the local Issues and every Task, archived Tasks too. `lineup next-id <repo>` prints the next free ID. `lineup add` refuses a local Issue whose ID another Task holds.
 
-## PROD-TRACK-010: lineup sends the same four lifecycle events to each Tracker
+## PROD-TRACK-010: lineup sends the same five lifecycle events to each Tracker
 
-lineup sends each Tracker the events `started`, `in_review`, `merged`, and `closed`, where `closed` means that the user closed the Task. When a Task starts, lineup assigns its Linear or GitHub Issue to the user. A Linear Issue takes the status that its team's status map gives, and a GitHub Issue takes the label that the label map gives. A local Issue takes `status: started`, `status: in review`, and `status: done`, and nothing for `closed`. The status changes when the Task ends, not when the user closes its tab. The Needs you flag writes nothing to a Tracker.
+lineup sends each Tracker the events `started`, `in_review`, `merged`, `closed`, and `qa_passed`. `closed` is the user's close, and `qa_passed` is a QA pass. When a Task starts, lineup assigns its Linear or GitHub Issue to the user. A Linear Issue takes the status that its team's status map gives, and a GitHub Issue takes the label that the label map gives. A local Issue takes `status: started`, `status: in review`, and `status: done`, and nothing for `closed` or `qa_passed`. The status changes when the Task ends, not when the user closes its tab. The Needs you flag writes nothing to a Tracker.
 
 ## PROD-TRACK-011: The status map of a Linear team decides each status write
 
-Each Linear team has its own map from a lifecycle event to a status, in a `[linear.<url key>.status.<TEAM>]` table of the config file. lineup writes a Linear status only for an event that the map names. It writes nothing for an event that the map leaves out, so Linear's GitHub automation keeps the statuses that it sets. For example, a team that tests each change after the merge leaves out `merged`, and lineup never moves its Issues to Done.
+Each Linear team has its own map from a lifecycle event to a status, in a `[linear.<url key>.status.<TEAM>]` table of the config file. lineup writes a Linear status only for an event that the map names. It writes nothing for an event that the map leaves out, so Linear's GitHub automation keeps the statuses that it sets. For example, a team that tests each change after the merge leaves out `merged` and maps `qa_passed` to Done.
 
 ## PROD-TRACK-012: A GitHub Issue carries at most one lifecycle label
 
-The `[github.labels]` table maps each lifecycle event to a label, for every repository. For an event, lineup adds its label and removes the labels of the other events. If the map leaves out `started` or `in_review`, lineup writes nothing for that event. If it leaves out `merged` or `closed`, lineup removes every lifecycle label. lineup creates a label that the repository does not have. It never adds or removes the `backlog` label. The PR of a GitHub Issue carries `Fixes <owner>/<repo>#<n>` in its body, so GitHub closes the Issue at the merge.
+The `[github.labels]` table maps each lifecycle event to a label, for every repository. For an event, lineup adds its label and removes the labels of the other events. If the map leaves out `started`, `in_review`, or `qa_passed`, lineup writes nothing for that event. If it leaves out `merged` or `closed`, lineup removes every lifecycle label. lineup creates a label that the repository does not have. It never adds or removes the `backlog` label. The PR of a GitHub Issue carries `Fixes <owner>/<repo>#<n>` in its body, so GitHub closes the Issue at the merge.
 
 ## PROD-TRACK-013: The Local Tracker is one folder of Markdown files outside every Repo
 
@@ -60,4 +60,4 @@ A Linear Issue's branch is the branch name that Linear gives the Issue. A GitHub
 
 ## PROD-TRACK-015: lineup refuses a Repo prefix that can clash
 
-lineup refuses to load a config file with a bad prefix, and the error names the prefix. A prefix holds only letters, digits, and single dashes, with no dash at either end. It is not `LOCAL`, `AH`, or `PR`, and no two tables share it. An owner table holds no prefix. A prefix never equals a team key of a `teams` list. `lineup restart` also checks the team keys of each signed-in Linear workspace, and if Linear does not answer, it prints a warning and checks only the `teams` lists. Case does not count in these checks.
+lineup refuses to load a bad prefix, and the error names it. A prefix holds only letters, digits, and single dashes, with no dash at either end. It is not `LOCAL`, `AH`, `PR`, or `QA`, it does not start with `QA-`, and no two tables share it. An owner table holds no prefix. A prefix never equals a team key of a `teams` list. `lineup restart` also checks the team keys of each signed-in Linear workspace, and if Linear does not answer, it prints a warning and checks only the `teams` lists. Case does not count in these checks.

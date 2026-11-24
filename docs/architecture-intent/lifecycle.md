@@ -17,9 +17,9 @@ Not: The edge Signals `ci-passed`, `ci-failed`, `review-approved`, and `pr-confl
 
 One table in the lifecycle reducer lists the gaps of the Landing bar in order, each with its text: conflict, failed check, pending check, draft, score due, low score, open thread, new Feedback, and approval. The first gap of the Standing decides, through one route for each gap, the Stage of a Task in CI running, In review, or Ready to land. It also settles an agent Stage whose budget the Standing spent, so that flag clears at the first poll after the gap closes. A Task already in that Stage stays there. A failed optional check is no gap.
 
-## ARCH-LIFE-004: The Kind keeps build Stages and review Stages apart
+## ARCH-LIFE-004: The Kind keeps the Stages of build, review, and QA apart
 
-Each Task has a Kind, `build` or `review`, and each Stage names the Kinds that can enter it. A build Task moves through Working, CI running, CI debug, In review, Responding, and Ready to land. A review Task moves through Reviewing and Review ready. Done belongs to both. Review ready is a user Stage, so recovery never flags a finished review. A rerun takes only a Stage of the Kind of the Task. A review Task gets no Effect that writes to GitHub or to a Tracker, because those Effects come from build Stages.
+Each Task has a Kind, `build`, `review`, or `qa`, and each Stage names the Kinds that can enter it. A build Task moves through Working, CI running, CI debug, In review, Responding, and Ready to land. A review Task moves through Reviewing and Review ready. A QA Task moves through QA waiting, Verifying, and QA failed. Done belongs to each Kind. Review ready and QA failed are user Stages, so recovery never flags them. A rerun takes only a Stage of the Kind of the Task. Review and QA Tasks get no Effect that writes to GitHub.
 
 Because: A review needs the tab, Worker, recovery, and Needs you group of a Task, and it must never get the GitHub effects of a build Task.
 Not: An ad hoc Task with `skill=pr-review`, which never learns the PR that it reviews; a build Task on the head branch of the PR, which the branch poll treats as the user's own PR.
@@ -36,7 +36,7 @@ Because: A `done` while a prompt is pending belongs to the Stage before it or to
 
 ## ARCH-LIFE-007: Cleanup comes from the user's ends of a build Task and from each end of a review
 
-The cleanup Effect closes the tab of the Task, removes its worktree, and removes the Repo session when it holds no other tab. A build Task gets it only from the user: `task-closed` in any Stage, or `tab-closed` on a Done Task. A build Task that ends at a merge gets no cleanup and keeps its tab and its worktree. A review Task gets cleanup at each end: the user's review, a merge, a close of the PR, `lineup close`, and a skip.
+The cleanup Effect closes the tab of the Task, removes its worktree, and removes the Repo session when it holds no other tab. A build Task gets it only from the user: `task-closed` in any Stage, or `tab-closed` on a Done Task. A build Task that ends at a merge gets no cleanup and keeps its tab and its worktree. A review Task gets cleanup at each end: the user's review, a merge, a close of the PR, `lineup close`, and a skip. A QA Task gets cleanup at each end, after a pass once the Worker stops working.
 
 ## ARCH-LIFE-008: Review ends are levels that each poll computes again
 
@@ -46,7 +46,7 @@ Because: `pr-review` posts the review in a late step, and a Done in between clos
 
 ## ARCH-LIFE-009: The reducer holds its invariants under random Signals
 
-These invariants hold for every sequence of Signals. The started build Tasks never pass the WIP cap without a recorded yes. Each started Task ends in Done or in Needs you. No Task is in Ready to land while its Standing has a gap. An optional check never starts CI debug. A second `pr-seen` with the same facts changes nothing. Review cycles never pass their budget. Each Kind stays in its own Stages. Review Tasks never change the WIP count, never pass their slots, and get no Effect that writes outside lineup.
+These invariants hold for every sequence of Signals. The started build Tasks never pass the WIP cap without a recorded yes. Each started Task ends in Done or in Needs you. No Task is in Ready to land while its Standing has a gap. An optional check never starts CI debug. A second `pr-seen` with the same facts changes nothing. Review cycles never pass their budget. Each Kind stays in its own Stages. Review Tasks and QA Tasks never change the WIP count and never pass their slots. Review Tasks get no Effect that writes outside lineup.
 
 ## ARCH-LIFE-010: Review cycles and Responding rounds are separate budgets
 

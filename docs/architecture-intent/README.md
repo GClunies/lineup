@@ -35,6 +35,7 @@ Each entry is a bullet `- [<Domain name>](<domain file>.md): <what the domain co
 - [Harness](harness.md): how lineup starts and talks to agent programs.
 - [Lifecycle](lifecycle.md): how the lifecycle reducer turns Signals into Stages and effects.
 - [Orchestrator](orchestrator.md): how the Orchestrator connects to lineup.
+- [QA](qa.md): how QA Tasks are built.
 - [Reviews](reviews.md): how review queues and review Tasks are built.
 - [Rex](rex.md): how lineup uses Rex sessions, tabs, status records, and the palette.
 - [Signals](signals.md): how lineup reads Rex and GitHub, and turns what it reads into Signals.
