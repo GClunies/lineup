@@ -374,11 +374,11 @@ func TestARowOffScreenDoesNotWidenTheStatusColumn(t *testing.T) {
 	}
 	m.sel = "PD-714"
 	out = viewAt(m, 100)
-	if l := lineOf(t, out, "PD-714"); !strings.Contains(l, "Waiting for Code Review") {
-		t.Fatalf("the PD-714 row must show its Tracker state: %q", l)
+	if l := lineOf(t, out, "PD-714"); !strings.Contains(l, "code review") {
+		t.Fatalf("the PD-714 row must show its short Tracker state: %q", l)
 	}
-	if l := lineOf(t, out, "PD-40 "); cellOf(l, "▂▄▆")-cellOf(l, "up next") != len("Waiting for Code Review")+2 {
-		t.Errorf("with PD-714 on screen the status column must be 23 cells: %q\n%s", l, out)
+	if l := lineOf(t, out, "PD-40 "); cellOf(l, "▂▄▆")-cellOf(l, "up next") != len("code review")+2 {
+		t.Errorf("with PD-714 on screen the status column must be 11 cells: %q\n%s", l, out)
 	}
 }
 
