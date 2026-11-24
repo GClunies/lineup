@@ -1,0 +1,37 @@
+internal/config/edit.go
+  s_3f62d37256047d::t_7326081c4a361a 4,87-90,101-147,166-168,173-177,221-224,226-230,232-239,242,251-252,265-269
+internal/configpanel/model_test.go
+  s_3f62d37256047d::t_4c87b90ee09403 366
+cmd/lineup/config_test.go
+  s_3f62d37256047d::t_1c237f1cda28b4 108-109
+  s_3f62d37256047d::t_f3c69e79ca2a83 136-141,143-144
+  s_3f62d37256047d::t_0914d20f07b1f7 170
+  s_3f62d37256047d::t_eaec85daebce90 73-74
+internal/configpanel/view.go
+  s_3f62d37256047d::t_499c4be130a007 181
+cmd/lineup/config.go
+  s_3f62d37256047d::t_200052ff59b2a9 83
+  s_3f62d37256047d::t_c3a4c803dec932 51-55
+internal/config/edit_test.go
+  s_3f62d37256047d::t_8cae83680f229b 525
+  s_3f62d37256047d::t_ac06f6167fc419 526
+  s_3f62d37256047d::t_59d29c5352c99a 113-186
+internal/configpanel/model.go
+  s_3f62d37256047d::t_8282007ad7a0ba 231
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5d72b4e07973255eb0d44229a9526e26cfa29f54",
+  "prompts": {},
+  "sessions": {
+    "s_3f62d37256047d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "918a36da-c6bf-4dae-acbd-698584050738",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
