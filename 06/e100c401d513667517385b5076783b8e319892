@@ -1,0 +1,136 @@
+docs/product-intent/lifecycle.md
+  s_6fdf04ba241df3::t_db428c3bc64a89 84-87
+internal/github/own_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 85-86,93
+internal/scheduler/side.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 7,56-61,64,71-76,153
+internal/board/groups.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 18-19,21-24,33-41,46,60,66-67,71-81
+cmd/lineup/procargs_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 1-44
+cmd/lineup/procargs_darwin.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 1-33
+cmd/lineup/decide.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 28-31,39
+internal/board/model.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 66-68,239-242,244-250,253,283-292,310-312,324-328,340-348,545-547
+internal/board/team_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 5,201-412
+docs/architecture-intent/worktrees.md
+  s_6fdf04ba241df3::t_db428c3bc64a89 35-40
+docs/product-intent/tabs.md
+  s_6fdf04ba241df3::t_db428c3bc64a89 31,76-83
+internal/github/testdata/own_blockers.json
+  s_6fdf04ba241df3::t_db428c3bc64a89 1
+internal/scheduler/scheduler_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 45-47,52,218,480-488,572-573,647-649,652,656-662,796-800,1040-1042,1066-1068,1114,1144-1146
+cmd/lineup/close_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 1-32
+cmd/lineup/procargs_other.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 1-22
+docs/product-intent/board.md
+  s_6fdf04ba241df3::t_db428c3bc64a89 23,31,55,92-107
+internal/config/migrate.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 646-648
+docs/product-intent/workers.md
+  s_6fdf04ba241df3::t_db428c3bc64a89 63
+internal/scheduler/review_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 1137-1139,1141-1161,1163,1165-1166
+internal/worktree/worktree.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 56-57,60,64,66,68-69,72-89,107-113,117-129,131
+docs/product-intent/issues.md
+  s_6fdf04ba241df3::t_db428c3bc64a89 7
+internal/board/github.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 63
+internal/board/status_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 236-248
+docs/architecture-intent/rex.md
+  s_6fdf04ba241df3::t_db428c3bc64a89 73,75
+internal/board/view_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 4,16-17,352-477
+cmd/lineup/serve.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 117-122,124-126
+  s_6fdf04ba241df3::t_cecd5a6fa17707 123
+internal/config/config_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 314,1070-1092,1094-1110,1112-1123,1127-1145,1147-1152,1155-1157
+internal/board/run.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 53-55,57
+cmd/lineup/hub.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 668
+internal/rex/client_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 160-161,163-171,175
+internal/board/view.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 7,87,90-93,242-243,246-250,269-288,337-339,374,377,393,395,429,432-435,497-501,503,507-514,541-553,580,582-598,628,638-642,644-654,710
+internal/scheduler/merged_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 6-7,30-57,66,110-119,121-127,129,218,226-228,264-266,275-277,284-355
+  s_6fdf04ba241df3::t_729df27e4fe9b2 356
+internal/scheduler/record.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 4,91,93-96,504
+  s_6fdf04ba241df3::t_549529fe698eda 97
+internal/github/own.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 65-68,94,98-99,103,106
+internal/scheduler/scheduler.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 304-306,308-312,319,323-330,597-601,603-604,606,608,610-620,913-915,1125
+  s_6fdf04ba241df3::t_c2fc728fe64c15 560-561
+  s_6fdf04ba241df3::t_3dc83e1e04f161 331-332
+internal/rex/client.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 336-345,348,355,359,363,365
+internal/config/migrate_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 221-306
+cmd/lineup/cli.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 40,466-478
+  s_6fdf04ba241df3::t_3af0386fc9dabd 479-481
+internal/linear/client.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 15,345-347,349-351,353
+internal/github/client.go
+  s_6fdf04ba241df3::t_255bd6f2982d18 228
+  s_6fdf04ba241df3::t_db428c3bc64a89 41-42,116,413
+internal/config/config.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 18,165,171,237-239,241-242,245-263,267-270,272,274,279-308,818-822,921-937,941,1013-1016,1048-1049
+internal/worktree/worktree_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 92,148-181,195,202,209-229
+internal/board/issues.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 91,110,118,175-178,180-185,249-262
+  s_6fdf04ba241df3::t_08c278d47ed2de 263-264
+internal/scheduler/ports.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 25-31,75-79,139-143,340-353
+cmd/lineup/wire_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 267-282,458
+go.mod
+  s_6fdf04ba241df3::t_db428c3bc64a89 13
+docs/product-intent/configuration.md
+  s_6fdf04ba241df3::t_d28121af80f0f3 11,15
+internal/rex/integration_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 198-199
+internal/scheduler/add_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 174-195
+internal/scheduler/api.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 211,313-337
+  s_6fdf04ba241df3::t_265a1a8de31e02 338-339
+internal/board/github_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 4,266-315
+cmd/lineup/wire.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 111-112,274-275,896-898
+  s_6fdf04ba241df3::t_72bcda801e87ac 209
+  s_6fdf04ba241df3::t_5e1da4941f0a43 899-900
+internal/board/mouse.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 58-59,69-71,95
+internal/board/issues_test.go
+  s_6fdf04ba241df3::t_db428c3bc64a89 78,83,137,193-194,234,252,387,449
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "06e100c401d513667517385b5076783b8e319892",
+  "prompts": {},
+  "sessions": {
+    "s_6fdf04ba241df3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1e03a85-2a6e-48c0-9cd0-da25aaf02f13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
