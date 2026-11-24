@@ -22,6 +22,10 @@ var sections = []section{
 
 const sectionNeedsYou = "needs_you"
 
+// defaultCollapsed are the sections that start closed when [board] has no
+// collapsed list.
+var defaultCollapsed = []string{"backlog", "team", "done"}
+
 // movedSections maps each old section key to the key that took its place.
 // lineup config migrate rewrites them.
 var movedSections = map[string]string{"ready": "up_next", "queued": "up_next"}
@@ -84,7 +88,7 @@ func headings(name string, keys []string, banned string) ([]string, error) {
 }
 
 func resolveBoard(f boardFile) (Board, error) {
-	collapsed := []string{"backlog", "team", "done"}
+	collapsed := defaultCollapsed
 	if f.Collapsed != nil {
 		collapsed = *f.Collapsed
 	}

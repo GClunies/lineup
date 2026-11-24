@@ -30,6 +30,8 @@ const (
 	defaultPollInterval = 30 * time.Second
 	defaultModel        = "claude-opus-5-5"
 	defaultEffort       = "high"
+	// defaultBudget is each loop budget of [budgets] that no layer sets.
+	defaultBudget = 3
 	// DefaultReviewCycles is the review bot's cycle budget when no
 	// max_review_cycles applies.
 	DefaultReviewCycles = 3
@@ -40,8 +42,9 @@ const (
 	maxKeepWorktreeDays = 30
 )
 
-// trackerEvents are the lifecycle events that a Tracker map can name.
-var trackerEvents = map[string]bool{"started": true, "in_review": true, "merged": true, "closed": true}
+// trackerEvents are the lifecycle events that a Tracker map can name, in
+// their order in the lifecycle.
+var trackerEvents = []string{"started", "in_review", "merged", "closed"}
 
 type Resolved struct {
 	WIPCap int
@@ -402,14 +405,14 @@ func parseGlobal(globalPath, data string) (*Global, error) {
 	for ws, w := range g.file.Linear {
 		for team, events := range w.Status {
 			for ev := range events {
-				if !trackerEvents[ev] {
+				if !slices.Contains(trackerEvents, ev) {
 					return nil, fmt.Errorf("%s: linear.%s.status.%s: unknown event %q", globalPath, ws, team, ev)
 				}
 			}
 		}
 	}
 	for ev := range g.file.GitHub.Labels {
-		if !trackerEvents[ev] && ev != backlogKey {
+		if !slices.Contains(trackerEvents, ev) && ev != backlogKey {
 			return nil, fmt.Errorf("%s: github.labels: unknown event %q", globalPath, ev)
 		}
 	}
@@ -819,7 +822,7 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 		WIPCap:       defaultWIPCap,
 		PR:           true,
 		PollInterval: defaultPollInterval,
-		Budgets:      lifecycle.Budgets{CIDebug: 3, Responding: 3},
+		Budgets:      lifecycle.Budgets{CIDebug: defaultBudget, Responding: defaultBudget},
 	}
 
 	var bot reviewBotFile

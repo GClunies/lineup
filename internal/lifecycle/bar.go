@@ -50,6 +50,12 @@ var (
 	approvalRuleNames = []string{RequestedApprovals: "requested", RequiredApprovals: "required"}
 )
 
+// CheckRuleNames, ThreadRuleNames, and ApprovalRuleNames are the names of the
+// rules of each Landing bar key, in their order.
+func CheckRuleNames() []string    { return slices.Clone(checkRuleNames) }
+func ThreadRuleNames() []string   { return slices.Clone(threadRuleNames) }
+func ApprovalRuleNames() []string { return slices.Clone(approvalRuleNames) }
+
 func (r CheckRule) String() string    { return checkRuleNames[r] }
 func (r ThreadRule) String() string   { return threadRuleNames[r] }
 func (r ApprovalRule) String() string { return approvalRuleNames[r] }
