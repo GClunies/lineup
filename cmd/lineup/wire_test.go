@@ -154,6 +154,7 @@ func TestTheLocalTrackerFilesAFixIssueWithItsRepo(t *testing.T) {
 // A QA Worker's prompt quotes the build Task's Issue and names the merge and
 // the QA worktree (PROD-QA-004).
 func TestAQAWorkerGetsTheBuildIssueAndTheMerge(t *testing.T) {
+	claudeOnPath(t)
 	cfg := loadConfig(t, "[defaults.stage.verifying]\nskill = \"qa-check\"\n")
 	var calls []string
 	mux := trackerMux{kinds: map[string]issueTracker{scheduler.KindLinear: spyTracker{name: "linear", calls: &calls, desc: "The nightly load fills the column."}}}
