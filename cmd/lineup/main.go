@@ -28,6 +28,12 @@ const usage = `usage: lineup [command]
                                sign out of Linear; --local only forgets the tokens here
   lineup logout github         stop using GitHub Issues as a Tracker
   lineup trackers              name the Trackers that are on
+  lineup config                open the config panel: each setting with its doc, its default,
+                               the value that applies, and the level that sets it. It
+                               changes one setting at a time, and only if the file loads
+  lineup config keys [--json] [--repo <owner>/<repo>]
+                               list every config key; --repo adds the value that applies to
+                               the Repo and the level that sets it
   lineup config migrate        rewrite the config file from [[repos]] tables to roots
                                and [repos."owner/repo"] tables, from trackers lists
                                to tracker keys, and from ready and queued in [board]
@@ -104,7 +110,7 @@ func run(args []string) error {
 	case "logout":
 		return logout(args[1:], os.Stdout, linear.Logout)
 	case "config":
-		return cmdConfig(args[1:], os.Stdout)
+		return cmdConfig(args[1:], os.Stdout, runConfigPanel)
 	case "repo":
 		return cmdRepo(context.Background(), args[1:], os.Stdout, realRepoEnv())
 	case "trackers":

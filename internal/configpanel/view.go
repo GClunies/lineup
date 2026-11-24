@@ -180,7 +180,7 @@ func (m Model) levelNote(w config.Where) string {
 	}
 	for _, s := range m.edit.SetAt {
 		if s.Level == w.Level {
-			return dim.Render("  sets it now")
+			return dim.Render("  replaces its value")
 		}
 	}
 	return ""

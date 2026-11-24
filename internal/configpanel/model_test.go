@@ -195,7 +195,7 @@ func TestASaveWritesTheFileAndRunsTheRestartOnEnter(t *testing.T) {
 	if want := strings.Replace(fixture, "wip_cap = 2", "wip_cap = 4", 1); p.file(t) != want {
 		t.Fatalf("the file is\n%s", p.file(t))
 	}
-	if v := p.view(); !strings.Contains(v, "Saved. Applies after: lineup restart scheduler. enter runs it · esc skips") {
+	if v := p.view(); !strings.Contains(v, "Saved. Applies after: lineup restart scheduler.") || !strings.Contains(v, "enter runs it · esc skips") {
 		t.Fatalf("no restart offer:\n%s", v)
 	}
 	if got := p.rowLine(t, "wip_cap"); got != "wip_cap 4 acme/api" {
@@ -248,7 +248,7 @@ func TestLSetsTheKeyAtTheLevelThatTheUserPicks(t *testing.T) {
 	p.to(t, "budgets.ci_debug")
 	p.press("l")
 	v := p.view()
-	for _, want := range []string{"Set budgets.ci_debug at which level?", "[defaults]  sets it now", "acme/*", "acme/api"} {
+	for _, want := range []string{"Set budgets.ci_debug at which level?", "[defaults]  replaces its value", "acme/*", "acme/api"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("the level list has no %q:\n%s", want, v)
 		}

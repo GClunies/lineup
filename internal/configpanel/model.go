@@ -381,7 +381,7 @@ func (m Model) save(value *string) (tea.Model, tea.Cmd) {
 	m.input.Blur()
 	m.refresh()
 	m.restart, m.mode = m.edit.Key.Restart, modeSaved
-	return m.say("Saved. Applies after: "+m.restart+". enter runs it · esc skips", false), nil
+	return m.say("Saved. Applies after: "+m.restart+".", false), nil
 }
 
 func (m Model) savedKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
