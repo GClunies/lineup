@@ -228,7 +228,7 @@ func (m Model) startEdit(pickLevel, remove bool) (tea.Model, tea.Cmd) {
 	}
 	m.edit, m.remove = s, remove
 	if remove {
-		m.levels = s.SetAt
+		m.levels = s.SetAt()
 		if len(m.levels) == 0 {
 			why := s.Path + " is not set at any level here."
 			if s.From != "" {

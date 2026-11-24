@@ -363,7 +363,7 @@ func TestTheFilterKeepsTheMatchingKeys(t *testing.T) {
 
 func TestTheReviewQueuesShowAndDoNotEdit(t *testing.T) {
 	p := newPanel(t, fixture+"\n[[review.queues]]\nname = \"team\"\nrepo = [\"acme/api\"]\n")
-	if got := p.rowLine(t, "review.queues[0]"); got != `review.queues[0] team: repo = ["acme/api"] top level` {
+	if got := p.rowLine(t, "review.queues[0]"); got != `review.queues[0] repo = ["acme/api"] top level` {
 		t.Errorf("row %q", got)
 	}
 	p.to(t, "review.queues[0]")

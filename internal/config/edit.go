@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -83,6 +84,10 @@ func (w Where) String() string {
 type Setting struct {
 	Key  Key
 	Path string
+	// Group and Label are the plain place of the key: the titles of the
+	// groups that hold it, outermost first, and its own name.
+	Group []string
+	Label string
 	// Value is the text of the value that applies, or the default.
 	Value string
 	// Raw is the decoded value that applies, or nil for the default.
@@ -93,8 +98,53 @@ type Setting struct {
 	// [stage.<key>] table with no value takes the one of [stage.default]
 	// (ARCH-CONFIG-002).
 	From string
-	// SetAt lists each level that sets Path itself, lowest first.
-	SetAt []Where
+	// Layers lists each place that the value can come from, lowest first:
+	// each level that sets the stage.default key of a stage key, then each
+	// level where Path itself can sit. The last one that sets a value is the
+	// one that applies.
+	Layers []Layer
+}
+
+// Layer is one place that the value of a Setting can come from.
+type Layer struct {
+	At Where
+	// Path is the key at the level: the Setting's own Path, or the
+	// stage.default key that it falls back to.
+	Path string
+	Set  bool
+	// Value is the text of the value at the level, when Set.
+	Value string
+}
+
+// Levels lists each level where Path itself can be set on the tab, lowest
+// first.
+func (s Setting) Levels() []Where { return s.own(false) }
+
+// SetAt lists each level that sets Path itself, lowest first.
+func (s Setting) SetAt() []Where { return s.own(true) }
+
+func (s Setting) own(set bool) []Where {
+	var out []Where
+	for _, l := range s.Layers {
+		if l.Path == s.Path && (l.Set || !set) {
+			out = append(out, l.At)
+		}
+	}
+	return out
+}
+
+// FileKey is the key as the file writes it at the level, such as
+// [repos."acme/api".review_bot] min_review_score.
+func (s Setting) FileKey(w Where) string {
+	if s.Key.Type == TypeQueue {
+		return "[[review.queues]]"
+	}
+	parts := strings.Split(s.Path, ".")
+	key := bareOrQuoted(parts[len(parts)-1])
+	if table := append(tableOf(w), parts[:len(parts)-1]...); len(table) > 0 {
+		return "[" + joinKey(table) + "] " + key
+	}
+	return key
 }
 
 // Source names the level of the value: default, [defaults], or the key of
@@ -113,17 +163,18 @@ func (s Setting) Source() string {
 // key they are the top-level keys and the [defaults] keys. With a Repo key
 // they are the keys of a Repo table, and each value layers as Resolve
 // layers it: [defaults], then the owner/* table, then the owner/repo table.
-// The tables match the Repo key in any case. It reads Raw, so it works on a
-// file that does not load.
+// The tables match the Repo key in any case, and a table that the file does
+// not have is a level that sets nothing. It reads Raw, so it works on a file
+// that does not load.
 func (f *File) Settings(repoKey string) []Setting {
 	layers := []Where{{Level: LevelDefaults}}
 	if repoKey != "" {
 		owner, _, _ := strings.Cut(repoKey, "/")
-		if k, ok := f.repoTable(owner + "/*"); ok {
-			layers = append(layers, Where{LevelOwner, k})
-		}
-		if k, ok := f.repoTable(repoKey); ok {
-			layers = append(layers, Where{LevelRepo, k})
+		for _, w := range []Where{{LevelOwner, owner + "/*"}, {LevelRepo, repoKey}} {
+			if k, ok := f.repoTable(w.Table); ok {
+				w.Table = k
+			}
+			layers = append(layers, w)
 		}
 	}
 	var out []Setting
@@ -167,19 +218,28 @@ func (f *File) Settings(repoKey string) []Setting {
 // no level sets takes the stage.default key of the highest level that sets it.
 func (f *File) setting(k Key, path string, at []Where) Setting {
 	s := Setting{Key: k, Path: path, Value: k.Default}
-	for _, w := range at {
-		if v, ok := f.lookup(w, path); ok {
-			s.SetAt = append(s.SetAt, w)
-			s.By, s.Raw = &w, v
-		}
+	s.Group, s.Label = k.place(path)
+	paths := []string{path}
+	if parts := strings.Split(path, "."); parts[0] == "stage" && parts[1] != "default" {
+		paths = []string{"stage.default." + parts[2], path}
 	}
-	parts := strings.Split(path, ".")
-	if s.By == nil && parts[0] == "stage" && parts[1] != "default" {
-		from := "stage.default." + parts[2]
+	for _, p := range paths {
+		from := ""
+		if p != path {
+			from = p
+		}
 		for _, w := range at {
-			if v, ok := f.lookup(w, from); ok {
+			v, ok := f.lookup(w, p)
+			if !ok && from != "" {
+				// A stage.default key is a layer only where a level sets it.
+				continue
+			}
+			l := Layer{At: w, Path: p, Set: ok}
+			if ok {
+				l.Value = valueText(v)
 				s.By, s.Raw, s.From = &w, v, from
 			}
+			s.Layers = append(s.Layers, l)
 		}
 	}
 	if s.By != nil {
@@ -188,7 +248,8 @@ func (f *File) setting(k Key, path string, at []Where) Setting {
 	return s
 }
 
-// queues gives one row for each [[review.queues]] entry, with its filters.
+// queues gives one row for each [[review.queues]] entry, with its name as
+// the label and its filters as the value.
 func (f *File) queues(k Key) []Setting {
 	review, _ := f.Raw["review"].(map[string]any)
 	list, _ := review["queues"].([]map[string]any)
@@ -201,8 +262,11 @@ func (f *File) queues(k Key) []Setting {
 				filters = append(filters, key+" = "+tomlText(q[key]))
 			}
 		}
-		out = append(out, Setting{Key: k, Path: fmt.Sprintf("review.queues[%d]", i), Raw: q,
-			Value: name + ": " + strings.Join(filters, ", "), By: &Where{Level: LevelTop}, SetAt: []Where{{Level: LevelTop}}})
+		path, value := fmt.Sprintf("review.queues[%d]", i), strings.Join(filters, ", ")
+		group, _ := k.place(path)
+		top := Where{Level: LevelTop}
+		out = append(out, Setting{Key: k, Path: path, Group: group, Label: cmp.Or(name, fmt.Sprintf("Queue %d", i+1)),
+			Raw: q, Value: value, By: &top, Layers: []Layer{{At: top, Path: path, Set: true, Value: value}}})
 	}
 	return out
 }

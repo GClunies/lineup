@@ -70,6 +70,8 @@ type keysJSON struct {
 
 type keyJSON struct {
 	Path    string   `json:"path"`
+	Group   []string `json:"group"`
+	Label   string   `json:"label"`
 	Levels  []string `json:"levels"`
 	Restart string   `json:"restart"`
 }
@@ -103,8 +105,8 @@ func TestConfigKeysListsEveryKey(t *testing.T) {
 		for _, l := range k.Levels {
 			levels = append(levels, l.String())
 		}
-		if got := v.Keys[i]; got.Path != k.Path || !slices.Equal(got.Levels, levels) || got.Restart != k.Restart {
-			t.Errorf("key %d = %+v, want %s at %q", i, got, k.Path, levels)
+		if got := v.Keys[i]; got.Path != k.Path || !slices.Equal(got.Group, k.Group) || got.Label != k.Label || !slices.Equal(got.Levels, levels) || got.Restart != k.Restart {
+			t.Errorf("key %d = %+v, want %s, %q %s, at %q", i, got, k.Path, k.Group, k.Label, levels)
 		}
 	}
 	if i := slices.IndexFunc(v.Keys, func(k keyJSON) bool { return k.Path == "wip_cap" }); i < 0 || !slices.Equal(v.Keys[i].Levels, []string{"[defaults]", "owner/*", "owner/repo"}) {
@@ -131,14 +133,15 @@ func TestConfigKeysNamesTheValueAndTheLevelForARepo(t *testing.T) {
 		got[s.Path] = s
 	}
 	for _, want := range []configSetting{
-		{"wip_cap", "2", "acme/api"},
-		{"teams", `["ENG"]`, "acme/api"},
-		{"poll_interval", "20s", "acme/*"},
-		{"tracker", "linear", "acme/*"},
-		{"budgets.ci_debug", "3", "default"},
+		{"wip_cap", []string{"Capacity"}, "WIP cap", "2", "acme/api"},
+		{"teams", []string{"Repo"}, "Linear teams", `["ENG"]`, "acme/api"},
+		{"poll_interval", []string{"Capacity"}, "Poll interval", "20s", "acme/*"},
+		{"tracker", []string{"Repo"}, "Tracker", "linear", "acme/*"},
+		{"budgets.ci_debug", []string{"Loop budgets"}, "CI debug", "3", "default"},
+		{"stage.working.model", []string{"Workers", "Stage Working"}, "Model", "claude-opus-5-5", "default"},
 	} {
-		if got[want.Path] != want {
-			t.Errorf("%s = %+v, want %+v", want.Path, got[want.Path], want)
+		if s := got[want.Path]; !slices.Equal(s.Group, want.Group) || s.Label != want.Label || s.Value != want.Value || s.Source != want.Source {
+			t.Errorf("%s = %+v, want %+v", want.Path, s, want)
 		}
 	}
 	if v.Repo != "acme/api" || len(v.Keys) != len(config.Catalog) {
@@ -164,7 +167,7 @@ func TestConfigKeysWorksOnAFileThatDoesNotLoad(t *testing.T) {
 	if !strings.Contains(v.LoadError, "wip_cap") || len(v.Keys) != len(config.Catalog) {
 		t.Fatalf("load_error %q with %d keys, want the error and the catalog", v.LoadError, len(v.Keys))
 	}
-	if i := slices.IndexFunc(v.Settings, func(s configSetting) bool { return s.Path == "wip_cap" }); i < 0 || v.Settings[i] != (configSetting{"wip_cap", "four", "[defaults]"}) {
+	if i := slices.IndexFunc(v.Settings, func(s configSetting) bool { return s.Path == "wip_cap" }); i < 0 || v.Settings[i].Value != "four" || v.Settings[i].Source != "[defaults]" {
 		t.Errorf("settings %+v, want wip_cap four from [defaults]", v.Settings)
 	}
 	if v := decodeKeys(t, configKeysOf(t, bad, "--json")); v.LoadError == "" {

@@ -178,7 +178,7 @@ func (m Model) levelNote(w config.Where) string {
 	case w.Level == config.LevelOwner && !m.file.SetUp(w.Table):
 		return dim.Render("  no table yet: the save writes it")
 	}
-	for _, s := range m.edit.SetAt {
+	for _, s := range m.edit.SetAt() {
 		if s.Level == w.Level {
 			return dim.Render("  replaces its value")
 		}

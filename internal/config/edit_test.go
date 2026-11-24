@@ -110,6 +110,80 @@ func TestSettingsNameTheLevelOfEachValue(t *testing.T) {
 	}
 }
 
+// layerText writes each layer of a setting as level path=value, with · for a
+// level that does not set it.
+func layerText(s Setting) []string {
+	var out []string
+	for _, l := range s.Layers {
+		v := "·"
+		if l.Set {
+			v = l.Value
+		}
+		out = append(out, l.At.String()+" "+l.Path+"="+v)
+	}
+	return out
+}
+
+func TestLayersGiveTheValueAtEachLevel(t *testing.T) {
+	f := readEdit(t, t.TempDir(), layeredConfig)
+	for _, c := range []struct {
+		repo, path string
+		want       []string
+	}{
+		{"acme/api", "wip_cap", []string{"[defaults] wip_cap=7", "acme/* wip_cap=·", "acme/api wip_cap=2"}},
+		{"acme/api", "tracker", []string{"acme/* tracker=linear", "acme/api tracker=·"}},
+		{"acme/api", "teams", []string{`acme/api teams=["ENG"]`}},
+		{"acme/web", "wip_cap", []string{"[defaults] wip_cap=7", "acme/* wip_cap=·", "acme/web wip_cap=·"}},
+		{"octo/tools", "poll_interval", []string{"[defaults] poll_interval=·", "octo/* poll_interval=·", "octo/tools poll_interval=·"}},
+		{"acme/api", "stage.working.effort", []string{
+			"[defaults] stage.default.effort=low", "acme/* stage.default.effort=max",
+			"[defaults] stage.working.effort=·", "acme/* stage.working.effort=·", "acme/api stage.working.effort=·"}},
+		{"acme/api", "stage.working.model", []string{
+			"[defaults] stage.default.model=global-model",
+			"[defaults] stage.working.model=working-model", "acme/* stage.working.model=·", "acme/api stage.working.model=·"}},
+		{"", "wip_cap", []string{"[defaults] wip_cap=7"}},
+		{"", "roots", []string{`top level roots=["~/repos"]`}},
+	} {
+		if got := layerText(row(t, f.Settings(c.repo), c.path)); !slices.Equal(got, c.want) {
+			t.Errorf("%q %s has layers\n%s\nwant\n%s", c.repo, c.path, strings.Join(got, "\n"), strings.Join(c.want, "\n"))
+		}
+	}
+	// The last layer that sets a value is the one that applies.
+	for _, repo := range []string{"", "acme/api", "acme/web", "octo/tools"} {
+		for _, s := range f.Settings(repo) {
+			var last *Layer
+			for j := range s.Layers {
+				if s.Layers[j].Set {
+					last = &s.Layers[j]
+				}
+			}
+			switch {
+			case last == nil && s.By != nil, last != nil && (s.By == nil || *s.By != last.At || cmpOr(s.From, s.Path) != last.Path):
+				t.Errorf("%q %s applies %s from %v, and its last set layer is %+v", repo, s.Path, s.Source(), s.From, last)
+			}
+		}
+	}
+}
+
+func TestFileKeyNamesTheTableOfTheLevel(t *testing.T) {
+	f := readEdit(t, t.TempDir(), layeredConfig)
+	for _, c := range []struct {
+		repo, path string
+		at         Where
+		want       string
+	}{
+		{"acme/api", "review_bot.min_review_score", Where{LevelRepo, "acme/api"}, `[repos."acme/api".review_bot] min_review_score`},
+		{"acme/api", "wip_cap", Where{LevelOwner, "acme/*"}, `[repos."acme/*"] wip_cap`},
+		{"", "stage.default.model", Where{Level: LevelDefaults}, "[defaults.stage.default] model"},
+		{"", "github.labels.started", Where{Level: LevelTop}, "[github.labels] started"},
+		{"", "roots", Where{Level: LevelTop}, "roots"},
+	} {
+		if got := row(t, f.Settings(c.repo), c.path).FileKey(c.at); got != c.want {
+			t.Errorf("%s at %s is %s, want %s", c.path, c.at, got, c.want)
+		}
+	}
+}
+
 // TestSettingsAgreeWithResolve checks each layer key that Resolve gives,
 // for each Repo of the fixture.
 func TestSettingsAgreeWithResolve(t *testing.T) {
@@ -448,8 +522,8 @@ func TestEveryKeySetsAndRemovesAtEveryLevel(t *testing.T) {
 							t.Fatalf("%s at %s lost a comment line or a blank line:\n%s", path, w, f.Text)
 						}
 						s := row(t, f.Settings(tab), path)
-						if slices.Contains(s.SetAt, w) != (value != nil) {
-							t.Fatalf("%s at %s, value %v: the row says it is set at %v", path, w, value != nil, s.SetAt)
+						if slices.Contains(s.SetAt(), w) != (value != nil) {
+							t.Fatalf("%s at %s, value %v: the row says it is set at %v", path, w, value != nil, s.SetAt())
 						}
 					}
 				}

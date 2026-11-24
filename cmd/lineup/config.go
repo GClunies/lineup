@@ -48,9 +48,11 @@ type configKeys struct {
 }
 
 type configSetting struct {
-	Path   string `json:"path"`
-	Value  string `json:"value"`
-	Source string `json:"source"`
+	Path   string   `json:"path"`
+	Group  []string `json:"group"`
+	Label  string   `json:"label"`
+	Value  string   `json:"value"`
+	Source string   `json:"source"`
 }
 
 // cmdConfigKeys prints the key catalog, and with --repo the value that
@@ -78,7 +80,7 @@ func cmdConfigKeys(args []string, out io.Writer) error {
 	}
 	if *repo != "" {
 		for _, s := range f.Settings(*repo) {
-			v.Settings = append(v.Settings, configSetting{Path: s.Path, Value: s.Value, Source: s.Source()})
+			v.Settings = append(v.Settings, configSetting{Path: s.Path, Group: s.Group, Label: s.Label, Value: s.Value, Source: s.Source()})
 		}
 	}
 	if *asJSON {
