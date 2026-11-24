@@ -268,6 +268,17 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 			}
 			return s.apply(r, lifecycle.WorkerStatus{State: "blocked", Kind: string(lifecycle.ReasonQuestion), Detail: q}, "")
 		})
+	case "qa":
+		// Key is wait, pass, or fail. Value is the <when> of a wait, and Text
+		// is the reason, the summary, or the findings.
+		return nil, s.verdict(req)
+	case "qa-accept":
+		return nil, s.signal(req.Task, lifecycle.QAAccept{})
+	case "qa-recheck":
+		return nil, s.recheck(req.Task)
+	case "qa-fix":
+		// The data is the ID of the new fix Issue.
+		return s.fileFix(ctx, req.Task)
 	case "open":
 		return s.open(req.Task)
 	case "steer", "focus", "capture":

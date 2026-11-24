@@ -10,9 +10,11 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gclunies/lineup/internal/config"
 	"github.com/gclunies/lineup/internal/github"
+	"github.com/gclunies/lineup/internal/lifecycle"
 	"github.com/gclunies/lineup/internal/localissues"
 	"github.com/gclunies/lineup/internal/rex"
 	"github.com/gclunies/lineup/internal/scheduler"
@@ -21,10 +23,12 @@ import (
 
 func TestMain(m *testing.M) { testenv.Main(m) }
 
-// spyTracker records each call it gets, as "<call> <identifier>".
+// spyTracker records each call it gets, as "<call> <identifier>". desc is
+// each Issue's description.
 type spyTracker struct {
 	name  string
 	calls *[]string
+	desc  string
 }
 
 func (s spyTracker) note(call, id string) { *s.calls = append(*s.calls, s.name+" "+call+" "+id) }
@@ -43,7 +47,97 @@ func (s spyTracker) SetStatus(_ context.Context, is scheduler.Issue, ev string) 
 }
 func (s spyTracker) Description(_ context.Context, is scheduler.Issue) (string, error) {
 	s.note("describe", is.Identifier)
-	return "", nil
+	return s.desc, nil
+}
+func (s spyTracker) Create(_ context.Context, build *scheduler.Issue, repo, title, _ string) (scheduler.Issue, error) {
+	of := "none"
+	if build != nil {
+		of = build.Identifier
+	}
+	s.note("create beside "+of+" in "+repo, title)
+	return scheduler.Issue{Identifier: "NEW-1"}, nil
+}
+
+// A fix Issue goes to the Tracker of the build Task's Issue, and an ad hoc
+// build Task's to the Local Tracker (PROD-QA-011).
+func TestTheMuxFilesAFixIssueBesideTheBuildIssue(t *testing.T) {
+	var calls []string
+	mux := trackerMux{kinds: map[string]issueTracker{}}
+	for _, k := range []string{scheduler.KindLinear, scheduler.KindGitHub, scheduler.KindLocal} {
+		mux.kinds[k] = spyTracker{name: k, calls: &calls}
+	}
+	ctx := context.Background()
+	for build, kind := range map[*scheduler.Issue]string{
+		{Kind: scheduler.KindLinear, Identifier: "ENG-1"}:  scheduler.KindLinear,
+		{Kind: scheduler.KindGitHub, Identifier: "o/r#2"}:  scheduler.KindGitHub,
+		{Kind: scheduler.KindLocal, Identifier: "LOCAL-3"}: scheduler.KindLocal,
+		nil: scheduler.KindLocal,
+	} {
+		calls = nil
+		is, err := mux.CreateFix(ctx, build, "acme/data", "Fix QA of X: t", "findings")
+		if err != nil || is.Kind != kind || len(calls) != 1 || !strings.HasPrefix(calls[0], kind+" create beside ") {
+			t.Errorf("%v: issue %+v err %v calls %q, want one %s create", build, is, err, calls, kind)
+		}
+	}
+}
+
+// The branch poll keeps the merge of a merged PR for its QA Task
+// (ARCH-QA-005).
+func TestTheBranchPollKeepsTheMergeCommit(t *testing.T) {
+	fixture, err := filepath.Abs(filepath.Join("..", "..", "internal", "github", "testdata", "merged.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "gh")
+	os.WriteFile(bin, []byte("#!/bin/sh\ncat "+fixture+"\n"), 0o755)
+	key := scheduler.PRKey{Repo: "cli/cli", Branch: "b"}
+	prs, err := (&githubPort{c: &github.Client{Bin: bin}}).Poll(context.Background(), []scheduler.PRKey{key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pr := prs[key]; pr.MergeCommit != "93d24ce9ffefb6cc86bde89b50271457bb0ef9cb" || !pr.MergedAt.Equal(time.Date(2026, 10, 27, 14, 38, 50, 0, time.UTC)) {
+		t.Fatalf("snapshot = %+v, want the merge", pr)
+	}
+}
+
+// A Local fix Issue names the Repo, so lineup add maps it there.
+func TestTheLocalTrackerFilesAFixIssueWithItsRepo(t *testing.T) {
+	l := localTracker{s: localissues.Store{Dir: t.TempDir()}}
+	is, err := l.Create(context.Background(), nil, "acme/data", "Fix QA of AH-65: Add billing", "The rows are missing.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if is.Identifier != "LOCAL-1" || is.RepoHint != "acme/data" || is.Title != "Fix QA of AH-65: Add billing" {
+		t.Fatalf("issue %+v", is)
+	}
+	if d, _ := l.Description(context.Background(), is); d != "The rows are missing." {
+		t.Fatalf("description %q", d)
+	}
+}
+
+// A QA Worker's prompt quotes the build Task's Issue and names the merge and
+// the QA worktree (PROD-QA-004).
+func TestAQAWorkerGetsTheBuildIssueAndTheMerge(t *testing.T) {
+	cfg := loadConfig(t, "[defaults.stage.verifying]\nskill = \"qa-check\"\n")
+	var calls []string
+	mux := trackerMux{kinds: map[string]issueTracker{scheduler.KindLinear: spyTracker{name: "linear", calls: &calls, desc: "The nightly load fills the column."}}}
+	w := scheduler.WorkerSpec{Task: "QA-ENG-1", Kind: lifecycle.KindQA, Stage: lifecycle.Verifying, Repo: t.TempDir(),
+		Worktree: "/repos/data.qa-pr-7", Issue: &scheduler.Issue{Kind: scheduler.KindLinear, Identifier: "ENG-1", Title: "Add billing"},
+		PRURL: "https://github.com/acme/data/pull/7", MergeCommit: "93d24ce", MergedAt: time.Date(2026, 10, 27, 14, 38, 50, 0, time.UTC)}
+	p := harnessPort{cfg: cfg, tracker: mux}
+	prompt, err := p.Prompt(context.Background(), w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"/qa-check ", "> The nightly load fills the column.", "Merge commit: 93d24ce\n", "Merged at: 2026-10-27T14:38:50Z\n", "QA worktree: /repos/data.qa-pr-7\n"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt lacks %q:\n%s", want, prompt)
+		}
+	}
+	w.Recheck = true
+	if again, _ := p.Prompt(context.Background(), w); strings.Contains(again, "nightly load") {
+		t.Errorf("a later check repeats the Issue:\n%s", again)
+	}
 }
 
 func TestTheMuxSendsEachCallOnlyToItsIssuesTracker(t *testing.T) {
@@ -95,7 +189,8 @@ func TestTheLocalTrackerWritesEachEventsStatus(t *testing.T) {
 	for _, step := range []struct {
 		event string
 		want  localissues.Status
-	}{{"started", localissues.Started}, {"in_review", localissues.InReview}, {"closed", localissues.InReview}, {"merged", localissues.Done}} {
+	}{{"started", localissues.Started}, {"in_review", localissues.InReview}, {"closed", localissues.InReview}, {"merged", localissues.Done},
+		{"qa_passed", localissues.Done}} {
 		if err := l.SetStatus(ctx, is, step.event); err != nil {
 			t.Fatal(err)
 		}

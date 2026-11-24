@@ -548,8 +548,13 @@ type fakeWorktrees struct {
 	reviewsRemoved []string
 	inFlight       int
 	mostInFlight   int
-	// keep makes RemoveReview keep the worktree, as for an unpushed commit.
+	// keep makes RemoveReview and RemoveQA keep the worktree, as for an
+	// unpushed commit or an uncommitted change.
 	keep bool
+	// qaAdded logs each AddQA call as "<number> <commit>", and qaRemoved
+	// each RemoveQA path.
+	qaAdded   []string
+	qaRemoved []string
 	// dirty makes Remove keep the worktree, as for uncommitted changes.
 	// removed still logs each try.
 	dirty bool
@@ -605,6 +610,20 @@ func (w *fakeWorktrees) RemoveReview(_ context.Context, _, path string, _ Review
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.reviewsRemoved = append(w.reviewsRemoved, path)
+	return w.keep, nil
+}
+
+func (w *fakeWorktrees) AddQA(_ context.Context, repo string, number int, commit string) (string, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.qaAdded = append(w.qaAdded, fmt.Sprintf("%d %s", number, commit))
+	return fmt.Sprintf("%s.qa-pr-%d", repo, number), nil
+}
+
+func (w *fakeWorktrees) RemoveQA(_ context.Context, _, path string) (bool, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.qaRemoved = append(w.qaRemoved, path)
 	return w.keep, nil
 }
 
@@ -695,6 +714,15 @@ type fakeTracker struct {
 	status []string
 	kinds  []string // the Kind of each Lookup
 	title  string   // the Issue's title, and "Add billing model" when empty
+	// fixes logs each CreateFix call. A non-nil gate holds each call open
+	// until the test closes it.
+	fixes []fixCall
+	gate  chan struct{}
+}
+
+type fixCall struct {
+	build              *Issue
+	repo, title, about string
 }
 
 func (t *fakeTracker) Lookup(_ context.Context, kind, id string) (Issue, error) {
@@ -705,6 +733,22 @@ func (t *fakeTracker) Lookup(_ context.Context, kind, id string) (Issue, error) 
 	return Issue{Kind: kind, Identifier: id, Title: title, BranchName: "ada/eng-1-billing", TeamKey: "ENG"}, nil
 }
 func (t *fakeTracker) Begin(context.Context, Issue) error { return nil }
+
+// CreateFix files LOCAL-9 for an ad hoc build Task, and ENG-99 beside a
+// Linear Issue.
+func (t *fakeTracker) CreateFix(_ context.Context, build *Issue, repo, title, about string) (Issue, error) {
+	t.mu.Lock()
+	t.fixes = append(t.fixes, fixCall{build, repo, title, about})
+	gate := t.gate
+	t.mu.Unlock()
+	if gate != nil {
+		<-gate
+	}
+	if build == nil {
+		return Issue{Kind: KindLocal, Identifier: "LOCAL-9", Title: title}, nil
+	}
+	return Issue{Kind: build.Tracker(), Identifier: "ENG-99", Title: title}, nil
+}
 func (t *fakeTracker) SetStatus(_ context.Context, _ Issue, event string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -724,6 +768,9 @@ func (fakeConfig) PickedRepo(context.Context, Issue, string) error { return nil 
 func (fakeConfig) ResolveRepo(name string) (string, error)         { return "/repos/acme/" + name, nil }
 func (fakeConfig) RepoPrefix(string) string                        { return "" }
 func (fakeConfig) SetUp(repo string) (string, bool)                { return "acme/" + filepath.Base(repo), true }
+
+// QA is off, as by default.
+func (fakeConfig) QA(string) (QA, error) { return QA{MaxWait: 48 * time.Hour}, nil }
 
 // RepoTracker gives /repos/acme/issues the GitHub Tracker, /repos/acme/notes
 // the Local Tracker, and every other Repo Linear.

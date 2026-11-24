@@ -120,6 +120,7 @@ func serve() error {
 		PollInterval:   defaults.PollInterval,
 		Queues:         reviewQueues(cfg),
 		Slots:          cfg.ReviewSlots(),
+		QASlots:        cfg.QASlots(),
 		StateHome:      xdgStateHome(),
 		BoardCache:     filepath.Join(stateDir(), "board.json"),
 		Log:            log,

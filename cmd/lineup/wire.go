@@ -206,7 +206,8 @@ func (p *githubPort) Poll(ctx context.Context, keys []scheduler.PRKey) (map[sche
 		if err != nil {
 			return nil, err
 		}
-		out[scheduler.PRKey{Repo: k.Repo, Branch: k.Branch, Bot: k.Bot}] = scheduler.PRSnapshot{Number: pr.Number, URL: pr.URL, Raw: raw}
+		out[scheduler.PRKey{Repo: k.Repo, Branch: k.Branch, Bot: k.Bot}] = scheduler.PRSnapshot{Number: pr.Number, URL: pr.URL, Raw: raw,
+			MergeCommit: pr.MergeCommit, MergedAt: pr.MergedAt}
 	}
 	return out, nil
 }
@@ -295,6 +296,15 @@ func (p worktreePort) RemoveReview(ctx context.Context, repo, path string, pr sc
 	return worktree.RemoveReview(ctx, repo, path, pr.Number)
 }
 
+func (p worktreePort) AddQA(ctx context.Context, repo string, number int, commit string) (string, error) {
+	path := worktree.QAPath(repo, number)
+	return path, worktree.AddQA(ctx, repo, path, commit)
+}
+
+func (p worktreePort) RemoveQA(ctx context.Context, repo, path string) (bool, error) {
+	return worktree.RemoveQA(ctx, repo, path)
+}
+
 type harnessPort struct {
 	cfg     *config.Global
 	tracker trackerMux
@@ -316,8 +326,11 @@ func (p harnessPort) Prompt(ctx context.Context, w scheduler.WorkerSpec) (string
 	st := res.Stages[w.Stage]
 	info := claude.TaskInfo{ID: w.Task, Ask: w.Text, PRURL: w.PRURL, Branch: w.Branch, Repo: w.Repo, PR: res.PR,
 		ReviewCycle: w.ReviewCycle, Bar: w.Bar, Standing: w.Standing, Restart: w.Restart, Steers: w.Steers}
-	if w.Kind == lifecycle.KindReview {
+	switch w.Kind {
+	case lifecycle.KindReview:
 		info.ReviewWorktree = w.Worktree
+	case lifecycle.KindQA:
+		info.QAWorktree, info.MergeCommit, info.MergedAt, info.Recheck = w.Worktree, w.MergeCommit, w.MergedAt, w.Recheck
 	}
 	if w.Issue != nil {
 		info.IssueID, info.IssueTitle, info.IssueURL = w.Issue.Identifier, w.Issue.Title, w.Issue.URL
@@ -342,7 +355,7 @@ func (p harnessPort) Command(ctx context.Context, w scheduler.WorkerSpec, prompt
 		return nil, nil, err
 	}
 	var addDirs []string
-	if w.Kind == lifecycle.KindReview {
+	if w.Kind != lifecycle.KindBuild {
 		addDirs = []string{w.Worktree}
 	}
 	if prompt == "" && w.Conversation == "" {
@@ -404,6 +417,9 @@ type issueTracker interface {
 	Begin(ctx context.Context, is scheduler.Issue) error
 	SetStatus(ctx context.Context, is scheduler.Issue, event string) error
 	Description(ctx context.Context, is scheduler.Issue) (string, error)
+	// Create files a fix Issue, assigned to the user, beside build, the
+	// build Task's Issue, or with the Repo key repo in the Local Tracker.
+	Create(ctx context.Context, build *scheduler.Issue, repo, title, description string) (scheduler.Issue, error)
 }
 
 // trackerMux is the Scheduler's Tracker port. It routes each call to the
@@ -458,6 +474,22 @@ func (m trackerMux) Description(ctx context.Context, is scheduler.Issue) (string
 		return "", err
 	}
 	return t.Description(ctx, is)
+}
+
+// CreateFix files the fix Issue in the Tracker of the build Task's Issue. An
+// ad hoc build Task has none, so its fix Issue is local (PROD-QA-011).
+func (m trackerMux) CreateFix(ctx context.Context, build *scheduler.Issue, repo, title, description string) (scheduler.Issue, error) {
+	kind := scheduler.KindLocal
+	if build != nil {
+		kind = build.Tracker()
+	}
+	t, err := m.of(kind)
+	if err != nil {
+		return scheduler.Issue{}, err
+	}
+	is, err := t.Create(ctx, build, repo, title, description)
+	is.Kind = kind
+	return is, err
 }
 
 type trackerPort struct{ cfg *config.Global }
@@ -547,6 +579,28 @@ func (p *trackerPort) Description(ctx context.Context, is scheduler.Issue) (stri
 	return full.Description, err
 }
 
+// Create files the Issue in the team and the Project of the build Task's Issue.
+func (p *trackerPort) Create(ctx context.Context, build *scheduler.Issue, _, title, description string) (scheduler.Issue, error) {
+	c, _, err := p.client(build.Workspace)
+	if err != nil {
+		return scheduler.Issue{}, err
+	}
+	full, err := c.Issue(ctx, build.Identifier)
+	if err != nil {
+		return scheduler.Issue{}, err
+	}
+	n := linear.NewIssue{TeamID: full.Team.ID, Title: title, Description: description, AssignToMe: true}
+	if full.Project != nil {
+		n.ProjectID = full.Project.ID
+	}
+	is, err := c.Create(ctx, n)
+	if err != nil {
+		return scheduler.Issue{}, err
+	}
+	return scheduler.Issue{Workspace: build.Workspace, ID: is.ID, Identifier: is.Identifier, Title: is.Title, URL: is.URL,
+		BranchName: is.BranchName, TeamKey: full.Team.Key, ProjectID: n.ProjectID}, nil
+}
+
 // githubTracker reaches GitHub Issues through gh. labels maps a lifecycle
 // event to the label it sets.
 type githubTracker struct {
@@ -592,6 +646,19 @@ func (g githubTracker) Description(ctx context.Context, is scheduler.Issue) (str
 	return full.Body, err
 }
 
+// Create files the Issue in the repository of the build Task's Issue.
+func (g githubTracker) Create(ctx context.Context, build *scheduler.Issue, _, title, description string) (scheduler.Issue, error) {
+	repo, _, err := github.ParseIssueID(build.Identifier)
+	if err != nil {
+		return scheduler.Issue{}, err
+	}
+	is, err := g.c.CreateIssue(ctx, repo, title, description)
+	if err != nil {
+		return scheduler.Issue{}, err
+	}
+	return scheduler.Issue{Identifier: is.ID(), Title: is.Title, URL: is.URL, BranchName: is.Branch()}, nil
+}
+
 // localTracker is the Local Tracker's folder.
 type localTracker struct{ s localissues.Store }
 
@@ -607,8 +674,22 @@ func (l localTracker) Lookup(_ context.Context, identifier string) (scheduler.Is
 	if err != nil {
 		return scheduler.Issue{}, err
 	}
+	return l.issue(is), nil
+}
+
+func (l localTracker) issue(is localissues.Issue) scheduler.Issue {
 	return scheduler.Issue{Identifier: is.ID(), Title: is.Title, URL: "file://" + filepath.Join(l.s.Dir, is.File()),
-		BranchName: is.Branch(), RepoHint: is.Repo}, nil
+		BranchName: is.Branch(), RepoHint: is.Repo}
+}
+
+// Create files a Local Issue with the Repo key repo. A Local Issue has no
+// assignee, so the user owns it.
+func (l localTracker) Create(_ context.Context, _ *scheduler.Issue, repo, title, description string) (scheduler.Issue, error) {
+	is, err := l.s.Create(title, repo, description)
+	if err != nil {
+		return scheduler.Issue{}, err
+	}
+	return l.issue(is), nil
 }
 
 func (l localTracker) Begin(context.Context, scheduler.Issue) error { return nil }
@@ -760,6 +841,11 @@ func (p configPort) RepoTracker(repo string) (string, string) { return p.cfg.Rep
 func (p configPort) RepoPrefix(repo string) string { return p.cfg.RepoPrefix(repo) }
 
 func (p configPort) SetUp(repo string) (string, bool) { return p.cfg.SetUp(repo) }
+
+func (p configPort) QA(repo string) (scheduler.QA, error) {
+	res, err := p.cfg.Resolve(repo, nil)
+	return scheduler.QA(res.QA), err
+}
 
 func (p configPort) RepoForGitHub(slug string) (string, bool) { return p.cfg.CheckoutFor(slug) }
 

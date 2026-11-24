@@ -62,14 +62,14 @@ func (s *Scheduler) restore(ctx context.Context, id string, focus bool) (OpenRes
 	}
 	res := OpenResult{TaskView: r.view(), Action: OpenFocused}
 	switch {
-	case r.Stage == lifecycle.Done && r.WindowID == "" && r.Review != nil:
+	case r.Stage == lifecycle.Done && r.WindowID == "" && r.Kind != lifecycle.KindBuild:
 		return res, fmt.Errorf("%s is Done and its worktree is gone", id)
 	case r.WindowID != "" && (r.Job != JobExited || r.Stage == lifecycle.Done):
 		if !focus {
 			return res, nil
 		}
 		return res, s.d.Rex.Focus(ctx, r.SessionID, r.WindowID, r.BlockID)
-	case r.Review == nil && r.Worktree == "" && r.Stage != lifecycle.Done:
+	case r.Kind == lifecycle.KindBuild && r.Worktree == "" && r.Stage != lifecycle.Done:
 		return res, fmt.Errorf("%s has no worktree yet", id)
 	}
 	gone := r.Conversation != "" && !s.d.Harness.HasConversation(ctx, WorkerSpec{Repo: r.Repo, Conversation: r.Conversation})
