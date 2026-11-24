@@ -20,7 +20,7 @@ The `[board]` table in the config sets the layout of the groups `needs_you`, `fo
 
 ## PROD-BOARD-005: The user opens and closes groups for one run
 
-`enter` or a tap on a group heading opens or closes that group for this run only. Needs you never closes. `d` shows and opens Done when it is hidden, and hides Done when it shows, for this run only, whatever `hidden` says. When a Task moves into a closed group, the selection goes to that group's heading. Any other lost selection goes to the first row, or to the first heading when every group is closed. A capture into a closed or hidden Backlog shows and opens Backlog for this run, and selects the new row.
+`enter` or a tap on a heading opens or closes its group for this run only. Needs you never closes. `d` shows and opens a hidden Done, and hides a shown Done, for this run only, whatever `hidden` says. When a closed group or the Team limit hides the selected row, the selection goes to that heading or the `+ N more rows` line. Any other lost selection goes to the first row, or to the first heading when every group is closed. A capture into a closed or hidden Backlog shows and opens it for this run, and selects the new row.
 
 ## PROD-BOARD-006: Each row shows one status word
 
@@ -52,7 +52,7 @@ On a Task row, `enter` focuses the Task's tab in Rex. When the Task has no live 
 
 ## PROD-BOARD-013: The keys on every row
 
-On every row, `j` and `k` move the selection through the headings and the rows of open groups. `d` shows or hides Done, `/` opens the filter, and `n` captures a new Issue. `R` makes the Scheduler poll GitHub for every started Task at once. `z` zooms the Orchestrator pane to full height, and back. `?` shows all keys, and `q` quits. A key that does not apply to the selected row does nothing. The footer hints name the keys of the selected row, drop hints from the end to fit, and always keep `? all keys`.
+On every row, `j` and `k` move the selection through the headings, the rows that show, and the `+ N more rows` line. `d` shows or hides Done, `/` opens the filter, and `n` captures a new Issue. `R` makes the Scheduler poll GitHub for every started Task at once. `z` zooms the Orchestrator pane to full height, and back. `?` shows all keys, and `q` quits. A key that does not apply to the selected row does nothing. The footer hints name the keys of the selected row, drop hints from the end to fit, and always keep `? all keys`.
 
 ## PROD-BOARD-014: Mouse and touch work as the keys do
 
@@ -93,3 +93,8 @@ The Repo of a Task on the Board, in `lineup ls`, and in `lineup show` is the fol
 ## PROD-BOARD-023: Each column fits the rows on screen
 
 Each column is as wide as its widest cell among the rows on screen, so a row out of view does not widen it. The column of the age or the priority, the Repo column, and the skill column each show only when at least half the rows on screen fill them. The title takes the rest of the width.
+
+## PROD-BOARD-024: An open Team shows at most 10 rows
+
+An open Team shows its first 10 rows. When it holds more, a dim line follows them, for example `+ 90 more rows`. The user can select that line, and the strip then shows Team and `90 more rows`. `enter` or a tap on the line shows every row of Team for this run and selects the first row that was hidden. Closing Team brings the limit back. While the filter holds text, Team shows every match.
+
