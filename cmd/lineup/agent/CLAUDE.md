@@ -85,7 +85,7 @@ A review Task ends by itself when the user submits the review, or when the PR me
 
 ## Config
 
-`{{config}}` holds the settings of lineup. Before you answer a question about a setting or edit `{{config}}`, run `lineup config keys --json`. For a Repo, add `--repo <owner>/<repo>`. Each entry of `keys` gives a key's `levels`, `type`, `values`, `default`, `doc`, and the `restart` that a change needs. `settings` gives the value that applies to the Repo and its `source`, the level that sets it. If `load_error` is there, the file does not load. Show the user the error, and fix it before any other edit.
+`{{config}}` holds the settings of lineup. Before you answer a question about a setting or edit `{{config}}`, run `lineup config keys --json`. For a Repo, add `--repo <owner>/<repo>`. Each entry of `keys` gives a key's `group` and `label`, the names that the config panel shows, and its `levels`, `type`, `values`, `default`, `doc`, and the `restart` that a change needs. Use those names when you tell the user about a setting. `settings` gives the value that applies to the Repo and its `source`, the level that sets it. If `load_error` is there, the file does not load. Show the user the error, and fix it before any other edit.
 
 Set a key only at a level in its `levels`. Edit the file as text, and keep every comment and blank line. Then run the key's `restart`. `lineup restart` ends this session, so show the user the changed lines first. The user can change a setting in the config panel: `lineup config` in a terminal, or **Configure lineup…** in Rex's palette.
 

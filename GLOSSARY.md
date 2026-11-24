@@ -97,7 +97,7 @@ A Done Task that the user hid from the Board. Archiving closes the Task's tab an
 _Avoid_: Deleted, removed
 
 **Config panel**:
-The screen of `lineup config`: each key of the config file, the value that applies, and the level that sets it, on a Global tab and a Repo tab. It changes one key at a time.
+The screen of `lineup config`: the settings of the config file as a tree of groups with plain names, on a Global tab and a Repo tab. Each setting shows the value that applies and the level that sets it. The selected setting shows its value at each level, from the default up. The panel changes one key at a time.
 _Avoid_: Settings page, config editor
 
 **Hub**:
@@ -203,5 +203,5 @@ _Avoid_: Lane count, concurrency limit
 ### Configuration
 
 **Key catalog**:
-The one list of every key of the config file: its path, the levels where it can sit, its type, its allowed values, its default, a one-line doc, and the restart that a change needs. The config panel and `lineup config keys` show it.
+The one list of every key of the config file: its path, its group and plain label, the levels where it can sit, its type, its allowed values, its default, a one-line doc, and the restart that a change needs. The config panel and `lineup config keys` show it.
 _Avoid_: Schema, key list, settings registry

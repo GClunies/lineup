@@ -270,7 +270,7 @@ func (m Model) levelNote(w config.Where) string {
 // detail describes the selected row. A group names the rows that it holds.
 // A setting gives its doc, its value at each level with the one that
 // applies, the key as the file writes it where enter sets it, and the
-// restart that a change needs.
+// restart that a change needs (PROD-CONFIG-012).
 func (m Model) detail() []string {
 	r, ok := m.selectedRow()
 	if !ok {

@@ -30,9 +30,9 @@ lineup checks the whole config file at each load. A bad value, an unknown key, o
 
 The Scheduler and the Board read the config file only when they start. After the user edits the file or runs `lineup config migrate`, `lineup restart` applies the change to both. `lineup restart scheduler` applies it to the Scheduler alone. `lineup repo init` restarts the Scheduler by itself. A new clone below a root needs no restart.
 
-## PROD-CONFIG-008: One panel shows every setting
+## PROD-CONFIG-008: One panel shows every setting in groups with plain names
 
-`lineup config` opens the config panel in the terminal, with a Global tab and a Repo tab. The Global tab lists each top-level key and each `[defaults]` key. The Repo tab lists the keys of a Repo table for one Repo, which the user picks from the checkouts below `roots`. Each row shows the key, the value that applies, and the level that sets it: `default`, `[defaults]`, the owner table, or the Repo table. The selected key shows its doc, its type, its allowed values, its default, and the restart that a change needs.
+`lineup config` opens the config panel, with a Global tab and a Repo tab. Each tab is a tree of groups with plain names, such as Review bot › Lowest pass score. Each group starts closed and sums up its settings and the levels that set them. The Global tab holds the top-level keys, and the `[defaults]` keys in a group of their own. The Repo tab holds the keys of one Repo that the user picks from the checkouts below `roots`. Each setting shows the value that applies and the level that sets it.
 
 ## PROD-CONFIG-009: The panel writes only a change that loads
 
@@ -45,3 +45,7 @@ After a save, the panel names the restart that the change needs: `lineup restart
 ## PROD-CONFIG-011: lineup config keys lists every key
 
 `lineup config keys` lists every key of the config file with its levels, its type, its allowed values, its default, its doc, and the restart that a change needs. `--json` prints the list as JSON. `--repo <owner>/<repo>` adds the value that applies to the Repo and the level that sets it. The list works on a file that does not load, and `--json` then names the load error.
+
+## PROD-CONFIG-012: The panel shows the value of a setting at each level
+
+The selected setting in the config panel shows its doc and one line for each level, from the default up: `default`, `[defaults]`, the owner table, and the Repo table, each with its value there. A mark shows the level that applies. A Stage key also shows each `[stage.default]` value that it falls back to. Then the panel names the key as the file writes it, and the restart that a change needs.
