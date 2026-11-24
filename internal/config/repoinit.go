@@ -24,6 +24,7 @@ type setupKey struct {
 var setupKeys = []setupKey{
 	{"tracker", tomlString},
 	{"teams", tomlList},
+	{"prefix", tomlString},
 	{"review_bot.name", tomlString},
 	{"review_bot.min_review_score", tomlInt},
 	{"review_bot.max_review_cycles", tomlInt},

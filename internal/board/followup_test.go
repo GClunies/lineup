@@ -4,9 +4,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/quick"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gclunies/lineup/internal/github"
 	"github.com/gclunies/lineup/internal/lifecycle"
@@ -41,19 +43,19 @@ func TestADoneTaskShowsInFollowUpUntilItsTrackerClosesTheIssue(t *testing.T) {
 		return github.OwnIssue{Issue: github.Issue{Repo: "octo/sandbox", Number: n, Title: "Ship the QA build", State: "OPEN"}}
 	}
 	for _, c := range []struct {
-		name, id, note string
-		open, closed   tea.Msg
+		name, id, word, state string
+		open, closed          tea.Msg
 	}{
-		{"Linear, then completed", "PD-1", "Waiting for QA",
+		{"Linear, then completed", "PD-1", "QA", "Waiting for QA",
 			mineIssuesMsg{ws: acme, issues: []linear.Issue{waitingForQA("PD-1")}, live: true},
 			mineIssuesMsg{ws: acme, issues: []linear.Issue{completed}, live: true}},
-		{"Linear, then gone from My Issues", "PD-1", "Waiting for QA",
+		{"Linear, then gone from My Issues", "PD-1", "QA", "Waiting for QA",
 			mineIssuesMsg{ws: acme, issues: []linear.Issue{waitingForQA("PD-1")}, live: true},
 			mineIssuesMsg{ws: acme, live: true}},
-		{"GitHub, then gone from the open Issues", "octo/sandbox#12", "open",
+		{"GitHub, then gone from the open Issues", "octo/sandbox#12", "open", "open",
 			mineGitHubMsg{issues: []github.OwnIssue{ownIssue(12), ownIssue(14)}},
 			mineGitHubMsg{issues: []github.OwnIssue{ownIssue(14)}}},
-		{"Local, then done", "LOCAL-1", "in review",
+		{"Local, then done", "LOCAL-1", "in review", "in review",
 			mineLocalMsg{issues: []localissues.Issue{localIssue(1, localissues.InReview)}},
 			mineLocalMsg{issues: []localissues.Issue{localIssue(1, localissues.Done)}}},
 	} {
@@ -63,11 +65,11 @@ func TestADoneTaskShowsInFollowUpUntilItsTrackerClosesTheIssue(t *testing.T) {
 			if !strings.Contains(out, "Follow-up 1\n") || hasHeading(out, "Done") {
 				t.Fatalf("want %s in an open Follow-up and no Done:\n%s", c.id, out)
 			}
-			if l := lineOf(t, out, boardID(c.id)); !strings.Contains(l, c.note) || strings.Contains(l, "merged") {
-				t.Errorf("row %q, want the status %q", l, c.note)
+			if l := lineOf(t, out, boardID(c.id)); !strings.Contains(l, "  "+c.word+"  ") || strings.Contains(l, "merged") {
+				t.Errorf("row %q, want the status %q", l, c.word)
 			}
-			if f := footerAt(m, 100); !strings.Contains(f, " · "+c.note+"\n") {
-				t.Errorf("the strip must name the Tracker state %q:\n%s", c.note, f)
+			if f := footerAt(m, 100); !strings.Contains(f, " · "+c.state+"\n") {
+				t.Errorf("the strip must name the Tracker state %q:\n%s", c.state, f)
 			}
 			m = openAll(feed(m, c.closed))
 			m.sel = c.id
@@ -180,10 +182,63 @@ func TestAFollowUpRowKeepsTheWorktreeNoteInTheStrip(t *testing.T) {
 	task.Note, task.WorktreeNote = "#12 merged · "+kept, kept
 	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{task}})
 	m = feed(m, mineIssuesMsg{ws: acme, issues: []linear.Issue{waitingForQA("PD-1")}, live: true})
-	if l := lineOf(t, screen(m), boardID("PD-1")); !strings.Contains(l, "Waiting for QA") || strings.Contains(l, "worktree") {
-		t.Errorf("row %q, want the status word Waiting for QA alone", l)
+	if l := lineOf(t, screen(m), boardID("PD-1")); !strings.Contains(l, "  QA  ") || strings.Contains(l, "worktree") {
+		t.Errorf("row %q, want the status word QA alone", l)
 	}
 	if f := footerAt(m, 120); !strings.Contains(f, " · Waiting for QA · "+kept) {
 		t.Errorf("the strip must name the Tracker state, then %q:\n%s", kept, f)
+	}
+}
+
+// The open states of the user's Linear workspace each show a status word of
+// at most 12 cells on a Follow-up row (PROD-BOARD-027).
+func TestAFollowUpRowShowsAShortTrackerState(t *testing.T) {
+	for state, want := range map[string]string{
+		"Waiting for Code Review": "code review",
+		"Waiting for QA":          "QA",
+		"In Development":          "development",
+		"Ready for Grooming":      "grooming",
+		"Ready for Dev":           "dev",
+		"Not Ready for Dev":       "not ready f…",
+		"Blocked":                 "blocked",
+		"Ready for QA":            "ready for QA",
+	} {
+		is := waitingForQA("PD-1")
+		is.State.Name = state
+		m := feed(shippedBoard(&fakeClient{}, "PD-1"), mineIssuesMsg{ws: acme, issues: []linear.Issue{is}, live: true})
+		if l := lineOf(t, screen(m), "PD-1"); !strings.Contains(l, "  "+want+"  ") {
+			t.Errorf("state %q: row %q, want the status word %q", state, l, want)
+		}
+		if f := footerAt(m, 100); !strings.Contains(f, " · "+state+"\n") {
+			t.Errorf("state %q: the strip must name the full Tracker state:\n%s", state, f)
+		}
+	}
+}
+
+func TestATrackerWordNeverPassesTwelveCells(t *testing.T) {
+	if err := quick.Check(func(state string) bool { return lipgloss.Width(trackerWord(state)) <= 12 }, nil); err != nil {
+		t.Error(err)
+	}
+}
+
+// At 113 columns the Follow-up rows of Issue 162 give a status column of at
+// most 12 cells, and the strip of the selected row names its full Tracker
+// state (PROD-BOARD-027, PROD-BOARD-007).
+func TestFollowUpRowsKeepTheStatusColumnShortAt113Columns(t *testing.T) {
+	review := waitingForQA("PD-714")
+	review.State.Name = "Waiting for Code Review"
+	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Tasks: []scheduler.TaskView{shipped("PD-714"), shipped("PD-645")}})
+	m = feed(m, mineIssuesMsg{ws: acme, live: true, issues: []linear.Issue{review, waitingForQA("PD-645")}})
+	m.sel = "PD-714"
+	out := viewAt(m, 113)
+	for id, word := range map[string]string{"PD-714": "code review", "PD-645": "QA"} {
+		l := lineOf(t, out, id)
+		status := cellOf(l, "  "+word+"  ") + 2
+		if width := cellOf(l, "today") - status - 2; status < 2 || width > 12 {
+			t.Errorf("the %s row shows a status column of %d cells, want %q in at most 12: %q\n%s", id, width, word, l, out)
+		}
+	}
+	if f := footerAt(m, 113); !strings.Contains(f, " · Waiting for Code Review\n") {
+		t.Errorf("the strip must name the full Tracker state:\n%s", f)
 	}
 }

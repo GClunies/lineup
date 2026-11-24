@@ -24,6 +24,7 @@ name = "greptile"
 
 [repos."crexi/data"]
 teams = ["PD"] # the data team
+prefix = "dat"
 [repos."crexi/data".landing_bar]
 threads = "resolved"
 
@@ -48,11 +49,13 @@ name = "greptile"
 
 [repos."crexi/data"]
 teams = ["PD"] # the data team
+prefix = "dat"
 [repos."crexi/data".landing_bar]
 threads = "resolved"
 
 [repos."crexi/web"]
 teams = ["WEB", "APP"]
+prefix = "cw"
 [repos."crexi/web".review_bot]
 min_review_score = 4
 [repos."crexi/web".landing_bar]
@@ -89,11 +92,11 @@ func TestInitRepoAddsATableThatTheNextLoadReads(t *testing.T) {
 	if err := os.Chmod(path, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	table, err := InitRepo(path, "crexi/web", []string{"landing_bar.checks=all", "review_bot.min_review_score=4", "teams=WEB, APP"})
+	table, err := InitRepo(path, "crexi/web", []string{"landing_bar.checks=all", "prefix=cw", "review_bot.min_review_score=4", "teams=WEB, APP"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "[repos.\"crexi/web\"]\nteams = [\"WEB\", \"APP\"]\n[repos.\"crexi/web\".review_bot]\nmin_review_score = 4\n[repos.\"crexi/web\".landing_bar]\nchecks = \"all\"\n"; table != want {
+	if want := "[repos.\"crexi/web\"]\nteams = [\"WEB\", \"APP\"]\nprefix = \"cw\"\n[repos.\"crexi/web\".review_bot]\nmin_review_score = 4\n[repos.\"crexi/web\".landing_bar]\nchecks = \"all\"\n"; table != want {
 		t.Errorf("table:\n%s\nwant:\n%s", table, want)
 	}
 	if got := readFile(t, path); got != initAfter {
@@ -119,6 +122,9 @@ func TestInitRepoAddsATableThatTheNextLoadReads(t *testing.T) {
 	}
 	if got := g.ReposForTeam("APP"); !reflect.DeepEqual(got, []string{"crexi/web"}) {
 		t.Errorf("team APP maps to %q, want crexi/web", got)
+	}
+	if got := g.RepoPrefix(web); got != "cw" {
+		t.Errorf("RepoPrefix(web) = %q, want cw", got)
 	}
 }
 
@@ -168,7 +174,14 @@ func TestInitRepoRefusesABadTableAndKeepsTheFile(t *testing.T) {
 		{"crexi/web", []string{"tracker=linear", "tracker=github"}, "tracker is set twice"},
 		{"crexi/web", []string{"tracker"}, "key=value"},
 		{"crexi/web", []string{"teams=PD,"}, "teams"},
-		{"crexi/web", []string{"wip_cap=3"}, "tracker, teams, review_bot.name, review_bot.min_review_score, review_bot.max_review_cycles, landing_bar.checks, landing_bar.threads, landing_bar.approvals"},
+		{"crexi/web", []string{"prefix=local"}, `repos."crexi/web": prefix "LOCAL" is reserved: lineup starts its own IDs with LOCAL, AH, PR, QA`},
+		{"crexi/web", []string{"prefix=ah"}, `repos."crexi/web": prefix "AH" is reserved`},
+		{"crexi/web", []string{"prefix=PR"}, `repos."crexi/web": prefix "PR" is reserved`},
+		{"crexi/web", []string{"prefix=qa-web"}, `repos."crexi/web": prefix "QA-WEB" starts with QA-`},
+		{"crexi/web", []string{"prefix=c_w"}, `repos."crexi/web": prefix "C_W" must hold only letters, digits, and dashes`},
+		{"crexi/web", []string{"prefix=DAT"}, `repos."crexi/web": prefix "DAT" is also the prefix of repos."crexi/data"`},
+		{"crexi/web", []string{"prefix=pd"}, `repos."crexi/web": prefix "PD" equals a Linear team key`},
+		{"crexi/web", []string{"wip_cap=3"}, "tracker, teams, prefix, review_bot.name, review_bot.min_review_score, review_bot.max_review_cycles, landing_bar.checks, landing_bar.threads, landing_bar.approvals"},
 		{"crexi/data", nil, "crexi/data is already set up in "},
 		{"Crexi/Data", nil, "Crexi/Data is already set up in "},
 		{"crexi/*", nil, "owner/repo"},
@@ -232,6 +245,33 @@ min_review_score = 4
 	} {
 		if got := g.Inherited(key); !reflect.DeepEqual(got, want) {
 			t.Errorf("Inherited(%s) = %+v, want %+v", key, got, want)
+		}
+	}
+}
+
+func TestSuggestPrefixTakesTheFirstStartOfTheNameThatLoadAccepts(t *testing.T) {
+	g := load(t, `
+[repos."acme/data"]
+tracker = "linear"
+teams = ["KIN"]
+[repos."acme/web"]
+prefix = "lin"
+[repos."acme/notes"]
+prefix = "not"
+`)
+	for key, want := range map[string]string{
+		"GClunies/Kinesis-Advantage-360-Pro-ZMK": "kines", // KIN is a team key, and KINE is a team key below.
+		"GClunies/lineup":                        "line",  // acme/web has LIN.
+		"acme/notes":                             "not",   // the Repo's own prefix is no clash.
+		"GClunies/HOD":                           "hod",
+		"GClunies/qa-tools":                      "qat", // QA- is reserved, so the dash goes.
+		"GClunies/ah":                            "",    // AH is reserved, and no longer start exists.
+		"GClunies/go":                            "go",
+		"GClunies/.github":                       "git",
+		"GClunies/---":                           "",
+	} {
+		if got := g.SuggestPrefix(key, []string{"KINE"}); got != want {
+			t.Errorf("SuggestPrefix(%s) = %q, want %q", key, got, want)
 		}
 	}
 }

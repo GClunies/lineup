@@ -53,9 +53,9 @@ lineup has no planning Stage. If the user wants a Worker to plan before it build
 A build Task needs the own `[repos."<owner>/<repo>"]` table of its Repo in `{{config}}`. An empty table is enough. An `[repos."<owner>/*"]` table does not count. A review Task needs no table. If the table is missing, `lineup add` adds nothing and fails with `repo not set up: <owner>/<repo>`.
 
 1. Run `lineup repo detect <owner>/<repo> --json`. It prints the detected value of each question, the Trackers in `trackers_on`, the Linear teams in `linear_teams`, and the worktree hooks in `worktree`.
-2. Ask the first four questions below in one `AskUserQuestion` call. Put the detected option first, and end its label with "(detected)".
-3. If the user picks Linear for the Tracker, ask the Linear teams question in a second call. `AskUserQuestion` takes at most 4 questions.
-4. Run `lineup repo init <owner>/<repo> <key=value>...` with the answers. It writes the table, prints it, and restarts the Scheduler.
+2. Ask the Tracker, Review bot, Landing bar, and Prefix questions below in one `AskUserQuestion` call. Put the detected option first, and end its label with "(detected)".
+3. Ask the Worktree question and, if the user picked Linear for the Tracker, the Teams question in a second call. If neither question applies, skip this call. `AskUserQuestion` takes at most 4 questions.
+4. Run `lineup repo init <owner>/<repo> <key=value>...` with the answers. It writes the table, prints it, and restarts the Scheduler. If it refuses the prefix, show the user its error and ask the Prefix question again.
 5. Run the same `lineup add` again.
 6. If the user picked the worktree Task, run its `lineup add` last.
 
@@ -70,6 +70,7 @@ The `key=value` arguments come from the answers:
 | Which Tracker gives the Repo its Issues? | Tracker | `tracker`, then each other Tracker in `trackers_on`, then **None**, for ad hoc Tasks only. If `tracker` is `""`, **None** is the detected option. | `tracker=<linear, github, or local>`. **None** passes nothing. |
 | Which review bot gates the PRs? | Review bot | `review_bot.name`, then **No gate**. If `review_bot` is `null`, **No gate** is the detected option, and **Greptile** comes second. Offer **No gate** only when `review_bot` is `null` or `init` holds `review_bot.name`. | `review_bot.name=greptile`. **No gate** passes nothing. |
 | Which checks must pass before a PR lands? | Landing bar | `landing_bar.checks`, then the other value. `required`: the required checks of the base branch. `all`: every check. | `landing_bar.checks=<required or all>` |
+| Which prefix starts the IDs of the Repo's ad hoc Tasks and Local Issues? Ask only when `prefix` is not `""`. | Prefix | `prefix` in upper case, with the first ID in its description, for example `KIN-1`. Then **No prefix**, which keeps `AH-<n>` and `LOCAL-<n>`. | `prefix=<p>`. A typed answer passes `prefix=<the answer>`. **No prefix** passes nothing. |
 | Start a Task that writes worktrunk hooks for the Repo? Ask only when `worktree.set_up` is `false`. | Worktree | **Start a Task**, then **Skip**. | None. **Start a Task** runs `lineup add --repo <owner>/<repo> "Write worktrunk pre-start hooks in .config/wt.toml that copy the ignored files and install the dependencies of a new worktree"`. |
 | Which Linear teams map their Issues to the Repo? Set `multiSelect`. | Teams | Up to 4 teams from `linear_teams` whose key or name fits the Repo. If a team has `repos`, name those Repos in its description, because the team maps to them too. | `teams=<KEY>,<KEY>` |
 
