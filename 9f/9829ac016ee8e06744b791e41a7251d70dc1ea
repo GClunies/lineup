@@ -1,0 +1,47 @@
+cmd/lineup/hub_test.go
+  s_a52dd73fdfa48b::t_03f75bf69c00ba 123-141
+cmd/lineup/agent/CLAUDE.md
+  s_a52dd73fdfa48b::t_e80bc1547df878 56-58,73
+cmd/lineup/main.go
+  s_a52dd73fdfa48b::t_e5434d85c273d8 43
+cmd/lineup/repo.go
+  s_a52dd73fdfa48b::t_7b3a14c5299bfe 65-71,235-241
+cmd/lineup/repo_test.go
+  s_a52dd73fdfa48b::t_c64038bf07003f 122,176,179-181
+docs/product-intent/board.md
+  s_a52dd73fdfa48b::t_69538546faacd7 27,108-111
+docs/product-intent/issues.md
+  s_a52dd73fdfa48b::t_dfe3ca7eb69ae9 39
+docs/product-intent/orchestrator.md
+  s_a52dd73fdfa48b::t_2517512b1b51f0 43
+docs/product-intent/repos.md
+  s_a52dd73fdfa48b::t_5966a3cc1575ba 52-55
+internal/board/followup_test.go
+  s_a52dd73fdfa48b::t_7e5af8644401bc 7,11,46-47,49,52,55,58,68-69,71-72,185-186,192-244
+internal/board/view.go
+  s_a52dd73fdfa48b::t_e432b94bbf022c 467-468,474,479-508
+internal/board/view_test.go
+  s_a52dd73fdfa48b::t_fe9b76894bca3a 377-378,380-381
+internal/config/config.go
+  s_a52dd73fdfa48b::t_057f7305b3ab41 606,614,616-618,628-684
+internal/config/repoinit.go
+  s_a52dd73fdfa48b::t_a24a07e7d5293a 27
+internal/config/repoinit_test.go
+  s_a52dd73fdfa48b::t_1f070fa95d663c 27,52,58,95,99,126-128,177-184,251-277
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9f9829ac016ee8e06744b791e41a7251d70dc1ea",
+  "prompts": {},
+  "sessions": {
+    "s_a52dd73fdfa48b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3196c45d-2dbf-4b35-96ce-2d1a87240ac7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
