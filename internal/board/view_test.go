@@ -381,10 +381,10 @@ func TestARowOffScreenDoesNotWidenTheStatusColumn(t *testing.T) {
 	}
 }
 
-// issueBoard is the Board of the example in Issue 157.
+// issueBoard is the Board of the example in Issue 157 under teamRepos.
 // PD-688 is the one row with a skill. PD-704 and PD-248 are Linear rows of
 // team PD, and snowcap#101 is a GitHub row with no priority.
-func issueBoard() Model {
+func issueBoard(teamRepos func(string) []string) Model {
 	draft := tv("PD-688", lifecycle.CIRunning, "data",
 		"DE - Collapse sale transactions within 30 days into one headline sale in the property record stream", "draft", 9*24*time.Hour)
 	draft.Flag, draft.Group, draft.Skill, draft.PRNumber = "draft", "Needs you", "pstack:poteto-mode", 5136
@@ -395,7 +395,7 @@ func issueBoard() Model {
 	snowcap := github.OwnIssue{Issue: github.Issue{Repo: "datacoves/snowcap", Number: 101,
 		Title: "Docs generator: make docs drops pages and links", State: "OPEN"}}
 	m := newModel(&fakeClient{}, scheduler.BoardView{Cap: 5, Started: 1, Tasks: []scheduler.TaskView{draft}})
-	m.opts.Teams = []string{"PD"}
+	m.opts.Teams, m.opts.TeamRepos = []string{"PD"}, teamRepos
 	return feed(m, mineIssuesMsg{ws: acme, live: true, issues: []linear.Issue{upNext}},
 		mineIssuesMsg{ws: acme, live: true, team: true, issues: []linear.Issue{team}},
 		mineGitHubMsg{issues: []github.OwnIssue{snowcap}})
@@ -405,7 +405,7 @@ func issueBoard() Model {
 // that has one shows only in the strip, and the title gets the rest
 // (PROD-BOARD-023, PROD-BOARD-007).
 func TestTheColumnsFitTheirWordsAndTheTitleGetsTheRest(t *testing.T) {
-	m := issueBoard()
+	m := issueBoard(nil)
 	m.sel = "PD-688"
 	out := viewAt(m, 109)
 	for _, id := range []string{"PD-688", "PD-704", "snowcap#101", "PD-248"} {
@@ -430,6 +430,33 @@ func TestTheColumnsFitTheirWordsAndTheTitleGetsTheRest(t *testing.T) {
 	}
 	if f := footerAt(m, 109); !strings.Contains(f, "\n PD-688 · CI running · data · poteto-mode · #5136 · draft\n") {
 		t.Errorf("the strip must name the skill after the Repo:\n%s", f)
+	}
+}
+
+// A Linear row names the Repo of its team when the team maps to exactly one
+// Repo, and none when it maps to two (PROD-ISSUE-001).
+func TestALinearRowNamesTheOneRepoOfItsTeam(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		repos []string
+		want  bool
+	}{
+		{"one Repo", []string{"crexi/data"}, true},
+		{"two Repos", []string{"crexi/data", "crexi/web"}, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			out := viewAt(issueBoard(func(team string) []string {
+				if team == "PD" {
+					return c.repos
+				}
+				return nil
+			}), 109)
+			for _, id := range []string{"PD-704", "PD-248"} {
+				if l := lineOf(t, out, id); strings.HasSuffix(strings.TrimRight(l, " "), "  data") != c.want {
+					t.Errorf("the %s row names data %v, want %v: %q", id, !c.want, c.want, l)
+				}
+			}
+		})
 	}
 }
 

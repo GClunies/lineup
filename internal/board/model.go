@@ -63,6 +63,9 @@ type Options struct {
 	// Teams are the Linear team keys whose unassigned Issues show in Team.
 	// Empty reads none.
 	Teams []string
+	// TeamRepos lists the Repo keys, owner/repo, whose teams list holds the
+	// Linear team key. Nil lists none.
+	TeamRepos func(teamKey string) []string
 	// LocalPrefixes are the Repo prefixes of the Local Issues, besides local.
 	LocalPrefixes []string
 	// Destinations is destinations.json in the state folder. It keeps the
