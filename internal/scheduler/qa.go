@@ -75,7 +75,8 @@ func (s *Scheduler) addQA(build Record, qa QA) {
 }
 
 // clockQA is the QA clock (ARCH-QA-003). It sends qa-expired to each QA Task
-// in QA waiting whose deadline has come. Then it sends qa-due to each one
+// in QA waiting that had a check and whose deadline has come. A merge older
+// than max_wait still gets its first check (PROD-QA-008). Then it sends qa-due to each one
 // whose next check has come, the earliest first, until the QA slots are full.
 // Only the loop calls it.
 func (s *Scheduler) clockQA() {
@@ -84,7 +85,7 @@ func (s *Scheduler) clockQA() {
 	for _, r := range s.list() {
 		switch {
 		case r.Kind != lifecycle.KindQA || r.Stage != lifecycle.QAWaiting:
-		case !now.Before(r.Deadline):
+		case !now.Before(r.Deadline) && r.hadWorker():
 			s.apply(r, lifecycle.QAExpired{Detail: "no verdict after " + shortDuration(r.MaxWait)}, "")
 		case !now.Before(r.NextCheck):
 			due = append(due, r)

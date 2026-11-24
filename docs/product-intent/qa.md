@@ -32,7 +32,7 @@ While a QA Task waits, its Worker stays idle in its tab, and lineup does not end
 
 ## PROD-QA-008: A QA Task waits at most max_wait
 
-`max_wait` in the `[qa]` table of a Repo's layer is the longest time that a QA Task can wait for a verdict, 48h from the merge by default. When a QA Task in QA waiting reaches it, the Task goes to QA failed with the note `no verdict after 48h`. A wait that the Worker sets past it ends at it.
+`max_wait` in the `[qa]` table of a Repo's layer is the longest time that a QA Task can wait for a verdict, 48h from the merge by default. When a QA Task in QA waiting reaches it, the Task goes to QA failed with the note `no verdict after 48h`. A wait that the Worker sets past it ends at it. A QA Task always gets its first check, also when its merge is older than `max_wait`.
 
 ## PROD-QA-009: A pass ends the QA Task and tells the Tracker
 

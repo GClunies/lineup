@@ -17,7 +17,7 @@ Because: the Task's Policy is fixed at its start, and a QA setting must apply to
 
 ## ARCH-QA-003: The Scheduler's clock starts each due check
 
-At each poll, the Scheduler sends `qa-expired` to each QA Task in QA waiting whose deadline has passed. Then it sends `qa-due` to each one whose next check has come, the earliest due first, while the QA Tasks in Verifying are fewer than `slots`. The reducer refuses `qa-due` when the slots are full. The next check and the deadline live in the Task, so a restart keeps them.
+At each poll, the Scheduler sends `qa-expired` to each QA Task in QA waiting that had a check and whose deadline has passed. Then it sends `qa-due` to each one whose next check has come, the earliest due first, while the QA Tasks in Verifying are fewer than `slots`. The reducer refuses `qa-due` when the slots are full. The next check and the deadline live in the Task, so a restart keeps them.
 
 Because: a wait of hours outlives a Scheduler restart, and a level check at each poll loses no due check.
 

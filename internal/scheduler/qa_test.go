@@ -317,6 +317,19 @@ func TestTheDeadlineEndsTheWait(t *testing.T) {
 	}
 }
 
+// A merge older than max_wait, for example one that a restart sees late,
+// still gets its first check. The deadline ends the wait after it
+// (PROD-QA-008, ARCH-QA-003).
+func TestAnOldMergeStillGetsItsFirstCheck(t *testing.T) {
+	h, c := newQA(t, qaConfig{maxWait: 10 * time.Minute})
+	h.checking()
+	if err := h.qa("wait", "1h", "the DAG has not run"); err != nil {
+		t.Fatal(err)
+	}
+	c.add(time.Minute)
+	h.waitStage("QA-ENG-1", lifecycle.QAFailed)
+}
+
 // A done with no verdict means that the contract result is missing
 // (PROD-QA-005, ARCH-QA-004).
 func TestADoneWithNoVerdictStopsTheQATask(t *testing.T) {
