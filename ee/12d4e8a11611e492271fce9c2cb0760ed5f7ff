@@ -1,0 +1,20 @@
+internal/config/catalog.go
+  s_3f62d37256047d::t_f74629853c592a 229
+  s_3f62d37256047d::t_6da1e6834dcb1c 232
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee12d4e8a11611e492271fce9c2cb0760ed5f7ff",
+  "prompts": {},
+  "sessions": {
+    "s_3f62d37256047d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "918a36da-c6bf-4dae-acbd-698584050738",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
