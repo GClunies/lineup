@@ -82,15 +82,15 @@ func TestOwnIssuesKeepsTheUsersOwnOpenIssues(t *testing.T) {
 	if closedInGraphQL := blockers[0]; closedInGraphQL != (Blocker{"octo/sandbox#7", false}) {
 		t.Errorf("blocker closed in the GraphQL reply: %v", closedInGraphQL)
 	}
-	if openFromSearch := blockers[1]; openFromSearch != (Blocker{"octo/sandbox#12", true}) {
-		t.Errorf("blocker open in a search: %v", openFromSearch)
+	if openInGraphQL := blockers[1]; openInGraphQL != (Blocker{"octo/sandbox#12", true}) {
+		t.Errorf("blocker open in the GraphQL reply: %v", openInGraphQL)
 	}
 	calls, _ := os.ReadFile(log)
 	lines := strings.Split(strings.TrimSpace(string(calls)), "\n")
 	if len(lines) != 3 {
 		t.Fatalf("calls:\n%s", calls)
 	}
-	for i, want := range []string{"|--assignee|octo", "|--author|octo|--no-assignee", "p0=7"} {
+	for i, want := range []string{"|--assignee|octo", "|--author|octo|--no-assignee", "-F|p0=7|-f|o1=octo|-f|n1=sandbox|-F|p1=12"} {
 		if !strings.Contains(lines[i], want) {
 			t.Errorf("call %d %q lacks %q", i, lines[i], want)
 		}
