@@ -83,8 +83,12 @@ func windowStart(lines []string, h int) int {
 			at = i
 		}
 	}
-	return min(max(at-h/2, 0), len(lines)-h)
+	return windowAt(at, len(lines), h)
 }
+
+// windowAt is the first of the h lines, out of n, that keep line sel on
+// screen near the middle. It is 0 when the n lines fit.
+func windowAt(sel, n, h int) int { return max(min(sel-h/2, n-h), 0) }
 
 // header shows lineup and its alerts at the left, and the live state at the
 // right. A narrow header drops the live state from the start, and it always
@@ -253,7 +257,8 @@ func (m Model) selection() (title, facts string) {
 	if t.Group == groupFollowUp {
 		kept = t.WorktreeNote
 	}
-	return scheduler.PlainTitle(t.Title), join(boardID(t.ID), t.Stage, t.Repo, pr, t.Note, kept)
+	// The skill shows here also when its column does not (PROD-BOARD-007).
+	return scheduler.PlainTitle(t.Title), join(boardID(t.ID), t.Stage, t.Repo, skillName(t), pr, t.Note, kept)
 }
 
 type hint struct{ key, does string }
@@ -336,10 +341,10 @@ func (m Model) rowActions() []hint {
 // preview is on. h is the height of the body.
 func (m Model) taskBody(h int) string {
 	if !m.preview {
-		return m.rows(m.width)
+		return m.rows(m.width, h)
 	}
 	lw := m.width * 55 / 100
-	return lipgloss.JoinHorizontal(lipgloss.Top, m.rows(lw), m.previewPane(m.width-lw, h))
+	return lipgloss.JoinHorizontal(lipgloss.Top, m.rows(lw, h), m.previewPane(m.width-lw, h))
 }
 
 func (m Model) previewPane(w, h int) string {
@@ -355,9 +360,9 @@ func (m Model) previewPane(w, h int) string {
 		Render(strings.Join(lines, "\n"))
 }
 
-func (m Model) rows(w int) string {
+func (m Model) rows(w, h int) string {
 	var texts []string
-	for _, l := range m.rowLines(w) {
+	for _, l := range m.rowLines(w, h) {
 		texts = append(texts, l.text)
 	}
 	return strings.Join(texts, "\n")
@@ -391,8 +396,12 @@ var columns = [numCols]column{
 	colStatus: {task: func(_ Model, t scheduler.TaskView) string { return taskStatus(t) }, issue: issueRow.status},
 	colTail:   {drop: 3, task: func(m Model, t scheduler.TaskView) string { return m.age(t) }, issue: issueRow.priorityText},
 	colRepo:   {drop: 2, task: func(_ Model, t scheduler.TaskView) string { return t.Repo }, issue: func(r issueRow) string { return r.Repo }},
-	colSkill:  {drop: 1, task: func(_ Model, t scheduler.TaskView) string { return t.Skill[strings.LastIndex(t.Skill, ":")+1:] }, issue: func(issueRow) string { return "" }},
+	colSkill:  {drop: 1, task: func(_ Model, t scheduler.TaskView) string { return skillName(t) }, issue: func(issueRow) string { return "" }},
 }
+
+// skillName is the Task's skill without its plugin, as in poteto-mode for
+// kit:poteto-mode.
+func skillName(t scheduler.TaskView) string { return t.Skill[strings.LastIndex(t.Skill, ":")+1:] }
 
 const (
 	// titleWant is the title width that the optional columns must leave before
@@ -452,14 +461,24 @@ type cellRow struct {
 	faded, alert bool
 }
 
-// columnWidths fits the columns to the rows on screen. It drops columns until
-// the title gets titleWant cells, and the title then takes the rest. A narrow
-// row cuts the title down to titleMin.
+// columnWidths fits the columns to the rows on screen. Each column is as wide
+// as its widest cell, and an optional column that fewer than half the rows
+// fill takes no cells (PROD-BOARD-023). It drops columns until the title gets
+// titleWant cells, and the title then takes the rest. A narrow row cuts the
+// title down to titleMin.
 func columnWidths(w int, rows []cellRow) [numCols]int {
-	var ws [numCols]int
+	var ws, filled [numCols]int
 	for _, r := range rows {
 		for i, c := range r.cells {
 			ws[i] = max(ws[i], lipgloss.Width(c))
+			if c != "" {
+				filled[i]++
+			}
+		}
+	}
+	for i, c := range columns {
+		if c.drop > 0 && 2*filled[i] < len(rows) {
+			ws[i] = 0
 		}
 	}
 	// The marker takes 3 cells, and 2 cells sit between columns.
@@ -486,13 +505,17 @@ func columnWidths(w int, rows []cellRow) [numCols]int {
 	return ws
 }
 
-func (m Model) rowLines(w int) []rowLine {
-	type group struct {
-		name string
-		rows []cellRow
+// rowLines is the h lines of the Task rows that keep the selection on screen.
+// The columns fit the rows among those lines only (PROD-BOARD-023).
+func (m Model) rowLines(w, h int) []rowLine {
+	// entry is a heading, or a row of an open group, with its rowLine id.
+	// heading is the group name of a heading, and empty for a row.
+	type entry struct {
+		id, heading string
+		count       int
+		row         cellRow
 	}
-	var groups []group
-	var onScreen []cellRow
+	var entries []entry
 	for _, g := range m.lay.order {
 		if !m.shown(g) {
 			continue
@@ -519,9 +542,20 @@ func (m Model) rowLines(w int) []rowLine {
 		if len(rows) == 0 {
 			continue
 		}
-		groups = append(groups, group{g, rows})
+		entries = append(entries, entry{id: headingKey(g), heading: g, count: len(rows)})
 		if m.open(g) {
-			onScreen = append(onScreen, rows...)
+			for _, r := range rows {
+				entries = append(entries, entry{id: r.id, row: r})
+			}
+		}
+	}
+	sel := slices.IndexFunc(entries, func(e entry) bool { return e.id == m.sel })
+	start := windowAt(max(sel, 0), len(entries), h)
+	entries = entries[start:min(start+h, len(entries))]
+	var onScreen []cellRow
+	for _, e := range entries {
+		if e.heading == "" {
+			onScreen = append(onScreen, e.row)
 		}
 	}
 	ws := columnWidths(w, onScreen)
@@ -562,13 +596,11 @@ func (m Model) rowLines(w int) []rowLine {
 		return ansi.Truncate(selRow.Render(name)+dim.Inherit(selRow).Render(pad(count, max(w-lipgloss.Width(name), 0))), w, "…")
 	}
 	var out []rowLine
-	for _, g := range groups {
-		out = append(out, rowLine{headingKey(g.name), heading(g.name, len(g.rows))})
-		if !m.open(g.name) {
-			continue
-		}
-		for _, r := range g.rows {
-			out = append(out, rowLine{r.id, row(r)})
+	for _, e := range entries {
+		if e.heading != "" {
+			out = append(out, rowLine{e.id, heading(e.heading, e.count)})
+		} else {
+			out = append(out, rowLine{e.id, row(e.row)})
 		}
 	}
 	switch {

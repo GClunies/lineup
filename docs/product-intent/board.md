@@ -28,7 +28,7 @@ Each row shows one status word in its own column after the title, and that colum
 
 ## PROD-BOARD-007: The strip shows the selected row in full
 
-The strip under the rows shows a rule, the selected row's full title, and its facts joined by ` · `: the ID, the Stage, the Repo, the PR number, and the note. An empty fact does not show, and the PR number shows only when the note does not name it. An Issue row shows its group in place of the Stage. The title and the facts wrap, so the strip never cuts them. Then come the Board message, until the next key, and the key hints. On a heading, the strip shows the group name and its row count.
+The strip under the rows shows a rule, the selected row's full title, and its facts joined by ` · `: the ID, the Stage, the Repo, the skill, the PR number, and the note. An empty fact does not show, and the PR number shows only when the note does not name it. An Issue row shows its group in place of the Stage. The title and the facts wrap, so the strip never cuts them. Then come the Board message, until the next key, and the key hints. On a heading, the strip shows the group name and row count.
 
 ## PROD-BOARD-008: The note of a Task says where its PR stands
 
@@ -89,3 +89,7 @@ While the Board cannot reach the Scheduler, it shows the view that the Scheduler
 ## PROD-BOARD-022: A Task names its Repo by the Repo's folder
 
 The Repo of a Task on the Board, in `lineup ls`, and in `lineup show` is the folder name of the Repo, for example `data`. If two Repos of Tasks on the Board share a folder name, each name adds the parent folder, for example `acme-data`.
+
+## PROD-BOARD-023: Each column fits the rows on screen
+
+Each column is as wide as its widest cell among the rows on screen, so a row out of view does not widen it. The column of the age or the priority, the Repo column, and the skill column each show only when at least half the rows on screen fill them. The title takes the rest of the width.
