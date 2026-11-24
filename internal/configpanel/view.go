@@ -237,7 +237,7 @@ func (m Model) statusLines() []string {
 	return out
 }
 
-func (m Model) footer() string {
+func (m Model) footer() []string {
 	var keys string
 	switch m.mode {
 	case modeFilter:
@@ -261,5 +261,5 @@ func (m Model) footer() string {
 		}
 		keys += " · q quit"
 	}
-	return dim.Render(" " + keys)
+	return m.wrap(dim, keys)
 }
