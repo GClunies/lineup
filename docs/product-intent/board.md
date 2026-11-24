@@ -24,7 +24,7 @@ The `[board]` table in the config sets the layout of the groups `needs_you`, `fo
 
 ## PROD-BOARD-006: Each row shows one status word
 
-Each row shows one status word in its own column after the title, and that column never drops. A Task in Needs you with a flag shows its reason: `question`, `permission`, `auth`, `error`, `setup failed`, `stopped`, `budget spent`, `tab closed`, `worker silent`, `draft`, `drafts`, `PR closed`, or `bot late`. A Task in Follow-up shows its Tracker state. Any other Task shows its Stage: `working`, `CI running`, `CI debug`, `in review`, `responding`, `ready`, `QA waiting`, `verifying`, `QA failed`, or `done`. An Issue row shows `blocked`, `unblocked`, `up next`, `backlog`, or `team`. A flagged Task and a blocked Issue show the word in pink, and the word reads the same with `NO_COLOR=1`.
+Each row shows one status word in its own column after the title, and that column never drops. A Task in Needs you with a flag shows its reason: `question`, `permission`, `auth`, `error`, `setup failed`, `stopped`, `budget spent`, `tab closed`, `worker silent`, `draft`, `drafts`, `PR closed`, or `bot late`. A Task in Follow-up shows its short Tracker state. Any other Task shows its Stage: `working`, `CI running`, `CI debug`, `in review`, `responding`, `ready`, `QA waiting`, `verifying`, `QA failed`, or `done`. An Issue row shows `blocked`, `unblocked`, `up next`, `backlog`, or `team`. A flagged Task and a blocked Issue show the word in pink, and the word reads the same with `NO_COLOR=1`.
 
 ## PROD-BOARD-007: The strip shows the selected row in full
 
@@ -105,3 +105,7 @@ When the Board reads 100 Issues of one team, the Team heading adds `+` to its co
 ## PROD-BOARD-026: A toast names lineup once
 
 Each toast from the Board names lineup once. Its banner shows the `my-lineup` session name and then the toast text, with no `lineup` title above them.
+
+## PROD-BOARD-027: A Follow-up row shows a short Tracker state
+
+The status word of a Follow-up row is its Tracker state in lowercase, but a word in all capitals stays as it is. If the word is wider than 12 cells, it drops one lead of `waiting for`, `ready for`, or `in`. If it is still wider, it ends with `…` at 12 cells. For example, `Waiting for Code Review` shows `code review`, and `Waiting for QA` shows `QA`. The strip shows the full Tracker state in place of the note.

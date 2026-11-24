@@ -464,17 +464,47 @@ var flagWord = map[string]string{
 }
 
 // taskStatus is the status word of a Task row: the flag of a Task in Needs
-// you, the Tracker state of a Task in Follow-up, which setBoard puts in its
-// note, and the Stage of any other Task.
+// you, the short Tracker state of a Task in Follow-up, which setBoard puts in
+// its note, and the Stage of any other Task.
 func taskStatus(t scheduler.TaskView) string {
 	switch {
 	case inNeedsYou(t) && t.Flag != "":
 		return cmp.Or(flagWord[t.Flag], t.Flag)
 	case t.Group == groupFollowUp:
-		return t.Note
+		return trackerWord(t.Note)
 	}
 	return cmp.Or(stageWord[t.StageKey], t.Stage)
 }
+
+// trackerWordMax is the most cells that a Follow-up row's status word takes.
+const trackerWordMax = 12
+
+// trackerWord is the status word of a Tracker state, as in code review for
+// Waiting for Code Review. It lowercases each word that is not all capitals.
+// A word wider than trackerWordMax drops one lead of waitLeads, and a word
+// still too wide is cut with … (PROD-BOARD-027).
+func trackerWord(state string) string {
+	words := strings.Fields(state)
+	for i, w := range words {
+		if w != strings.ToUpper(w) {
+			words[i] = strings.ToLower(w)
+		}
+	}
+	s := strings.Join(words, " ")
+	if lipgloss.Width(s) > trackerWordMax {
+		for _, lead := range waitLeads {
+			if rest, ok := strings.CutPrefix(s, lead); ok {
+				s = rest
+				break
+			}
+		}
+	}
+	return ansi.Truncate(s, trackerWordMax, "…")
+}
+
+// waitLeads are the leads of a Tracker state that say the Issue waits for
+// what follows them.
+var waitLeads = []string{"waiting for ", "ready for ", "in "}
 
 // boardID is the ID that the ID column shows. A GitHub ID drops its owner,
 // because the Repo column names the repository.

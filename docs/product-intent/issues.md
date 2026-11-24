@@ -36,7 +36,7 @@ The Board paints the Linear Issue rows from the cache of each workspace's lists,
 
 ## PROD-ISSUE-009: Follow-up holds the merged Tasks whose Issues are still open
 
-Follow-up holds the Done build Tasks whose Issues are open. A Linear Issue is open in an `unstarted` or `started` state type, and a local Issue is open unless it is `done` or `canceled`. The status word is the Tracker state, for example `Waiting for QA`, and the note names a kept worktree. When the Tracker closes the Issue, or the Issue stops being the user's own, the row moves to Done. Follow-up starts open, and its rows do not fade. `x` and the `today` age work as on a Done row. Follow-up rows add nothing to the Needs you count.
+Follow-up holds the Done build Tasks whose Issues are open. A Linear Issue is open in an `unstarted` or `started` state type, and a local Issue is open unless it is `done` or `canceled`. The status word is a short Tracker state, for example `QA`, and the note names a kept worktree. When the Tracker closes the Issue, or the Issue stops being the user's own, the row moves to Done. Follow-up starts open, and its rows do not fade. `x` and the `today` age work as on a Done row. Follow-up rows add nothing to the Needs you count.
 
 ## PROD-ISSUE-010: The user reads, opens, and changes an Issue from its row
 
