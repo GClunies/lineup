@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -58,25 +59,60 @@ func (s spyTracker) Create(_ context.Context, build *scheduler.Issue, repo, titl
 	return scheduler.Issue{Identifier: "NEW-1"}, nil
 }
 
-// A fix Issue goes to the Tracker of the build Task's Issue, and an ad hoc
-// build Task's to the Local Tracker (PROD-QA-011).
-func TestTheMuxFilesAFixIssueBesideTheBuildIssue(t *testing.T) {
+// A fix Issue goes to the Tracker of the build Task's Issue. An ad hoc
+// build Task has none, so its fix Issue goes to the Repo Tracker
+// (PROD-QA-011).
+func TestTheMuxFilesAFixIssueBesideTheBuildIssueOrInTheRepoTracker(t *testing.T) {
+	cfg := loadConfig(t, "[repos.\"acme/data\"]\nteams = [\"ENG\"]\ntracker = \"linear\"\n"+
+		"[repos.\"acme/web\"]\ntracker = \"github\"\n[repos.\"acme/notes\"]\ntracker = \"local\"\n")
 	var calls []string
-	mux := trackerMux{kinds: map[string]issueTracker{}}
+	mux := trackerMux{kinds: map[string]issueTracker{}, fixTracker: cfg.FixTracker}
 	for _, k := range []string{scheduler.KindLinear, scheduler.KindGitHub, scheduler.KindLocal} {
 		mux.kinds[k] = spyTracker{name: k, calls: &calls}
 	}
 	ctx := context.Background()
-	for build, kind := range map[*scheduler.Issue]string{
-		{Kind: scheduler.KindLinear, Identifier: "ENG-1"}:  scheduler.KindLinear,
-		{Kind: scheduler.KindGitHub, Identifier: "o/r#2"}:  scheduler.KindGitHub,
-		{Kind: scheduler.KindLocal, Identifier: "LOCAL-3"}: scheduler.KindLocal,
-		nil: scheduler.KindLocal,
+	for _, c := range []struct {
+		build      *scheduler.Issue
+		repo, want string
+	}{
+		{&scheduler.Issue{Kind: scheduler.KindLinear, Identifier: "ENG-1"}, "acme/web", "linear create beside ENG-1 in acme/web"},
+		{&scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "o/r#2"}, "acme/data", "github create beside o/r#2 in acme/data"},
+		{&scheduler.Issue{Kind: scheduler.KindLocal, Identifier: "LOCAL-3"}, "acme/data", "local create beside LOCAL-3 in acme/data"},
+		{nil, "acme/data", "linear create beside none in acme/data"},
+		{nil, "acme/web", "github create beside none in acme/web"},
+		{nil, "acme/notes", "local create beside none in acme/notes"},
+		{nil, "acme/other", "local create beside none in acme/other"},
 	} {
 		calls = nil
-		is, err := mux.CreateFix(ctx, build, "acme/data", "Fix QA of X: t", "findings")
-		if err != nil || is.Kind != kind || len(calls) != 1 || !strings.HasPrefix(calls[0], kind+" create beside ") {
-			t.Errorf("%v: issue %+v err %v calls %q, want one %s create", build, is, err, calls, kind)
+		is, err := mux.CreateFix(ctx, c.build, c.repo, "Fix QA of X: t", "findings")
+		kind, _, _ := strings.Cut(c.want, " ")
+		if err != nil || is.Kind != kind || !slices.Equal(calls, []string{c.want + " Fix QA of X: t"}) {
+			t.Errorf("%v in %s: issue %+v err %v calls %q, want %q", c.build, c.repo, is, err, calls, c.want)
+		}
+	}
+}
+
+// With no build Issue, a GitHub fix Issue goes to the Repo's own repository
+// (PROD-QA-011).
+func TestTheGitHubTrackerFilesAnAdHocFixIssueInTheRepo(t *testing.T) {
+	dir := t.TempDir()
+	args, bin := filepath.Join(dir, "args"), filepath.Join(dir, "gh")
+	os.WriteFile(bin, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > "+args+"\necho https://github.com/acme/web/issues/9\n"), 0o755)
+	g := githubTracker{c: &github.Client{Bin: bin}}
+	for _, c := range []struct {
+		build *scheduler.Issue
+		want  string
+	}{
+		{nil, "acme/web"},
+		{&scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "acme/api#4"}, "acme/api"},
+	} {
+		is, err := g.Create(context.Background(), c.build, "acme/web", "Fix QA of AH-65: Add billing", "The rows are missing.")
+		if err != nil {
+			t.Fatal(err)
+		}
+		sent, _ := os.ReadFile(args)
+		if !strings.Contains(string(sent), "\n--repo\n"+c.want+"\n") || is.Identifier != c.want+"#9" {
+			t.Errorf("build %v: gh got %q and gave %s, want the Issue in %s", c.build, sent, is.Identifier, c.want)
 		}
 	}
 }

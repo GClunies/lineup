@@ -254,8 +254,8 @@ func (s *Scheduler) recheck(id string) error {
 }
 
 // fileFix is the user's Start a fix Task. It files the fix Issue in the
-// Tracker of the build Task's Issue, ends the QA Task, and returns the new
-// Issue's ID (PROD-QA-011). The Tracker call runs off the loop, and a second
+// Tracker of the build Task's Issue, or of an ad hoc build Task's Repo, ends
+// the QA Task, and returns the new Issue's ID (PROD-QA-011). The Tracker call runs off the loop, and a second
 // call during it files no second Issue.
 func (s *Scheduler) fileFix(ctx context.Context, id string) (string, error) {
 	var r Record

@@ -1095,6 +1095,20 @@ func (g *Global) RepoTracker(repoPath string) (key, tracker string) {
 	return key, g.tracker(key)
 }
 
+// FixTracker is the Tracker of an ad hoc build Task's fix Issue in the Repo
+// key: linear with the first of the Repo's teams, github, or else local
+// (PROD-QA-011).
+func (g *Global) FixTracker(key string) (tracker, team string) {
+	t, _ := g.table(key)
+	switch tr := g.tracker(key); {
+	case tr == "linear" && len(t.Teams) > 0:
+		return tr, t.Teams[0]
+	case tr == "github":
+		return tr, ""
+	}
+	return "local", ""
+}
+
 // SetUp reports whether the file has the Repo's own [repos."owner/repo"]
 // table, in any case, even an empty one. An owner/* table sets up no Repo.
 // key is the Repo's key.

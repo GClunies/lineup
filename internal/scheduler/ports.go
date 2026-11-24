@@ -296,8 +296,9 @@ type Tracker interface {
 	// CreateFix files the fix Issue of a QA Task, assigned to the user, in
 	// the Tracker of build, the build Task's Issue: in its Linear team and
 	// Project, in its GitHub repository, or in the Local Tracker with repo,
-	// the Repo's key. A nil build, of an ad hoc Task, files a Local Issue
-	// with repo (PROD-QA-011).
+	// the Repo's key. A nil build, of an ad hoc Task, files the Issue in the
+	// Repo Tracker of repo: the first of its teams, its GitHub repository,
+	// or else the Local Tracker (PROD-QA-011).
 	CreateFix(ctx context.Context, build *Issue, repo, title, description string) (Issue, error)
 }
 

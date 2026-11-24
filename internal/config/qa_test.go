@@ -116,3 +116,32 @@ func TestTheVerifyingStageSetsTheQAWorkersModel(t *testing.T) {
 		t.Errorf("[stage.verifying] reached working: %+v", got)
 	}
 }
+
+// An ad hoc build Task's fix Issue goes to its Repo Tracker: the first of
+// the Repo's teams, its GitHub repository, or else the Local Tracker
+// (PROD-QA-011).
+func TestAnAdHocFixIssueGoesToTheRepoTracker(t *testing.T) {
+	g := load(t, `
+[repos."crexi/*"]
+tracker = "linear"
+[repos."crexi/data"]
+teams = ["PD", "ENG"]
+[repos."crexi/web"]
+[repos."GClunies/*"]
+tracker = "github"
+[repos."GClunies/hod"]
+tracker = "local"
+`)
+	for key, want := range map[string][2]string{
+		"crexi/data":      {"linear", "PD"},
+		"Crexi/Data":      {"linear", "PD"},
+		"crexi/web":       {"local", ""}, // a Linear Repo with no teams
+		"GClunies/lineup": {"github", ""},
+		"GClunies/hod":    {"local", ""},
+		"acme/none":       {"local", ""},
+	} {
+		if tracker, team := g.FixTracker(key); tracker != want[0] || team != want[1] {
+			t.Errorf("FixTracker(%s) = %q, %q, want %q", key, tracker, team, want)
+		}
+	}
+}

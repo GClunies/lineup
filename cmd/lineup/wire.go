@@ -418,16 +418,19 @@ type issueTracker interface {
 	SetStatus(ctx context.Context, is scheduler.Issue, event string) error
 	Description(ctx context.Context, is scheduler.Issue) (string, error)
 	// Create files a fix Issue, assigned to the user, beside build, the
-	// build Task's Issue, or with the Repo key repo in the Local Tracker.
+	// build Task's Issue. With no build Issue, it files it in the Repo of
+	// the key repo.
 	Create(ctx context.Context, build *scheduler.Issue, repo, title, description string) (scheduler.Issue, error)
 }
 
 // trackerMux is the Scheduler's Tracker port. It routes each call to the
 // Tracker that the Issue's Kind names. prefixes are the Repo prefixes, so
-// that an ID such as HOD-3 reads as a local Issue.
+// that an ID such as HOD-3 reads as a local Issue. fixTracker names the
+// Tracker of an ad hoc build Task's fix Issue in a Repo key.
 type trackerMux struct {
-	kinds    map[string]issueTracker
-	prefixes []string
+	kinds      map[string]issueTracker
+	prefixes   []string
+	fixTracker func(key string) (tracker, team string)
 }
 
 var trackerNames = map[string]string{scheduler.KindLinear: "Linear", scheduler.KindGitHub: "GitHub", scheduler.KindLocal: "local"}
@@ -477,11 +480,14 @@ func (m trackerMux) Description(ctx context.Context, is scheduler.Issue) (string
 }
 
 // CreateFix files the fix Issue in the Tracker of the build Task's Issue. An
-// ad hoc build Task has none, so its fix Issue is local (PROD-QA-011).
+// ad hoc build Task has none, so its fix Issue goes to the Repo Tracker
+// (PROD-QA-011).
 func (m trackerMux) CreateFix(ctx context.Context, build *scheduler.Issue, repo, title, description string) (scheduler.Issue, error) {
-	kind := scheduler.KindLocal
+	var kind string
 	if build != nil {
 		kind = build.Tracker()
+	} else {
+		kind, _ = m.fixTracker(repo)
 	}
 	t, err := m.of(kind)
 	if err != nil {
@@ -579,26 +585,62 @@ func (p *trackerPort) Description(ctx context.Context, is scheduler.Issue) (stri
 	return full.Description, err
 }
 
-// Create files the Issue in the team and the Project of the build Task's Issue.
-func (p *trackerPort) Create(ctx context.Context, build *scheduler.Issue, _, title, description string) (scheduler.Issue, error) {
-	c, _, err := p.client(build.Workspace)
+// Create files the fix Issue, assigned to the user, where fixTeam puts it.
+func (p *trackerPort) Create(ctx context.Context, build *scheduler.Issue, repo, title, description string) (scheduler.Issue, error) {
+	c, ws, n, err := p.fixTeam(ctx, build, repo)
 	if err != nil {
 		return scheduler.Issue{}, err
 	}
-	full, err := c.Issue(ctx, build.Identifier)
-	if err != nil {
-		return scheduler.Issue{}, err
-	}
-	n := linear.NewIssue{TeamID: full.Team.ID, Title: title, Description: description, AssignToMe: true}
-	if full.Project != nil {
-		n.ProjectID = full.Project.ID
-	}
+	n.Title, n.Description, n.AssignToMe = title, description, true
 	is, err := c.Create(ctx, n)
 	if err != nil {
 		return scheduler.Issue{}, err
 	}
-	return scheduler.Issue{Workspace: build.Workspace, ID: is.ID, Identifier: is.Identifier, Title: is.Title, URL: is.URL,
-		BranchName: is.BranchName, TeamKey: full.Team.Key, ProjectID: n.ProjectID}, nil
+	return scheduler.Issue{Workspace: ws.ID, ID: is.ID, Identifier: is.Identifier, Title: is.Title, URL: is.URL,
+		BranchName: is.BranchName, TeamKey: is.Team.Key, ProjectID: n.ProjectID}, nil
+}
+
+// fixTeam is the team and the Project of the build Task's Issue. With no
+// build Issue, it is the first of the Repo's teams, in the first signed-in
+// workspace that has the team (PROD-QA-011).
+func (p *trackerPort) fixTeam(ctx context.Context, build *scheduler.Issue, repo string) (*linear.Client, linear.Workspace, linear.NewIssue, error) {
+	if build != nil {
+		c, ws, err := p.client(build.Workspace)
+		if err != nil {
+			return nil, ws, linear.NewIssue{}, err
+		}
+		full, err := c.Issue(ctx, build.Identifier)
+		if err != nil {
+			return nil, ws, linear.NewIssue{}, err
+		}
+		n := linear.NewIssue{TeamID: full.Team.ID}
+		if full.Project != nil {
+			n.ProjectID = full.Project.ID
+		}
+		return c, ws, n, nil
+	}
+	_, key := p.cfg.FixTracker(repo)
+	wss, err := linear.Workspaces()
+	if err != nil {
+		return nil, linear.Workspace{}, linear.NewIssue{}, err
+	}
+	var errs []error
+	for _, ws := range wss {
+		c := linear.NewClient(ws)
+		teams, err := c.Teams(ctx)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", ws.Name, err))
+			continue
+		}
+		if i := slices.IndexFunc(teams, func(t linear.Team) bool { return strings.EqualFold(t.Key, key) }); i >= 0 {
+			return c, ws, linear.NewIssue{TeamID: teams[i].ID}, nil
+		}
+	}
+	err = fmt.Errorf("no signed-in Linear workspace has the team %s: run `lineup login`", key)
+	if len(errs) > 0 {
+		err = fmt.Errorf("%w: %w", err, errors.Join(errs...))
+	}
+	return nil, linear.Workspace{}, linear.NewIssue{}, err
 }
 
 // githubTracker reaches GitHub Issues through gh. labels maps a lifecycle
@@ -646,11 +688,15 @@ func (g githubTracker) Description(ctx context.Context, is scheduler.Issue) (str
 	return full.Body, err
 }
 
-// Create files the Issue in the repository of the build Task's Issue.
-func (g githubTracker) Create(ctx context.Context, build *scheduler.Issue, _, title, description string) (scheduler.Issue, error) {
-	repo, _, err := github.ParseIssueID(build.Identifier)
-	if err != nil {
-		return scheduler.Issue{}, err
+// Create files the Issue in the repository of the build Task's Issue. With
+// no build Issue, it files it in repo, the Repo's own repository
+// (PROD-QA-011).
+func (g githubTracker) Create(ctx context.Context, build *scheduler.Issue, repo, title, description string) (scheduler.Issue, error) {
+	if build != nil {
+		var err error
+		if repo, _, err = github.ParseIssueID(build.Identifier); err != nil {
+			return scheduler.Issue{}, err
+		}
 	}
 	is, err := g.c.CreateIssue(ctx, repo, title, description)
 	if err != nil {
