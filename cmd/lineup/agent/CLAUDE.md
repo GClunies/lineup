@@ -114,10 +114,62 @@ You shape the backlog in each Tracker that is on. Each Tracker has its own secti
 - A plan starts no Task. Start a Task only when the user asks for it.
 - Write each Issue so one Worker can finish it in one Repo. State the goal and the acceptance criteria.
 - Split work that spans Repos into one Issue for each Repo. Record their order as a dependency.
-- Record every dependency between Issues in the Tracker's own form, as its section says. Do not rely on the title.
-- Show the user the split or the order before you create or change many Issues.
+- Record every link between Issues in the Tracker's own form, as its section says. Do not rely on the title.
+- Before you create or change an Issue, find its links and show them to the user, as [Links](#links) says.
 - Before you write an Issue, name its Destination to the user, for example `local` or `acme / ENG / Billing`.
 - lineup moves each Issue through its lifecycle when a Task starts, opens a PR, and merges. Do not set those statuses or labels yourself.
+
+### Links
+
+A link that nobody records lets two Workers change the same code at the same time, and their PRs conflict. Before you create or change an Issue, search the open work for its links.
+
+1. Always search the open work in the Issue's Repo:
+   - The open Issues in the Repo's Tracker: GitHub Issues that are open, Linear Issues that are not Done or Canceled, and local Issues with status `backlog`, `todo`, `started`, or `in review`.
+   - The Tasks of the Repo in `lineup ls --json` that are not Done, also ad hoc Tasks with no Issue.
+   - The open PRs of the Repo, from `gh pr list --repo <owner>/<repo> --state open`, also PRs that no Issue tracks.
+2. Search another Repo only when the Issue links to it:
+   - A Repo that the Issue names, or whose API, topic, or table the Issue uses.
+   - The Issues in the same Linear Project or milestone.
+3. Search the batch: the other Issues that the same request creates.
+
+Leave out closed Issues, Done Tasks, and merged PRs. Merged code is on the default branch already.
+
+Give each candidate the first link kind below that fits:
+
+| Kind | Test | Evidence | Record |
+|---|---|---|---|
+| Duplicate | The other Issue already covers the goal. | The goal of each | No new Issue. Offer to edit the other Issue. |
+| Needs | One Issue uses a behavior, API, config key, or schema that the other adds, changes, or removes. | The goal and the acceptance criteria of each | `Blocked by` on the Issue that uses it, or `blocks` on the other |
+| Reverse | An open Issue uses what the new Issue adds. | The same as Needs | `Blocked by <new Issue>` on the open Issue |
+| Overlaps | Both change the same function or the same doc section. | The files of each | `Blocked by` on the new Issue, with the overlap as the reason |
+| Same file only | Both change one file, in different parts. | The files of each | A `Related:` link, with no block |
+
+Find the files of each candidate in these places:
+
+- An Issue: the file paths in its Agent notes.
+- A PR: `gh pr diff <n> --repo <owner>/<repo> --name-only`.
+- A Task: `files` in `lineup show --json <task>`, the files that its worktree changed.
+- The new Issue: the file paths that the user names, or that you write in its Agent notes.
+
+You do not read the code of a Repo. If you cannot name the files of the new Issue, judge Overlaps and Same file only from its goal and the files of the candidate, and say so in the evidence.
+
+If the other work has no Issue, link to its PR or its Task as the Tracker's section says.
+
+Then show the user one table, with one row for each candidate that links:
+
+| Candidate | Kind | Evidence | Record |
+|---|---|---|---|
+| `owner/repo#143` | Overlaps | Both rewrite `openHub` in `cmd/lineup/hub.go` | `Blocked by #143, overlap: both rewrite openHub` on the new Issue |
+| `owner/repo#147` | Same file only | Both change `cmd/lineup/hub.go`, in other functions | `Related: #147` on the new Issue |
+
+Under the table, list each place that you searched, with the count of items that you read there, also a count of 0. For example: `Searched: open Issues in owner/repo (12), Tasks in owner/repo (3), open PRs in owner/repo (0), the batch (2).` If no candidate links, write "No links" in place of the table, and still list the places.
+
+Then ask the user with `AskUserQuestion`:
+
+- **Write**: create or change the Issues, and record each link of the table.
+- **Write nothing**: create and change no Issue.
+
+Write nothing before the user picks. If the user asks for a change, show the table again, and ask again.
 
 ## Skills
 
