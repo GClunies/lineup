@@ -42,12 +42,14 @@ type tab struct {
 
 // split is a block that Split opened beside the anchor block of a tab.
 // beside lists the other open blocks of the tab when the split opened. label
-// and program are what Panes reads: side and hunk for each split that Split
-// opens. A test seeds other blocks of a tab with any label and program.
+// program, and args are what Panes reads: side and hunk for each split that
+// Split opens. A test seeds other blocks of a tab with any label, program, and
+// args.
 type split struct {
 	BlockID, anchor, cwd, window string
 	argv, beside                 []string
 	label, program               string
+	args                         []string
 	closed                       bool
 }
 
@@ -213,7 +215,7 @@ func (f *fakeRex) Panes(_ context.Context, _, window string) ([]Pane, error) {
 	}
 	for _, s := range f.splits {
 		if s.window == window && !s.closed {
-			out = append(out, Pane{BlockID: s.BlockID, Label: s.label, Program: s.program})
+			out = append(out, Pane{BlockID: s.BlockID, Label: s.label, Program: s.program, Args: s.args})
 		}
 	}
 	return out, nil
