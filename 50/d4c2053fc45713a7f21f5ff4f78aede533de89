@@ -1,0 +1,70 @@
+internal/worktree/worktree_test.go
+  s_20574cdff99e9d::t_fcbf7a9034a280 92,149-151,166,173,195,202,209-228
+  s_20574cdff99e9d::t_48e47b7ceae7ae 229
+cmd/lineup/close_test.go
+  s_20574cdff99e9d::t_e7d8c94b6037e6 1-32
+internal/scheduler/scheduler_test.go
+  s_20574cdff99e9d::t_b6d5a9063b2e62 626,991-993,1017-1019,1095-1097
+  s_20574cdff99e9d::t_057f403854a847 627-628,631
+  s_20574cdff99e9d::t_0f1328e7432d34 1065
+internal/scheduler/merged_test.go
+  s_20574cdff99e9d::t_b6d5a9063b2e62 226-228,264-266,275-277
+  s_20574cdff99e9d::t_18e1aed17e3451 66,218
+docs/architecture-intent/worktrees.md
+  s_20574cdff99e9d::t_bbbf082ea50102 35-40
+internal/scheduler/record.go
+  s_20574cdff99e9d::t_902668860e9b41 479
+  s_20574cdff99e9d::t_959670888ebf45 4
+  s_20574cdff99e9d::t_558ffef5432db5 86
+  s_20574cdff99e9d::t_a1e39f0896dd46 88-90
+internal/worktree/worktree.go
+  s_20574cdff99e9d::t_aae46ef75ebb50 56-57,60,64,66,68-69,72-78,84-85
+  s_20574cdff99e9d::t_83ffefcbf82b65 107-113,117,120-129,131
+  s_20574cdff99e9d::t_063908e813a820 79-83,86-89
+  s_20574cdff99e9d::t_611060baf9c44b 118-119
+docs/product-intent/lifecycle.md
+  s_20574cdff99e9d::t_de606c73c29f53 84-87
+cmd/lineup/decide.go
+  s_20574cdff99e9d::t_2dc36e15aa41c4 28-31
+  s_20574cdff99e9d::t_c4b17227c9e968 39
+internal/scheduler/api.go
+  s_20574cdff99e9d::t_adf68f9e7c7f6e 211
+  s_20574cdff99e9d::t_48c773938ece8f 302-328
+cmd/lineup/cli.go
+  s_20574cdff99e9d::t_dac3ee78b4301e 449-464
+  s_20574cdff99e9d::t_82155f508f457c 39
+internal/scheduler/ports.go
+  s_20574cdff99e9d::t_c0cb90ca759443 131-135
+cmd/lineup/wire_test.go
+  s_20574cdff99e9d::t_af094dbf5017d5 328
+cmd/lineup/wire.go
+  s_20574cdff99e9d::t_6a8da6a8824c92 273-274
+  s_20574cdff99e9d::t_8cede43826808b 209
+internal/github/client.go
+  s_20574cdff99e9d::t_eaede1c95e9e88 41-42
+  s_20574cdff99e9d::t_ea12e9e0f4ae5e 112
+  s_20574cdff99e9d::t_2973ae8edc3ac6 204-206
+  s_20574cdff99e9d::t_b6d5a9063b2e62 202-203,207-209
+  s_20574cdff99e9d::t_39979a460e7213 388
+internal/scheduler/scheduler.go
+  s_20574cdff99e9d::t_de0067136f7678 580-584,586-587,589,591,593-603
+  s_20574cdff99e9d::t_4a8ac638fd5287 895-897
+docs/product-intent/tabs.md
+  s_20574cdff99e9d::t_23c13cc28405f7 80-83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "50d4c2053fc45713a7f21f5ff4f78aede533de89",
+  "prompts": {},
+  "sessions": {
+    "s_20574cdff99e9d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8241235c-39a7-47b3-8a39-6461166dfa70",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
