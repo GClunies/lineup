@@ -77,3 +77,7 @@ When `lineup` or `lineup restart` must reopen the Hub tab that it runs in, a bac
 ## PROD-TABS-019: A merged Task whose tab lineup closes keeps its worktree for some days
 
 With `close_tab = true`, lineup keeps the worktree of a merged build Task for `keep_worktree_days`, 0 to 30 and 7 by default. The days count from the tab's close, or from the merge when the Task has no tab. Then lineup removes the worktree, at a poll or at its next start. A tab that is gone at the Scheduler's start keeps its worktree for the full days. The value for the Task's own Repo applies.
+
+## PROD-TABS-020: `lineup close` says why a worktree stays
+
+If lineup cannot remove the worktree of a Task, `lineup close <task>` prints the reason, for example `worktree kept: uncommitted changes in <path>`. The note of the Task on the Board shows the same reason. lineup tries the removal again at each poll.

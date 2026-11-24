@@ -475,6 +475,15 @@ func (g *fakeGitHub) set(key PRKey, number int, signals ...string) {
 	g.prs[key] = PRSnapshot{Number: number, URL: fmt.Sprintf("https://github.com/%s/pull/%d", key.Repo, number), Raw: raw}
 }
 
+// endedAt makes the key's PR one that merged or closed at at.
+func (g *fakeGitHub) endedAt(key PRKey, at time.Time) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	pr := g.prs[key]
+	pr.ClosedAt = at
+	g.prs[key] = pr
+}
+
 func (g *fakeGitHub) RepoSlug(context.Context, string) (string, error) { return "acme/data", nil }
 
 func (g *fakeGitHub) Poll(_ context.Context, keys []PRKey) (map[PRKey]PRSnapshot, error) {
@@ -553,6 +562,8 @@ type fakeWorktrees struct {
 	// dirty makes Remove keep the worktree, as for uncommitted changes.
 	// removed still logs each try.
 	dirty bool
+	// removeErr fails each Remove call, and the worktree stays.
+	removeErr error
 	// addErr fails the next AddReview call.
 	addErr error
 	// base is the DiffBase of every worktree, or base1 when it is empty. gone
@@ -612,14 +623,22 @@ func (w *fakeWorktrees) CreateArgv(_, branch string) []string { return []string{
 func (w *fakeWorktrees) Path(_ context.Context, _, branch string) (string, error) {
 	return filepath.Join(w.root, filepath.Base(branch)), nil
 }
-func (w *fakeWorktrees) Remove(_ context.Context, _, branch string) error {
+
+// Remove logs the path of each try, or the branch when the Task has no path.
+func (w *fakeWorktrees) Remove(_ context.Context, _, branch, path string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.removed = append(w.removed, branch)
+	w.removed = append(w.removed, cmp.Or(path, branch))
 	if w.dirty {
 		return fmt.Errorf("%w: %s", ErrUncommitted, branch)
 	}
-	return nil
+	return w.removeErr
+}
+
+func (w *fakeWorktrees) failRemove(err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.removeErr = err
 }
 
 func (w *fakeWorktrees) setDirty(dirty bool) {
@@ -969,7 +988,9 @@ func TestADoneTabTheUserClosesRemovesTheWorktree(t *testing.T) {
 		t.Fatalf("removed %v before the user closed the tab", got)
 	}
 	h.rex.userCloses(worker)
-	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	eventually(t, "the worktree removed", func() bool {
+		return slices.Equal(h.worktreesRemoved(), []string{filepath.Join(h.wt.root, "eng-1-billing")})
+	})
 	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:acme/data"}) })
 	if v := h.task("ENG-1"); v.Stage != "Done" || v.Outcome != "merged" || v.Tab || v.Live {
 		t.Fatalf("task = %+v, want Done, merged, with no tab", v)
@@ -993,7 +1014,9 @@ func TestClosingADoneTaskClosesItsTabAndRemovesTheWorktree(t *testing.T) {
 	h, worker := doneWithATab(t)
 	h.do(Request{Op: "close", Task: "ENG-1"})
 	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude working")) == 0 })
-	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	eventually(t, "the worktree removed", func() bool {
+		return slices.Equal(h.worktreesRemoved(), []string{filepath.Join(h.wt.root, "eng-1-billing")})
+	})
 	eventually(t, "the Repo session removed", func() bool { return slices.Equal(h.sessionsDestroyed(), []string{"session:acme/data"}) })
 	h.rex.events <- RexEvent{Kind: EvClosed, BlockID: worker.BlockID}
 	h.still("ENG-1", lifecycle.Done)
@@ -1039,7 +1062,7 @@ func seedDoneWithAWorktree(id string) func(*store.Store) {
 
 func TestRecoveryRemovesTheWorktreeOfADoneTaskWhoseCleanupNeverRan(t *testing.T) {
 	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), seedDoneWithAWorktree("ENG-crash"))
-	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"b-ENG-crash"}) })
+	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"/worktrees/b-ENG-crash"}) })
 	eventually(t, "the removed worktree to leave the Task", func() bool { return h.task("ENG-crash").Worktree == "" })
 }
 
@@ -1069,7 +1092,9 @@ func TestArchiveClosesAnOpenTab(t *testing.T) {
 		t.Fatalf("board after archive = %v", ids)
 	}
 	eventually(t, "the tab closed", func() bool { return len(h.rex.open("claude working")) == 0 })
-	eventually(t, "the worktree removed", func() bool { return slices.Equal(h.worktreesRemoved(), []string{"ada/eng-1-billing"}) })
+	eventually(t, "the worktree removed", func() bool {
+		return slices.Equal(h.worktreesRemoved(), []string{filepath.Join(h.wt.root, "eng-1-billing")})
+	})
 	if v := h.task("ENG-1"); v.Outcome != "merged" {
 		t.Fatalf("task = %+v, want the merged outcome kept", v)
 	}

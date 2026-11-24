@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"cmp"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -82,8 +83,11 @@ type Record struct {
 	ReviewedHead string `json:"reviewed_head,omitempty"`
 	// WorktreeKept is true when lineup kept a worktree that it meant to
 	// remove: a review worktree that holds work that is on no remote, or a
-	// build worktree with uncommitted changes.
+	// build worktree with uncommitted changes or a failed removal.
 	WorktreeKept bool `json:"worktree_kept,omitempty"`
+	// WorktreeError is why a build Task's worktree stays, when the reason is
+	// not uncommitted changes, for example an error of wt remove.
+	WorktreeError string `json:"worktree_error,omitempty"`
 	// CloseAtIdle is true from a build Task's merge, with close_tab on for
 	// the Task, until lineup closes its tab.
 	CloseAtIdle bool `json:"close_at_idle,omitempty"`
@@ -472,7 +476,7 @@ func (r *Record) note(pr int) string {
 func (r *Record) worktreeNote() string {
 	switch {
 	case r.WorktreeKept && r.Review == nil:
-		return "worktree kept: uncommitted changes in " + r.Worktree
+		return "worktree kept: " + cmp.Or(r.WorktreeError, "uncommitted changes in "+r.Worktree)
 	case r.WorktreeKept:
 		return "worktree kept: " + r.Worktree
 	case r.done() == kept:

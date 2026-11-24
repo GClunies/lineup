@@ -89,7 +89,7 @@ func TestCreatePathRemove(t *testing.T) {
 	sh(t, t.TempDir(), CreateArgv(bin, repo, "feat/old")...) // branch exists, no worktree
 
 	for range 2 {
-		if err := Remove(ctx, bin, repo, "feat/x"); err != nil {
+		if err := Remove(ctx, bin, repo, "feat/x", wt); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -145,6 +145,40 @@ func TestCreateFailsWhenHookFails(t *testing.T) {
 	}
 }
 
+// A Worker can switch the Task's worktree to another branch, for example for a
+// follow-up PR. Remove still finds the worktree by the path that setup
+// recorded, keeps it while it holds uncommitted changes, and a new setup of the
+// branch then works (ARCH-TREE-006).
+func TestRemoveFindsAWorktreeThatMovedToAnotherBranch(t *testing.T) {
+	bin, repo, _ := setup(t)
+	ctx := context.Background()
+	argv := CreateArgv(bin, repo, "feat/x")
+	sh(t, t.TempDir(), argv...)
+	wt, err := Path(ctx, bin, repo, "feat/x")
+	if err != nil || wt == "" {
+		t.Fatalf("Path = %q %v", wt, err)
+	}
+	sh(t, wt, "git", "switch", "-q", "-c", "feat/x-followup")
+	notes := filepath.Join(wt, "notes.txt")
+	if err := os.WriteFile(notes, []byte("draft\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Remove(ctx, bin, repo, "feat/x", wt); !errors.Is(err, ErrUncommitted) {
+		t.Fatalf("Remove of the moved dirty worktree: err = %v, want ErrUncommitted", err)
+	}
+	if _, err := os.Stat(notes); err != nil {
+		t.Fatalf("the dirty worktree is gone: %v", err)
+	}
+	os.Remove(notes)
+	if err := Remove(ctx, bin, repo, "feat/x", wt); err != nil {
+		t.Fatalf("Remove of the moved clean worktree: %v", err)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("the moved worktree is still there: %v", err)
+	}
+	sh(t, t.TempDir(), argv...) // a new setup of feat/x
+}
+
 // wt remove fails on a dirty worktree, so Remove refuses it before wt runs,
 // with an error that callers can tell apart.
 func TestRemoveKeepsAWorktreeWithUncommittedChanges(t *testing.T) {
@@ -158,17 +192,38 @@ func TestRemoveKeepsAWorktreeWithUncommittedChanges(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(wt, "notes.txt"), []byte("draft\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := Remove(ctx, bin, repo, "feat/dirty"); !errors.Is(err, ErrUncommitted) {
+	if err := Remove(ctx, bin, repo, "feat/dirty", ""); !errors.Is(err, ErrUncommitted) {
 		t.Fatalf("Remove of a dirty worktree: err = %v, want ErrUncommitted", err)
 	}
 	if _, err := os.Stat(filepath.Join(wt, "notes.txt")); err != nil {
 		t.Fatalf("the dirty worktree is gone: %v", err)
 	}
 	os.Remove(filepath.Join(wt, "notes.txt"))
-	if err := Remove(ctx, bin, repo, "feat/dirty"); err != nil {
+	if err := Remove(ctx, bin, repo, "feat/dirty", ""); err != nil {
 		t.Fatalf("Remove of the cleaned worktree: %v", err)
 	}
 	if _, err := os.Stat(wt); !os.IsNotExist(err) {
 		t.Errorf("the cleaned worktree is still there: %v", err)
+	}
+}
+
+// The user can delete a worktree's folder by hand. Remove of its path prunes
+// what git still records of it.
+func TestRemoveOfAWorktreeWhoseFolderIsGone(t *testing.T) {
+	bin, repo, _ := setup(t)
+	ctx := context.Background()
+	sh(t, t.TempDir(), CreateArgv(bin, repo, "feat/gone")...)
+	wt, err := Path(ctx, bin, repo, "feat/gone")
+	if err != nil || wt == "" {
+		t.Fatalf("Path = %q %v", wt, err)
+	}
+	if err := os.RemoveAll(wt); err != nil {
+		t.Fatal(err)
+	}
+	if err := Remove(ctx, bin, repo, "feat/gone", wt); err != nil {
+		t.Fatalf("Remove of a worktree whose folder is gone: %v", err)
+	}
+	if list := sh(t, repo, "git", "worktree", "list"); strings.Contains(list, wt) {
+		t.Fatalf("git still lists the worktree:\n%s", list)
 	}
 }

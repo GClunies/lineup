@@ -208,12 +208,7 @@ func (s *Scheduler) Handle(ctx context.Context, req Request) (any, error) {
 	case "merge":
 		return nil, s.signal(req.Task, lifecycle.PRMerge{})
 	case "close":
-		return nil, s.with(req.Task, func(r *Record) error {
-			if r.Stage == lifecycle.Done && r.WindowID == "" && r.Worktree == "" {
-				return nil
-			}
-			return s.apply(r, lifecycle.TaskClosed{}, "")
-		})
+		return s.closeTask(ctx, req.Task)
 	case "archive":
 		return nil, s.with(req.Task, func(r *Record) error {
 			if r.Stage != lifecycle.Done {
@@ -302,6 +297,33 @@ func (s *Scheduler) with(id string, f func(r *Record) error) error {
 		err = f(r)
 	})
 	return err
+}
+
+// closeTask ends the Task and waits for its cleanup. It returns why lineup
+// kept the Task's worktree, or "" when lineup kept none (PROD-TABS-020).
+func (s *Scheduler) closeTask(ctx context.Context, id string) (string, error) {
+	cleaned := make(chan struct{})
+	err := s.with(id, func(r *Record) error {
+		id = r.ID
+		if r.Stage != lifecycle.Done || r.WindowID != "" || r.Worktree != "" {
+			if err := s.apply(r, lifecycle.TaskClosed{}, ""); err != nil {
+				return err
+			}
+		}
+		// The lane runs the Task's Effects in order, so this runs after the Cleanup.
+		s.enqueue(id, func(context.Context) { close(cleaned) })
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	select {
+	case <-cleaned:
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+	r, _ := s.snapshot(id)
+	return r.worktreeNote(), nil
 }
 
 func (s *Scheduler) signal(id string, sig lifecycle.Signal) error {

@@ -53,23 +53,40 @@ type listOutput struct {
 	} `json:"items"`
 }
 
-// Path returns the worktree path of the branch, or "" with no error if the
-// branch has no worktree.
-func Path(ctx context.Context, bin, repo, branch string) (string, error) {
+// worktrees maps the path of each worktree of the Repo to its branch.
+func worktrees(ctx context.Context, bin, repo string) (map[string]string, error) {
 	out, err := run(ctx, bin, "-C", repo, "--config-set", "list.json-schema=2", "list", "--format=json")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	var l listOutput
 	if err := json.Unmarshal(out, &l); err != nil {
-		return "", fmt.Errorf("parse wt list output: %w", err)
+		return nil, fmt.Errorf("parse wt list output: %w", err)
 	}
+	wts := map[string]string{}
 	for _, it := range l.Items {
-		if it.Branch == branch && it.Worktree != nil {
-			return it.Worktree.Path, nil
+		if it.Worktree != nil {
+			wts[it.Worktree.Path] = it.Branch
 		}
 	}
-	return "", nil
+	return wts, nil
+}
+
+// Path returns the worktree path of the branch, or "" with no error if the
+// branch has no worktree.
+func Path(ctx context.Context, bin, repo, branch string) (string, error) {
+	wts, err := worktrees(ctx, bin, repo)
+	return pathOf(wts, branch), err
+}
+
+// pathOf is the path of the branch's worktree in wts, or "".
+func pathOf(wts map[string]string, branch string) string {
+	for p, b := range wts {
+		if b == branch {
+			return p
+		}
+	}
+	return ""
 }
 
 // DiffBase is the merge-base of HEAD in the worktree dir with origin's default
@@ -87,22 +104,31 @@ func DiffBase(ctx context.Context, dir string) (string, error) {
 	return git(ctx, dir, "merge-base", "HEAD", branch)
 }
 
-// Remove deletes the worktree of the branch. A branch with no worktree is not
-// an error. A worktree with uncommitted changes stays, and the error wraps
-// ErrUncommitted. git reads the changes, because wt's message is for people.
-func Remove(ctx context.Context, bin, repo, branch string) error {
-	p, err := Path(ctx, bin, repo, branch)
-	if err != nil || p == "" {
-		return err
-	}
-	changes, err := git(ctx, p, "status", "--porcelain")
+// Remove deletes the worktree at path, whatever branch it holds now, or else
+// the worktree of the branch. With neither, it does nothing. A worktree with
+// uncommitted changes stays, and the error wraps ErrUncommitted. git reads
+// the changes, because wt's message is for people. wt prunes a worktree whose
+// folder is gone.
+func Remove(ctx context.Context, bin, repo, branch, path string) error {
+	wts, err := worktrees(ctx, bin, repo)
 	if err != nil {
 		return err
 	}
-	if changes != "" {
-		return fmt.Errorf("%w: %s", ErrUncommitted, p)
+	if _, ok := wts[path]; !ok {
+		if path = pathOf(wts, branch); path == "" {
+			return nil
+		}
 	}
-	_, err = run(ctx, bin, "-C", repo, "-y", "remove", "--foreground", branch)
+	if _, err := os.Stat(path); err == nil {
+		changes, err := git(ctx, path, "status", "--porcelain")
+		if err != nil {
+			return err
+		}
+		if changes != "" {
+			return fmt.Errorf("%w: %s", ErrUncommitted, path)
+		}
+	}
+	_, err = run(ctx, bin, "-C", repo, "-y", "remove", "--foreground", path)
 	return err
 }
 
