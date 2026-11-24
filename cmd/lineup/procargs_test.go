@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 )
 
 // rexweb-pane is a bash script, so the kernel runs it as the interpreter with
@@ -23,8 +24,15 @@ func TestProcArgsReadsTheScriptThatAnInterpreterRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+	// Start returns before Linux sets the new argv, so wait for the exec.
 	want := []string{"/bin/sh", script, "https://github.com/acme/data/pull/7"}
-	if got := procArgs(cmd.Process.Pid); !slices.Equal(got, want) {
+	var got []string
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if got = procArgs(cmd.Process.Pid); got != nil {
+			break
+		}
+	}
+	if !slices.Equal(got, want) {
 		t.Fatalf("procArgs = %q, want %q", got, want)
 	}
 }
