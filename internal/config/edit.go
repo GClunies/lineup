@@ -201,6 +201,9 @@ func (f *File) Settings(repoKey string) []Setting {
 			out = append(out, f.setting(k, path, at))
 		}
 	}
+	// The keys of one Stage go together, default first, then in lifecycle
+	// order. The stage keys are the last of the catalog.
+	slices.SortStableFunc(out, func(a, b Setting) int { return stageRank(a.Path) - stageRank(b.Path) })
 	// With no min_review_score, the gate takes the top score of the bot.
 	name := slices.IndexFunc(out, func(s Setting) bool { return s.Path == "review_bot.name" })
 	for i, s := range out {
@@ -212,6 +215,23 @@ func (f *File) Settings(repoKey string) []Setting {
 		}
 	}
 	return out
+}
+
+// stageRank is 0 for a key outside [stage], 1 for a stage.default key, and
+// one more than the Stage for each other stage key.
+func stageRank(path string) int {
+	parts := strings.Split(path, ".")
+	switch {
+	case parts[0] != "stage":
+		return 0
+	case parts[1] == "default":
+		return 1
+	}
+	st, err := lifecycle.ParseStage(parts[1])
+	if err != nil {
+		return 0
+	}
+	return int(st) + 2
 }
 
 // setting looks the path up at each level, lowest first. A stage key that

@@ -1,7 +1,8 @@
-// Package configpanel is the panel of lineup config: each key of the config
-// file with its doc, its default, the value that applies, and the level that
-// sets it. It changes one key at a time through config.File, which writes the
-// file only when the loader passes the new text (PROD-CONFIG-008).
+// Package configpanel is the panel of lineup config: a tree of plain-named
+// groups that hold each key of the config file, with the value that applies
+// and the level that sets it, and for the selected key its doc and its value
+// at each level. It changes one key at a time through config.File, which
+// writes the file only when the loader passes the new text (PROD-CONFIG-008).
 package configpanel
 
 import (
@@ -54,13 +55,65 @@ type restartMsg struct {
 	err          error
 }
 
+// node is a group of the tree, or one setting in it.
+type node struct {
+	// id is a group's titles from the outermost, joined by " › ", or a
+	// setting's path.
+	id    string
+	title string
+	set   *config.Setting // nil for a group
+	kids  []*node
+}
+
+// group is the subgroup of n with the id, which it adds when n has none.
+func (n *node) group(id, title string) *node {
+	for _, k := range n.kids {
+		if k.set == nil && k.id == id {
+			return k
+		}
+	}
+	k := &node{id: id, title: title}
+	n.kids = append(n.kids, k)
+	return k
+}
+
+// leaves lists the settings below n, in tree order.
+func (n *node) leaves() []config.Setting {
+	if n.set != nil {
+		return []config.Setting{*n.set}
+	}
+	var out []config.Setting
+	for _, k := range n.kids {
+		out = append(out, k.leaves()...)
+	}
+	return out
+}
+
+// holds reports whether n or a node below it has the id.
+func (n *node) holds(id string) bool {
+	return n.id == id || slices.ContainsFunc(n.kids, func(k *node) bool { return k.holds(id) })
+}
+
+// row is a node in sight, at its depth below the top of the tree.
+type row struct {
+	*node
+	depth  int
+	parent int // the index of the row of the parent group, or -1
+}
+
+// defaultsGroup holds the [defaults] keys on the Global tab.
+const defaultsGroup = "Defaults for every Repo"
+
 type Model struct {
 	opts Options
 	file *config.File
 	tab  tab
 	repo string // the Repo of the Repo tab, or ""
 	all  []config.Setting
-	rows []config.Setting // all, filtered
+	rows []row
+	// open holds the ids of the groups that the user opened. A filter shows
+	// each group that holds a match open.
+	open map[string]bool
 	sel  int
 	mode mode
 
@@ -95,7 +148,7 @@ func newInput(prompt string) textinput.Model {
 
 // New builds the panel on the Global tab.
 func New(opts Options) Model {
-	m := Model{opts: opts, file: opts.File, width: 100, height: 30,
+	m := Model{opts: opts, file: opts.File, width: 100, height: 30, open: map[string]bool{},
 		filter: newInput("/ "), repoFilter: newInput("Repo: "), input: newInput("")}
 	m.repo = opts.Repo
 	if m.repo == "" && len(opts.Repos) > 0 {
@@ -110,11 +163,12 @@ func (m Model) Init() tea.Cmd { return nil }
 // readOnly reports whether the file does not load, so the panel edits nothing.
 func (m Model) readOnly() bool { return m.file.LoadErr != nil }
 
-// refresh reads the rows of the tab again and keeps the selected key.
+// refresh reads the settings of the tab again, builds the tree, and keeps
+// the selected row in sight: it opens the groups above it.
 func (m *Model) refresh() {
 	keep := ""
-	if s, ok := m.selected(); ok {
-		keep = s.Path
+	if r, ok := m.selectedRow(); ok {
+		keep = r.id
 	}
 	switch {
 	case m.tab == tabGlobal:
@@ -125,17 +179,87 @@ func (m *Model) refresh() {
 		m.all = nil
 	}
 	q := strings.ToLower(strings.TrimSpace(m.filter.Value()))
-	m.rows = slices.DeleteFunc(slices.Clone(m.all), func(s config.Setting) bool {
-		return q != "" && !strings.Contains(strings.ToLower(s.Path), q)
-	})
-	m.sel = max(slices.IndexFunc(m.rows, func(s config.Setting) bool { return s.Path == keep }), 0)
+	top := &node{}
+	for i := range m.all {
+		s := &m.all[i]
+		crumbs := m.crumbs(*s)
+		text := strings.ToLower(strings.Join(append(slices.Clone(crumbs), s.Label, s.Path), " "))
+		if !strings.Contains(text, q) {
+			continue
+		}
+		at := top
+		for d, title := range crumbs {
+			at = at.group(strings.Join(crumbs[:d+1], " › "), title)
+		}
+		at.kids = append(at.kids, &node{id: s.Path, title: s.Label, set: s})
+	}
+	for _, g := range top.kids {
+		m.reveal(g, keep)
+	}
+	m.rows = nil
+	m.flatten(top.kids, 0, -1)
+	m.sel = max(slices.IndexFunc(m.rows, func(r row) bool { return r.id == keep }), 0)
 }
 
-func (m Model) selected() (config.Setting, bool) {
+// reveal opens each group above the node with the id.
+func (m *Model) reveal(n *node, id string) bool {
+	if n.set != nil || n.id == id {
+		return n.id == id
+	}
+	for _, k := range n.kids {
+		if m.reveal(k, id) {
+			m.open[n.id] = true
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Model) flatten(nodes []*node, depth, parent int) {
+	for _, n := range nodes {
+		m.rows = append(m.rows, row{node: n, depth: depth, parent: parent})
+		if m.isOpen(n) {
+			m.flatten(n.kids, depth+1, len(m.rows)-1)
+		}
+	}
+}
+
+// crumbs are the titles of the groups that hold the setting on the tab. The
+// Global tab puts the [defaults] keys in a group of their own.
+func (m Model) crumbs(s config.Setting) []string {
+	if m.tab == tabGlobal && !slices.Contains(s.Key.Levels, config.LevelTop) {
+		return append([]string{defaultsGroup}, s.Group...)
+	}
+	return s.Group
+}
+
+func (m Model) filtering() bool { return strings.TrimSpace(m.filter.Value()) != "" }
+
+// isOpen reports whether the node is a group that shows its rows.
+func (m Model) isOpen(n *node) bool { return n.set == nil && (m.open[n.id] || m.filtering()) }
+
+func (m Model) selectedRow() (row, bool) {
 	if m.sel < 0 || m.sel >= len(m.rows) {
-		return config.Setting{}, false
+		return row{}, false
 	}
 	return m.rows[m.sel], true
+}
+
+// selected is the setting of the selected row. A group has none.
+func (m Model) selected() (config.Setting, bool) {
+	if r, ok := m.selectedRow(); ok && r.set != nil {
+		return *r.set, true
+	}
+	return config.Setting{}, false
+}
+
+// openGroup opens or closes the selected group.
+func (m Model) openGroup(open bool) Model {
+	if r, ok := m.selectedRow(); ok && r.set == nil {
+		m.open[r.id] = open
+		m.refresh()
+	}
+	return m
 }
 
 func (m Model) say(text string, bad bool) Model {
@@ -181,9 +305,9 @@ func (m Model) listKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q":
 		return m, tea.Quit
 	case "tab", "shift+tab":
+		// The other tab keeps the selected key when it has it.
 		m.tab = 1 - m.tab
 		m.refresh()
-		m.sel = 0
 	case "j", "down":
 		m.sel = min(m.sel+1, max(len(m.rows)-1, 0))
 	case "k", "up":
@@ -195,6 +319,24 @@ func (m Model) listKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "/":
 		m.mode = modeFilter
 		return m, m.filter.Focus()
+	case "right":
+		// → opens a group, and on an open group it selects the first row.
+		r, ok := m.selectedRow()
+		switch {
+		case ok && r.set == nil && !m.isOpen(r.node):
+			return m.openGroup(true), nil
+		case ok && r.set == nil:
+			m.sel = min(m.sel+1, len(m.rows)-1)
+		}
+	case "left":
+		// ← closes an open group, and on any other row it selects the group.
+		r, ok := m.selectedRow()
+		switch {
+		case ok && r.set == nil && m.isOpen(r.node) && !m.filtering():
+			return m.openGroup(false), nil
+		case ok && r.parent >= 0:
+			m.sel = r.parent
+		}
 	case "esc":
 		m.filter.SetValue("")
 		m.refresh()
@@ -205,6 +347,9 @@ func (m Model) listKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.repoFilter.Focus()
 		}
 	case "enter":
+		if r, ok := m.selectedRow(); ok && r.set == nil {
+			return m.openGroup(!m.open[r.id]), nil
+		}
 		return m.startEdit(false, false)
 	case "l":
 		return m.startEdit(true, false)
@@ -230,42 +375,20 @@ func (m Model) startEdit(pickLevel, remove bool) (tea.Model, tea.Cmd) {
 	if remove {
 		m.levels = s.SetAt()
 		if len(m.levels) == 0 {
-			why := s.Path + " is not set at any level here."
+			why := s.Label + " is not set at any level here."
 			if s.From != "" {
 				why += " Its value comes from " + s.From + "."
 			}
 			return m.say(why, true), nil
 		}
 	} else {
-		m.levels = m.levelsOf(s.Key)
+		m.levels = s.Levels()
 	}
 	if !pickLevel {
 		return m.openEditor(m.levels[len(m.levels)-1])
 	}
 	m.mode, m.levelAt = modeLevels, len(m.levels)-1
 	return m, nil
-}
-
-// levelsOf lists the levels of the tab where the key can be set, lowest
-// first. The Global tab has the top level or [defaults]. The Repo tab has
-// [defaults], the owner/* table, and the Repo's own table, as the catalog
-// allows.
-func (m Model) levelsOf(k config.Key) []config.Where {
-	var out []config.Where
-	for _, l := range k.Levels {
-		switch {
-		case m.tab == tabGlobal && (l == config.LevelTop || l == config.LevelDefaults):
-			out = append(out, config.Where{Level: l})
-		case m.tab == tabRepo && l == config.LevelDefaults:
-			out = append(out, config.Where{Level: l})
-		case m.tab == tabRepo && l == config.LevelOwner:
-			owner, _, _ := strings.Cut(m.repo, "/")
-			out = append(out, config.Where{Level: l, Table: owner + "/*"})
-		case m.tab == tabRepo && l == config.LevelRepo:
-			out = append(out, config.Where{Level: l, Table: m.repo})
-		}
-	}
-	return out
 }
 
 func (m Model) levelKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -479,7 +602,6 @@ func (m Model) repoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeList
 		m.repoFilter.Blur()
 		m.refresh()
-		m.sel = 0
 		return m, nil
 	}
 	var cmd tea.Cmd

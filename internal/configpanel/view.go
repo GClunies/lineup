@@ -2,8 +2,10 @@ package configpanel
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
@@ -52,14 +54,20 @@ func (m Model) View() string {
 	return strings.Join(lines, "\n")
 }
 
-// wrap breaks the text into lines that fit the width, each in the style.
+// wrap breaks the text into lines that fit the width, each in the style. It
+// breaks at spaces, so HOD-3 stays whole.
 func (m Model) wrap(style lipgloss.Style, text string) []string {
 	var out []string
+	text = strings.ReplaceAll(text, "-", nbHyphen)
 	for _, l := range strings.Split(lipgloss.NewStyle().Width(max(m.width-2, 20)).Render(text), "\n") {
-		out = append(out, style.Render(" "+strings.TrimRight(l, " ")))
+		l = strings.ReplaceAll(strings.TrimRight(l, " "), nbHyphen, "-")
+		out = append(out, style.Render(" "+l))
 	}
 	return out
 }
+
+// nbHyphen is a hyphen that a line does not break at.
+const nbHyphen = "\u2011"
 
 // stack joins lines and lists of lines.
 func stack(parts ...any) []string {
@@ -78,48 +86,121 @@ func stack(parts ...any) []string {
 func (m Model) tabLine() string {
 	global, repo := " Global ", " Repo: "+cmpOr(m.repo, "none")+" ▾ "
 	if m.tab == tabGlobal {
-		return " " + head.Render("["+global+"]") + "  " + dim.Render(repo)
+		return " " + head.Render("["+global+"]") + "  " + dim.Render(repo+"   tab switches")
 	}
-	return " " + dim.Render(global) + "  " + head.Render("["+repo+"]")
+	return " " + dim.Render(global) + "  " + head.Render("["+repo+"]") + dim.Render("   tab switches · r picks the Repo")
 }
 
-// table is the KEY, VALUE, and SET BY columns, with the selected row in
-// sight.
+// table is the SETTING, VALUE, and SET BY columns of the rows in sight,
+// with the selected row in sight. A closed group sums up its settings.
 func (m Model) table(h int) []string {
 	if len(m.rows) == 0 {
 		switch {
 		case m.tab == tabRepo && m.repo == "":
 			return []string{dim.Render(" No checkout below roots. Set roots on the Global tab.")}
 		case m.filter.Value() != "":
-			return []string{m.filterLine(), dim.Render(" No key matches the filter.")}
+			return []string{m.filterLine(), dim.Render(" No setting matches the filter.")}
 		}
 		return nil
 	}
-	keyW, valW := len("KEY"), len("VALUE")
-	for _, s := range m.rows {
-		keyW, valW = max(keyW, len(s.Path)), max(valW, ansi.StringWidth(s.Value))
+	type cells struct{ name, value, by string }
+	lines := make([]cells, len(m.rows))
+	nameW, byW := len("SETTING"), len("SET BY")
+	for i, r := range m.rows {
+		var c cells
+		marker := "  "
+		switch {
+		case r.set != nil:
+			c.value, c.by = plain(r.set.Value), r.set.Source()
+		case m.isOpen(r.node):
+			marker = "▾ "
+		default:
+			marker = "▸ "
+			c.value, c.by = summary(r.node)
+		}
+		c.name = strings.Repeat("  ", r.depth) + marker + r.title
+		lines[i] = c
+		nameW, byW = max(nameW, ansi.StringWidth(c.name)), max(byW, ansi.StringWidth(c.by))
 	}
-	keyW, valW = min(keyW, 38), min(valW, max(m.width-keyW-24, 12))
+	valW := len("VALUE")
+	for _, c := range lines {
+		valW = max(valW, ansi.StringWidth(c.value))
+	}
+	nameW, byW = min(nameW, max(m.width*2/5, 24)), min(byW, max(m.width/3, 14))
+	valW = min(valW, max(m.width-nameW-byW-6, 10))
 	cell := func(s string, w int) string { return fmt.Sprintf("%-*s", w, ansi.Truncate(s, w, "…")) }
-	out := []string{dim.Render("   " + cell("KEY", keyW) + "  " + cell("VALUE", valW) + "  SET BY")}
+	out := []string{dim.Render("  " + cell("SETTING", nameW) + "  " + cell("VALUE", valW) + "  SET BY")}
 	if l := m.filterLine(); l != "" {
 		out = append(out, l)
 	}
 	rows := make([]string, len(m.rows))
-	for i, s := range m.rows {
-		line := cell(s.Path, keyW) + "  " + cell(s.Value, valW) + "  " + s.Source()
+	for i, c := range lines {
+		by := ansi.Truncate(c.by, byW, "…")
+		line := cell(c.name, nameW) + "  " + cell(c.value, valW) + "  " + by
+		r := m.rows[i]
 		switch {
 		case i == m.sel:
-			rows[i] = selRow.Render("▶  " + line)
-		case s.By == nil:
-			rows[i] = dim.Render("   " + line)
+			rows[i] = selRow.Render("▶ " + line)
+		case r.set == nil:
+			rows[i] = "  " + bold.Render(cell(c.name, nameW)) + "  " + dim.Render(cell(c.value, valW)+"  "+by)
+		case r.set.By == nil:
+			rows[i] = dim.Render("  " + line)
 		default:
-			rows[i] = "   " + line
+			rows[i] = "  " + line
 		}
 	}
 	room := max(h-len(out), 1)
 	start := min(max(m.sel-room/2, 0), max(len(rows)-room, 0))
 	return append(out, rows[start:min(start+room, len(rows))]...)
+}
+
+// summary sums up the settings of a closed group: their values when it holds
+// at most three and no subgroup, else how many of them a level sets. by
+// names each level whose value applies to one of them.
+func summary(n *node) (value, by string) {
+	leaves := n.leaves()
+	var values, levels []string
+	set, small := 0, len(leaves) <= 3
+	var seen []config.Where
+	for _, s := range leaves {
+		values = append(values, plain(s.Value))
+		if s.Key.Type == config.TypeQueue {
+			small = false
+		}
+		if s.By != nil {
+			set++
+			if !slices.Contains(seen, *s.By) {
+				seen = append(seen, *s.By)
+			}
+		}
+	}
+	for _, k := range n.kids {
+		small = small && k.set != nil
+	}
+	slices.SortStableFunc(seen, func(a, b config.Where) int { return int(a.Level) - int(b.Level) })
+	for _, w := range seen {
+		levels = append(levels, w.String())
+	}
+	if small {
+		return strings.Join(values, " · "), strings.Join(levels, ", ")
+	}
+	return fmt.Sprintf("%d of %d set", set, len(leaves)), strings.Join(levels, ", ")
+}
+
+// plain writes a TOML list of strings as its items with commas between them,
+// and an empty list as none. Other text stays as it is.
+func plain(text string) string {
+	if !strings.HasPrefix(text, "[") {
+		return text
+	}
+	var v struct{ V []string }
+	if _, err := toml.Decode("V = "+text, &v); err != nil {
+		return text
+	}
+	if len(v.V) == 0 {
+		return "none"
+	}
+	return strings.Join(v.V, ", ")
 }
 
 func (m Model) filterLine() string {
@@ -152,9 +233,9 @@ func (m Model) repoList(h int) []string {
 }
 
 func (m Model) levelList() []string {
-	verb := "Set " + m.edit.Path + " at which level?"
+	verb := "Set " + m.edit.Label + " at which level?"
 	if m.remove {
-		verb = "Remove " + m.edit.Path + " from which level?"
+		verb = "Remove " + m.edit.Label + " from which level?"
 	}
 	out := []string{" " + bold.Render(verb)}
 	for i, w := range m.levels {
@@ -186,21 +267,77 @@ func (m Model) levelNote(w config.Where) string {
 	return ""
 }
 
-// detail describes the selected key: its doc, its type and values, its
-// default, and the restart that a change needs.
+// detail describes the selected row. A group names the rows that it holds.
+// A setting gives its doc, its value at each level with the one that
+// applies, the key as the file writes it where enter sets it, and the
+// restart that a change needs.
 func (m Model) detail() []string {
-	s, ok := m.selected()
+	r, ok := m.selectedRow()
 	if !ok {
 		return nil
 	}
-	k := s.Key
-	out := m.wrap(lipgloss.NewStyle(), s.Path+": "+k.Doc)
-	kind := "Type " + string(k.Type)
-	if len(k.Values) > 0 {
-		kind += ": " + strings.Join(k.Values, ", ")
+	// The pane keeps the height of the tallest detail of the tab, so the
+	// tree does not jump as the selection moves.
+	tallest := 0
+	for i := range m.all {
+		tallest = max(tallest, len(m.detailOf(&node{set: &m.all[i]})))
 	}
-	out = append(out, dim.Render(" "+kind+". Default "+k.Default+"."), dim.Render(" Applies after: "+k.Restart))
+	out := m.detailOf(r.node)
+	for len(out) < min(tallest, m.height/2) {
+		out = append(out, "")
+	}
 	return out
+}
+
+func (m Model) detailOf(r *node) []string {
+	if r.set == nil {
+		var titles []string
+		for _, k := range r.kids {
+			titles = append(titles, k.title)
+		}
+		return stack(bold.Render(" "+r.id), m.wrap(dim, "Holds "+strings.Join(titles, " · ")))
+	}
+	s := *r.set
+	crumbs := slices.Concat(m.crumbs(s), []string{s.Label})
+	out := stack(bold.Render(" "+strings.Join(crumbs, " › ")), m.wrap(lipgloss.NewStyle(), s.Key.Doc))
+
+	type level struct{ name, value string }
+	def := s.Key.Default
+	if s.By == nil && s.Value != def {
+		def += " (" + s.Value + ")"
+	}
+	levels := []level{{"default", def}}
+	applies := 0
+	for _, l := range s.Layers {
+		name, value := l.At.String(), "·"
+		if l.Path != s.Path {
+			name += " (" + l.Path[:strings.LastIndex(l.Path, ".")] + ")"
+		}
+		if l.Set {
+			value, applies = plain(l.Value), len(levels)
+		}
+		levels = append(levels, level{name, value})
+	}
+	nameW, valW := 0, 0
+	for _, l := range levels {
+		nameW, valW = max(nameW, ansi.StringWidth(l.name)), max(valW, ansi.StringWidth(l.value))
+	}
+	valW = min(valW, max(m.width-nameW-18, 10))
+	for i, l := range levels {
+		line := fmt.Sprintf("   %-*s  %-*s", nameW, l.name, valW, ansi.Truncate(l.value, valW, "…"))
+		if i == applies {
+			out = append(out, good.Render(line+"  ◀ applies"))
+		} else {
+			out = append(out, dim.Render(strings.TrimRight(line, " ")))
+		}
+	}
+
+	k := s.Key
+	fileKey := "File key: " + s.FileKey(s.Levels()[len(s.Levels())-1]) + " · " + string(k.Type)
+	if len(k.Values) > 0 {
+		fileKey += " · " + strings.Join(k.Values, ", ")
+	}
+	return stack(out, m.wrap(dim, fileKey), dim.Render(" Applies after: "+k.Restart))
 }
 
 // statusLines are the editor, the status, and the restart that waits.
@@ -217,13 +354,13 @@ func (m Model) statusLines() []string {
 				items = append(items, " "+c+" ")
 			}
 		}
-		out = append(out, " Set "+m.edit.Path+" at "+at+": "+strings.Join(items, " "))
+		out = append(out, " Set "+m.edit.Label+" at "+at+": "+strings.Join(items, " "))
 	case modeInput:
 		hint := ""
 		if m.edit.Key.Type == config.TypeList {
 			hint = dim.Render("  items with commas between them")
 		}
-		out = append(out, " Set "+m.edit.Path+" at "+at+":"+hint, " > "+m.input.View())
+		out = append(out, " Set "+m.edit.Label+" at "+at+":"+hint, " > "+m.input.View())
 	}
 	switch {
 	case m.status != "" && m.bad:
@@ -255,11 +392,10 @@ func (m Model) footer() []string {
 	case modeRunning:
 		keys = "the restart runs"
 	default:
-		keys = "enter edit · l set at level · x remove from level · / filter · tab Global/Repo"
-		if m.tab == tabRepo {
-			keys += " · r pick Repo"
+		keys = "enter edit · l set at level · x remove · ← group · / filter · q quit"
+		if r, ok := m.selectedRow(); ok && r.set == nil {
+			keys = "→ or enter open · ← close · / filter · q quit"
 		}
-		keys += " · q quit"
 	}
 	return m.wrap(dim, keys)
 }
