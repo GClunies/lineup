@@ -1,0 +1,42 @@
+docs/product-intent/configuration.md
+  s_3f62d37256047d::t_69eb890e82418d 35
+cmd/lineup/config_test.go
+  s_3f62d37256047d::t_c95c566619a39e 136
+  s_3f62d37256047d::t_50c82695f4ebee 140
+internal/config/catalog.go
+  s_3f62d37256047d::t_3f49b171d4190f 162,164-165,167
+  s_3f62d37256047d::t_04540330678ba8 168
+  s_3f62d37256047d::t_282a023e00fa27 143
+  s_3f62d37256047d::t_b89fcc2d92d311 146
+  s_3f62d37256047d::t_0bda69dd1536ec 161
+  s_3f62d37256047d::t_a33d29cc3f0a03 147,149
+  s_3f62d37256047d::t_f48e5a17d458f8 171
+  s_3f62d37256047d::t_08a7df1c7c8bb3 153,155-156,158
+  s_3f62d37256047d::t_eb427d70492e2b 174
+GLOSSARY.md
+  s_3f62d37256047d::t_358395bedfd91c 200
+  s_3f62d37256047d::t_0ff67e8b9dc30c 162
+  s_3f62d37256047d::t_227946efbe26f3 186
+internal/configpanel/model_test.go
+  s_3f62d37256047d::t_b37ebfaefa72e4 533
+  s_3f62d37256047d::t_ba1e32f32b025c 526
+  s_3f62d37256047d::t_a3eb9ffbcc59a5 211-212,221,237,239-240,251,267,316,323,343,350,356,379,398,414,424,428,433,469,488,492,500,504,508,523,600,604
+internal/config/catalog_test.go
+  s_3f62d37256047d::t_6eeb388c0c4bc4 184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ec857c617bf1d11e5f6351904cdd79e48c5c2e0f",
+  "prompts": {},
+  "sessions": {
+    "s_3f62d37256047d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "918a36da-c6bf-4dae-acbd-698584050738",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
