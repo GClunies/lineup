@@ -1,0 +1,25 @@
+GLOSSARY.md
+  s_3f62d37256047d::t_ef78f2e6004ce7 99-102,202-207
+docs/product-intent/palette.md
+  s_3f62d37256047d::t_9e0a0ccd3e792f 32-35
+docs/product-intent/configuration.md
+  s_3f62d37256047d::t_4d5284cb3a4580 32-47
+docs/architecture-intent/configuration.md
+  s_3f62d37256047d::t_eed771c1f9e0e9 46-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d93bc32a8b5f218fb75e3e7b12252862328d1b6",
+  "prompts": {},
+  "sessions": {
+    "s_3f62d37256047d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "918a36da-c6bf-4dae-acbd-698584050738",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
