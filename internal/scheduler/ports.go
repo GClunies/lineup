@@ -68,9 +68,11 @@ type PRKey struct{ Repo, Branch, Bot string }
 // PRSnapshot is the GitHub adapter's view of one PR, kept opaque here so the
 // Scheduler can store it and hand it back for edge detection.
 type PRSnapshot struct {
-	Number int             `json:"number"`
-	URL    string          `json:"url"`
-	Raw    json.RawMessage `json:"raw"`
+	Number int    `json:"number"`
+	URL    string `json:"url"`
+	// ClosedAt is when the PR merged or closed, or zero while it is open.
+	ClosedAt time.Time       `json:"closed_at,omitzero"`
+	Raw      json.RawMessage `json:"raw"`
 }
 
 // ReviewKey names the PR that a review Task reviews: owner/name and its number.

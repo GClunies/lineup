@@ -145,6 +145,39 @@ func TestCreateFailsWhenHookFails(t *testing.T) {
 	}
 }
 
+// A Worker can switch the Task's worktree to another branch, for example for a
+// follow-up PR. Remove still finds the worktree, keeps it while it holds
+// uncommitted changes, and a new setup of the branch then works.
+func TestRemoveFindsAWorktreeThatMovedToAnotherBranch(t *testing.T) {
+	bin, repo, _ := setup(t)
+	ctx := context.Background()
+	argv := CreateArgv(bin, repo, "feat/x")
+	sh(t, t.TempDir(), argv...)
+	wt, err := Path(ctx, bin, repo, "feat/x")
+	if err != nil || wt == "" {
+		t.Fatalf("Path = %q %v", wt, err)
+	}
+	sh(t, wt, "git", "switch", "-q", "-c", "feat/x-followup")
+	notes := filepath.Join(wt, "notes.txt")
+	if err := os.WriteFile(notes, []byte("draft\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Remove(ctx, bin, repo, "feat/x"); !errors.Is(err, ErrUncommitted) {
+		t.Fatalf("Remove of the moved dirty worktree: err = %v, want ErrUncommitted", err)
+	}
+	if _, err := os.Stat(notes); err != nil {
+		t.Fatalf("the dirty worktree is gone: %v", err)
+	}
+	os.Remove(notes)
+	if err := Remove(ctx, bin, repo, "feat/x"); err != nil {
+		t.Fatalf("Remove of the moved clean worktree: %v", err)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("the moved worktree is still there: %v", err)
+	}
+	sh(t, t.TempDir(), argv...) // a new setup of feat/x
+}
+
 // wt remove fails on a dirty worktree, so Remove refuses it before wt runs,
 // with an error that callers can tell apart.
 func TestRemoveKeepsAWorktreeWithUncommittedChanges(t *testing.T) {

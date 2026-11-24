@@ -475,6 +475,15 @@ func (g *fakeGitHub) set(key PRKey, number int, signals ...string) {
 	g.prs[key] = PRSnapshot{Number: number, URL: fmt.Sprintf("https://github.com/%s/pull/%d", key.Repo, number), Raw: raw}
 }
 
+// endedAt makes the key's PR one that merged or closed at at.
+func (g *fakeGitHub) endedAt(key PRKey, at time.Time) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	pr := g.prs[key]
+	pr.ClosedAt = at
+	g.prs[key] = pr
+}
+
 func (g *fakeGitHub) RepoSlug(context.Context, string) (string, error) { return "acme/data", nil }
 
 func (g *fakeGitHub) Poll(_ context.Context, keys []PRKey) (map[PRKey]PRSnapshot, error) {
@@ -553,6 +562,8 @@ type fakeWorktrees struct {
 	// dirty makes Remove keep the worktree, as for uncommitted changes.
 	// removed still logs each try.
 	dirty bool
+	// removeErr fails each Remove call, and the worktree stays.
+	removeErr error
 	// addErr fails the next AddReview call.
 	addErr error
 	// base is the DiffBase of every worktree, or base1 when it is empty. gone
@@ -619,7 +630,13 @@ func (w *fakeWorktrees) Remove(_ context.Context, _, branch string) error {
 	if w.dirty {
 		return fmt.Errorf("%w: %s", ErrUncommitted, branch)
 	}
-	return nil
+	return w.removeErr
+}
+
+func (w *fakeWorktrees) failRemove(err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.removeErr = err
 }
 
 func (w *fakeWorktrees) setDirty(dirty bool) {

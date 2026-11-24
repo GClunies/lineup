@@ -27,6 +27,34 @@ func seedKept(id string, age time.Duration, until time.Time) func(*store.Store) 
 	}
 }
 
+// lineup close waits for the removal, so it can say why the worktree stays.
+// The Board's note says the same (PROD-TABS-020).
+func TestACloseSaysWhyItKeepsTheWorktree(t *testing.T) {
+	path := func(h *harness) string { return filepath.Join(h.wt.root, "eng-1-billing") }
+	for _, c := range []struct {
+		name string
+		fail func(h *harness)
+		why  func(h *harness) string
+	}{
+		{"uncommitted changes", func(h *harness) { h.wt.setDirty(true) },
+			func(h *harness) string { return "worktree kept: uncommitted changes in " + path(h) }},
+		{"a failed removal", func(h *harness) { h.wt.failRemove(errors.New("wt remove: the worktree is locked")) },
+			func(*harness) string { return "worktree kept: wt remove: the worktree is locked" }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h, _ := doneWithATab(t)
+			c.fail(h)
+			want := c.why(h)
+			if got := h.do(Request{Op: "close", Task: "ENG-1"}); got != want {
+				t.Fatalf("close = %#v, want %q", got, want)
+			}
+			if v := h.task("ENG-1"); v.Note != "#42 merged · "+want || v.Worktree != path(h) {
+				t.Fatalf("task = %+v, want the worktree kept and the note %q", v, want)
+			}
+		})
+	}
+}
+
 func TestAStoppedSchedulerRemovesAWorktreeWhoseDaysEndedAtItsStart(t *testing.T) {
 	seed := func(st *store.Store) {
 		seedKept("ENG-DUE", time.Hour, time.Now().Add(-time.Hour))(st)
