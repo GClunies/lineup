@@ -14,9 +14,9 @@ import (
 	"time"
 )
 
-// A review Task reads the PR's code in a detached worktree beside the Repo's
-// main checkout. Plain git makes and removes it, never worktrunk: worktrunk
-// hooks would run the PR's code.
+// A review Task reads the PR's code, and a QA Task the merged code, in a
+// detached worktree beside the Repo's main checkout. Plain git makes and
+// removes it, never worktrunk: worktrunk hooks would run that code.
 
 // ReviewPath is <main checkout's parent>/<main checkout's folder>.review-pr-<number>.
 func ReviewPath(main string, number int) string {
@@ -29,6 +29,41 @@ func AddReview(ctx context.Context, main, path string, number int, base, head st
 	if err := fetch(ctx, main, pullRef(number), base); err != nil {
 		return err
 	}
+	return addDetached(ctx, main, path, head)
+}
+
+// QAPath is <main checkout's parent>/<main checkout's folder>.qa-pr-<number>.
+func QAPath(main string, number int) string {
+	return filepath.Join(filepath.Dir(main), filepath.Base(main)+".qa-pr-"+strconv.Itoa(number))
+}
+
+// AddQA fetches origin's default branch into the main checkout, then adds the
+// QA worktree, detached at the merge commit, if it is missing (ARCH-QA-005).
+func AddQA(ctx context.Context, main, path, commit string) error {
+	if err := fetch(ctx, main, strings.TrimPrefix(defaultBranch(ctx, main), "origin/")); err != nil {
+		return err
+	}
+	return addDetached(ctx, main, path, commit)
+}
+
+// RemoveQA removes the QA worktree when it holds no uncommitted change. kept
+// is true when the worktree stays.
+func RemoveQA(ctx context.Context, main, path string) (kept bool, err error) {
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	changes, err := git(ctx, path, "status", "--porcelain")
+	if err != nil || changes != "" {
+		return true, err
+	}
+	if _, err := git(ctx, main, "worktree", "remove", path); err != nil {
+		return true, err
+	}
+	return false, nil
+}
+
+// addDetached adds the worktree at path, detached at commit, if it is missing.
+func addDetached(ctx context.Context, main, path, commit string) error {
 	switch _, err := os.Stat(path); {
 	case err == nil:
 		return nil
@@ -37,7 +72,7 @@ func AddReview(ctx context.Context, main, path string, number int, base, head st
 	}
 	// --force only overrides git's guard for a registered worktree whose
 	// folder someone deleted, because the folder is missing here.
-	_, err := git(ctx, main, "worktree", "add", "--force", "--detach", path, head)
+	_, err := git(ctx, main, "worktree", "add", "--force", "--detach", path, commit)
 	return err
 }
 
