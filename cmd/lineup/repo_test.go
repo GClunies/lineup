@@ -119,6 +119,7 @@ func TestRepoDetectPrintsTheSetupAsJSON(t *testing.T) {
 	want := `{"repo":"acme/web","checkout":` + quote(web) + `,"trackers_on":["linear","github"],"tracker":"github",
 		"review_bot":{"name":"greptile","min_review_score":5,"max_review_cycles":5},
 		"landing_bar":{"checks":"all","threads":"replied","approvals":"required"},
+		"prefix":"",
 		"linear_teams":[{"workspace":"acme","key":"PD","name":"Platform Data","repos":["acme/data"]},{"workspace":"acme","key":"WEB","name":"Web"}],
 		"worktree":{"hooks":[{"type":"pre-start","source":"user","name":"direnv"}],"set_up":true},
 		"init":["tracker=github","review_bot.name=greptile","landing_bar.checks=all"]}`
@@ -172,8 +173,11 @@ func TestRepoDetectAsksGitHubOnlyForAGitHubRepo(t *testing.T) {
 	}
 	var d detected
 	json.Unmarshal(out.Bytes(), &d)
-	if d.Tracker != "" || d.ReviewBot != nil || d.LandingBar.Checks != "required" || len(d.Init) != 0 || d.Teams != nil || !slices.Equal(d.TrackersOn, []string{"local"}) {
+	if d.Tracker != "" || d.ReviewBot != nil || d.LandingBar.Checks != "required" || d.Teams != nil || !slices.Equal(d.TrackersOn, []string{"local"}) {
 		t.Errorf("detected %+v, want no detected value and no Linear teams", d)
+	}
+	if d.Prefix != "not" || !slices.Equal(d.Init, []string{"prefix=not"}) {
+		t.Errorf("prefix %q, init %q, want the suggested prefix not in both", d.Prefix, d.Init)
 	}
 }
 

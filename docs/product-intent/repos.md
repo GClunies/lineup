@@ -49,3 +49,7 @@ A GitHub Issue works in the one checkout below the roots whose Repo key is the I
 ## PROD-REPO-012: An Issue whose team is on no Repo takes the Repo of its Project
 
 When no `teams` list holds the team of a Linear Issue, the Issue works in the Repo that the user picked for its Project. Without that Repo, `lineup add` fails with `no Repo mapping`, and the Board's Repo picker lists each Repo whose Tracker is Linear. The Board keeps each pick in its Repo picker as the Repo of the Issue's Project.
+
+## PROD-REPO-013: The Repo setup suggests a prefix
+
+`lineup repo detect` suggests the shortest start of the Repo name's letters and digits, of at least 3, that the config file accepts. No other Repo and no Linear team can have it. For example, `Kinesis-Advantage-360-Pro-ZMK` gets `KIN`, and its first ad hoc Task is `KIN-1`. The Prefix question offers the suggested prefix first, then **No prefix**. If no start fits, the question does not come. `lineup repo init` refuses a prefix that the load refuses, for example `AH`, with the same error.

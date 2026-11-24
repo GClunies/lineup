@@ -40,7 +40,7 @@ const usage = `usage: lineup [command]
                                to up_next
   lineup repo detect <owner>/<repo> --json
                                print the detected setup of a Repo: its Tracker, review
-                               bot, Landing bar, Linear teams, and worktree hooks
+                               bot, Landing bar, prefix, Linear teams, and worktree hooks
   lineup repo init <owner>/<repo> [key=value ...] | --defaults
                                add the Repo's [repos."owner/repo"] table, which lineup add
                                needs for a build Task, then restart the Scheduler.

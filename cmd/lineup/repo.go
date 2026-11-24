@@ -62,11 +62,13 @@ type detected struct {
 	Checkout   string   `json:"checkout"`
 	TrackersOn []string `json:"trackers_on"`
 	// Tracker is "" when no Tracker is detected.
-	Tracker    string        `json:"tracker"`
-	ReviewBot  *reviewBot    `json:"review_bot"`
-	LandingBar landingBar    `json:"landing_bar"`
-	Teams      []linearTeam  `json:"linear_teams,omitempty"`
-	Worktree   worktreeHooks `json:"worktree"`
+	Tracker    string     `json:"tracker"`
+	ReviewBot  *reviewBot `json:"review_bot"`
+	LandingBar landingBar `json:"landing_bar"`
+	// Prefix is the suggested prefix of the Repo's own IDs, or "".
+	Prefix   string        `json:"prefix"`
+	Teams    []linearTeam  `json:"linear_teams,omitempty"`
+	Worktree worktreeHooks `json:"worktree"`
 	// Init are the key=value arguments that lineup repo init --defaults
 	// writes: each detected value that no lower layer sets.
 	Init []string `json:"init"`
@@ -229,6 +231,13 @@ func detect(ctx context.Context, env repoEnv, key string) (detected, error) {
 			t.Repos = slices.DeleteFunc(g.ReposForTeam(t.Key), func(k string) bool { return strings.EqualFold(k, key) })
 			d.Teams = append(d.Teams, t)
 		}
+	}
+	keys := make([]string, len(d.Teams))
+	for i, t := range d.Teams {
+		keys[i] = t.Key
+	}
+	if d.Prefix = g.SuggestPrefix(key, keys); d.Prefix != "" {
+		d.Init = append(d.Init, "prefix="+d.Prefix)
 	}
 	d.Worktree = readyHooks(env.hooks(ctx, checkout))
 	return d, nil
