@@ -32,7 +32,7 @@ The Scheduler and the Board read the config file only when they start. After the
 
 ## PROD-CONFIG-008: One panel shows every setting in groups with plain names
 
-`lineup config` opens the config panel, with a Global tab and a Repo tab. Each tab is a tree of groups with plain names, such as Review bot › Lowest pass score. Each group starts closed and sums up its settings. Its SET IN column names the level that sets all of them, or `mixed`. The Global tab holds the top-level keys, and the `[defaults]` keys in a group of their own. The Repo tab holds the keys of one Repo from the checkouts below `roots`. Each setting shows the value that applies and the level that sets it.
+`lineup config` opens the config panel, with a Global tab and a Repo tab. Each tab is a tree of groups with plain names, such as Review bot › Min pass score. Each group starts closed and sums up its settings. Its SET IN column names the level that sets all of them, or `mixed`. The Global tab holds the top-level keys, and the `[defaults]` keys in a group of their own. The Repo tab holds the keys of one Repo from the checkouts below `roots`. Each setting shows the value that applies and the level that sets it.
 
 ## PROD-CONFIG-009: The panel writes only a change that loads
 

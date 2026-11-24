@@ -133,11 +133,11 @@ func TestConfigKeysNamesTheValueAndTheLevelForARepo(t *testing.T) {
 		got[s.Path] = s
 	}
 	for _, want := range []configSetting{
-		{"wip_cap", []string{"Capacity"}, "WIP cap", "2", "acme/api"},
+		{"wip_cap", []string{"Capacity"}, "Build Tasks at once", "2", "acme/api"},
 		{"teams", []string{"Repo"}, "Linear teams", `["ENG"]`, "acme/api"},
 		{"poll_interval", []string{"Capacity"}, "Poll interval", "20s", "acme/*"},
 		{"tracker", []string{"Repo"}, "Tracker", "linear", "acme/*"},
-		{"budgets.ci_debug", []string{"Loop budgets"}, "CI debug", "3", "default"},
+		{"budgets.ci_debug", []string{"Loop budgets"}, "CI loop", "3", "default"},
 		{"stage.working.model", []string{"Workers", "Stage Working"}, "Model", "claude-opus-5-5", "default"},
 	} {
 		if s := got[want.Path]; !slices.Equal(s.Group, want.Group) || s.Label != want.Label || s.Value != want.Value || s.Source != want.Source {

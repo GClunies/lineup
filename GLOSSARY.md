@@ -159,7 +159,7 @@ The Stage where a PR that meets its Landing bar waits for the user to merge it. 
 _Avoid_: Mergeable, approved
 
 **Landing bar**:
-What a PR must meet for its build Task to be in Ready to land: the required checks pass, the review bot's score meets the minimum, every review thread is done, no Feedback is new, and the required reviews approve. A Repo's `[landing_bar]` table can change each item. A Task keeps the Landing bar that it had at Intake.
+What a PR must meet for its build Task to be in Ready to land: the required checks pass, the review bot's score meets the minimum, every review thread is done, no Feedback is new, and the required reviews approve. A Repo's `[landing_bar]` table can change each item. A Task keeps the Landing bar that it had at Intake. The config panel names its group Merge requirements.
 _Avoid_: Definition of done, merge criteria, readiness
 
 **Standing**:
@@ -183,7 +183,7 @@ A reply to a person's Review thread or Feedback that a Worker wrote and that wai
 _Avoid_: Pending reply, proposed comment, suggestion
 
 **Loop budget**:
-The most automatic attempts that a Stage gets before the Task gets the Needs you flag, for example 3 CI debug attempts. A lost Worker spends no budget, because lineup opens no tab by itself.
+The most automatic attempts that a Stage gets before the Task gets the Needs you flag, for example 3 CI debug attempts. A lost Worker spends no budget, because lineup opens no tab by itself. The config panel calls the budget of CI debug the CI loop, and the budget of Responding the Reply loop.
 _Avoid_: Retry limit, max attempts
 
 **Review bot**:
@@ -197,7 +197,7 @@ _Avoid_: Bot round, greploop, review round
 ### Capacity
 
 **WIP cap**:
-The most started Tasks, from Working through Ready to land, that can exist at one time. To start a Task past it, the user must confirm or raise the cap.
+The most started Tasks, from Working through Ready to land, that can exist at one time. To start a Task past it, the user must confirm or raise the cap. The config panel calls it Build Tasks at once.
 _Avoid_: Lane count, concurrency limit
 
 ### Configuration

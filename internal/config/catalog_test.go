@@ -181,7 +181,7 @@ func TestEachKeyHasAPlainPlace(t *testing.T) {
 		"github.labels.backlog":            "GitHub labels › Backlog",
 		"stage.default.model":              "Workers › Every Stage › Model",
 		"stage.ci_debug.skill":             "Workers › Stage CI debug › Skill",
-		"review_bot.min_review_score":      "Review bot › Lowest pass score",
+		"review_bot.min_review_score":      "Review bot › Min pass score",
 	} {
 		k, ok := keyFor(path)
 		if !ok {
