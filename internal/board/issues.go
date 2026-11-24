@@ -246,6 +246,22 @@ func (mi mine) list(ws linear.Workspace, team bool) (lists map[string][]linear.I
 	return mi.lin, ws.ID + "/my", "my Issues"
 }
 
+// teamCapped reports whether a workspace's Team list holds TeamIssuesMax
+// Issues of one team, so that the read can have left some out
+// (PROD-BOARD-025).
+func (mi mine) teamCapped() bool {
+	for _, list := range mi.team {
+		n := map[string]int{}
+		for _, is := range list {
+			n[is.Team.Key]++
+			if n[is.Team.Key] >= linear.TeamIssuesMax {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // workspaceOf is the workspace whose My Issues or Team list holds is.
 func (mi mine) workspaceOf(is linear.Issue) linear.Workspace {
 	for _, lists := range []map[string][]linear.Issue{mi.lin, mi.team} {

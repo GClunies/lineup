@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -234,11 +235,15 @@ func (m Model) selection() (title, facts string) {
 		return strings.Join(slices.DeleteFunc(fs, func(f string) bool { return f == "" }), " · ")
 	}
 	if g, ok := headingName(m.sel); ok {
-		n := len(m.groupIDs(g))
-		if n == 1 {
+		count := m.countText(g, len(m.groupIDs(g)))
+		if count == "1" {
 			return g, "1 row"
 		}
-		return g, fmt.Sprintf("%d rows", n)
+		return g, count + " rows"
+	}
+	if g, ok := moreName(m.sel); ok {
+		n := len(m.groupIDs(g))
+		return g, moreRows(n - m.limit(g, n))
 	}
 	if r, ok := m.currentIssue(); ok {
 		return scheduler.PlainTitle(r.Title), join(boardID(r.ID), r.Group, r.Repo, r.note())
@@ -259,6 +264,24 @@ func (m Model) selection() (title, facts string) {
 	}
 	// The skill shows here also when its column does not (PROD-BOARD-007).
 	return scheduler.PlainTitle(t.Title), join(boardID(t.ID), t.Stage, t.Repo, skillName(t), pr, t.Note, kept)
+}
+
+// countText is the count n that the heading of group g shows. A Team list
+// that reached the read's cap adds + (PROD-BOARD-025).
+func (m Model) countText(g string, n int) string {
+	s := strconv.Itoa(n)
+	if g == groupTeam && m.mine.teamCapped() {
+		s += "+"
+	}
+	return s
+}
+
+// moreRows names the n rows that a more line hides.
+func moreRows(n int) string {
+	if n == 1 {
+		return "1 more row"
+	}
+	return fmt.Sprintf("%d more rows", n)
 }
 
 type hint struct{ key, does string }
@@ -306,6 +329,9 @@ func (m Model) rowActions() []hint {
 			verb = "open"
 		}
 		return []hint{{"enter", verb}}
+	}
+	if _, ok := moreName(m.sel); ok {
+		return []hint{{"enter", "show all"}}
 	}
 	if r, ok := m.currentIssue(); ok {
 		return slices.Clone(issueKinds[r.Kind].keys)
@@ -508,11 +534,13 @@ func columnWidths(w int, rows []cellRow) [numCols]int {
 // rowLines is the h lines of the Task rows that keep the selection on screen.
 // The columns fit the rows among those lines only (PROD-BOARD-023).
 func (m Model) rowLines(w, h int) []rowLine {
-	// entry is a heading, or a row of an open group, with its rowLine id.
-	// heading is the group name of a heading, and empty for a row.
+	// entry is a heading, a row of an open group, or the more line under the
+	// rows that the group's limit shows, with its rowLine id. heading is the
+	// group name of a heading, and empty for a row. more is the count of the
+	// rows that a more line hides, and 0 for any other entry.
 	type entry struct {
 		id, heading string
-		count       int
+		count, more int
 		row         cellRow
 	}
 	var entries []entry
@@ -544,8 +572,13 @@ func (m Model) rowLines(w, h int) []rowLine {
 		}
 		entries = append(entries, entry{id: headingKey(g), heading: g, count: len(rows)})
 		if m.open(g) {
-			for _, r := range rows {
+			k := m.limit(g, len(rows))
+			for _, r := range rows[:k] {
 				entries = append(entries, entry{id: r.id, row: r})
+			}
+			// A row past the limit is no entry, so it fits no column (PROD-BOARD-023).
+			if k < len(rows) {
+				entries = append(entries, entry{id: moreKey(g), more: len(rows) - k})
 			}
 		}
 	}
@@ -554,7 +587,7 @@ func (m Model) rowLines(w, h int) []rowLine {
 	entries = entries[start:min(start+h, len(entries))]
 	var onScreen []cellRow
 	for _, e := range entries {
-		if e.heading == "" {
+		if e.heading == "" && e.more == 0 {
 			onScreen = append(onScreen, e.row)
 		}
 	}
@@ -585,7 +618,7 @@ func (m Model) rowLines(w, h int) []rowLine {
 	// A heading shows the group's name, its count in the dim style, and a
 	// closed group's mark.
 	heading := func(g string, n int) string {
-		count := fmt.Sprintf(" %d", n)
+		count := " " + m.countText(g, n)
 		if !m.open(g) {
 			count += " …"
 		}
@@ -595,11 +628,22 @@ func (m Model) rowLines(w, h int) []rowLine {
 		name := "▸" + g
 		return ansi.Truncate(selRow.Render(name)+dim.Inherit(selRow).Render(pad(count, max(w-lipgloss.Width(name), 0))), w, "…")
 	}
+	// A more line counts the n rows that it hides, in the dim style.
+	more := func(id string, n int) string {
+		text := "+ " + moreRows(n)
+		if m.sel != id {
+			return ansi.Truncate(dim.Render("   "+text), w, "…")
+		}
+		return selRow.Render(pad(" ▸ "+text, w))
+	}
 	var out []rowLine
 	for _, e := range entries {
-		if e.heading != "" {
+		switch {
+		case e.heading != "":
 			out = append(out, rowLine{e.id, heading(e.heading, e.count)})
-		} else {
+		case e.more > 0:
+			out = append(out, rowLine{e.id, more(e.id, e.more)})
+		default:
 			out = append(out, rowLine{e.id, row(e.row)})
 		}
 	}
@@ -656,6 +700,7 @@ const boardHelp = `
    j k      move the selection
    enter    focus the Task's tab in Rex, or restore its closed Worker
             on a group heading: open or close the group
+            on "+ N more rows": show every row of the group
    d        show or hide Done
    p        live preview of the Worker's screen
    f        detail pane at full screen, and back; on an Issue row,
