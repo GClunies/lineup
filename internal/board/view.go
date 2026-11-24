@@ -142,6 +142,10 @@ func (m Model) doneSinceYesterday() int {
 
 func inNeedsYou(t scheduler.TaskView) bool { return t.Group == lifecycle.GroupNeedsYou.String() }
 
+// onBoard reports whether the Board lists the Task: a build Task or a QA
+// Task, and never a review Task (PROD-BOARD-001).
+func onBoard(t scheduler.TaskView) bool { return t.Kind != lifecycle.KindReview }
+
 // footer is the mode's footer. A config problem adds its own line above it.
 func (m Model) footer() string {
 	f := m.modeFooter()
@@ -412,6 +416,9 @@ var stageWord = map[string]string{
 	lifecycle.Done.Key():        "done",
 	lifecycle.Reviewing.Key():   "reviewing",
 	lifecycle.ReviewReady.Key(): "review ready",
+	lifecycle.QAWaiting.Key():   "QA waiting",
+	lifecycle.Verifying.Key():   "verifying",
+	lifecycle.QAFailed.Key():    "QA failed",
 }
 
 // flagWord is the status word of a flag whose Reason does not read as one.

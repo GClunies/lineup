@@ -69,6 +69,7 @@ var groupOf = map[lifecycle.Stage]string{
 	lifecycle.Working: "Working", lifecycle.CIRunning: "Waiting", lifecycle.CIDebug: "Working",
 	lifecycle.InReview: "Waiting", lifecycle.Responding: "Working", lifecycle.ReadyToLand: "Needs you",
 	lifecycle.Done: "Done", lifecycle.Reviewing: "Working", lifecycle.ReviewReady: "Needs you",
+	lifecycle.QAWaiting: "Waiting", lifecycle.Verifying: "Working", lifecycle.QAFailed: "Needs you",
 }
 
 func tv(id string, st lifecycle.Stage, repo, title, note string, age time.Duration) scheduler.TaskView {

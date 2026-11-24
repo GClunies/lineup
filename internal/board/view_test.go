@@ -67,6 +67,7 @@ func TestEveryStageAndFlagHasAStatusOfAtMostTwoWords(t *testing.T) {
 		lifecycle.Working: "working", lifecycle.CIRunning: "CI running", lifecycle.CIDebug: "CI debug",
 		lifecycle.InReview: "in review", lifecycle.Responding: "responding", lifecycle.ReadyToLand: "ready", lifecycle.Done: "done",
 		lifecycle.Reviewing: "reviewing", lifecycle.ReviewReady: "review ready",
+		lifecycle.QAWaiting: "QA waiting", lifecycle.Verifying: "verifying", lifecycle.QAFailed: "QA failed",
 	}
 	flags := map[lifecycle.Reason]string{
 		lifecycle.ReasonQuestion: "question", lifecycle.ReasonPermission: "permission", lifecycle.ReasonAuth: "auth",
