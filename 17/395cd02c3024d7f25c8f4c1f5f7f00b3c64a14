@@ -1,0 +1,50 @@
+internal/board/view_test.go
+  s_441fc85af30b28::t_c9c968facf25b7 4
+  s_441fc85af30b28::t_118b7c9b23bd6a 351-383,385-386,388-397,399-407,409-411,414-415,419-449
+  s_441fc85af30b28::t_68d9e320f5baf7 412-413,416-418
+  s_441fc85af30b28::t_231a30a8c26f6d 384,387,398,408
+  s_441fc85af30b28::t_9635993f7f7525 16-17
+internal/board/mouse.go
+  s_441fc85af30b28::t_013a239690af22 91
+internal/board/view.go
+  s_441fc85af30b28::t_4d9584ca861beb 599-600,602
+  s_441fc85af30b28::t_9c204ee618378f 399,402-404
+  s_441fc85af30b28::t_95775d3ca4c7b6 260-261
+  s_441fc85af30b28::t_88ed2cb3a8a7a6 511-512,514-516
+  s_441fc85af30b28::t_5fcbab482fce42 344,347
+  s_441fc85af30b28::t_8a6e137efb955b 86,89-91
+  s_441fc85af30b28::t_a9d26bc7c47f98 545,548,552
+  s_441fc85af30b28::t_0023ede15c1b1a 601,603
+  s_441fc85af30b28::t_ba0371908c12c7 363,365
+  s_441fc85af30b28::t_4a7391af2ea447 508-510,513,518
+  s_441fc85af30b28::t_3d77219806663d 517,547,549-551,553-558
+  s_441fc85af30b28::t_5f0b2721ada4ff 464-468,470,474-481
+  s_46b9538e813b72::t_bda4a3024d3d67 92,405
+docs/product-intent/board.md
+  s_441fc85af30b28::t_0f2472ddd7dc5e 92-95
+  s_441fc85af30b28::t_36848591bcd1ad 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "17395cd02c3024d7f25c8f4c1f5f7f00b3c64a14",
+  "prompts": {},
+  "sessions": {
+    "s_441fc85af30b28": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b41fb1c-7e7c-4647-85b4-683c266189dd",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    },
+    "s_46b9538e813b72": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dd0147ab-bb94-4a74-a584-151a682a6a2b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
