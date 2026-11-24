@@ -1,0 +1,29 @@
+internal/configpanel/view.go
+  s_3f62d37256047d::t_76cac0d0b57e38 273
+cmd/lineup/agent/CLAUDE.md
+  s_3f62d37256047d::t_67649257bfb6d3 88
+docs/architecture-intent/configuration.md
+  s_3f62d37256047d::t_6f7c4a7177680e 49
+GLOSSARY.md
+  s_3f62d37256047d::t_8e7a8289cca48f 100
+  s_3f62d37256047d::t_790aa87b74a1e4 206
+docs/product-intent/configuration.md
+  s_3f62d37256047d::t_869af4bf0b00f9 33
+  s_3f62d37256047d::t_8309e2a7849afe 35,48-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d4025b140ae3e3d4574a581ae292b30741bc6492",
+  "prompts": {},
+  "sessions": {
+    "s_3f62d37256047d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "918a36da-c6bf-4dae-acbd-698584050738",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
