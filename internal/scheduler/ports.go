@@ -22,9 +22,13 @@ type Window struct{ SessionID, WindowID, BlockID string }
 
 type Status struct{ State, Kind, Msg string }
 
-// Pane is one block of a tab: its label and the name of the program in its
-// foreground, such as hunk.
-type Pane struct{ BlockID, Label, Program string }
+// Pane is one block of a tab: its label, and the name and argv of the
+// program in its foreground, such as hunk. A script's interpreter is the
+// program, and the script is its first argument.
+type Pane struct {
+	BlockID, Label, Program string
+	Args                    []string
+}
 
 type Rex interface {
 	EnsureSession(ctx context.Context, label string) (string, error)

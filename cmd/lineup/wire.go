@@ -108,8 +108,8 @@ func (p rexPort) Panes(ctx context.Context, session, window string) ([]scheduler
 			continue
 		}
 		for i, b := range w.BlockIDs {
-			program, _ := p.c.Foreground(ctx, session, b)
-			out = append(out, scheduler.Pane{BlockID: b, Label: w.Labels[i], Program: program})
+			fg, _ := p.c.Foreground(ctx, session, b)
+			out = append(out, scheduler.Pane{BlockID: b, Label: w.Labels[i], Program: fg.Name, Args: procArgs(fg.PID)})
 		}
 	}
 	return out, nil

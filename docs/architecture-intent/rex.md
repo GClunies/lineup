@@ -70,7 +70,7 @@ Not: refusing to reopen the caller's tab; a Board that re-execs itself when its 
 
 ## ARCH-REX-012: One step on the Task's lane converges its side pane
 
-One step on the Task's lane converges the tab on one side pane. It runs after a Worker opens, at start for each live Worker, and at each poll where the Record names a pane. A side pane is any block but the Worker's that is labeled `side` or runs `hunk` or `rexweb-pane`. The step keeps the Record's pane while its folder and command match the Task's worktree and merge-base, and closes the others. A new pane splits the old pane, which then closes, so the new pane keeps its place and size. A failed split logs a warning.
+One step on the Task's lane converges the tab on one side pane. It runs after a Worker opens, at start for each live Worker, and at each poll where the Record names a pane. A side pane is the Record's pane, or a block but the Worker's that is labeled `side` or runs `hunk` or `rexweb-pane`. The step keeps the Record's pane while it matches the Task's worktree and merge-base, and closes the others. A new pane splits the old pane, which then closes, so it keeps its place and size. A failed split logs a warning.
 
-Because: the user can type `hunk` in a plain split, so a check of the label or of the stored block ID alone misses a pane.
+Because: a typed `hunk` has the label `shell`, and a rexweb pane has the page's title and runs `bash` with the `rexweb-pane` script as its first argument. One check alone misses a pane.
 Not: the merge-base computed once in the pane's shell, which freezes the base.
