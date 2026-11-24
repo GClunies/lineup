@@ -101,3 +101,7 @@ An open Team shows its first 10 rows. When it holds more, a dim line follows the
 ## PROD-BOARD-025: The Team heading marks the fetch cap
 
 When the Board reads 100 Issues of one team, the Team heading adds `+` to its count, for example `Team 100+`. The strip on that heading shows the same count, for example `100+ rows`.
+
+## PROD-BOARD-026: A toast names lineup once
+
+Each toast from the Board names lineup once. Its banner shows the `my-lineup` session name and then the toast text, with no `lineup` title above them.
