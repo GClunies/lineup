@@ -725,6 +725,11 @@ func (fakeConfig) ResolveRepo(name string) (string, error)         { return "/re
 func (fakeConfig) RepoPrefix(string) string                        { return "" }
 func (fakeConfig) SetUp(repo string) (string, bool)                { return "acme/" + filepath.Base(repo), true }
 
+// Merged keeps the tab and a worktree for 7 days, as an empty [merged] does.
+func (fakeConfig) Merged(string, map[string]string) (Merged, error) {
+	return Merged{KeepWorktree: 7 * 24 * time.Hour}, nil
+}
+
 // RepoTracker gives /repos/acme/issues the GitHub Tracker, /repos/acme/notes
 // the Local Tracker, and every other Repo Linear.
 func (fakeConfig) RepoTracker(repo string) (string, string) {
