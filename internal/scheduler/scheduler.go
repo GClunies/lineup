@@ -41,6 +41,9 @@ type Deps struct {
 	// Slots is how many review Tasks of all queues together can be started at
 	// one time. 0 sets no shared cap.
 	Slots int
+	// QASlots is how many QA Tasks can be in Verifying at one time. 0 sets
+	// no cap (PROD-QA-007).
+	QASlots int
 	// StateHome is the XDG state folder. A review Worker gets it as
 	// XDG_STATE_HOME, so the Scheduler finds pr-review's record where the
 	// Worker writes it.
@@ -97,6 +100,8 @@ type Scheduler struct {
 	membersAt time.Time
 	// sideChecks holds each Task whose side pane check waits on its lane.
 	sideChecks map[string]bool
+	// fixing holds each QA Task whose fix Issue the Tracker files now.
+	fixing map[string]bool
 }
 
 type orphan struct {
@@ -115,9 +120,9 @@ func New(d Deps) (*Scheduler, error) {
 		d: d, inbox: make(chan func()), board: lifecycle.NewBoard(d.DefaultCap),
 		recs: map[string]*Record{}, lanes: map[string]chan func(context.Context){},
 		watchers: map[chan BoardView]struct{}{}, orphans: map[string][]orphan{},
-		repoLocks: map[string]*sync.Mutex{}, sideChecks: map[string]bool{},
+		repoLocks: map[string]*sync.Mutex{}, sideChecks: map[string]bool{}, fixing: map[string]bool{},
 	}
-	s.board.SharedSlots = d.Slots
+	s.board.SharedSlots, s.board.QASlots = d.Slots, d.QASlots
 	for _, q := range d.Queues {
 		s.board.Slots[q.Name] = q.Slots
 	}
@@ -208,6 +213,7 @@ func (s *Scheduler) Run(ctx context.Context, events <-chan RexEvent) error {
 		case <-tick.C:
 			s.flagSilentPrompts()
 			s.tidy()
+			s.clockQA()
 			s.checkSides()
 			go s.poll(ctx, nil)
 		}
@@ -415,7 +421,14 @@ func (s *Scheduler) exec(ctx context.Context, id string, e lifecycle.Effect) {
 		}
 		s.poll(ctx, []string{id})
 	case lifecycle.Cleanup:
+		// A QA Worker that gave its verdict can still be finishing its turn.
+		if e.WhenIdle && r.workerWorking() {
+			s.update(id, func(r *Record) { r.CloseAtIdle = true })
+			return
+		}
 		s.cleanup(ctx, r)
+	case lifecycle.StartQA:
+		s.startQA(ctx, r)
 	case lifecycle.TrackerStatus:
 		if r.Issue == nil || s.d.Tracker == nil {
 			return
@@ -544,7 +557,8 @@ func (s *Scheduler) sessionEmpty(ctx context.Context, session string) bool {
 // closeTab forgets the Task's tab before it closes it, so the tab's close is
 // not read as the user's. Only the user's own act reaches it: a close, an
 // archive, a rerun of a failed setup, a restore of a tab that Rex kept after
-// its program exited, or close_tab in a [merged] table, which the user turned on.
+// its program exited, close_tab in a [merged] table, which the user turned on,
+// or the end of a review or QA Task.
 func (s *Scheduler) closeTab(ctx context.Context, r Record) {
 	if r.WindowID == "" {
 		return
@@ -559,8 +573,9 @@ func (s *Scheduler) closeTab(ctx context.Context, r Record) {
 	}
 }
 
-// cleanup runs only when the user ends the Task. The user's act removes the
-// worktree at once, so lineup no longer closes the tab itself.
+// cleanup runs when the user ends the Task, or when a review or QA Task
+// ends. It removes the worktree at once, so lineup no longer closes the tab
+// itself.
 func (s *Scheduler) cleanup(ctx context.Context, r Record) {
 	if r.CloseAtIdle {
 		s.update(r.ID, func(r *Record) { r.CloseAtIdle = false })
@@ -569,6 +584,8 @@ func (s *Scheduler) cleanup(ctx context.Context, r Record) {
 	switch {
 	case r.Review != nil:
 		s.removeReviewWorktree(ctx, r)
+	case r.Kind == lifecycle.KindQA:
+		s.removeQAWorktree(ctx, r)
 	// A Task gets a SessionID when setup opens its tab. Setup can fail after
 	// worktrunk made the worktree but before the Record holds its path.
 	case r.Worktree != "" || r.SessionID != "":
@@ -860,14 +877,15 @@ func (s *Scheduler) poll(ctx context.Context, ids []string) {
 
 // pollTasks reads the PRs of the Tasks. A build Task's PR comes by its
 // branch, and a review Task's PR by its number, so the branch Signals never
-// reach a PR that lineup reviews.
+// reach a PR that lineup reviews. A QA Task's PR merged already, so no poll
+// reads it.
 func (s *Scheduler) pollTasks(ctx context.Context, ids []string) {
 	keys := map[PRKey]string{}
 	reviews := map[ReviewKey]string{}
 	s.call(func() {
 		for _, r := range s.list() {
 			switch {
-			case !r.Stage.Started() || (ids != nil && !slices.Contains(ids, r.ID)):
+			case !r.Stage.Started() || r.Kind == lifecycle.KindQA || (ids != nil && !slices.Contains(ids, r.ID)):
 			case r.Review != nil:
 				reviews[r.Review.key()] = r.ID
 			case r.RepoSlug != "":
@@ -976,7 +994,7 @@ func (s *Scheduler) recover(ctx context.Context) {
 				if r.Job == JobWorker {
 					s.readStatus(ctx, r)
 				}
-			case r.CloseAtIdle:
+			case r.CloseAtIdle && r.Kind == lifecycle.KindBuild:
 				// Rex lost the tab that lineup waited to close, or restored it
 				// as an idle shell. The user did not close it.
 				s.forgetTab(r)
@@ -1042,7 +1060,7 @@ func (s *Scheduler) recover(ctx context.Context) {
 func (s *Scheduler) renameRepoSessions(ctx context.Context) {
 	renamed := map[string]bool{}
 	for _, r := range s.list() {
-		if r.Review != nil {
+		if r.Kind != lifecycle.KindBuild {
 			continue
 		}
 		key, _ := s.d.Config.SetUp(r.Repo)
@@ -1071,11 +1089,18 @@ func (s *Scheduler) readStatus(ctx context.Context, r *Record) {
 }
 
 // tidy closes the tab of each merged Task whose Worker is not busy, and
-// removes each kept worktree whose time is up. Only the loop calls it.
+// removes each kept worktree whose time is up. A QA Task that ended while its
+// Worker worked cleans up once the Worker stops (PROD-QA-009). Only the loop
+// calls it.
 func (s *Scheduler) tidy() {
 	for _, r := range s.list() {
 		id := r.ID
 		switch {
+		case r.Kind == lifecycle.KindQA && r.Stage == lifecycle.Done && r.CloseAtIdle && !r.workerWorking():
+			r.CloseAtIdle = false
+			s.save(r)
+			rec := *r
+			s.enqueue(id, func(ctx context.Context) { s.cleanup(ctx, rec) })
 		case r.done() == closing && !r.workerWorking():
 			s.keepWorktree(r, "")
 			rec := *r

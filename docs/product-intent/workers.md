@@ -8,7 +8,7 @@ Each Task has one Worker, an interactive `claude` in one tab, from its first Sta
 
 ## PROD-WORKER-002: A Worker keeps the model of its first Stage
 
-A Worker keeps the model and the effort of the Stage that it starts in: Working for a build Task, Reviewing for a review Task. The config file sets them in `[stage.working]` or `[stage.reviewing]`, else in `[stage.default]`. lineup rejects `model` and `effort` under every other `[stage.<key>]` table, with an error that names the key. `skill` and `command` apply to each Stage, because each typed prompt carries them. `lineup set <task> model=<model>` picks the model of the Task's next Worker, for example the Worker that a restore opens.
+A Worker keeps the model and the effort of the Stage that it starts in: Working for a build Task, Reviewing for a review Task, and Verifying for a QA Task. The config file sets them in `[stage.working]`, `[stage.reviewing]`, or `[stage.verifying]`, else in `[stage.default]`. lineup rejects `model` and `effort` under every other `[stage.<key>]` table, with an error that names the key. `skill` and `command` apply to each Stage, because each typed prompt carries them. `lineup set <task> model=<model>` picks the model of the Task's next Worker, for example the Worker that a restore opens.
 
 ## PROD-WORKER-003: A Worker posts to a person only to report a fix
 
@@ -36,7 +36,7 @@ The user can talk to a Worker at any time. The user types in the Worker's tab, o
 
 ## PROD-WORKER-009: A restore brings back the same Worker
 
-`lineup open <task>` and `enter` on the Task's row bring back the Task's own Worker. A live tab comes to the front. Otherwise lineup opens a new tab that resumes the Worker's conversation in its folder, with a new side pane, and the `tab closed` flag clears. A Stage prompt that waited reaches the restored Worker at its first idle, and the restore types nothing else. A tab where the Worker exited closes, and the new tab takes its place. A Done build Task with a kept worktree restores in that worktree. A Done review Task with no tab refuses with `<task> is Done and its worktree is gone`.
+`lineup open <task>` and `enter` on its row bring back the Task's own Worker. A live tab comes to the front. Otherwise lineup opens a new tab that resumes the Worker's conversation in its folder, with a new side pane, and the `tab closed` flag clears. A Stage prompt that waited reaches the restored Worker at its first idle, and the restore types nothing else. A tab where the Worker exited closes, and the new tab takes its place. A Done build Task with a kept worktree restores in that worktree. A Done review or QA Task with no tab refuses with `<task> is Done and its worktree is gone`.
 
 ## PROD-WORKER-010: A Task with no conversation gets a fresh Worker that knows its steers
 
@@ -48,7 +48,7 @@ After lineup removes the worktree of a Done build Task, `lineup open` and `enter
 
 ## PROD-WORKER-012: Each Worker tab shows the change beside the Worker
 
-Each Worker tab holds a side pane to the right of the Worker, in the Task's own worktree. The pane opens half of the tab wide, and the Worker keeps the focus. A build Task's pane shows the worktree's changes since the branch left the default branch, and updates live. After a rebase or a merge of the default branch, the pane shows the changes since the new base within one poll. A review Task's pane shows the PR's GitHub page in RexWeb, else the PR's diff in `hunk`. A close of the pane alone changes nothing on the Task.
+Each Worker tab holds a side pane to the right of the Worker, in the Task's own worktree. The pane takes half of the tab, and the Worker keeps the focus. A build Task's pane shows the worktree's changes since the branch left the default branch, and updates live. After a rebase or a merge of the default branch, the pane shows the changes since the new base within one poll. A review or QA Task's pane shows the PR's GitHub page in RexWeb, else the PR's diff in `hunk`. A close of the pane alone changes nothing.
 
 ## PROD-WORKER-013: lineup shows what each Worker spent
 

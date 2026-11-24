@@ -65,6 +65,11 @@ const usage = `usage: lineup [command]
                                a Worker's question for the user, on the Task's row
   lineup ask --drafts <n> <task>
                                a Responding Worker's Draft replies wait for the user
+  lineup qa <task> wait <when> "<reason>"
+                               a QA Worker's next check, at a duration such as 2h, a
+                               clock time such as 03:00, or an RFC 3339 time
+  lineup qa <task> pass "<summary>" | fail "<findings>"
+                               a QA Worker's verdict on the merged change
   lineup set <task> key=value  override configuration, for example model=claude-opus-5-5
   lineup cap <n>               set the WIP cap
   lineup rerun <task> <stage>  type the Stage's prompt into the Worker again, for example for ci_debug

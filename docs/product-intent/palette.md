@@ -8,7 +8,7 @@ Each Needs you reason has a fixed list of choices, the default first. Ready to l
 
 ## PROD-PALETTE-002: lineup decide lists and runs the choices
 
-`lineup decide` lists each build Task and each review Task in Needs you, each with its choices. `lineup decide <task> <choice>` runs one choice, and Answer here takes the user's words as a third argument. The command refuses a Task that does not need the user, and a choice that the Task does not have.
+`lineup decide` lists each build Task, review Task, and QA Task in Needs you, each with its choices. `lineup decide <task> <choice>` runs one choice, and Answer here takes the user's words as a third argument. The command refuses a Task that does not need the user, and a choice that the Task does not have.
 
 ## PROD-PALETTE-003: Rex asks the choices from any tab or device
 

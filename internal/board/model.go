@@ -167,7 +167,7 @@ type Model struct {
 	want       string          // the row to select once it loads, such as a new local Issue
 
 	alerted  map[string]string // Task ID to the Attention that last toasted
-	reported map[string]string // Task ID to the Attention of each build Task in Needs you that the last Status report counted
+	reported map[string]string // Task ID to the Attention of each build or QA Task in Needs you that the last Status report counted
 }
 
 // New builds a Model that paints from the given view.
@@ -199,7 +199,9 @@ func New(v scheduler.BoardView, opts Options) Model {
 func (m *Model) setBoard(v scheduler.BoardView) {
 	m.board = v
 	m.tasks = m.tasks[:0]
-	own := v.OfKind(lifecycle.KindBuild).Tasks
+	own := slices.DeleteFunc(slices.Clone(v.Tasks), func(t scheduler.TaskView) bool { return !onBoard(t) })
+	// Follow-up holds only build Task rows: open is keyed by Issue ID, which
+	// is a build Task's own ID, and a QA Task's ID adds QA- (PROD-BOARD-002).
 	open := m.mine.openStates()
 	for i, t := range own {
 		if st, ok := open[t.ID]; ok && t.StageKey == lifecycle.Done.Key() {
@@ -704,8 +706,8 @@ func firstNonEmpty(ss ...string) string {
 	return ""
 }
 
-// toasts is the command that toasts v: one line for each Task that reached
-// Ready to land or Done, then the free slot hint. Any other Task in Needs you
+// toasts is the command that toasts v: one line for each build Task that
+// reached Ready to land or Done, then the free slot hint. Any other Task in Needs you
 // gets no toast, because the status record reports it. The Alerts call still
 // records its Attention, so the Task toasts when it reaches Done.
 func (m Model) toasts(v scheduler.BoardView) tea.Cmd {
@@ -728,21 +730,22 @@ func (m Model) toasts(v scheduler.BoardView) tea.Cmd {
 	}
 }
 
-// needsYouNow maps the ID of each build Task of v in Needs you to its
-// Attention, which holds the Stage and the flag. A Task that changes its
-// reason is a new entry, even when the count stays the same.
+// needsYouNow maps the ID of each build Task and QA Task of v in Needs you
+// to its Attention, which holds the Stage and the flag (PROD-BOARD-018). A
+// Task that changes its reason is a new entry, even when the count stays the
+// same.
 func needsYouNow(v scheduler.BoardView) map[string]string {
 	now := map[string]string{}
-	for _, t := range v.OfKind(lifecycle.KindBuild).Tasks {
-		if inNeedsYou(t) {
+	for _, t := range v.Tasks {
+		if onBoard(t) && inNeedsYou(t) {
 			now[t.ID] = t.Attention()
 		}
 	}
 	return now
 }
 
-// sendStatus gives Status the count of the build Tasks in Needs you that the
-// last report named. Init and Update call it themselves, not through a command.
+// sendStatus gives Status the count of the build Tasks and QA Tasks in Needs
+// you that the last report named. Init and Update call it themselves, not through a command.
 // Bubbletea runs each command on its own goroutine, so two reports in a row can
 // reach the terminal in the wrong order, and the record then keeps the older
 // count.

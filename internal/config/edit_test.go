@@ -246,7 +246,13 @@ func TestSettingsAgreeWithResolve(t *testing.T) {
 				t.Errorf("%s %s = %s, Resolve gives %s", key, path, got, w)
 			}
 		}
-		if len(r.Stages) != len(lifecycle.Stages())-5 {
+		agents := 0
+		for _, st := range lifecycle.Stages() {
+			if st.Agent() {
+				agents++
+			}
+		}
+		if len(r.Stages) != agents {
 			t.Fatalf("Resolve gives %d agent Stages", len(r.Stages))
 		}
 	}

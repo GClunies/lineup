@@ -8,11 +8,11 @@ lineup reads all of its configuration from one file in the user's config directo
 
 ## PROD-CONFIG-002: Settings layer from the defaults to the Task
 
-A setting comes from four levels, from lowest to highest: `[defaults]`, the `[repos."<owner>/*"]` table of the owner, the `[repos."<owner>/<repo>"]` table of the Repo, and a Task override. Each key layers on its own, so a higher level can set one key of `[budgets]` and keep the others. A table at each level can hold `[stage.<name>]`, `[budgets]`, `[review_bot]`, `[landing_bar]`, and `[merged]`. A `[stage.<name>]` section at any level beats `[stage.default]` at every level.
+A setting comes from four levels, from lowest to highest: `[defaults]`, the `[repos."<owner>/*"]` table of the owner, the `[repos."<owner>/<repo>"]` table of the Repo, and a Task override. Each key layers on its own, so a higher level can set one key of `[budgets]` and keep the others. A table at each level can hold `[stage.<name>]`, `[budgets]`, `[review_bot]`, `[landing_bar]`, `[merged]`, and `[qa]`. A `[stage.<name>]` section at any level beats `[stage.default]` at every level.
 
 ## PROD-CONFIG-003: Each key has one level where it belongs
 
-The top level holds the keys that apply once: `roots`, `start_skills`, `linear_client_id`, `[linear.*]`, `[github.labels]`, `local_tracker`, `local_issues_dir`, `[review]`, `[board]`, and `[layout]`. `[defaults]` holds each key that a Repo can override: `wip_cap`, `poll_interval`, `[budgets]`, `[review_bot]`, `[landing_bar]`, `[merged]`, and `[stage.*]`. A Repo table holds those keys, and `teams`, `tracker`, and `prefix`. `teams` and `prefix` need an `<owner>/<repo>` key. A layer key at the top level stops the load, for example with `wip_cap belongs in [defaults]. Run lineup config migrate to move it`.
+The top level holds the keys that apply once: `roots`, `start_skills`, `linear_client_id`, `[linear.*]`, `[github.labels]`, `local_tracker`, `local_issues_dir`, `[review]`, `[qa]` with only `slots`, `[board]`, and `[layout]`. `[defaults]` holds each key that a Repo can override: `wip_cap`, `poll_interval`, `[budgets]`, `[review_bot]`, `[landing_bar]`, `[merged]`, `[stage.*]`, and `[qa]` with `enabled` and `max_wait`. A Repo table holds those keys, and `teams`, `tracker`, and `prefix`. `teams` and `prefix` need an `<owner>/<repo>` key. A layer key at the top level stops the load, for example with `wip_cap belongs in [defaults]. Run lineup config migrate to move it`.
 
 ## PROD-CONFIG-004: A Task override changes one Task
 

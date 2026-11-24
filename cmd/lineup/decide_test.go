@@ -45,7 +45,14 @@ func decideBoard() scheduler.BoardView {
 	reviewing.Kind, reviewing.Stage, reviewing.StageKey, reviewing.Group = lifecycle.KindReview, "Reviewing", "reviewing", "Working"
 	question := needing("ENG-3", lifecycle.ReasonQuestion)
 	question.Live = true
+	failed := needing("QA-ENG-1", "")
+	failed.Kind, failed.Stage, failed.StageKey, failed.Note = lifecycle.KindQA, "QA failed", "qa_failed", "12 properties have two rows"
+	lostQA := needing("QA-ENG-2", lifecycle.ReasonTabClosed)
+	lostQA.Kind, lostQA.Stage, lostQA.StageKey = lifecycle.KindQA, "Verifying", "verifying"
+	waitingQA := needing("QA-ENG-3", "")
+	waitingQA.Kind, waitingQA.Stage, waitingQA.StageKey, waitingQA.Group = lifecycle.KindQA, "QA waiting", "qa_waiting", "Waiting"
 	return scheduler.BoardView{Tasks: []scheduler.TaskView{
+		failed, lostQA, waitingQA,
 		landing,
 		needing("ENG-2", lifecycle.ReasonTabClosed),
 		question,
@@ -102,6 +109,10 @@ func TestDecideListsTheTasksThatNeedYou(t *testing.T) {
 		"ENG-7":  {"open Open the tab", "close Close the Task"},
 		"ENG-8":  {"open Open the tab"},
 		"ENG-9":  {"open Open the tab"},
+		// A failed QA check offers its own choices, and a flagged QA Task
+		// those of its reason (PROD-QA-010).
+		"QA-ENG-1": {"fix Start a fix Task", "accept Accept the result", "recheck Check again", "open Open the tab"},
+		"QA-ENG-2": {"open Restore the Worker", "close Close the Task"},
 	}
 	got := listDecisions(t, decideBoard())
 	var ids []string
@@ -122,8 +133,25 @@ func TestDecideListsTheTasksThatNeedYou(t *testing.T) {
 			t.Errorf("%s: title %q, note %q", task.ID, task.Title, task.Note)
 		}
 	}
-	if wantIDs := []string{"ENG-1", "ENG-2", "ENG-3", "ENG-12", "ENG-4", "ENG-5", "ENG-6", "ENG-7", "ENG-8", "ENG-9", "R-1", "R-2", "R-3"}; !slices.Equal(ids, wantIDs) {
+	if wantIDs := []string{"ENG-1", "ENG-2", "ENG-3", "ENG-12", "ENG-4", "ENG-5", "ENG-6", "ENG-7", "ENG-8", "ENG-9", "R-1", "R-2", "R-3", "QA-ENG-1", "QA-ENG-2"}; !slices.Equal(ids, wantIDs) {
 		t.Fatalf("listed %q, want %q", ids, wantIDs)
+	}
+}
+
+// lineup decide with no argument lists a failed QA check's findings and its
+// choices, one column for the choice IDs (PROD-PALETTE-002).
+func TestDecidePrintsAFailedQACheck(t *testing.T) {
+	v := decideBoard()
+	v.Tasks = v.Tasks[:1]
+	c, _ := fakeScheduler(t, map[string]scheduler.Response{"ls": dataReply(t, v)})
+	var out bytes.Buffer
+	if err := cmdDecide(c, nil, &out); err != nil {
+		t.Fatal(err)
+	}
+	want := "QA-ENG-1  12 properties have two rows  QA-ENG-1 title\n" +
+		"  fix      Start a fix Task\n  accept   Accept the result\n  recheck  Check again\n  open     Open the tab\n"
+	if out.String() != want {
+		t.Errorf("lineup decide printed\n%s\nwant\n%s", out.String(), want)
 	}
 }
 
@@ -140,27 +168,21 @@ func TestEveryReasonHasAChoice(t *testing.T) {
 	}
 }
 
-func TestReadyToLandIsTheOnlyBuildStageInNeedsYou(t *testing.T) {
-	var got []lifecycle.Stage
-	for _, s := range lifecycle.Stages() {
-		if task := (lifecycle.Task{Stage: s}); lifecycle.KindBuild.Has(s) && task.Group() == lifecycle.GroupNeedsYou {
-			got = append(got, s)
+// unflagged gives each Kind one list of choices, so each Kind must have one
+// Stage in Needs you with no flag.
+func TestEachKindHasOneStageInNeedsYouWithNoFlag(t *testing.T) {
+	for kind, want := range map[lifecycle.Kind]lifecycle.Stage{
+		lifecycle.KindBuild: lifecycle.ReadyToLand, lifecycle.KindReview: lifecycle.ReviewReady, lifecycle.KindQA: lifecycle.QAFailed,
+	} {
+		var got []lifecycle.Stage
+		for _, s := range lifecycle.Stages() {
+			if task := (lifecycle.Task{Kind: kind, Stage: s}); kind.Has(s) && task.Group() == lifecycle.GroupNeedsYou {
+				got = append(got, s)
+			}
 		}
-	}
-	if !slices.Equal(got, []lifecycle.Stage{lifecycle.ReadyToLand}) {
-		t.Fatalf("build Stages in Needs you with no flag: %v, want only Ready to land, which choicesFor[readyToLand] merges", got)
-	}
-}
-
-func TestReviewReadyIsTheOnlyReviewStageInNeedsYou(t *testing.T) {
-	var got []lifecycle.Stage
-	for _, s := range lifecycle.Stages() {
-		if task := (lifecycle.Task{Kind: lifecycle.KindReview, Stage: s}); lifecycle.KindReview.Has(s) && task.Group() == lifecycle.GroupNeedsYou {
-			got = append(got, s)
+		if !slices.Equal(got, []lifecycle.Stage{want}) || len(unflagged[kind]) == 0 {
+			t.Errorf("%s Stages in Needs you with no flag: %v, want only %s, with the choices of unflagged", kind, got, want)
 		}
-	}
-	if !slices.Equal(got, []lifecycle.Stage{lifecycle.ReviewReady}) {
-		t.Fatalf("review Stages in Needs you with no flag: %v, want only Review ready, which reviewReady opens or closes", got)
 	}
 }
 
@@ -188,10 +210,14 @@ func TestDecideRunsTheChosenCommand(t *testing.T) {
 		{[]string{"ENG-2", "close"}, scheduler.Request{Op: "close", Task: "ENG-2"}, ""},
 		{[]string{"ENG-3", "answer", "Use the fast path."}, scheduler.Request{Op: "steer", Task: "ENG-3", Text: "Use the fast path."}, ""},
 		{[]string{"ENG-5", "rerun"}, scheduler.Request{Op: "rerun", Task: "ENG-5", Stage: "ci_debug"}, ""},
+		{[]string{"QA-ENG-1", "fix"}, scheduler.Request{Op: "qa-fix", Task: "QA-ENG-1"}, "Filed ENG-99. Start it with lineup add ENG-99.\n"},
+		{[]string{"qa-eng-1", "accept"}, scheduler.Request{Op: "qa-accept", Task: "QA-ENG-1"}, ""},
+		{[]string{"QA-ENG-1", "recheck"}, scheduler.Request{Op: "qa-recheck", Task: "QA-ENG-1"}, ""},
 	} {
 		sched, got := fakeScheduler(t, map[string]scheduler.Response{
 			"ls": dataReply(t, decideBoard()), "open": opened,
 			"merge": {OK: true}, "close": {OK: true}, "steer": {OK: true}, "rerun": {OK: true},
+			"qa-fix": dataReply(t, "ENG-99"), "qa-accept": {OK: true}, "qa-recheck": {OK: true},
 		})
 		var out bytes.Buffer
 		if err := cmdDecide(sched, c.args, &out); err != nil {
@@ -216,6 +242,8 @@ func TestDecideRefusesWhatTheTaskCannotDo(t *testing.T) {
 		{[]string{"ENG-10", "open"}, false, "ENG-10 does not need you", 1},
 		{[]string{"eng-10", "open"}, false, "ENG-10 does not need you", 1},
 		{[]string{"R-4", "open"}, false, "R-4 does not need you", 1},
+		{[]string{"QA-ENG-3", "recheck"}, false, "QA-ENG-3 does not need you", 1},
+		{[]string{"QA-ENG-2", "fix"}, false, `QA-ENG-2 has no choice "fix". Its choices are open, close`, 1},
 		{[]string{"ENG-2", "merge"}, false, `ENG-2 has no choice "merge". Its choices are open, close`, 1},
 		{[]string{"ENG-3", "answer"}, true, "", 1},
 		{[]string{"ENG-3", "answer", "  "}, true, "", 1},

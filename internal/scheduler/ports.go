@@ -77,6 +77,10 @@ type PRSnapshot struct {
 	// ClosedAt is when the PR merged or closed, or zero while it is open.
 	ClosedAt time.Time       `json:"closed_at,omitzero"`
 	Raw      json.RawMessage `json:"raw"`
+	// MergeCommit and MergedAt are the merge of a merged PR, which its QA
+	// Task checks out (ARCH-QA-005).
+	MergeCommit string    `json:"merge_commit,omitempty"`
+	MergedAt    time.Time `json:"merged_at,omitzero"`
 }
 
 // ReviewKey names the PR that a review Task reviews: owner/name and its number.
@@ -148,6 +152,13 @@ type Worktrees interface {
 	// an uncommitted change or a commit that is on no remote. kept reports
 	// that the worktree stays.
 	RemoveReview(ctx context.Context, repo, path string, pr ReviewPR) (kept bool, err error)
+	// AddQA fetches commit, the merge commit, by its SHA into the Repo's main
+	// checkout, then adds the QA worktree of PR number, detached at commit, if
+	// it is missing. It returns the worktree's path (ARCH-QA-005).
+	AddQA(ctx context.Context, repo string, number int, commit string) (string, error)
+	// RemoveQA removes the QA worktree unless it holds an uncommitted
+	// change. kept reports that the worktree stays.
+	RemoveQA(ctx context.Context, repo, path string) (kept bool, err error)
 }
 
 // WorkerSpec is what a Harness needs to start a Worker.
@@ -184,6 +195,12 @@ type WorkerSpec struct {
 	// lineup removed. It runs in the Repo's main checkout with no tool that
 	// writes files.
 	ReadOnly bool
+	// MergeCommit and MergedAt are the merge that a QA Task checks. Recheck
+	// is true for a later check, which goes to the Worker of the first one
+	// (PROD-QA-006).
+	MergeCommit string
+	MergedAt    time.Time
+	Recheck     bool
 }
 
 type Harness interface {
@@ -284,6 +301,13 @@ type Tracker interface {
 	Begin(ctx context.Context, is Issue) error
 	// SetStatus writes the mapped status for a lifecycle event, or nothing when the map has none.
 	SetStatus(ctx context.Context, is Issue, event string) error
+	// CreateFix files the fix Issue of a QA Task, assigned to the user, in
+	// the Tracker of build, the build Task's Issue: in its Linear team and
+	// Project, in its GitHub repository, or in the Local Tracker with repo,
+	// the Repo's key. A nil build, of an ad hoc Task, files the Issue in the
+	// Repo Tracker of repo: the first of its teams, its GitHub repository,
+	// or else the Local Tracker (PROD-QA-011).
+	CreateFix(ctx context.Context, build *Issue, repo, title, description string) (Issue, error)
 }
 
 type Config interface {
@@ -310,6 +334,9 @@ type Config interface {
 	// SetUp reports whether the Repo has its own [repos."owner/repo"]
 	// table, which a build Task needs, and the Repo's owner/repo key.
 	SetUp(repo string) (key string, ok bool)
+	// QA is the [qa] table of the Repo's layer. It reads files, so only
+	// lanes and API handlers call it.
+	QA(repo string) (QA, error)
 	// Merged is what lineup does after the PR of a build Task in the Repo
 	// merges, from the Repo's [merged] tables and the Task's overrides. An
 	// error comes with a value that the caller can still use: the value of

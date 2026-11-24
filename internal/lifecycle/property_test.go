@@ -22,6 +22,7 @@ var anySignal = rapid.OneOf(rapid.SampledFrom([]Signal{
 	WorkerExited{Code: 0}, WorkerExited{Code: 1}, SetupFailed{},
 	PROpen{}, Pushed{}, ReviewCommented{}, ReviewChangesRequested{}, ReviewAdditionalAuthors{}, PRMerged{},
 	PRReviewed{}, PRClosed{}, ReviewBotLate{}, TabClosed{}, TabClosed{Waits: true}, TabOpened{},
+	Rerun{Verifying}, QADue{}, QAExpired{}, QAWait{}, QAPass{}, QAFail{}, QAAccept{}, QARecheck{}, QAFixFiled{},
 }), rapid.Map(anyFacts, seen))
 
 // spending are the facts of a PR whose first gap spends a Loop budget under
@@ -45,6 +46,8 @@ func failure(t *rapid.T, s Stage, pushes bool) Signal {
 		if pushes {
 			return Pushed{}
 		}
+	case QAWaiting:
+		return QAExpired{}
 	}
 	return TabClosed{}
 }
@@ -52,15 +55,16 @@ func failure(t *rapid.T, s Stage, pushes bool) Signal {
 // queues are the review queues of a random Board. "" is a review with no queue.
 var queues = []string{"", "q1", "q2"}
 
-// randomBoard mixes build Tasks with review Tasks. q1 and q2 get 0 to 2
-// slots, so some review adds must fail, and a full cap refuses a build add
-// without the user's yes. ids are the Tasks that the Board took.
+// randomBoard mixes build Tasks with review Tasks and QA Tasks. q1 and q2 get
+// 0 to 2 slots, so some review adds must fail, and a full cap refuses a build
+// add without the user's yes. ids are the Tasks that the Board took.
 func randomBoard(t *rapid.T) (*Board, []string) {
 	b := NewBoard(rapid.IntRange(1, 4).Draw(t, "cap"))
 	for _, q := range queues[1:] {
 		b.Slots[q] = rapid.IntRange(0, 2).Draw(t, "slots "+q)
 	}
 	b.SharedSlots = rapid.IntRange(0, 3).Draw(t, "shared slots")
+	b.QASlots = rapid.IntRange(0, 2).Draw(t, "qa slots")
 	var ids []string
 	n := rapid.IntRange(1, 8).Draw(t, "tasks")
 	for i := 0; i < n || len(ids) == 0; i++ {
@@ -76,9 +80,12 @@ func randomBoard(t *rapid.T) (*Board, []string) {
 			p.Budgets.ReviewCycles = rapid.IntRange(0, 3).Draw(t, "cycles")
 		}
 		var err error
-		if rapid.Bool().Draw(t, "review") {
+		switch rapid.IntRange(0, 2).Draw(t, "kind") {
+		case 0:
 			_, _, err = b.AddReview(id, rapid.SampledFrom(queues).Draw(t, "queue"), p)
-		} else {
+		case 1:
+			b.AddQA(id, p, time.Time{}, time.Time{})
+		default:
 			_, _, err = b.Add(id, p, rapid.Bool().Draw(t, "over cap"))
 		}
 		switch {
@@ -142,7 +149,7 @@ func stepFrom(t *rapid.T, b *Board, task *Task, signals *rapid.Generator[Signal]
 	s := signals.Draw(t, "signal")
 	effects, err := b.Apply(task.ID, s)
 	var na *NotAllowedError
-	if err != nil && !errors.As(err, &na) {
+	if err != nil && !errors.As(err, &na) && !errors.Is(err, ErrQASlotsFull) {
 		t.Fatal(err)
 	}
 	return s, effects, err
@@ -197,7 +204,7 @@ func TestEveryStartedTaskEndsInDoneOrNeedsYou(t *testing.T) {
 				if step == bound {
 					t.Fatalf("%s still in %s after %d failures", id, task.Stage, bound)
 				}
-				if _, err := b.Apply(id, failure(t, task.Stage, pushes)); err != nil {
+				if _, err := b.Apply(id, failure(t, task.Stage, pushes)); err != nil && !errors.Is(err, ErrQASlotsFull) {
 					t.Fatal(err)
 				}
 			}
@@ -230,14 +237,14 @@ func TestReviewAddNeverPassesItsQueueSlots(t *testing.T) {
 	})
 }
 
-func TestReviewTasksNeverChangeTheWIPCount(t *testing.T) {
+func TestReviewAndQATasksNeverChangeTheWIPCount(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		b, ids := randomBoard(t)
 		for range rapid.IntRange(0, 200).Draw(t, "steps") {
 			task := anyTask(t, b, ids)
 			before, over := b.Started(), b.OverCap()
-			if _, err := b.Apply(task.ID, anySignal.Draw(t, "signal")); err == nil && task.Kind == KindReview && (b.Started() != before || b.OverCap() != over) {
-				t.Fatalf("a review signal moved started %d->%d, over cap %d->%d", before, b.Started(), over, b.OverCap())
+			if _, err := b.Apply(task.ID, anySignal.Draw(t, "signal")); err == nil && task.Kind != KindBuild && (b.Started() != before || b.OverCap() != over) {
+				t.Fatalf("a %s signal moved started %d->%d, over cap %d->%d", task.Kind, before, b.Started(), over, b.OverCap())
 			}
 		}
 	})
@@ -383,6 +390,46 @@ func TestReviewCyclesNeverPassTheirBudget(t *testing.T) {
 			}
 			if rounds[task.ID] > task.Policy.Budgets.ReviewCycles || task.Left.ReviewCycles < 0 {
 				t.Fatalf("%s started %d review cycles with a budget of %d, %d left", task.ID, rounds[task.ID], task.Policy.Budgets.ReviewCycles, task.Left.ReviewCycles)
+			}
+		}
+	})
+}
+
+// Only the clock's qa-due fills a QA slot by itself. A rerun and Check again
+// are the user's, so they can pass the slots (PROD-QA-007).
+func TestADueCheckNeverPassesTheQASlots(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b, ids := randomBoard(t)
+		for range rapid.IntRange(0, 200).Draw(t, "steps") {
+			task := anyTask(t, b, ids)
+			before := b.QAChecking()
+			s, _, err := step(t, b, task)
+			if _, due := s.(QADue); due && err == nil && b.QASlots > 0 && b.QAChecking() > before && b.QAChecking() > b.QASlots {
+				t.Fatalf("qa-due put %d QA Tasks in Verifying with %d slots", b.QAChecking(), b.QASlots)
+			}
+		}
+	})
+}
+
+// A QA Task writes outside lineup only the Tracker event qa_passed (ARCH-QA-001).
+func TestQATasksWriteOnlyAQAPass(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b, ids := randomBoard(t)
+		for range rapid.IntRange(0, 200).Draw(t, "steps") {
+			task := anyTask(t, b, ids)
+			s, effects, _ := step(t, b, task)
+			if task.Kind != KindQA {
+				continue
+			}
+			for _, e := range effects {
+				switch e := e.(type) {
+				case Merge, StartQA:
+					t.Fatalf("QA Task %s got %#v from %s", task.ID, e, s.Name())
+				case TrackerStatus:
+					if e.Event != "qa_passed" {
+						t.Fatalf("QA Task %s wrote %q from %s", task.ID, e.Event, s.Name())
+					}
+				}
 			}
 		}
 	})

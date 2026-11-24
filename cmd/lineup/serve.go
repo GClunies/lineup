@@ -108,7 +108,7 @@ func serve() error {
 		scheduler.KindLinear: lin,
 		scheduler.KindGitHub: githubTracker{c: gh.c, labels: cfg.GitHubLabels()},
 		scheduler.KindLocal:  localTracker{s: local},
-	}, prefixes: cfg.Prefixes()}
+	}, prefixes: cfg.Prefixes(), fixTracker: cfg.FixTracker}
 	s, err := scheduler.New(scheduler.Deps{
 		Rex: rexPort{rc}, GitHub: gh, Worktrees: worktreePort{wtBin},
 		Harness: harnessPort{cfg: cfg, tracker: tracker}, Tracker: tracker,
@@ -120,6 +120,7 @@ func serve() error {
 		PollInterval: defaults.PollInterval,
 		Queues:       reviewQueues(cfg),
 		Slots:        cfg.ReviewSlots(),
+		QASlots:      cfg.QASlots(),
 		StateHome:    xdgStateHome(),
 		BoardCache:   filepath.Join(stateDir(), "board.json"),
 		Log:          log,

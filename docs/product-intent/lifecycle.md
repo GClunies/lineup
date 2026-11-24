@@ -12,7 +12,7 @@ A build Task moves through seven Stages, and each Stage has one owner. The agent
 
 ## PROD-LIFE-003: The WIP cap holds unless the user says yes
 
-The WIP cap counts the started build Tasks, from Working through Ready to land. Done Tasks and review Tasks do not count. If the cap is full, `lineup add` adds nothing and fails with `wip cap full`, and the Issue keeps its row. The Board then asks the user to start the Task once over the cap with `o`, or to raise the cap by one with `c`. `--over-cap` starts the Task once over the cap, and only the user's yes allows it. The Board header counts the Tasks over the cap, for example `+1 over`.
+The WIP cap counts the started build Tasks, from Working through Ready to land. Done Tasks, review Tasks, and QA Tasks do not count. If the cap is full, `lineup add` adds nothing and fails with `wip cap full`, and the Issue keeps its row. The Board then asks the user to start the Task once over the cap with `o`, or to raise the cap by one with `c`. `--over-cap` starts the Task once over the cap, and only the user's yes allows it. The Board header counts the Tasks over the cap, for example `+1 over`.
 
 ## PROD-LIFE-004: Each agent Stage leaves a fixed result
 

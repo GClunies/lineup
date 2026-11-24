@@ -45,7 +45,7 @@ func (r *Record) worker() worker {
 		return busyWorker
 	case r.Job == JobSetup:
 		return settingUp
-	case r.Review == nil && r.Worktree == "":
+	case r.Kind == lifecycle.KindBuild && r.Worktree == "":
 		return noWorktree
 	case !r.hadWorker():
 		return noWorker
@@ -95,13 +95,20 @@ func (s *Scheduler) spec(r Record, stage lifecycle.Stage) WorkerSpec {
 	if r.Review != nil {
 		spec.PRURL = r.Review.URL
 	}
+	if r.Kind == lifecycle.KindQA && r.PR != nil {
+		spec.MergeCommit, spec.MergedAt = r.PR.MergeCommit, r.PR.MergedAt
+	}
 	return spec
 }
 
 // openWorker opens the Task's Worker and reports whether it did.
 func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.Stage, fresh bool) bool {
-	if r.Review != nil {
-		if !s.setupReview(ctx, r) {
+	if r.Kind != lifecycle.KindBuild {
+		set := s.setupReview
+		if r.Kind == lifecycle.KindQA {
+			set = s.setupQA
+		}
+		if !set(ctx, r) {
 			return false
 		}
 		var ok bool
@@ -122,7 +129,7 @@ func (s *Scheduler) openWorker(ctx context.Context, r Record, stage lifecycle.St
 	}
 	folder := r.Worktree
 	switch {
-	case r.Review != nil:
+	case r.Kind != lifecycle.KindBuild:
 		// The PR's code never becomes the Worker's folder: its .claude
 		// settings and hooks would run.
 		folder = r.Repo
@@ -209,6 +216,8 @@ func (r *Record) awaitsStatus() bool {
 func (s *Scheduler) typePrompt(ctx context.Context, r Record, stage lifecycle.Stage) {
 	spec := s.spec(r, stage)
 	spec.Restart, spec.Steers = false, nil
+	// A QA Worker gets a typed prompt only for a later check.
+	spec.Recheck = r.Kind == lifecycle.KindQA
 	prompt, err := s.d.Harness.Prompt(ctx, spec)
 	if err != nil {
 		s.fail(r.ID, "worker prompt", err)

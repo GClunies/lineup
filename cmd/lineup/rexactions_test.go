@@ -93,7 +93,7 @@ func TestRunAStageAgainOffersEachAgentStage(t *testing.T) {
 		}
 	}
 	var want []string
-	for _, k := range []lifecycle.Kind{lifecycle.KindBuild, lifecycle.KindReview} {
+	for _, k := range []lifecycle.Kind{lifecycle.KindBuild, lifecycle.KindReview, lifecycle.KindQA} {
 		for _, s := range lifecycle.Stages() {
 			if s.Agent() && k.Has(s) {
 				want = append(want, k.String()+" "+s.Key()+" "+s.String())

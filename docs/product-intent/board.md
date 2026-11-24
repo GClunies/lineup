@@ -4,11 +4,11 @@ This document states the current intended experience for what the Board shows an
 
 ## PROD-BOARD-001: The Board is one view of the user's build Tasks and Issues
 
-The Board is one view at the top of the `my-lineup` tab. It lists the user's build Tasks, the user's own Issues that have no Task, and the unassigned Issues of the user's teams. So the user sees all of their own work on one Board, from a captured idea to a merged PR. The Board lists no review Task. It has no other view, so the header names no view, and `1`, `2`, and `3` do nothing.
+The Board is one view at the top of the `my-lineup` tab. It lists the user's build Tasks and QA Tasks, the user's own Issues that have no Task, and the unassigned Issues of the user's teams. So the user sees all of their own work on one Board, from a captured idea to a merged PR. The Board lists no review Task. It has no other view, so the header names no view, and `1`, `2`, and `3` do nothing.
 
 ## PROD-BOARD-002: The groups and their default order
 
-The Board puts each row in one of eight groups. By default the groups show in this order: Needs you, Follow-up, Backlog, Team, Up next, Working, Waiting, and Done. Needs you comes first with the rows that wait for the user, and Follow-up comes next. The other groups follow the development cycle, from an idea to a merged PR. Backlog, Team, and Up next hold Issue rows. Needs you, Follow-up, Working, Waiting, and Done hold build Task rows.
+The Board puts each row in one of eight groups. By default the groups show in this order: Needs you, Follow-up, Backlog, Team, Up next, Working, Waiting, and Done. Needs you comes first with the rows that wait for the user, and Follow-up comes next. The other groups follow the development cycle, from an idea to a merged PR. Backlog, Team, and Up next hold Issue rows. Needs you, Working, Waiting, and Done hold build Task rows and QA Task rows. Follow-up holds build Task rows.
 
 ## PROD-BOARD-003: A group heading shows the name and the count
 
@@ -24,7 +24,7 @@ The `[board]` table in the config sets the layout of the groups `needs_you`, `fo
 
 ## PROD-BOARD-006: Each row shows one status word
 
-Each row shows one status word in its own column after the title, and that column never drops. A Task in Needs you with a flag shows its reason: `question`, `permission`, `auth`, `error`, `setup failed`, `stopped`, `budget spent`, `tab closed`, `worker silent`, `draft`, `drafts`, `PR closed`, or `bot late`. A Task in Follow-up shows its Tracker state. Any other Task shows its Stage: `working`, `CI running`, `CI debug`, `in review`, `responding`, `ready`, or `done`. An Issue row shows `blocked`, `unblocked`, `up next`, `backlog`, or `team`. A flagged Task and a blocked Issue show the word in pink, and the word reads the same with `NO_COLOR=1`.
+Each row shows one status word in its own column after the title, and that column never drops. A Task in Needs you with a flag shows its reason: `question`, `permission`, `auth`, `error`, `setup failed`, `stopped`, `budget spent`, `tab closed`, `worker silent`, `draft`, `drafts`, `PR closed`, or `bot late`. A Task in Follow-up shows its Tracker state. Any other Task shows its Stage: `working`, `CI running`, `CI debug`, `in review`, `responding`, `ready`, `QA waiting`, `verifying`, `QA failed`, or `done`. An Issue row shows `blocked`, `unblocked`, `up next`, `backlog`, or `team`. A flagged Task and a blocked Issue show the word in pink, and the word reads the same with `NO_COLOR=1`.
 
 ## PROD-BOARD-007: The strip shows the selected row in full
 
@@ -72,11 +72,11 @@ The Board paints its first screen from the cache in under 100 ms, and it renders
 
 ## PROD-BOARD-018: The my-lineup tab shows how many Tasks need the user
 
-While one or more build Tasks are in Needs you, Rex shows a dot and a message on the `my-lineup` tab, for example `2 Tasks need you`. The count leaves out review Tasks and Follow-up rows. The Board sends the mark at start, and again each time a build Task joins or leaves Needs you or changes its Stage or its flag. When no build Task needs the user, the mark clears. The mark also clears when the Board quits. The Dock badge counts the `my-lineup` tab once, whatever the number of Tasks.
+While one or more build Tasks or QA Tasks are in Needs you, Rex shows a dot and a message on the `my-lineup` tab, for example `2 Tasks need you`. The count leaves out review Tasks and Follow-up rows. The Board sends the mark at start, and again each time such a Task joins or leaves Needs you or changes its Stage or its flag. When no such Task needs the user, the mark clears. The mark also clears when the Board quits. The Dock badge counts the `my-lineup` tab once, whatever the number of Tasks.
 
 ## PROD-BOARD-019: The Board toasts Ready to land and Done
 
-The Board sends a desktop toast when a build Task reaches Ready to land or Done, for example `ENG-571 #4636 ✓ approved · ready to land | Rate limit login`. A click on the toast opens the Board's pane. A build Task that enters Needs you for a flag gets no toast, and a flagged Task in Ready to land gets none either. A Task toasts again only after it leaves that state and enters it again. The view that the Board opens on makes no toast. A review Task never toasts.
+The Board sends a desktop toast when a build Task reaches Ready to land or Done, for example `ENG-571 #4636 ✓ approved · ready to land | Rate limit login`. A click on the toast opens the Board's pane. A build Task that enters Needs you for a flag gets no toast, and a flagged Task in Ready to land gets none either. A Task toasts again only after it leaves that state and enters it again. The view that the Board opens on makes no toast. A review Task or a QA Task never toasts.
 
 ## PROD-BOARD-020: A free slot names the next Issue
 

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"path/filepath"
 	"slices"
+
+	"github.com/gclunies/lineup/internal/lifecycle"
 )
 
 // sidePane is what a Task's side pane runs: its folder and its command. It
@@ -23,8 +25,8 @@ func (p *sidePane) is(o *sidePane) bool {
 // read-only Worker has no worktree, and a removed worktree has no changes to
 // show. A build Task shows its worktree's changes since the merge-base with
 // the default branch, so a rebase changes its pane (PROD-WORKER-012). A review
-// Task reads the base only to learn that its worktree is there. ok is false
-// when git cannot tell.
+// or QA Task shows its PR, and reads the base only to learn that its worktree
+// is there. ok is false when git cannot tell.
 func (s *Scheduler) wantSide(ctx context.Context, r Record) (want *sidePane, ok bool) {
 	if r.Worktree == "" {
 		return nil, true
@@ -38,6 +40,8 @@ func (s *Scheduler) wantSide(ctx context.Context, r Record) (want *sidePane, ok 
 		return nil, false
 	case r.Review != nil:
 		return &sidePane{Dir: r.Worktree, Argv: reviewSide(r.Review.URL)}, true
+	case r.Kind == lifecycle.KindQA:
+		return &sidePane{Dir: r.Worktree, Argv: reviewSide(prURL(r.PR))}, true
 	}
 	return &sidePane{Dir: r.Worktree, Argv: []string{"hunk", "diff", "--watch", base}}, true
 }

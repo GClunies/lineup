@@ -1,5 +1,7 @@
 package lifecycle
 
+import "time"
+
 // Signal is an observed event or a user action. Each concrete type is one kind
 // from the spec's transition table, and Name returns the spec's name for it.
 type Signal interface {
@@ -50,6 +52,39 @@ type TabOpened struct{}
 
 type WorkerExited struct{ Code int }
 type SetupFailed struct{ Detail string }
+
+// QA signals (ARCH-QA-003, ARCH-QA-004).
+
+// QADue is the Scheduler's clock: the next check of a QA Task in QA waiting
+// has come. The reducer refuses it while the QA slots are full.
+type QADue struct{}
+
+// QAExpired is the Scheduler's clock: a QA Task in QA waiting reached its
+// deadline with no verdict. Detail is the note, for example "no verdict
+// after 48h".
+type QAExpired struct{ Detail string }
+
+// QAWait is the Worker's verdict that the change has not run yet. The next
+// check is Until, and at most the Task's deadline.
+type QAWait struct {
+	Until  time.Time
+	Reason string
+}
+
+// QAPass is the Worker's verdict that the change ran and meets the Issue.
+type QAPass struct{ Summary string }
+
+// QAFail is the Worker's verdict that the change ran and misses the Issue.
+type QAFail struct{ Findings string }
+
+// QAAccept is the user's accept of a failed QA check.
+type QAAccept struct{}
+
+// QARecheck is the user's Check again: a check now, with a new deadline.
+type QARecheck struct{ Deadline time.Time }
+
+// QAFixFiled is the user's fix: the Scheduler filed the fix Issue Issue.
+type QAFixFiled struct{ Issue string }
 
 // GitHub signals.
 
@@ -104,6 +139,14 @@ func (ReviewBotLate) Name() string           { return "review-bot-late" }
 func (PromptStalled) Name() string           { return "prompt-stalled" }
 func (PRReviewed) Name() string              { return "pr-reviewed" }
 func (PRClosed) Name() string                { return "pr-closed" }
+func (QADue) Name() string                   { return "qa-due" }
+func (QAExpired) Name() string               { return "qa-expired" }
+func (QAWait) Name() string                  { return "qa-wait" }
+func (QAPass) Name() string                  { return "qa-pass" }
+func (QAFail) Name() string                  { return "qa-fail" }
+func (QAAccept) Name() string                { return "qa-accept" }
+func (QARecheck) Name() string               { return "qa-recheck" }
+func (QAFixFiled) Name() string              { return "qa-fix-filed" }
 
 func (PRMerge) signal()                 {}
 func (TaskClosed) signal()              {}
@@ -125,6 +168,14 @@ func (ReviewBotLate) signal()           {}
 func (PromptStalled) signal()           {}
 func (PRReviewed) signal()              {}
 func (PRClosed) signal()                {}
+func (QADue) signal()                   {}
+func (QAExpired) signal()               {}
+func (QAWait) signal()                  {}
+func (QAPass) signal()                  {}
+func (QAFail) signal()                  {}
+func (QAAccept) signal()                {}
+func (QARecheck) signal()               {}
+func (QAFixFiled) signal()              {}
 
 // Effect is work the Scheduler must do after a transition, in order.
 type Effect interface{ effect() }
@@ -136,14 +187,20 @@ type PromptWorker struct{ Stage Stage }
 type Merge struct{}
 
 // Cleanup closes the Task's tab if it has one, removes its worktree, and
-// removes the Repo session when it is empty. Only the user starts it.
-type Cleanup struct{}
+// removes the Repo session when it is empty. WhenIdle waits until the Worker
+// stops working, so a QA Worker that passed can finish its turn.
+type Cleanup struct{ WhenIdle bool }
 
 // TrackerStatus writes the mapped Tracker status for a lifecycle event:
-// started, in_review, merged, or closed.
+// started, in_review, merged, closed, or qa_passed.
 type TrackerStatus struct{ Event string }
+
+// StartQA adds the QA Task of a build Task that merged, when its Repo has QA
+// on (ARCH-QA-002).
+type StartQA struct{}
 
 func (PromptWorker) effect()  {}
 func (Merge) effect()         {}
 func (Cleanup) effect()       {}
 func (TrackerStatus) effect() {}
+func (StartQA) effect()       {}

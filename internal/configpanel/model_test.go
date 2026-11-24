@@ -452,9 +452,9 @@ func TestGroupsStartClosedWithASummaryOfTheirSettings(t *testing.T) {
 	for _, want := range []string{
 		"▸ Folders and skills ~/repos · none mixed",
 		"▸ Local Tracker false · ~/.local/share/lineup/issues built-in",
-		"▸ GitHub labels 0 of 5 set built-in",
+		"▸ GitHub labels 0 of 6 set built-in",
 		"▸ Board and Hub layout 0 of 5 set built-in",
-		"▸ Defaults for every Repo 2 of 28 set mixed",
+		"▸ Defaults for every Repo 2 of 34 set mixed",
 	} {
 		if !p.has(want) {
 			t.Errorf("the Global tab has no line %q:\n%s", want, p.view())
@@ -467,7 +467,7 @@ func TestGroupsStartClosedWithASummaryOfTheirSettings(t *testing.T) {
 		"▸ Loop budgets 1 · 3 mixed",
 		"▸ Review bot greptile · 5 · 3 mixed",
 		"▸ Merge requirements required · replied · required built-in",
-		"▸ Workers 0 of 16 set built-in",
+		"▸ Workers 0 of 20 set built-in",
 	} {
 		if !p.has(want) {
 			t.Errorf("the Repo tab has no line %q:\n%s", want, p.view())
@@ -600,7 +600,7 @@ func TestAShortTerminalShowsEveryClosedGroup(t *testing.T) {
 	p.press("tab")
 	tree := strings.SplitN(p.view(), "SET IN", 2)[1]
 	tree = strings.SplitN(tree, "─", 2)[0]
-	for _, g := range []string{"Repo", "Capacity", "Loop budgets", "Review bot", "Merge requirements", "After a merge", "Workers"} {
+	for _, g := range []string{"Repo", "Capacity", "Loop budgets", "Review bot", "Merge requirements", "After a merge", "QA after a merge", "Workers"} {
 		if !strings.Contains(tree, "▸ "+g) {
 			t.Errorf("80x24: the tree does not show the group %s:\n%s", g, p.view())
 		}
@@ -631,7 +631,7 @@ func TestTabAndTheRepoPickerKeepTheSelectedKey(t *testing.T) {
 func TestAGroupNamesThePlaceThatSetsAllOfItsSettings(t *testing.T) {
 	p := newPanel(t, fixture+"[repos.\"acme/*\".budgets]\nci_debug = 2\nresponding = 4\n[defaults.stage.default]\nmodel = \"m1\"\n")
 	p.press("tab")
-	for _, want := range []string{"▸ Loop budgets 2 · 4 all acme Repos", "▸ Capacity 2 · 20s mixed", "▸ Workers 3 of 16 set mixed"} {
+	for _, want := range []string{"▸ Loop budgets 2 · 4 all acme Repos", "▸ Capacity 2 · 20s mixed", "▸ Workers 4 of 20 set mixed"} {
 		if !p.has(want) {
 			t.Errorf("the Repo tab has no line %q:\n%s", want, p.view())
 		}

@@ -80,6 +80,21 @@ func (c *Client) Issue(ctx context.Context, repo string, number int) (Issue, err
 	return g.issue(repo), nil
 }
 
+// CreateIssue opens an Issue in repo, assigned to the user, and gives it
+// back. gh prints the new Issue's URL, which ends in its number.
+func (c *Client) CreateIssue(ctx context.Context, repo, title, body string) (Issue, error) {
+	out, err := c.run(ctx, "issue", "create", "--repo", repo, "--title", title, "--body", body, "--assignee", "@me")
+	if err != nil {
+		return Issue{}, err
+	}
+	url := strings.TrimSpace(string(out))
+	n, err := strconv.Atoi(url[strings.LastIndex(url, "/")+1:])
+	if err != nil {
+		return Issue{}, fmt.Errorf("gh issue create %s: no Issue number in %q", repo, url)
+	}
+	return Issue{Repo: repo, Number: n, Title: title, Body: body, URL: url, State: "OPEN"}, nil
+}
+
 func (c *Client) AssignToMe(ctx context.Context, repo string, number int) error {
 	_, err := c.run(ctx, "issue", "edit", strconv.Itoa(number), "--repo", repo, "--add-assignee", "@me")
 	return err

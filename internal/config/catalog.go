@@ -101,6 +101,7 @@ var Groups = []Group{
 	{"Linear", "How lineup signs in to Linear, and the status that it gives a Linear Issue at each lifecycle event. Each Repo picks its Linear teams on the Repo tab."},
 	{"GitHub labels", "The labels that lineup puts on a GitHub Issue at each lifecycle event, and the label that puts an Issue in Backlog."},
 	{"Review queues", "The PR filters whose PRs lineup reviews without being asked, and how many review Tasks run at one time. Build Tasks have their own cap under Capacity."},
+	{"QA checks", "How many QA Tasks check a merged change at one time. Each Repo turns QA on under QA after a merge on the Repo tab."},
 	{"Board and Hub layout", "The order of the Board's sections, the sections that start closed or out of sight, and the place of the LINEUP pane."},
 	{DefaultsGroup, "The values that every Repo takes when its owner table and its own table do not set the key. The Repo tab shows each level for one Repo."},
 	{"Repo", "The Tracker that gives the Repo its Issues, the Linear teams that map to it, and the prefix of its own IDs."},
@@ -109,6 +110,7 @@ var Groups = []Group{
 	{"Review bot", "The review bot whose score is one more Merge requirement, and how many review cycles a Task gets to meet it."},
 	{"Merge requirements", "What a PR must meet before its Task is Ready to land (the Landing bar). The review bot's score is one more requirement."},
 	{"After a merge", "What lineup does with the tab and the worktree of a build Task after its PR merges."},
+	{"QA after a merge", "Whether each merge of a build Task adds a QA Task, whose own Worker checks the merged change, and how long it waits for a verdict."},
 	{"Workers", "The model, effort, and skill of the Worker in each Stage. Every Stage gives each value that a Stage does not set."},
 }
 
@@ -163,6 +165,9 @@ var Catalog = []Key{
 	{Path: "review.queues.<field>", Group: []string{"Review queues"}, Label: "Queue",
 		Levels: top, Type: TypeQueue, Default: "none", Restart: RestartScheduler,
 		Doc: "A review queue: a PR filter whose PRs lineup reviews without being asked. The queues fill in file order. Edit them in the file."},
+	{Path: "qa.slots", Group: []string{"QA checks"}, Label: "QA Tasks at once",
+		Levels: top, Type: TypeInt, Default: "no cap", Restart: RestartScheduler,
+		Doc: "How many QA Tasks can be in Verifying at one time. With none, there is no cap. QA Tasks never count toward the WIP cap."},
 	{Path: "board.order", Group: []string{"Board and Hub layout"}, Label: "Section order",
 		Levels: top, Type: TypeList, Values: sectionKeys(), Default: listText(sectionKeys()), Restart: RestartAll,
 		Doc: "The order of the Board's sections. Each section that the list leaves out follows in its default place."},
@@ -224,6 +229,12 @@ var Catalog = []Key{
 	{Path: "merged.keep_worktree_days", Group: []string{"After a merge"}, Label: "Days to keep the worktree",
 		Levels: layerLevels, Type: TypeInt, Default: strconv.Itoa(defaultKeepWorktreeDays), Restart: RestartScheduler,
 		Doc: fmt.Sprintf("How many days lineup keeps the worktree of a merged build Task after it closes the tab, from 0 to %d.", maxKeepWorktreeDays)},
+	{Path: "qa.enabled", Group: []string{"QA after a merge"}, Label: "Check each merge",
+		Levels: layerLevels, Type: TypeBool, Default: "false", Restart: RestartScheduler,
+		Doc: "Adds a QA Task at each merge of a build Task in the Repo. Its own Worker checks the merged change and gives a verdict. A pass writes the Tracker event qa_passed."},
+	{Path: "qa.max_wait", Group: []string{"QA after a merge"}, Label: "Max wait for a verdict",
+		Levels: layerLevels, Type: TypeDuration, Default: "48h", Restart: RestartScheduler,
+		Doc: "The longest time that a QA Task waits for a verdict, from the merge, as a duration such as 48h. Past it, the Task goes to QA failed."},
 	{Path: "stage.<stage>.model", Group: []string{"Workers", "<stage>"}, Label: "Model",
 		Levels: layerLevels, Type: TypeString, Default: defaultModel, Restart: RestartScheduler,
 		Doc: "The model of the Worker. Only Every Stage and the Stage that a Worker starts in take a model."},
@@ -272,7 +283,7 @@ var placeNames = map[string]func(part string) string{
 }
 
 // eventNames are the plain names of the lifecycle events of a Tracker map.
-var eventNames = map[string]string{"started": "At start", "in_review": "In review", "merged": "Merged", "closed": "Closed"}
+var eventNames = map[string]string{"started": "At start", "in_review": "In review", "merged": "Merged", "qa_passed": "QA passed", "closed": "Closed"}
 
 // trackerNames are the plain names of the Trackers.
 var trackerNames = map[string]string{"linear": "Linear", "github": "GitHub", "local": "Local"}

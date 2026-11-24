@@ -8,7 +8,7 @@ The Hub is the Rex session `my-lineup`, with one tab, also `my-lineup`. The tab 
 
 ## PROD-TABS-002: Each Repo has its own Rex session
 
-Each Repo with an open build Task has its own Rex session, named by the Repo key, for example `crexi/data`. A key always holds a `/`, so no Repo session takes the Hub's name `my-lineup`. An ad hoc Task opens in its Repo's session, as an Issue's Task does. Review Tasks open in the `reviews` session. lineup creates a Repo session with its first Task. It removes the session after the last Task tab in it closes, unless the session holds a tab that the user or another Scheduler opened.
+Each Repo with an open build Task has its own Rex session, named by the Repo key, for example `crexi/data`. A key always holds a `/`, so no Repo session takes the Hub's name `my-lineup`. An ad hoc Task opens in its Repo's session, as an Issue's Task does. Review Tasks open in the `reviews` session, and QA Tasks open in the `qa` session. lineup creates a Repo session with its first Task. It removes the session after the last Task tab in it closes, unless the session holds a tab that the user or another Scheduler opened.
 
 ## PROD-TABS-003: A tab label names the Task
 
