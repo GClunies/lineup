@@ -1,0 +1,50 @@
+internal/configpanel/model_test.go
+  s_3f62d37256047d::t_8a9cd73917da18 251
+  s_3f62d37256047d::t_cb4e3f51a8e3f8 198
+cmd/lineup/agent/CLAUDE.md
+  s_3f62d37256047d::t_ae3452d9f1ab2c 26
+  s_3f62d37256047d::t_7eeb333bc71b9c 86-91
+cmd/lineup/hub_test.go
+  s_3f62d37256047d::t_6e026dc8c21389 764-765,774-775
+cmd/lineup/config_test.go
+  s_3f62d37256047d::t_d4b6cad2a17c2d 65,71-76,110,190
+  s_3f62d37256047d::t_5009b61340be2c 63-64,66-70,77,79,98-109,111
+  s_3f62d37256047d::t_01280842bdd892 1-62,78,80-97,112-189,191-215
+internal/configpanel/view.go
+  s_3f62d37256047d::t_cbe2cdd4c8c775 183
+cmd/lineup/rex/lineup.lua
+  s_3f62d37256047d::t_daa38bce72b729 442-469
+cmd/lineup/main.go
+  s_3f62d37256047d::t_539ee3d195e229 31-33,35-36,113
+  s_3f62d37256047d::t_8d7334c0e63d0d 34
+cmd/lineup/config.go
+  s_3f62d37256047d::t_34f0792908b9cf 6,119
+  s_3f62d37256047d::t_71a75bac678984 19,118
+  s_3f62d37256047d::t_002381241279eb 27
+  s_3f62d37256047d::t_b01bb776957bb7 76
+  s_3f62d37256047d::t_bd91fc6a401ec8 148
+  s_3f62d37256047d::t_c6e0aa2e996993 149
+  s_3f62d37256047d::t_5ab098f9dc7f0b 153
+  s_3f62d37256047d::t_2753aa91f06708 1-5,7-18,20-26,28-75,77-117,120-137,140,142,146-147,150-152,154-157
+  s_3f62d37256047d::t_ce7d4fbea7df56 138-139,141,143-145
+internal/configpanel/model.go
+  s_3f62d37256047d::t_23abcf0ea2cbb5 384
+go.mod
+  s_3f62d37256047d::t_c0f89d1493c554 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "082f23541bec2e161b2aae8cf096c8eef2249adc",
+  "prompts": {},
+  "sessions": {
+    "s_3f62d37256047d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "918a36da-c6bf-4dae-acbd-698584050738",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
