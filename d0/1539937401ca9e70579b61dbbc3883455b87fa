@@ -1,0 +1,21 @@
+cmd/lineup/rex/lineup.lua
+  s_6fdf04ba241df3::t_0be3892b8cddbc 134-136
+cmd/lineup/rexactions_test.go
+  s_6fdf04ba241df3::t_cdd463d3cd087d 96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d01539937401ca9e70579b61dbbc3883455b87fa",
+  "prompts": {},
+  "sessions": {
+    "s_6fdf04ba241df3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1e03a85-2a6e-48c0-9cd0-da25aaf02f13",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
