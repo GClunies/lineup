@@ -1,0 +1,66 @@
+docs/product-intent/configuration.md
+  s_6fdf04ba241df3::t_c5bb57d9115004 11
+  s_6fdf04ba241df3::t_bab33a2312f4d1 15
+docs/architecture-intent/harness.md
+  s_6fdf04ba241df3::t_8f403a4c983a02 60
+docs/product-intent/lifecycle.md
+  s_6fdf04ba241df3::t_9164901281b130 15
+docs/product-intent/qa.md
+  s_6fdf04ba241df3::t_c887f9bf7d0182 1-46,48-51
+  s_6fdf04ba241df3::t_86fa69d1ee5a7b 47
+docs/product-intent/tabs.md
+  s_6fdf04ba241df3::t_c9972fcf94c441 11
+docs/architecture-intent/lifecycle.md
+  s_6fdf04ba241df3::t_3ad782c6ba4cc4 39
+  s_6fdf04ba241df3::t_73f1b817f2ec4a 49
+  s_6fdf04ba241df3::t_2399acaf08906c 20
+  s_6fdf04ba241df3::t_2bb44858879330 22
+GLOSSARY.md
+  s_6fdf04ba241df3::t_66add3e3471ff1 53-56
+  s_6fdf04ba241df3::t_8885569d42206f 96
+  s_6fdf04ba241df3::t_f777cc1719ecea 50
+docs/product-intent/workers.md
+  s_6fdf04ba241df3::t_3516491f34d257 39
+  s_6fdf04ba241df3::t_e1953c8e907908 51
+  s_6fdf04ba241df3::t_8ce4c9a8c96f82 11
+docs/architecture-intent/trackers.md
+  s_6fdf04ba241df3::t_5d5df099114c75 25
+  s_6fdf04ba241df3::t_c0f902ac20c377 7
+docs/product-intent/trackers.md
+  s_6fdf04ba241df3::t_6cc2f3bde8fb95 51
+  s_6fdf04ba241df3::t_121a84eba4d044 63
+  s_6fdf04ba241df3::t_3f3350b1834ebe 41
+  s_6fdf04ba241df3::t_67317df3e5091d 43
+  s_6fdf04ba241df3::t_cfab28bdc41e5e 47
+  s_6fdf04ba241df3::t_88d5c1a03d4ab2 31
+docs/product-intent/board.md
+  s_6fdf04ba241df3::t_f6742a760dff6c 79
+  s_6fdf04ba241df3::t_bf593f7833992d 11
+  s_6fdf04ba241df3::t_a6de182399428f 75
+  s_6fdf04ba241df3::t_6b3197f72f1d44 27
+  s_6fdf04ba241df3::t_0fe8034cacfc8f 7
+docs/product-intent/palette.md
+  s_6fdf04ba241df3::t_8b80ee8672b087 11
+docs/product-intent/README.md
+  s_6fdf04ba241df3::t_c0d013c6ba4fad 40
+docs/architecture-intent/README.md
+  s_6fdf04ba241df3::t_cc3ab1aea42c67 38
+docs/architecture-intent/qa.md
+  s_6fdf04ba241df3::t_a8fd005a5cb938 1-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ca57fbfaffc1a58cc33d0fe6fa76cfa88de8f06",
+  "prompts": {},
+  "sessions": {
+    "s_6fdf04ba241df3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1e03a85-2a6e-48c0-9cd0-da25aaf02f13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
