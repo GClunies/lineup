@@ -235,7 +235,7 @@ func TestABoardWithoutAHookSkipsThatReport(t *testing.T) {
 }
 
 // Rex titles a toast's banner with the OSC 777 title, then names the session,
-// my-lineup. An empty title keeps lineup to that one name (PROD-BOARD-023).
+// my-lineup. An empty title keeps lineup to that one name (PROD-BOARD-026).
 func TestToastNamesLineupOnce(t *testing.T) {
 	var out bytes.Buffer
 	text := "1 slot free, next ENG-611: Move the retry job"

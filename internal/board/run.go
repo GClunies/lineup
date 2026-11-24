@@ -52,7 +52,7 @@ func Run(socketPath, cachePath string, opts Options) error {
 // Toast asks the terminal for a desktop notification (OSC 777). Rex shows it
 // for this pane, so a click on it brings the user back to the pane. The title
 // stays empty, because Rex's banner already names the session, my-lineup
-// (PROD-BOARD-023).
+// (PROD-BOARD-026).
 func Toast(w io.Writer, text string) error {
 	_, err := fmt.Fprintf(w, "\x1b]777;notify;;%s\x07", termsafe.Clean(text, false))
 	return err
