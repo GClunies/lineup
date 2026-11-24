@@ -29,3 +29,19 @@ lineup checks the whole config file at each load. A bad value, an unknown key, o
 ## PROD-CONFIG-007: Changes to the file apply only after a restart
 
 The Scheduler and the Board read the config file only when they start. After the user edits the file or runs `lineup config migrate`, `lineup restart` applies the change to both. `lineup restart scheduler` applies it to the Scheduler alone. `lineup repo init` restarts the Scheduler by itself. A new clone below a root needs no restart.
+
+## PROD-CONFIG-008: One panel shows every setting
+
+`lineup config` opens the config panel in the terminal, with a Global tab and a Repo tab. The Global tab lists each top-level key and each `[defaults]` key. The Repo tab lists the keys of a Repo table for one Repo, which the user picks from the checkouts below `roots`. Each row shows the key, the value that applies, and the level that sets it: `default`, `[defaults]`, the owner table, or the Repo table. The selected key shows its doc, its type, its allowed values, its default, and the restart that a change needs.
+
+## PROD-CONFIG-009: The panel writes only a change that loads
+
+The panel changes one key at a time, at a level that the catalog allows for the key, and it refuses every other level. It loads the new file as the Scheduler does, and it writes the file only if that load passes. The write keeps every comment and blank line. On a load error, the panel shows the error and changes nothing. If the file does not load, the panel opens read-only and shows the error at the top. A set in a Repo with no table writes its table.
+
+## PROD-CONFIG-010: The panel offers the restart that a change needs
+
+After a save, the panel names the restart that the change needs: `lineup restart` for a key that the Board or the Hub reads, else `lineup restart scheduler`. Enter runs that restart, and Esc skips it. After a skip, a line in the panel says that the change waits for the restart.
+
+## PROD-CONFIG-011: lineup config keys lists every key
+
+`lineup config keys` lists every key of the config file with its levels, its type, its allowed values, its default, its doc, and the restart that a change needs. `--json` prints the list as JSON. `--repo <owner>/<repo>` adds the value that applies to the Repo and the level that sets it. The list works on a file that does not load, and `--json` then names the load error.

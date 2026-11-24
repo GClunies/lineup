@@ -43,3 +43,16 @@ The order of the `[[review.queues]]` entries is their priority. Each fill and `l
 
 Because: the user can read the priority of the queues directly from the file.
 Not: nested queue sources, as one queue with ordered sources.
+
+## ARCH-CONFIG-008: One key catalog describes every key
+
+The config package holds one key catalog: the path, the levels, the type, the allowed values, the default, the doc, and the restart of each key. The panel and `lineup config keys` read only the catalog. The catalog takes each list of allowed values from the code that checks it. A test ties the catalog to the decoder of the loader. A key with no entry, an entry with no key, and an entry at a level where the loader does not read it fail the test.
+
+Because: a second list of keys drifts from the loader.
+
+## ARCH-CONFIG-009: An edit changes the text, and the loader checks it first
+
+An edit of the config file changes the lines of one key and keeps every other line. Before it writes, it checks three things. The new text decodes to the old values with only that key changed. The loader passes the new text. The file on disk still holds the text that the edit read. One rename then writes the new text, so a reader never sees half a file. A key in a form that a line edit cannot change safely, such as an inline table, is refused.
+
+Because: the TOML library cannot write comments back.
+Not: a decode of the whole file and an encode of it again.

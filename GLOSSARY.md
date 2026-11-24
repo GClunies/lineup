@@ -96,6 +96,10 @@ _Avoid_: Dashboard, kanban, inbox
 A Done Task that the user hid from the Board. Archiving closes the Task's tab and removes its worktree, if they are still there. Its record and events stay in the store.
 _Avoid_: Deleted, removed
 
+**Config panel**:
+The screen of `lineup config`: each key of the config file, the value that applies, and the level that sets it, on a Global tab and a Repo tab. It changes one key at a time.
+_Avoid_: Settings page, config editor
+
 **Hub**:
 The Rex session `my-lineup` of lineup's own tab, also `my-lineup`. The tab holds the Board and the Orchestrator in the `LINEUP` pane. The `agent_side` and `agent_size` keys of the `[layout]` table set the side and the share of the tab for the `LINEUP` pane. The Orchestrator is the one agent for the Board.
 _Avoid_: Home, control tab
@@ -195,3 +199,9 @@ _Avoid_: Bot round, greploop, review round
 **WIP cap**:
 The most started Tasks, from Working through Ready to land, that can exist at one time. To start a Task past it, the user must confirm or raise the cap.
 _Avoid_: Lane count, concurrency limit
+
+### Configuration
+
+**Key catalog**:
+The one list of every key of the config file: its path, the levels where it can sit, its type, its allowed values, its default, a one-line doc, and the restart that a change needs. The config panel and `lineup config keys` show it.
+_Avoid_: Schema, key list, settings registry
