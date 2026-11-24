@@ -98,3 +98,6 @@ Each column is as wide as its widest cell among the rows on screen, so a row out
 
 An open Team shows its first 10 rows. When it holds more, a dim line follows them, for example `+ 90 more rows`. The user can select that line, and the strip then shows Team and `90 more rows`. `enter` or a tap on the line shows every row of Team for this run and selects the first row that was hidden. Closing Team brings the limit back. While the filter holds text, Team shows every match.
 
+## PROD-BOARD-025: The Team heading marks the fetch cap
+
+When the Board reads 100 Issues of one team, the Team heading adds `+` to its count, for example `Team 100+`. The strip on that heading shows the same count, for example `100+ rows`.

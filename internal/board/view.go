@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -234,11 +235,11 @@ func (m Model) selection() (title, facts string) {
 		return strings.Join(slices.DeleteFunc(fs, func(f string) bool { return f == "" }), " · ")
 	}
 	if g, ok := headingName(m.sel); ok {
-		n := len(m.groupIDs(g))
-		if n == 1 {
+		count := m.countText(g, len(m.groupIDs(g)))
+		if count == "1" {
 			return g, "1 row"
 		}
-		return g, fmt.Sprintf("%d rows", n)
+		return g, count + " rows"
 	}
 	if g, ok := moreName(m.sel); ok {
 		n := len(m.groupIDs(g))
@@ -263,6 +264,16 @@ func (m Model) selection() (title, facts string) {
 	}
 	// The skill shows here also when its column does not (PROD-BOARD-007).
 	return scheduler.PlainTitle(t.Title), join(boardID(t.ID), t.Stage, t.Repo, skillName(t), pr, t.Note, kept)
+}
+
+// countText is the count n that the heading of group g shows. A Team list
+// that reached the read's cap adds + (PROD-BOARD-025).
+func (m Model) countText(g string, n int) string {
+	s := strconv.Itoa(n)
+	if g == groupTeam && m.mine.teamCapped() {
+		s += "+"
+	}
+	return s
 }
 
 // moreRows names the n rows that a more line hides.
@@ -607,7 +618,7 @@ func (m Model) rowLines(w, h int) []rowLine {
 	// A heading shows the group's name, its count in the dim style, and a
 	// closed group's mark.
 	heading := func(g string, n int) string {
-		count := fmt.Sprintf(" %d", n)
+		count := " " + m.countText(g, n)
 		if !m.open(g) {
 			count += " …"
 		}

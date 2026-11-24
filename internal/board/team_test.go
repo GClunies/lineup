@@ -375,3 +375,38 @@ func TestRowsPastTheTeamLimitDoNotFitTheColumns(t *testing.T) {
 		t.Errorf("with every row on screen the OPS-1 row must name its Repo: %q", l)
 	}
 }
+
+// The Team heading adds + to its count when the Board read 100 Issues of one
+// team, and so does the strip on it (PROD-BOARD-025).
+func TestTheTeamHeadingMarksTheFetchCap(t *testing.T) {
+	ops := func(i int) linear.Issue {
+		is := teamIssue(fmt.Sprintf("OPS-%d", i), "backlog", 2)
+		is.Team.Key = "OPS"
+		return is
+	}
+	for _, c := range []struct {
+		name          string
+		pd, ops       int
+		heading, rows string
+	}{
+		{"100 of PD", 100, 0, " Team 100+ …", " 100+ rows"},
+		{"99 of PD", 99, 0, " Team 99 …", " 99 rows"},
+		{"60 of PD and 40 of OPS", 60, 40, " Team 100 …", " 100 rows"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			team := pdIssues(1, c.pd)
+			for i := 1; i <= c.ops; i++ {
+				team = append(team, ops(i))
+			}
+			e := teamEnv(t, team...)
+			out := screen(e.m)
+			if !slices.Contains(strings.Split(out, "\n"), c.heading) {
+				t.Errorf("no line is the heading %q:\n%s", c.heading, out)
+			}
+			e.m.sel = headingKey(groupTeam)
+			if f := footerAt(e.m, 100); !strings.Contains(f, "\n Team\n"+c.rows+"\n") {
+				t.Errorf("the strip on the Team heading must count %q:\n%s", c.rows, f)
+			}
+		})
+	}
+}
