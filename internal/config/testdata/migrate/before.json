@@ -34,12 +34,22 @@
             "Skill": "pstack:poteto-mode",
             "Command": ""
           },
+          "verifying": {
+            "Model": "claude-opus-5-5",
+            "Effort": "high",
+            "Skill": "pstack:poteto-mode",
+            "Command": ""
+          },
           "working": {
             "Model": "claude-opus-5-5",
             "Effort": "high",
             "Skill": "pstack:poteto-mode",
             "Command": ""
           }
+        },
+        "QA": {
+          "Enabled": false,
+          "MaxWait": 172800000000000
         },
         "Claude": ""
       },
@@ -86,12 +96,22 @@
             "Skill": "pstack:poteto-mode",
             "Command": ""
           },
+          "verifying": {
+            "Model": "claude-opus-5-5",
+            "Effort": "high",
+            "Skill": "pstack:poteto-mode",
+            "Command": ""
+          },
           "working": {
             "Model": "claude-opus-5-5",
             "Effort": "high",
             "Skill": "pstack:poteto-mode",
             "Command": ""
           }
+        },
+        "QA": {
+          "Enabled": false,
+          "MaxWait": 172800000000000
         },
         "Claude": ""
       },
@@ -138,12 +158,22 @@
             "Skill": "pstack:poteto-mode",
             "Command": ""
           },
+          "verifying": {
+            "Model": "claude-opus-5-5",
+            "Effort": "high",
+            "Skill": "pstack:poteto-mode",
+            "Command": ""
+          },
           "working": {
             "Model": "claude-opus-5-5",
             "Effort": "high",
             "Skill": "pstack:poteto-mode",
             "Command": ""
           }
+        },
+        "QA": {
+          "Enabled": false,
+          "MaxWait": 172800000000000
         },
         "Claude": ""
       },
@@ -190,12 +220,22 @@
             "Skill": "pstack:poteto-mode",
             "Command": ""
           },
+          "verifying": {
+            "Model": "claude-opus-5-5",
+            "Effort": "high",
+            "Skill": "pstack:poteto-mode",
+            "Command": ""
+          },
           "working": {
             "Model": "claude-opus-5-5",
             "Effort": "high",
             "Skill": "pstack:poteto-mode",
             "Command": ""
           }
+        },
+        "QA": {
+          "Enabled": false,
+          "MaxWait": 172800000000000
         },
         "Claude": ""
       },
@@ -236,12 +276,22 @@
             "Skill": "pstack:poteto-mode",
             "Command": ""
           },
+          "verifying": {
+            "Model": "claude-opus-5-5",
+            "Effort": "high",
+            "Skill": "pstack:poteto-mode",
+            "Command": ""
+          },
           "working": {
             "Model": "claude-opus-5-5",
             "Effort": "high",
             "Skill": "pstack:poteto-mode",
             "Command": ""
           }
+        },
+        "QA": {
+          "Enabled": false,
+          "MaxWait": 172800000000000
         },
         "Claude": ""
       },
@@ -282,12 +332,22 @@
             "Skill": "pstack:poteto-mode",
             "Command": ""
           },
+          "verifying": {
+            "Model": "claude-opus-5-5",
+            "Effort": "high",
+            "Skill": "pstack:poteto-mode",
+            "Command": ""
+          },
           "working": {
             "Model": "claude-opus-5-5",
             "Effort": "high",
             "Skill": "pstack:poteto-mode",
             "Command": ""
           }
+        },
+        "QA": {
+          "Enabled": false,
+          "MaxWait": 172800000000000
         },
         "Claude": ""
       },
@@ -328,12 +388,22 @@
             "Skill": "pstack:poteto-mode",
             "Command": ""
           },
+          "verifying": {
+            "Model": "claude-opus-5-5",
+            "Effort": "high",
+            "Skill": "pstack:poteto-mode",
+            "Command": ""
+          },
           "working": {
             "Model": "claude-opus-5-5",
             "Effort": "high",
             "Skill": "pstack:poteto-mode",
             "Command": ""
           }
+        },
+        "QA": {
+          "Enabled": false,
+          "MaxWait": 172800000000000
         },
         "Claude": ""
       },

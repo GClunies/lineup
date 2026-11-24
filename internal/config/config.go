@@ -41,7 +41,7 @@ const (
 )
 
 // trackerEvents are the lifecycle events that a Tracker map can name.
-var trackerEvents = map[string]bool{"started": true, "in_review": true, "merged": true, "closed": true}
+var trackerEvents = map[string]bool{"started": true, "in_review": true, "merged": true, "closed": true, "qa_passed": true}
 
 type Resolved struct {
 	WIPCap int
@@ -53,11 +53,23 @@ type Resolved struct {
 	// applies to the Repo.
 	Bar    lifecycle.LandingBar
 	Stages map[lifecycle.Stage]StageConfig
+	// QA is the Repo's [qa] layers.
+	QA QA
 	// Claude is the absolute path of the claude binary.
 	Claude string
 }
 
 type StageConfig struct{ Model, Effort, Skill, Command string }
+
+// QA is a Repo's resolved [qa] layers. With Enabled, each merge of a build
+// Task adds a QA Task (PROD-QA-001). MaxWait is the longest that a QA Task
+// waits for a verdict (PROD-QA-008).
+type QA struct {
+	Enabled bool
+	MaxWait time.Duration
+}
+
+const defaultMaxWait = 48 * time.Hour
 
 func (r Resolved) Policy() lifecycle.Policy {
 	return lifecycle.Policy{Budgets: r.Budgets, Bar: r.Bar}
@@ -106,6 +118,35 @@ func (f *landingBarFile) apply(b *lifecycle.LandingBar) error {
 	return nil
 }
 
+// qaFile is a [qa] table. The table of a layer holds enabled and max_wait,
+// and the top-level table holds only slots (PROD-CONFIG-003).
+type qaFile struct {
+	Enabled *bool   `toml:"enabled"`
+	MaxWait *string `toml:"max_wait"`
+	Slots   *int    `toml:"slots"`
+}
+
+// checkTop refuses a key of a layer's [qa] table in the top-level table.
+func (f qaFile) checkTop() error {
+	switch {
+	case f.Enabled != nil:
+		return errors.New("qa.enabled belongs in the [qa] table of [defaults] or of a Repo")
+	case f.MaxWait != nil:
+		return errors.New("qa.max_wait belongs in the [qa] table of [defaults] or of a Repo")
+	case f.Slots != nil && *f.Slots < 1:
+		return errors.New("qa.slots: slots must be at least 1")
+	}
+	return nil
+}
+
+func parseMaxWait(s string) (time.Duration, error) {
+	d, err := time.ParseDuration(s)
+	if err != nil || d <= 0 {
+		return 0, fmt.Errorf("qa.max_wait %q must be a duration above 0, such as 48h", s)
+	}
+	return d, nil
+}
+
 type stageFile struct {
 	Model   *string `toml:"model"`
 	Effort  *string `toml:"effort"`
@@ -121,6 +162,7 @@ type layer struct {
 	ReviewBot    *reviewBotFile       `toml:"review_bot"`
 	LandingBar   *landingBarFile      `toml:"landing_bar"`
 	Stage        map[string]stageFile `toml:"stage"`
+	QA           *qaFile              `toml:"qa"`
 }
 
 // layerKeys are the keys of a layer.
@@ -140,9 +182,10 @@ type repoTable struct {
 	Prefix string `toml:"prefix"`
 }
 
-// ReservedPrefixes start the IDs that lineup gives without a Repo prefix:
-// LOCAL-<n> Local Issues, AH-<n> ad hoc Tasks, and PR-<n> review Tasks.
-var ReservedPrefixes = []string{"local", "ah", "pr"}
+// ReservedPrefixes start the IDs that lineup gives itself: LOCAL-<n> Local
+// Issues, AH-<n> ad hoc Tasks, PR-<n> review Tasks, and QA-<build ID> QA
+// Tasks (PROD-TRACK-015).
+var ReservedPrefixes = []string{"local", "ah", "pr", "qa"}
 
 var prefixForm = regexp.MustCompile(`^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`)
 
@@ -183,6 +226,8 @@ type globalFile struct {
 		Slots  *int        `toml:"slots"`
 		Queues []queueFile `toml:"queues"`
 	} `toml:"review"`
+	// QA is the top-level [qa] table, which holds only slots.
+	QA     qaFile     `toml:"qa"`
 	Board  boardFile  `toml:"board"`
 	Merged mergedFile `toml:"merged"`
 	Layout layoutFile `toml:"layout"`
@@ -315,6 +360,15 @@ func (g *Global) ReviewQueues() []ReviewQueue {
 	return out
 }
 
+// QASlots is how many QA Tasks can be in Verifying at one time, or 0 for no
+// cap when qa.slots is not set (PROD-QA-007).
+func (g *Global) QASlots() int {
+	if g.file.QA.Slots == nil {
+		return 0
+	}
+	return *g.file.QA.Slots
+}
+
 // CloseMergedTab reports whether lineup closes a build Task's tab when its PR
 // merges, once the Worker is idle.
 func (g *Global) CloseMergedTab() bool { return g.file.Merged.CloseTab }
@@ -414,6 +468,9 @@ func parseGlobal(globalPath, data string) (*Global, error) {
 		}
 	}
 	if err := validateReview(g.file.Review.Queues, g.file.Review.Slots); err != nil {
+		return nil, fmt.Errorf("%s: %w", globalPath, err)
+	}
+	if err := g.file.QA.checkTop(); err != nil {
 		return nil, fmt.Errorf("%s: %w", globalPath, err)
 	}
 	if err := g.file.Merged.check(); err != nil {
@@ -529,7 +586,9 @@ func (g *Global) checkPrefixes(teamKeys []string) error {
 		case strings.HasSuffix(key, "/*"):
 			return fmt.Errorf("%s needs an owner/repo key, the key of one Repo", where)
 		case slices.Contains(ReservedPrefixes, p):
-			return fmt.Errorf("%s is reserved: lineup uses %s for IDs without a Repo prefix", where, strings.ToUpper(strings.Join(ReservedPrefixes, ", ")))
+			return fmt.Errorf("%s is reserved: lineup starts its own IDs with %s", where, strings.ToUpper(strings.Join(ReservedPrefixes, ", ")))
+		case strings.HasPrefix(p, "qa-"):
+			return fmt.Errorf("%s starts with QA-, which starts the ID of each QA Task", where)
 		case teams[p]:
 			return fmt.Errorf("%s equals a Linear team key, so its IDs would read as Linear IDs", where)
 		}
@@ -710,6 +769,16 @@ func (g *Global) validate(l *layer, where string) error {
 			return fmt.Errorf("%s: %w", where, err)
 		}
 	}
+	if q := l.QA; q != nil {
+		if q.Slots != nil {
+			return fmt.Errorf("%s: qa.slots belongs in the top-level [qa] table", where)
+		}
+		if q.MaxWait != nil {
+			if _, err := parseMaxWait(*q.MaxWait); err != nil {
+				return fmt.Errorf("%s: %w", where, err)
+			}
+		}
+	}
 	for key := range l.Stage {
 		if key == "default" {
 			continue
@@ -820,6 +889,7 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 		PR:           true,
 		PollInterval: defaultPollInterval,
 		Budgets:      lifecycle.Budgets{CIDebug: 3, Responding: 3},
+		QA:           QA{MaxWait: defaultMaxWait},
 	}
 
 	var bot reviewBotFile
@@ -845,6 +915,14 @@ func (g *Global) Resolve(repoPath string, overrides map[string]string) (Resolved
 			}
 			if b.Responding != nil {
 				res.Budgets.Responding = *b.Responding
+			}
+		}
+		if q := l.QA; q != nil {
+			if q.Enabled != nil {
+				res.QA.Enabled = *q.Enabled
+			}
+			if q.MaxWait != nil {
+				res.QA.MaxWait, _ = parseMaxWait(*q.MaxWait)
 			}
 		}
 	}

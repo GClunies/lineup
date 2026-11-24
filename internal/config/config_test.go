@@ -97,12 +97,12 @@ func TestMissingFileMeansDefaults(t *testing.T) {
 		t.Errorf("budgets = %+v", r.Budgets)
 	}
 	want := StageConfig{Model: "claude-opus-5-5", Effort: "high"}
-	for _, st := range []lifecycle.Stage{lifecycle.Working, lifecycle.CIDebug, lifecycle.Responding, lifecycle.Reviewing} {
+	for _, st := range []lifecycle.Stage{lifecycle.Working, lifecycle.CIDebug, lifecycle.Responding, lifecycle.Reviewing, lifecycle.Verifying} {
 		if r.Stages[st] != want {
 			t.Errorf("%s = %+v", st, r.Stages[st])
 		}
 	}
-	if len(r.Stages) != 4 || r.Claude != bin {
+	if len(r.Stages) != 5 || r.Claude != bin {
 		t.Errorf("stages %d claude %v", len(r.Stages), r.Claude)
 	}
 }
@@ -1044,7 +1044,7 @@ func TestThePrefixKeyRefusesABadPrefix(t *testing.T) {
 		{hod + "prefix = \"eng\"\n[repos.\"acme/data\"]\nteams = [\"ENG\"]\ntracker = \"linear\"", `repos."GClunies/hod": prefix "ENG" equals a Linear team key`},
 		{hod + "prefix = \"data\"\n[repos.\"acme/data\"]\nteams = [\"DATA\"]\ntracker = \"linear\"", `repos."GClunies/hod": prefix "DATA" equals a Linear team key`},
 		{hod + "prefix = \"DATA\"\n[repos.\"acme/data\"]\nteams = [\"data\"]\ntracker = \"linear\"", `repos."GClunies/hod": prefix "DATA" equals a Linear team key`},
-		{hod + `prefix = "local"`, `prefix "LOCAL" is reserved: lineup uses LOCAL, AH, PR for IDs without a Repo prefix`},
+		{hod + `prefix = "local"`, `prefix "LOCAL" is reserved: lineup starts its own IDs with LOCAL, AH, PR, QA`},
 		{hod + `prefix = "Ah"`, `prefix "AH" is reserved`},
 		{hod + `prefix = "PR"`, `prefix "PR" is reserved`},
 		{"[repos.\"GClunies/*\"]\nprefix = \"gc\"", `repos."GClunies/*": prefix "GC" needs an owner/repo key, the key of one Repo`},
