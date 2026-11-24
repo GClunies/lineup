@@ -60,7 +60,11 @@ type PR struct {
 	CheckRuns []lifecycle.Check
 	// ChecksDue is true when the head has no checks yet and the base branch has some.
 	ChecksDue bool
-	Threads   []Thread
+	// MergeCommit and MergedAt are the commit and the time of the merge, on a
+	// merged PR only. A QA Task checks out the merge commit (ARCH-QA-005).
+	MergeCommit string
+	MergedAt    time.Time
+	Threads     []Thread
 	// ThreadsOver is true when the PR has more review threads than the poll reads.
 	ThreadsOver bool
 	// Remarks are the newest comments outside review threads that can ask
@@ -109,6 +113,7 @@ func (c *Client) Viewer(ctx context.Context) (string, error) {
 const prFields = `
 fragment F on PullRequest {
   number url state isDraft headRefOid mergeStateStatus reviewDecision
+  mergeCommit { oid } mergedAt
   reviewRequests { totalCount }
   latestReviews(first: 50) { nodes { author { __typename login } state submittedAt } }
   commits(last: 100) { totalCount nodes { commit { author { user { login } } } } }
@@ -193,18 +198,38 @@ type gqlComment struct {
 	Body   string    `json:"body"`
 }
 
+type gqlCommit struct {
+	Oid string `json:"oid"`
+}
+
+// merge is the commit and the time of a PR's merge, or zeros for a PR that
+// did not merge.
+func merge(c *gqlCommit, at *time.Time) (string, time.Time) {
+	var oid string
+	var t time.Time
+	if c != nil {
+		oid = c.Oid
+	}
+	if at != nil {
+		t = *at
+	}
+	return oid, t
+}
+
 type gqlRollup struct {
 	State string `json:"state"`
 }
 
 type gqlPR struct {
-	Number           int    `json:"number"`
-	URL              string `json:"url"`
-	State            string `json:"state"`
-	IsDraft          bool   `json:"isDraft"`
-	HeadRefOid       string `json:"headRefOid"`
-	MergeStateStatus string `json:"mergeStateStatus"`
-	ReviewDecision   string `json:"reviewDecision"`
+	Number           int        `json:"number"`
+	URL              string     `json:"url"`
+	State            string     `json:"state"`
+	IsDraft          bool       `json:"isDraft"`
+	HeadRefOid       string     `json:"headRefOid"`
+	MergeStateStatus string     `json:"mergeStateStatus"`
+	ReviewDecision   string     `json:"reviewDecision"`
+	MergeCommit      *gqlCommit `json:"mergeCommit"`
+	MergedAt         *time.Time `json:"mergedAt"`
 	ReviewRequests   struct {
 		TotalCount int `json:"totalCount"`
 	} `json:"reviewRequests"`
@@ -390,6 +415,7 @@ func (g gqlPR) toPR() *PR {
 		ReviewRequests:   g.ReviewRequests.TotalCount,
 		CommitCount:      g.Commits.TotalCount,
 	}
+	pr.MergeCommit, pr.MergedAt = merge(g.MergeCommit, g.MergedAt)
 	for _, r := range g.LatestReviews.Nodes {
 		rv := Review{State: r.State, SubmittedAt: r.SubmittedAt}
 		if r.Author != nil {

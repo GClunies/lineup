@@ -199,6 +199,18 @@ func TestMerged(t *testing.T) {
 	check(t, Signals(open, changed, "v"), sigs(lifecycle.PRMerged{}))
 }
 
+// The branch poll reads the merge commit and the merge time of a merged PR,
+// for its QA Task (ARCH-QA-005). An open PR has neither.
+func TestAMergedPRGivesItsMergeCommit(t *testing.T) {
+	merged := load(t, "merged")
+	if merged.MergeCommit != "93d24ce9ffefb6cc86bde89b50271457bb0ef9cb" || !merged.MergedAt.Equal(time.Date(2026, 10, 27, 14, 38, 50, 0, time.UTC)) {
+		t.Fatalf("merge = %q at %v", merged.MergeCommit, merged.MergedAt)
+	}
+	if open := load(t, "pending"); open.MergeCommit != "" || !open.MergedAt.IsZero() {
+		t.Fatalf("an open PR has merge %q at %v", open.MergeCommit, open.MergedAt)
+	}
+}
+
 func TestAClosedPRSendsPRClosedOnEveryPoll(t *testing.T) {
 	open := load(t, "pending")
 	closed := clone(open)
