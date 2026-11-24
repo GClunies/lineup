@@ -29,3 +29,7 @@ The lineup actions in Rex's palette need a Rex server at API revision 17 or late
 ## PROD-PALETTE-007: lineup leaves the user's own Rex files alone
 
 lineup never edits Rex's init file and owns no key binding. Each time lineup opens the Hub, it writes its own file of palette actions beside Rex's init file, so an edit to that file is lost. The user adds `require("lineup")` to Rex's init file once to load the actions. The user binds a key to an action by its name there.
+
+## PROD-PALETTE-008: The palette opens the config panel
+
+Configure lineup… in Rex's palette opens `lineup config` in a new tab of the session where the user opened the palette. The tab closes when the user quits the panel.

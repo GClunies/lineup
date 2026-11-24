@@ -100,6 +100,10 @@ _Avoid_: Dashboard, kanban, inbox
 A Done Task that the user hid from the Board. Archiving closes the Task's tab and removes its worktree, if they are still there. Its record and events stay in the store.
 _Avoid_: Deleted, removed
 
+**Config panel**:
+The screen of `lineup config`: the settings of the config file as a tree of groups with plain names, on a Global tab and a Repo tab. Each setting shows the value that applies and the level that sets it. The selected setting shows its value at each level, from the default up. The panel changes one key at a time.
+_Avoid_: Settings page, config editor
+
 **Hub**:
 The Rex session `my-lineup` of lineup's own tab, also `my-lineup`. The tab holds the Board and the Orchestrator in the `LINEUP` pane. The `agent_side` and `agent_size` keys of the `[layout]` table set the side and the share of the tab for the `LINEUP` pane. The Orchestrator is the one agent for the Board.
 _Avoid_: Home, control tab
@@ -159,7 +163,7 @@ The Stage where a PR that meets its Landing bar waits for the user to merge it. 
 _Avoid_: Mergeable, approved
 
 **Landing bar**:
-What a PR must meet for its build Task to be in Ready to land: the required checks pass, the review bot's score meets the minimum, every review thread is done, no Feedback is new, and the required reviews approve. A Repo's `[landing_bar]` table can change each item. A Task keeps the Landing bar that it had at Intake.
+What a PR must meet for its build Task to be in Ready to land: the required checks pass, the review bot's score meets the minimum, every review thread is done, no Feedback is new, and the required reviews approve. A Repo's `[landing_bar]` table can change each item. A Task keeps the Landing bar that it had at Intake. The config panel names its group Merge requirements.
 _Avoid_: Definition of done, merge criteria, readiness
 
 **Standing**:
@@ -183,7 +187,7 @@ A reply to a person's Review thread or Feedback that a Worker wrote and that wai
 _Avoid_: Pending reply, proposed comment, suggestion
 
 **Loop budget**:
-The most automatic attempts that a Stage gets before the Task gets the Needs you flag, for example 3 CI debug attempts. A lost Worker spends no budget, because lineup opens no tab by itself.
+The most automatic attempts that a Stage gets before the Task gets the Needs you flag, for example 3 CI debug attempts. A lost Worker spends no budget, because lineup opens no tab by itself. The config panel calls the budget of CI debug the CI loop, and the budget of Responding the Reply loop.
 _Avoid_: Retry limit, max attempts
 
 **Review bot**:
@@ -197,5 +201,11 @@ _Avoid_: Bot round, greploop, review round
 ### Capacity
 
 **WIP cap**:
-The most started Tasks, from Working through Ready to land, that can exist at one time. To start a Task past it, the user must confirm or raise the cap.
+The most started Tasks, from Working through Ready to land, that can exist at one time. To start a Task past it, the user must confirm or raise the cap. The config panel calls it Build Tasks at once.
 _Avoid_: Lane count, concurrency limit
+
+### Configuration
+
+**Key catalog**:
+The one list of every key of the config file: its path, its group and plain label, the levels where it can sit, its type, its allowed values, its default, a one-line doc, and the restart that a change needs, with a one-line doc for each top group. The config panel and `lineup config keys` show it.
+_Avoid_: Schema, key list, settings registry

@@ -21,8 +21,8 @@ const (
 // error names them.
 var agentSides = []AgentSide{AgentLeft, AgentRight, AgentTop, AgentBottom}
 
-// The bounds of layout.agent_size, a percent of the tab.
-const minAgentSize, maxAgentSize = 10, 90
+// The bounds and the default of layout.agent_size, a percent of the tab.
+const minAgentSize, maxAgentSize, defaultAgentSize = 10, 90, 50
 
 // Layout is the split of the Hub's my-lineup tab. AgentSize is the LINEUP
 // pane's percent of the tab's width for left or right, or of its height for
@@ -42,7 +42,7 @@ type layoutFile struct {
 // resolve is the table's layout, by default left and 50. The error names
 // the bad key.
 func (f layoutFile) resolve() (Layout, error) {
-	l := Layout{AgentSide: AgentLeft, AgentSize: 50}
+	l := Layout{AgentSide: AgentLeft, AgentSize: defaultAgentSize}
 	if s := f.AgentSide; s != nil {
 		if !slices.Contains(agentSides, *s) {
 			names := make([]string, len(agentSides))

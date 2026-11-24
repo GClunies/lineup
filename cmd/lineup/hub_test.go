@@ -761,7 +761,8 @@ func TestConfigMigrateRewritesTheConfigFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := cmdConfig([]string{"migrate"}, &out); err != nil {
+	noPanel := func() error { t.Fatal("lineup config migrate opened the panel"); return nil }
+	if err := cmdConfig([]string{"migrate"}, &out, noPanel); err != nil {
 		t.Fatal(err)
 	}
 	if want := "Rewrote " + path + ". The old file is " + path + ".bak."; !strings.HasPrefix(out.String(), want) {
@@ -770,8 +771,8 @@ func TestConfigMigrateRewritesTheConfigFile(t *testing.T) {
 	if got, _ := os.ReadFile(path); string(got) != "[defaults.budgets]\nci_debug = 2\n" {
 		t.Errorf("config file:\n%s", got)
 	}
-	if err := cmdConfig(nil, &out); !errors.Is(err, errUsage) {
-		t.Errorf("lineup config with no sub-command: %v, want a usage error", err)
+	if err := cmdConfig([]string{"migrate", "now"}, &out, noPanel); !errors.Is(err, errUsage) {
+		t.Errorf("lineup config migrate now: %v, want a usage error", err)
 	}
 }
 

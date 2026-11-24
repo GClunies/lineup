@@ -442,3 +442,31 @@ rex.action{
     return { task = task.id, model = model, out = lineup({ "set", task.id, "model=" .. model }) }
   end,
 }
+
+rex.action{
+  name = "lineup_config",
+  title = "Configure lineup…",
+  description = "Open the lineup config panel in a new tab.",
+  category = "Lineup",
+  keywords = "lineup config configure settings preferences",
+  run = function(ctx, args)
+    if ctx.session_id == nil then
+      error("open the palette in a Rex session to open the panel", 0)
+    end
+    local r, err = rex.call("session.new_window", {
+      session_id = ctx.session_id,
+      window_label = "lineup config",
+      layout = {
+        block = {
+          flavor = "com.superlogical.terminal.shell",
+          label = "CONFIG",
+          options = { command = { LINEUP, "config" } },
+        },
+      },
+    })
+    if r == nil then
+      error(err, 0)
+    end
+    return { window = r.window_id }
+  end,
+}

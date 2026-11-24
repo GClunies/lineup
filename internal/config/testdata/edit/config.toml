@@ -1,0 +1,76 @@
+# lineup reads this file when it starts.
+roots = ["~/repos"]
+start_skills = ["kit:tdd"]
+local_tracker = false
+
+[defaults]
+# Five build Tasks at once.
+wip_cap = 5
+poll_interval = "30s"
+
+[defaults.budgets]
+ci_debug = 3
+responding = 3
+
+[defaults.stage.default]
+model = "claude-opus-5-5"
+effort = "high"
+skill = "kit:tdd"
+
+[repos."acme/*"]
+tracker = "linear"
+
+# The review bot reviews only these Repos.
+[repos."acme/api"]
+teams = ["ENG"]
+tracker = "linear"
+[repos."acme/api".review_bot]
+name = "greptile"
+min_review_score = 4
+max_review_cycles = 5
+
+[repos."acme/web"]
+[repos."acme/web".review_bot]
+name = "greptile"
+
+
+[repos."octo/tools"]
+prefix = "ot"
+tracker = "github"
+
+# Personal Repos track Issues in GitHub. lineup keeps one
+# lifecycle label on each Issue.
+[github.labels]
+started = "in progress"
+in_review = "in review"
+
+[linear.acme]
+client_id = "test-client-id" # acme allows only the apps that it registered
+
+[linear.acme.status.ENG]
+started = "In Development"
+
+# At most 5 queue reviews run at once. Queues fill in config order.
+[review]
+slots = 5
+
+[[review.queues]]
+name = "ENG teammates"
+repo = ["acme/api"]
+author = ["teammate-one", "teammate-two"]
+
+[[review.queues]]
+name = "acme/api"
+repo = ["acme/api"]
+exclude_regex = "WIP-"
+
+# Board sections: order, which start closed, and which are hidden.
+[board]
+order = ["needs_you", "working", "waiting", "up_next", "team", "backlog", "done"]
+collapsed = ["backlog", "team", "done"] # start closed
+hidden = []
+
+# The LINEUP pane takes 40 percent of the tab, on the left.
+[layout]
+agent_side = "left"
+agent_size = 40

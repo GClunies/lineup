@@ -113,19 +113,6 @@ func cmdNextID(c scheduler.Client, args []string, out io.Writer) error {
 	return nil
 }
 
-// cmdConfig rewrites the config file in its current form.
-func cmdConfig(args []string, out io.Writer) error {
-	if len(args) != 1 || args[0] != "migrate" {
-		return fmt.Errorf("%w: lineup config migrate", errUsage)
-	}
-	msg, err := config.Migrate(configPath())
-	if err != nil {
-		return err
-	}
-	fmt.Fprintln(out, msg)
-	return nil
-}
-
 // repoPrefixes reads the Repo prefixes from the config file. A file that
 // does not load names none.
 func repoPrefixes() []string {
