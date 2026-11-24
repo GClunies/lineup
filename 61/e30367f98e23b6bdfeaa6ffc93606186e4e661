@@ -1,0 +1,25 @@
+docs/product-intent/board.md
+  s_ae201ea39fa684::t_a8eca4823264d0 92-95
+internal/board/run.go
+  s_ae201ea39fa684::t_c2e717eb298422 54-55
+  s_ae201ea39fa684::t_cd26e0aebce067 53,57
+internal/board/status_test.go
+  s_ae201ea39fa684::t_dbccc5a2b86cb1 238
+  s_ae201ea39fa684::t_12396cd30b4dd3 236-237,239-248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "61e30367f98e23b6bdfeaa6ffc93606186e4e661",
+  "prompts": {},
+  "sessions": {
+    "s_ae201ea39fa684": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5d54ed7d-d9d7-4d06-8e73-605a4ab1e373",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    }
+  }
+}
