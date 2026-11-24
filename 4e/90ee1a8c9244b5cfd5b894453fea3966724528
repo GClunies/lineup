@@ -1,0 +1,44 @@
+internal/scheduler/api.go
+  s_a52dd73fdfa48b::t_aaeca28c2e2b0a 57-60
+  s_a52dd73fdfa48b::t_4afdeda72501a8 347-349,353,356-358,365-372
+internal/scheduler/scheduler_test.go
+  s_a52dd73fdfa48b::t_fb1a5e180ef561 593-601
+  s_a52dd73fdfa48b::t_17ebb58715259f 580-581
+cmd/lineup/review_test.go
+  s_a52dd73fdfa48b::t_b9ccf37978a515 334-337,339-345,347-349,351,353-354,357-360
+  s_a52dd73fdfa48b::t_4450892ce1b07f 338
+  s_a52dd73fdfa48b::t_83e402072fe523 350,352,355-356
+  s_a52dd73fdfa48b::t_7b7e504d7f931b 346
+internal/worktree/worktree_test.go
+  s_a52dd73fdfa48b::t_25b607c72161ce 140-190
+  s_a52dd73fdfa48b::t_439543eb552b86 11
+internal/worktree/worktree.go
+  s_a52dd73fdfa48b::t_b1f5b16ad19eda 14
+  s_a52dd73fdfa48b::t_2d95ffbce5245c 108-131
+cmd/lineup/wire.go
+  s_a52dd73fdfa48b::t_1b91c3eb24f978 290-297
+cmd/lineup/cli.go
+  s_a52dd73fdfa48b::t_a119e7e6b40a7f 358-363
+internal/scheduler/ports.go
+  s_a52dd73fdfa48b::t_c21c9a80a99c36 147-151
+docs/product-intent/workers.md
+  s_a52dd73fdfa48b::t_6ddb1178385f3b 64-67
+internal/scheduler/api_test.go
+  s_a52dd73fdfa48b::t_d8b945220eb0a4 269-297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4e90ee1a8c9244b5cfd5b894453fea3966724528",
+  "prompts": {},
+  "sessions": {
+    "s_a52dd73fdfa48b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3196c45d-2dbf-4b35-96ce-2d1a87240ac7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
