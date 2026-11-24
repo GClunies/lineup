@@ -198,3 +198,24 @@ func TestEachKeyHasAPlainPlace(t *testing.T) {
 		}
 	}
 }
+
+// TestEachTopGroupHasADoc ties Groups to the catalog: each top group of a key
+// has a doc, and each entry of Groups is a top group.
+func TestEachTopGroupHasADoc(t *testing.T) {
+	tops := []string{DefaultsGroup}
+	for _, k := range Catalog {
+		if !slices.Contains(tops, k.Group[0]) {
+			tops = append(tops, k.Group[0])
+		}
+	}
+	for _, title := range tops {
+		if GroupDoc(title) == "" {
+			t.Errorf("the group %s has no doc", title)
+		}
+	}
+	for _, g := range Groups {
+		if !slices.Contains(tops, g.Title) {
+			t.Errorf("Groups has %s, which is no top group of the catalog", g.Title)
+		}
+	}
+}

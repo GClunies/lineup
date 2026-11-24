@@ -42,6 +42,7 @@ func cmdConfig(args []string, out io.Writer, panel func() error) error {
 // with --repo.
 type configKeys struct {
 	Keys      []config.Key    `json:"keys"`
+	Groups    []config.Group  `json:"groups"`
 	Repo      string          `json:"repo,omitempty"`
 	Settings  []configSetting `json:"settings,omitempty"`
 	LoadError string          `json:"load_error,omitempty"`
@@ -74,7 +75,7 @@ func cmdConfigKeys(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	v := configKeys{Keys: config.Catalog, Repo: *repo}
+	v := configKeys{Keys: config.Catalog, Groups: config.Groups, Repo: *repo}
 	if f.LoadErr != nil {
 		v.LoadError = f.LoadErr.Error()
 	}

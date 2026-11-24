@@ -629,3 +629,31 @@ func TestAGroupNamesThePlaceThatSetsAllOfItsSettings(t *testing.T) {
 		t.Errorf("row %q", got)
 	}
 }
+
+// TestASelectedGroupShowsItsDoc checks the detail of a group: the doc of a
+// top group, then the rows that it holds.
+func TestASelectedGroupShowsItsDoc(t *testing.T) {
+	p := newPanel(t, fixture)
+	p.press("tab")
+	p.toGroup(t, "Merge requirements")
+	for _, want := range []string{"Merge requirements",
+		"What a PR must meet before its Task is Ready to land (the Landing bar). The review bot's score is one more requirement.",
+		"Holds Checks · Review threads · Approvals"} {
+		if !p.has(want) {
+			t.Errorf("the detail has no line %q:\n%s", want, p.view())
+		}
+	}
+	p.toGroup(t, "Workers")
+	p.press("right", "j")
+	if got := p.selLine(t); got != "▸ Every Stage 0 of 4 set built-in" {
+		t.Fatalf("selected %q", got)
+	}
+	if v := p.view(); !p.has("Holds Model · Effort · Skill · First command") || strings.Contains(v, "Every Stage gives each value") {
+		t.Errorf("a subgroup shows a doc:\n%s", v)
+	}
+	p.press("tab")
+	p.toGroup(t, "Defaults for every Repo")
+	if !p.has("The values that every Repo takes when its owner table and its own table do not set the key. The Repo tab shows each level for one Repo.") {
+		t.Errorf("the Global tab shows no doc of its defaults:\n%s", p.view())
+	}
+}

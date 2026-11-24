@@ -203,5 +203,5 @@ _Avoid_: Lane count, concurrency limit
 ### Configuration
 
 **Key catalog**:
-The one list of every key of the config file: its path, its group and plain label, the levels where it can sit, its type, its allowed values, its default, a one-line doc, and the restart that a change needs. The config panel and `lineup config keys` show it.
+The one list of every key of the config file: its path, its group and plain label, the levels where it can sit, its type, its allowed values, its default, a one-line doc, and the restart that a change needs, with a one-line doc for each top group. The config panel and `lineup config keys` show it.
 _Avoid_: Schema, key list, settings registry

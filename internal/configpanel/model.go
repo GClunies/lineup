@@ -101,9 +101,6 @@ type row struct {
 	parent int // the index of the row of the parent group, or -1
 }
 
-// defaultsGroup holds the [defaults] keys on the Global tab.
-const defaultsGroup = "Defaults for every Repo"
-
 type Model struct {
 	opts Options
 	file *config.File
@@ -228,7 +225,7 @@ func (m *Model) flatten(nodes []*node, depth, parent int) {
 // Global tab puts the [defaults] keys in a group of their own.
 func (m Model) crumbs(s config.Setting) []string {
 	if m.tab == tabGlobal && !slices.Contains(s.Key.Levels, config.LevelTop) {
-		return append([]string{defaultsGroup}, s.Group...)
+		return append([]string{config.DefaultsGroup}, s.Group...)
 	}
 	return s.Group
 }

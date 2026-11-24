@@ -63,6 +63,7 @@ func configKeysOf(t *testing.T, text string, args ...string) string {
 // keysJSON is what the Orchestrator reads from lineup config keys --json.
 type keysJSON struct {
 	Keys      []keyJSON       `json:"keys"`
+	Groups    []config.Group  `json:"groups"`
 	Repo      string          `json:"repo"`
 	Settings  []configSetting `json:"settings"`
 	LoadError string          `json:"load_error"`
@@ -108,6 +109,9 @@ func TestConfigKeysListsEveryKey(t *testing.T) {
 		if got := v.Keys[i]; got.Path != k.Path || !slices.Equal(got.Group, k.Group) || got.Label != k.Label || !slices.Equal(got.Levels, levels) || got.Restart != k.Restart {
 			t.Errorf("key %d = %+v, want %s, %q %s, at %q", i, got, k.Path, k.Group, k.Label, levels)
 		}
+	}
+	if i := slices.IndexFunc(v.Groups, func(g config.Group) bool { return g.Title == "Merge requirements" }); i < 0 || !strings.Contains(v.Groups[i].Doc, "Landing bar") {
+		t.Errorf("--json groups = %+v, want the doc of Merge requirements", v.Groups)
 	}
 	if i := slices.IndexFunc(v.Keys, func(k keyJSON) bool { return k.Path == "wip_cap" }); i < 0 || !slices.Equal(v.Keys[i].Levels, []string{"[defaults]", "owner/*", "owner/repo"}) {
 		t.Errorf("wip_cap does not name its levels as the file writes them")

@@ -78,6 +78,45 @@ type Key struct {
 	Restart string `json:"restart"`
 }
 
+// Group is a top group of the config panel, and its doc: what the group is,
+// and how it relates to the other groups.
+type Group struct {
+	Title string `json:"title"`
+	Doc   string `json:"doc"`
+}
+
+// DefaultsGroup holds the [defaults] keys on the Global tab of the panel.
+const DefaultsGroup = "Defaults for every Repo"
+
+// Groups lists each top group of the catalog, and DefaultsGroup, in the
+// order of the panel. A test ties it to the groups of the catalog.
+var Groups = []Group{
+	{"Folders and skills", "Where lineup finds your checkouts, and the skills that the Board offers when it starts a Task."},
+	{"Local Tracker", "The Tracker whose Issues are files on this machine. Each Repo picks its one Tracker under Repo on the Repo tab."},
+	{"Linear", "How lineup signs in to Linear, and the status that it gives a Linear Issue at each lifecycle event. Each Repo picks its Linear teams on the Repo tab."},
+	{"GitHub labels", "The labels that lineup puts on a GitHub Issue at each lifecycle event, and the label that puts an Issue in Backlog."},
+	{"Review queues", "The PR filters whose PRs lineup reviews without being asked, and how many review Tasks run at one time. Build Tasks have their own cap under Capacity."},
+	{"Board and Hub layout", "The order of the Board's sections, the sections that start closed or out of sight, and the place of the LINEUP pane."},
+	{DefaultsGroup, "The values that every Repo takes when its owner table and its own table do not set the key. The Repo tab shows each level for one Repo."},
+	{"Repo", "The Tracker that gives the Repo its Issues, the Linear teams that map to it, and the prefix of its own IDs."},
+	{"Capacity", "How many build Tasks run at one time (the WIP cap), and how often the Scheduler polls."},
+	{"Loop budgets", "How many automatic rounds a Task gets before it goes to Needs you. The review bot's cycles are under Review bot."},
+	{"Review bot", "The review bot whose score is one more Merge requirement, and how many review cycles a Task gets to meet it."},
+	{"Merge requirements", "What a PR must meet before its Task is Ready to land (the Landing bar). The review bot's score is one more requirement."},
+	{"After a merge", "What lineup does with the tab and the worktree of a build Task after its PR merges."},
+	{"Workers", "The model, effort, and skill of the Worker in each Stage. Every Stage gives each value that a Stage does not set."},
+}
+
+// GroupDoc is the doc of the top group with the title, or "".
+func GroupDoc(title string) string {
+	for _, g := range Groups {
+		if g.Title == title {
+			return g.Doc
+		}
+	}
+	return ""
+}
+
 var (
 	top         = []Level{LevelTop}
 	layerLevels = []Level{LevelDefaults, LevelOwner, LevelRepo}

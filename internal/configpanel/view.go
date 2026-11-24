@@ -281,7 +281,8 @@ func (m Model) levelNote(w config.Where) string {
 	return ""
 }
 
-// detail describes the selected row. A group names the rows that it holds.
+// detail describes the selected row. A group gives its doc, when it is a top
+// group, and names the rows that it holds (PROD-CONFIG-014).
 // A setting gives its doc, its value at each level with the one that
 // applies, the key as the file writes it where enter sets it, and the
 // restart that a change needs (PROD-CONFIG-012).
@@ -309,7 +310,11 @@ func (m Model) detailOf(r *node) []string {
 		for _, k := range r.kids {
 			titles = append(titles, k.title)
 		}
-		return stack(bold.Render(" "+r.id), m.wrap(dim, "Holds "+strings.Join(titles, " · ")))
+		var doc []string
+		if d := config.GroupDoc(r.id); d != "" {
+			doc = m.wrap(lipgloss.NewStyle(), d)
+		}
+		return stack(bold.Render(" "+r.id), doc, m.wrap(dim, "Holds "+strings.Join(titles, " · ")))
 	}
 	s := *r.set
 	crumbs := slices.Concat(m.crumbs(s), []string{s.Label})

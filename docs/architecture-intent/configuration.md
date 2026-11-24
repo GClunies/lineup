@@ -46,7 +46,7 @@ Not: nested queue sources, as one queue with ordered sources.
 
 ## ARCH-CONFIG-008: One key catalog describes every key
 
-The config package holds one key catalog: the path, the group, the plain label, the levels, the type, the allowed values, the default, the doc, and the restart of each key. The panel and `lineup config keys` read only the catalog. The catalog takes each list of allowed values from the code that checks it. A test ties the catalog to the decoder of the loader. A key with no entry, an entry with no key, an entry with no group or label, and an entry at a level where the loader does not read it fail the test.
+The config package holds one key catalog: the path, the group, the plain label, the levels, the type, the allowed values, the default, the doc, and the restart of each key. It also gives each top group a doc. The panel and `lineup config keys` read only it. Each list of allowed values comes from the code that checks it. A test ties the catalog to the loader's decoder. A key with no entry, an entry with no key, group, or label, a top group with no doc, and an entry at a level that the loader skips fail the test.
 
 Because: a second list of keys drifts from the loader.
 

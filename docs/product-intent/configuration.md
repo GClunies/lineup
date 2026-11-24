@@ -44,7 +44,7 @@ After a save, the panel names the restart that the change needs: `lineup restart
 
 ## PROD-CONFIG-011: lineup config keys lists every key
 
-`lineup config keys` lists every key of the config file with its levels, its type, its allowed values, its default, its doc, and the restart that a change needs. `--json` prints the list as JSON. `--repo <owner>/<repo>` adds the value that applies to the Repo and the level that sets it. The list works on a file that does not load, and `--json` then names the load error.
+`lineup config keys` lists every key of the config file with its levels, its type, its allowed values, its default, its doc, and the restart that a change needs. `--json` prints the list as JSON, with the doc of each group of the panel. `--repo <owner>/<repo>` adds the value that applies to the Repo and the level that sets it. The list works on a file that does not load, and `--json` then names the load error.
 
 ## PROD-CONFIG-012: The panel shows the value of a setting at each level
 
@@ -53,3 +53,7 @@ The selected setting in the config panel shows its doc and one line for each lev
 ## PROD-CONFIG-013: The panel names each level in plain words
 
 The config panel names each level by a plain name: `built-in` for the default, `your file` for the top level, `all Repos` for `[defaults]`, `all <owner> Repos` for the owner table, and `this Repo` for the Repo table. A Stage key that takes the value of `[stage.default]` adds `Every Stage`, as in `all Repos, Every Stage`. A line below the tabs names the levels of the tab in order, and the last level that sets a value wins. The level picker uses the same names.
+
+## PROD-CONFIG-014: A selected group says what it is
+
+The selected top group in the config panel shows a one-line doc above the rows that it holds. The doc names what the group is and how it relates to the other groups. For example, Merge requirements is the Landing bar, and the review bot's score is one more requirement.
