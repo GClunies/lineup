@@ -1,0 +1,45 @@
+internal/config/catalog.go
+  s_3f62d37256047d::t_84f5a57b240080 81-105,107-119
+  s_3f62d37256047d::t_7967306443fb36 106
+internal/configpanel/model_test.go
+  s_3f62d37256047d::t_3fadb54dc2efa6 632-659
+internal/config/catalog_test.go
+  s_3f62d37256047d::t_5e5f76afdd7fcd 201-221
+cmd/lineup/config_test.go
+  s_3f62d37256047d::t_f9f3d31f1e2d8a 113-115
+  s_3f62d37256047d::t_18b4e38dd03ba3 66
+cmd/lineup/config.go
+  s_3f62d37256047d::t_660737ecdb09c4 45
+  s_3f62d37256047d::t_2d17e467bb70c6 78
+docs/architecture-intent/configuration.md
+  s_3f62d37256047d::t_4383d1c0f6692e 49
+internal/configpanel/model.go
+  s_3f62d37256047d::t_2f16953b807965 228
+cmd/lineup/agent/CLAUDE.md
+  s_3f62d37256047d::t_243026250cedc3 88
+internal/configpanel/view.go
+  s_3f62d37256047d::t_a46d6f9124c996 313,315-317
+  s_3f62d37256047d::t_8271ba7214c491 314
+  s_3f62d37256047d::t_c8b43de0e41030 284-285
+docs/product-intent/configuration.md
+  s_3f62d37256047d::t_a6b83b1ce34a68 56-59
+  s_3f62d37256047d::t_25869ad1c66abb 47
+GLOSSARY.md
+  s_3f62d37256047d::t_bbc8fd81e41619 206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "be36660a5510e58d55507cdf1a073a22fdf0e2af",
+  "prompts": {},
+  "sessions": {
+    "s_3f62d37256047d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "918a36da-c6bf-4dae-acbd-698584050738",
+        "model": "unknown"
+      },
+      "human_author": null
+    }
+  }
+}
