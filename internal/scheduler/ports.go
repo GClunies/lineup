@@ -302,6 +302,20 @@ type Config interface {
 	// SetUp reports whether the Repo has its own [repos."owner/repo"]
 	// table, which a build Task needs, and the Repo's owner/repo key.
 	SetUp(repo string) (key string, ok bool)
+	// Merged is what lineup does after the PR of a build Task in the Repo
+	// merges, from the Repo's [merged] tables and the Task's overrides. An
+	// error comes with a value that the caller can still use: the value of
+	// the tables, without the bad override.
+	Merged(repo string, overrides map[string]string) (Merged, error)
+}
+
+// Merged is what lineup does with a build Task's tab and worktree after its
+// PR merges.
+type Merged struct {
+	// CloseTab closes the tab once the Worker is not busy.
+	CloseTab bool
+	// KeepWorktree is how long lineup keeps the worktree after the tab's close.
+	KeepWorktree time.Duration
 }
 
 // LocalIssues is the Local Tracker's folder, as the ad hoc Task IDs need it.

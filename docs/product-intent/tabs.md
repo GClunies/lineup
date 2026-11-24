@@ -28,7 +28,7 @@ When the user closes a Done Task, lineup removes the Task's clean worktree at on
 
 ## PROD-TABS-007: lineup can close the tab of a merged Task when its Worker is idle
 
-With `close_tab = true` in the `[merged]` table of the config file, lineup closes the tab of each build Task that merges, once its Worker reports `idle` or `done`, or exits. It also removes the Repo session when the close leaves it empty. It keeps the worktree for `keep_worktree_days`, 0 to 30 and 7 by default, from the tab's close, or from the merge with no tab. Then it removes the worktree, at a poll or at its next start. A tab that is gone at the Scheduler's start keeps its worktree for the full days. `close_tab` is off by default.
+A `[merged]` table sits in `[defaults]` or in a Repo table, and each of its keys layers on its own. The value for the Task's own Repo applies. With `close_tab = true`, lineup closes the tab of each build Task that merges, once its Worker reports `idle` or `done`, or exits. It also removes the Repo session when the close leaves it empty. `close_tab` is off by default.
 
 ## PROD-TABS-008: lineup never removes a worktree with uncommitted changes
 
@@ -73,3 +73,7 @@ When `lineup` or `lineup restart` must reopen the Hub tab that it runs in, a bac
 ## PROD-TABS-018: The config file sets the split of the Hub tab
 
 `agent_side` in the `[layout]` table puts the `LINEUP` pane on the `left`, `right`, `top`, or `bottom` of the `my-lineup` tab, and the Board takes the other side. `agent_size` gives the pane 10 to 90 percent of the width for `left` or `right`, or of the height for `top` or `bottom`. The defaults are `left` and 50. A new Hub tab and a reopened Hub tab both use the table. A bad value stops the config load.
+
+## PROD-TABS-019: A merged Task whose tab lineup closes keeps its worktree for some days
+
+With `close_tab = true`, lineup keeps the worktree of a merged build Task for `keep_worktree_days`, 0 to 30 and 7 by default. The days count from the tab's close, or from the merge when the Task has no tab. Then lineup removes the worktree, at a poll or at its next start. A tab that is gone at the Scheduler's start keeps its worktree for the full days. The value for the Task's own Repo applies.

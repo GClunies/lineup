@@ -53,11 +53,6 @@ type Deps struct {
 	// PromptWait is how long a Stage prompt waits on a Worker that has sent no
 	// status before the Task gets a flag. 0 means a minute.
 	PromptWait time.Duration
-	// CloseMergedTab is [merged] close_tab: lineup closes a merged build
-	// Task's tab once its Worker is not busy, and keeps the worktree for
-	// KeepWorktree.
-	CloseMergedTab bool
-	KeepWorktree   time.Duration
 }
 
 type RexEventKind int
@@ -300,19 +295,33 @@ func (s *Scheduler) transition(r *Record, ev store.Event, effects []lifecycle.Ef
 	}
 }
 
-// markMerged readies a build Task that just merged for tidy, when [merged]
-// close_tab is on. A tab closes once the Worker is not busy. With no tab, the
-// worktree's days start now.
+// markMerged readies a build Task that just merged for tidy, when close_tab
+// is on for the Task. A tab closes once the Worker is not busy. With no tab,
+// the worktree's days start now.
 func (s *Scheduler) markMerged(r *Record) {
-	if !s.d.CloseMergedTab || r.Review != nil || r.Outcome != lifecycle.OutcomeMerged {
+	if r.Review != nil || r.Outcome != lifecycle.OutcomeMerged {
+		return
+	}
+	m := s.merged(r)
+	if !m.CloseTab {
 		return
 	}
 	switch {
 	case r.WindowID != "":
 		r.CloseAtIdle = true
 	case r.Worktree != "":
-		r.KeepUntil = s.now().Add(s.d.KeepWorktree)
+		r.KeepUntil = s.now().Add(m.KeepWorktree)
 	}
+}
+
+// merged is the [merged] value of the Task's own Repo and overrides. A bad
+// value comes with the value of the file, so lineup warns and acts on it.
+func (s *Scheduler) merged(r *Record) Merged {
+	m, err := s.d.Config.Merged(r.Repo, r.Overrides)
+	if err != nil {
+		s.d.Log.Warn("read merged config", "task", r.ID, "err", err)
+	}
+	return m
 }
 
 // replayPR applies the stored PR's pr-seen, so a Task that enters CI running
@@ -535,7 +544,7 @@ func (s *Scheduler) sessionEmpty(ctx context.Context, session string) bool {
 // closeTab forgets the Task's tab before it closes it, so the tab's close is
 // not read as the user's. Only the user's own act reaches it: a close, an
 // archive, a rerun of a failed setup, a restore of a tab that Rex kept after
-// its program exited, or [merged] close_tab, which the user turned on.
+// its program exited, or close_tab in a [merged] table, which the user turned on.
 func (s *Scheduler) closeTab(ctx context.Context, r Record) {
 	if r.WindowID == "" {
 		return
@@ -1081,7 +1090,7 @@ func (s *Scheduler) tidy() {
 // keepWorktree starts the days of a merged Task's worktree, after lineup
 // closed its tab or Rex lost it.
 func (s *Scheduler) keepWorktree(r *Record, detail string) {
-	r.CloseAtIdle, r.KeepUntil = false, s.now().Add(s.d.KeepWorktree)
+	r.CloseAtIdle, r.KeepUntil = false, s.now().Add(s.merged(r).KeepWorktree)
 	s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: "merged-tab-closed", From: r.Stage.String(), To: r.Stage.String(),
 		Detail: detail + "worktree kept until " + r.KeepUntil.Format(time.RFC3339)})
 }

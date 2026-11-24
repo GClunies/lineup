@@ -761,6 +761,11 @@ func (p configPort) RepoPrefix(repo string) string { return p.cfg.RepoPrefix(rep
 
 func (p configPort) SetUp(repo string) (string, bool) { return p.cfg.SetUp(repo) }
 
+func (p configPort) Merged(repo string, overrides map[string]string) (scheduler.Merged, error) {
+	m, err := p.cfg.Merged(repo, overrides)
+	return scheduler.Merged{CloseTab: m.CloseTab, KeepWorktree: m.KeepWorktree}, err
+}
+
 func (p configPort) RepoForGitHub(slug string) (string, bool) { return p.cfg.CheckoutFor(slug) }
 
 func (p configPort) ResolveRepo(name string) (string, error) { return p.cfg.FindCheckout(name) }

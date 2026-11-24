@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gclunies/lineup/internal/config"
 	"github.com/gclunies/lineup/internal/github"
@@ -130,6 +131,22 @@ func TestAGitHubIssueMapsToTheCheckoutWhoseOriginIsItsRepository(t *testing.T) {
 	want := "no Repo mapping for octo/sandbox#2: 2 checkouts have the key octo/sandbox: " + checkout + " and " + clone
 	if _, err := p.RepoForIssue(context.Background(), scheduler.Issue{Kind: scheduler.KindGitHub, Identifier: "octo/sandbox#2"}); !errors.Is(err, scheduler.ErrNoRepo) || err.Error() != want {
 		t.Fatalf("two clones of the repository: err %v, want %q", err, want)
+	}
+}
+
+// The Scheduler gets each key of [merged] for the Repo, and the error of a
+// bad override with the value of the file.
+func TestMergedComesFromTheTablesOfTheRepo(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	app := gitCheckout(t, filepath.Join(home, "code", "acme", "app"), "git@github.com:acme/app.git")
+	p := configPort{cfg: loadConfig(t, "[defaults.merged]\nkeep_worktree_days = 2\n\n[repos.\"acme/app\".merged]\nclose_tab = true\n")}
+	want := scheduler.Merged{CloseTab: true, KeepWorktree: 2 * 24 * time.Hour}
+	if m, err := p.Merged(app, nil); err != nil || m != want {
+		t.Errorf("Merged = %+v %v, want %+v", m, err, want)
+	}
+	if m, err := p.Merged(app, map[string]string{"close_tab": "maybe"}); err == nil || m != want {
+		t.Errorf("a bad override: %+v %v, want an error and %+v", m, err, want)
 	}
 }
 

@@ -84,8 +84,8 @@ type Record struct {
 	// remove: a review worktree that holds work that is on no remote, or a
 	// build worktree with uncommitted changes.
 	WorktreeKept bool `json:"worktree_kept,omitempty"`
-	// CloseAtIdle is true from a build Task's merge, with [merged] close_tab
-	// on, until lineup closes its tab.
+	// CloseAtIdle is true from a build Task's merge, with close_tab on for
+	// the Task, until lineup closes its tab.
 	CloseAtIdle bool `json:"close_at_idle,omitempty"`
 	// KeepUntil is when lineup removes the worktree of a Done build Task that
 	// has no tab. Zero means no removal is due.
