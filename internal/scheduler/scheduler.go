@@ -53,11 +53,6 @@ type Deps struct {
 	// PromptWait is how long a Stage prompt waits on a Worker that has sent no
 	// status before the Task gets a flag. 0 means a minute.
 	PromptWait time.Duration
-	// CloseMergedTab is [merged] close_tab: lineup closes a merged build
-	// Task's tab once its Worker is not busy, and keeps the worktree for
-	// KeepWorktree.
-	CloseMergedTab bool
-	KeepWorktree   time.Duration
 }
 
 type RexEventKind int
@@ -300,19 +295,33 @@ func (s *Scheduler) transition(r *Record, ev store.Event, effects []lifecycle.Ef
 	}
 }
 
-// markMerged readies a build Task that just merged for tidy, when [merged]
-// close_tab is on. A tab closes once the Worker is not busy. With no tab, the
-// worktree's days start now.
+// markMerged readies a build Task that just merged for tidy, when close_tab
+// is on for the Task. A tab closes once the Worker is not busy. With no tab,
+// the worktree's days start now.
 func (s *Scheduler) markMerged(r *Record) {
-	if !s.d.CloseMergedTab || r.Review != nil || r.Outcome != lifecycle.OutcomeMerged {
+	if r.Review != nil || r.Outcome != lifecycle.OutcomeMerged {
+		return
+	}
+	m := s.merged(r)
+	if !m.CloseTab {
 		return
 	}
 	switch {
 	case r.WindowID != "":
 		r.CloseAtIdle = true
 	case r.Worktree != "":
-		r.KeepUntil = s.now().Add(s.d.KeepWorktree)
+		r.KeepUntil = s.now().Add(m.KeepWorktree)
 	}
+}
+
+// merged is the [merged] value of the Task's own Repo and overrides. A bad
+// value comes with the value of the file, so lineup warns and acts on it.
+func (s *Scheduler) merged(r *Record) Merged {
+	m, err := s.d.Config.Merged(r.Repo, r.Overrides)
+	if err != nil {
+		s.d.Log.Warn("read merged config", "task", r.ID, "err", err)
+	}
+	return m
 }
 
 // replayPR applies the stored PR's pr-seen, so a Task that enters CI running
@@ -535,7 +544,7 @@ func (s *Scheduler) sessionEmpty(ctx context.Context, session string) bool {
 // closeTab forgets the Task's tab before it closes it, so the tab's close is
 // not read as the user's. Only the user's own act reaches it: a close, an
 // archive, a rerun of a failed setup, a restore of a tab that Rex kept after
-// its program exited, or [merged] close_tab, which the user turned on.
+// its program exited, or close_tab in a [merged] table, which the user turned on.
 func (s *Scheduler) closeTab(ctx context.Context, r Record) {
 	if r.WindowID == "" {
 		return
@@ -568,25 +577,30 @@ func (s *Scheduler) cleanup(ctx context.Context, r Record) {
 	s.removeSession(ctx, r)
 }
 
-// removeWorktree removes a build Task's worktree. A worktree with uncommitted
-// changes stays, and tidy tries again at each tick until the user commits or
-// discards them. Any other error changes nothing.
+// removeWorktree removes a build Task's worktree at the path that setup
+// recorded, also after a switch to another branch (ARCH-TREE-006). A worktree
+// that lineup cannot remove stays, with the reason in the note, and tidy tries
+// again at each tick, for example until the user commits or discards the
+// uncommitted changes.
 func (s *Scheduler) removeWorktree(ctx context.Context, r Record) {
-	err := s.d.Worktrees.Remove(ctx, r.Repo, r.Branch)
-	switch {
-	case err == nil:
-		s.update(r.ID, func(r *Record) { r.Worktree, r.WorktreeKept, r.KeepUntil = "", false, time.Time{} })
-	case errors.Is(err, ErrUncommitted):
-		s.d.Log.Warn("keep worktree", "task", r.ID, "err", err)
+	err := s.d.Worktrees.Remove(ctx, r.Repo, r.Branch, r.Worktree)
+	if err == nil {
 		s.update(r.ID, func(r *Record) {
-			r.WorktreeKept = true
-			if r.KeepUntil.IsZero() {
-				r.KeepUntil = s.now()
-			}
+			r.Worktree, r.WorktreeKept, r.WorktreeError, r.KeepUntil = "", false, "", time.Time{}
 		})
-	default:
-		s.d.Log.Error("remove worktree", "task", r.ID, "err", err)
+		return
 	}
+	why := err.Error()
+	if errors.Is(err, ErrUncommitted) {
+		why = ""
+	}
+	s.d.Log.Warn("keep worktree", "task", r.ID, "err", err)
+	s.update(r.ID, func(r *Record) {
+		r.WorktreeKept, r.WorktreeError = true, why
+		if r.KeepUntil.IsZero() {
+			r.KeepUntil = s.now()
+		}
+	})
 }
 
 // removeSession removes the Task's Repo session after the Repo's last
@@ -878,7 +892,9 @@ func (s *Scheduler) pollTasks(ctx context.Context, ids []string) {
 		for key, id := range keys {
 			cur, ok := res[key]
 			r := s.recs[id]
-			if !ok || r == nil {
+			// A PR that ended before the Task began is an earlier Task's
+			// (PROD-LIFE-021).
+			if !ok || r == nil || r.PR == nil && !cur.ClosedAt.IsZero() && cur.ClosedAt.Before(r.CreatedAt) {
 				continue
 			}
 			sigs := s.d.GitHub.Signals(r.PR, &cur)
@@ -1081,7 +1097,7 @@ func (s *Scheduler) tidy() {
 // keepWorktree starts the days of a merged Task's worktree, after lineup
 // closed its tab or Rex lost it.
 func (s *Scheduler) keepWorktree(r *Record, detail string) {
-	r.CloseAtIdle, r.KeepUntil = false, s.now().Add(s.d.KeepWorktree)
+	r.CloseAtIdle, r.KeepUntil = false, s.now().Add(s.merged(r).KeepWorktree)
 	s.save(r, store.Event{TaskID: r.ID, At: s.now(), Signal: "merged-tab-closed", From: r.Stage.String(), To: r.Stage.String(),
 		Detail: detail + "worktree kept until " + r.KeepUntil.Format(time.RFC3339)})
 }

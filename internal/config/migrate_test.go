@@ -218,6 +218,92 @@ wip_cap = 1
 	}
 }
 
+// A file in the current form keeps its Repo tables when a layer key at the
+// top level moves to [defaults] (PROD-CONFIG-006).
+func TestMigrateMovesALayerKeyBesideTheRepoTables(t *testing.T) {
+	old := `roots = ["~/repos"]
+
+[defaults]
+wip_cap = 3
+
+[repos."crexi/data"]
+tracker = "linear"
+teams = ["PD"]
+
+# The bar of every Repo.
+[landing_bar]
+threads = "resolved" # mine
+`
+	path := write(t, filepath.Join(t.TempDir(), "config.toml"), old)
+	if msg, err := Migrate(path); err != nil || !strings.HasPrefix(msg, "Rewrote "+path) {
+		t.Fatalf("Migrate = %q %v", msg, err)
+	}
+	want := `roots = ["~/repos"]
+
+[defaults]
+wip_cap = 3
+
+[repos."crexi/data"]
+tracker = "linear"
+teams = ["PD"]
+
+# The bar of every Repo.
+[defaults.landing_bar]
+threads = "resolved" # mine
+`
+	if got, _ := os.ReadFile(path); string(got) != want {
+		t.Errorf("migrated file:\n%s\nwant\n%s", got, want)
+	}
+	if _, err := Load(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A [merged] table at the top level moves to [defaults.merged] with its
+// comments, and a Repo's own table still beats it (PROD-CONFIG-006).
+func TestMigrateMovesTheMergedTableToDefaults(t *testing.T) {
+	home := fixtureHome(t)
+	old := `roots = ["~/repos"]
+
+[repos."crexi/data".merged]
+keep_worktree_days = 1
+
+# Close the tab of each merged Task.
+[merged]
+close_tab = true # once the Worker is idle
+keep_worktree_days = 3
+`
+	path := write(t, filepath.Join(home, ".config", "lineup", "config.toml"), old)
+	if msg, err := Migrate(path); err != nil || !strings.HasPrefix(msg, "Rewrote "+path) {
+		t.Fatalf("Migrate = %q %v", msg, err)
+	}
+	want := `roots = ["~/repos"]
+
+[repos."crexi/data".merged]
+keep_worktree_days = 1
+
+# Close the tab of each merged Task.
+[defaults.merged]
+close_tab = true # once the Worker is idle
+keep_worktree_days = 3
+`
+	if got, _ := os.ReadFile(path); string(got) != want {
+		t.Errorf("migrated file:\n%s\nwant\n%s", got, want)
+	}
+	g, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rel, want := range map[string]Merged{
+		"repos/crexi/data":      {CloseTab: true, KeepWorktree: 1 * day},
+		"repos/gclunies/lineup": {CloseTab: true, KeepWorktree: 3 * day},
+	} {
+		if got, err := g.Merged(filepath.Join(home, rel), nil); err != nil || got != want {
+			t.Errorf("%s: %+v %v, want %+v", rel, got, err, want)
+		}
+	}
+}
+
 func TestMigrateRefusesWhatNoTableCanReplace(t *testing.T) {
 	home := fixtureHome(t)
 	gitCheckout(t, home, "deep/a/b/c", "")

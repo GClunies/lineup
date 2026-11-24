@@ -63,6 +63,9 @@ type Options struct {
 	// Teams are the Linear team keys whose unassigned Issues show in Team.
 	// Empty reads none.
 	Teams []string
+	// TeamRepos lists the Repo keys, owner/repo, whose teams list holds the
+	// Linear team key. Nil lists none.
+	TeamRepos func(teamKey string) []string
 	// LocalPrefixes are the Repo prefixes of the Local Issues, besides local.
 	LocalPrefixes []string
 	// Destinations is destinations.json in the state folder. It keeps the
@@ -231,14 +234,21 @@ func (m *Model) keepSelection() {
 }
 
 // fallback picks the selection when the old one is gone. A row that a closed
-// group now hides selects that group's heading. Any other loss selects the
-// first row, or the first heading when no group is open.
+// group now hides selects that group's heading, and a row that the limit of
+// an open group now hides selects its more line (PROD-BOARD-005). Any other
+// loss selects the first Task or Issue row, or the first heading when no
+// group is open.
 func (m Model) fallback(ids []string) string {
-	if g := m.groupOf(m.sel); g != "" && m.shown(g) && !m.open(g) {
-		return headingKey(g)
+	if g := m.groupOf(m.sel); g != "" {
+		if m.shown(g) && !m.open(g) {
+			return headingKey(g)
+		}
+		if slices.Contains(ids, moreKey(g)) {
+			return moreKey(g)
+		}
 	}
 	for _, id := range ids {
-		if _, isHeading := headingName(id); !isHeading {
+		if m.groupOf(id) != "" {
 			return id
 		}
 	}
@@ -268,6 +278,16 @@ func (m Model) open(g string) bool { return m.query() != "" || !m.lay.closed[g] 
 // with a match shows, a hidden one too.
 func (m Model) shown(g string) bool { return m.query() != "" || !m.lay.hidden[g] }
 
+// limit is how many of the n rows of open group g show. An open Team shows
+// at most teamRows until the user asks for every row, and the filter shows
+// every match (PROD-BOARD-024).
+func (m Model) limit(g string, n int) int {
+	if g == groupTeam && !m.lay.full[g] && m.query() == "" {
+		return min(n, teamRows)
+	}
+	return n
+}
+
 // groupIDs lists the IDs of the rows in group g.
 func (m Model) groupIDs(g string) []string {
 	var ids []string
@@ -285,8 +305,9 @@ func (m Model) groupIDs(g string) []string {
 }
 
 // rowIDs lists the selection stops in screen order. Each shown group with a
-// row has its heading, except Needs you, and then its rows when it is open.
-// Under a filter the stops are the matching rows only.
+// row has its heading, except Needs you, and then its rows when it is open,
+// up to its limit and then its more line (PROD-BOARD-013). Under a filter the
+// stops are the matching rows only.
 func (m Model) rowIDs() []string {
 	var ids []string
 	for _, g := range m.lay.order {
@@ -298,7 +319,11 @@ func (m Model) rowIDs() []string {
 			ids = append(ids, headingKey(g))
 		}
 		if m.open(g) {
-			ids = append(ids, rows...)
+			k := m.limit(g, len(rows))
+			ids = append(ids, rows[:k]...)
+			if k < len(rows) {
+				ids = append(ids, moreKey(g))
+			}
 		}
 	}
 	return ids
@@ -307,6 +332,15 @@ func (m Model) rowIDs() []string {
 // toggleGroup opens the group if it is closed, and closes it if it is open.
 func (m Model) toggleGroup(g string) Model {
 	m.lay = m.lay.withClosed(g, m.open(g))
+	return m
+}
+
+// showAll shows every row of group g for this run, and selects the first row
+// that its limit hid (PROD-BOARD-024).
+func (m Model) showAll(g string) Model {
+	ids := m.groupIDs(g)
+	m.sel = ids[m.limit(g, len(ids))]
+	m.lay = m.lay.withFull(g)
 	return m
 }
 
@@ -505,6 +539,9 @@ func (m Model) boardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if g, isHeading := headingName(m.sel); isHeading {
 			return m.toggleGroup(g), nil
+		}
+		if g, isMore := moreName(m.sel); isMore {
+			return m.showAll(g), nil
 		}
 		if ok {
 			return m, m.openTask(t.ID)
