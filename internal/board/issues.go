@@ -88,7 +88,7 @@ func (r issueRow) priorityText() string {
 // has its canonical form. team is the Team list. An Issue in lin too is not in
 // Team, as the Team list can lag a start. backlog is the label that puts a
 // GitHub Issue in Backlog.
-func issueRows(lin, team []linear.Issue, loc []localissues.Issue, gh []github.OwnIssue, backlog string, tasks []scheduler.TaskView) []issueRow {
+func issueRows(lin, team []linear.Issue, loc []localissues.Issue, gh []github.OwnIssue, backlog string, teamRepos func(string) []string, tasks []scheduler.TaskView) []issueRow {
 	held := map[string]bool{}
 	for _, t := range tasks {
 		held[t.ID] = true
@@ -107,7 +107,7 @@ func issueRows(lin, team []linear.Issue, loc []localissues.Issue, gh []github.Ow
 	for i := range lin {
 		is := &lin[i]
 		own[is.ID] = true
-		rows = append(rows, linearIssueRow(is, issueGroup[scheduler.KindLinear][is.State.Type]))
+		rows = append(rows, linearIssueRow(is, issueGroup[scheduler.KindLinear][is.State.Type], teamRepos))
 	}
 	for i := range team {
 		is := &team[i]
@@ -115,7 +115,7 @@ func issueRows(lin, team []linear.Issue, loc []localissues.Issue, gh []github.Ow
 			continue
 		}
 		graph = append(graph, *is)
-		rows = append(rows, linearIssueRow(is, groupTeam))
+		rows = append(rows, linearIssueRow(is, groupTeam, teamRepos))
 	}
 	for i := range loc {
 		is := &loc[i]
@@ -172,9 +172,17 @@ func issueRows(lin, team []linear.Issue, loc []localissues.Issue, gh []github.Ow
 	return out
 }
 
-func linearIssueRow(is *linear.Issue, group string) issueRow {
-	return issueRow{ID: is.Identifier, Kind: scheduler.KindLinear, Group: group, Title: is.Title, URL: is.URL,
+// linearIssueRow is the row of a Linear Issue. It names the Repo, as a GitHub
+// row does, when the Issue's team maps to exactly one Repo (PROD-ISSUE-001).
+func linearIssueRow(is *linear.Issue, group string, teamRepos func(string) []string) issueRow {
+	r := issueRow{ID: is.Identifier, Kind: scheduler.KindLinear, Group: group, Title: is.Title, URL: is.URL,
 		Priority: is.Priority, Blockers: linear.BlockedBy(*is), Unblocked: is.Unblocked, lin: is}
+	if teamRepos != nil {
+		if keys := teamRepos(is.Team.Key); len(keys) == 1 {
+			_, r.Repo, _ = strings.Cut(keys[0], "/")
+		}
+	}
+	return r
 }
 
 // githubGroup puts a GitHub Issue in Backlog when it carries the backlog
@@ -236,6 +244,22 @@ func (mi mine) list(ws linear.Workspace, team bool) (lists map[string][]linear.I
 		return mi.team, ws.ID + "/team", "team Issues"
 	}
 	return mi.lin, ws.ID + "/my", "my Issues"
+}
+
+// teamCapped reports whether a workspace's Team list holds TeamIssuesMax
+// Issues of one team, so that the read can have left some out
+// (PROD-BOARD-025).
+func (mi mine) teamCapped() bool {
+	for _, list := range mi.team {
+		n := map[string]int{}
+		for _, is := range list {
+			n[is.Team.Key]++
+			if n[is.Team.Key] >= linear.TeamIssuesMax {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // workspaceOf is the workspace whose My Issues or Team list holds is.

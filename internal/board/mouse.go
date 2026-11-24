@@ -55,7 +55,8 @@ func (m Model) mouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 }
 
 // tapRow selects the row under the tap. A heading opens or closes its group,
-// and a Task or Issue row opens its menu.
+// a more line shows every row of its group, and a Task or Issue row opens its
+// menu.
 func (m Model) tapRow(x, y int) (tea.Model, tea.Cmd) {
 	id := m.rowAt(x, y)
 	if id == "" || !slices.Contains(m.rowIDs(), id) {
@@ -64,6 +65,9 @@ func (m Model) tapRow(x, y int) (tea.Model, tea.Cmd) {
 	m.status, m.sel = "", id
 	if g, ok := headingName(id); ok {
 		return m.toggleGroup(g), nil
+	}
+	if g, ok := moreName(id); ok {
+		return m.showAll(g), nil
 	}
 	title := id
 	if t, ok := m.current(); ok {
@@ -88,7 +92,7 @@ func (m Model) rowAt(x, y int) string {
 	if x >= w {
 		return ""
 	}
-	rows := m.rowLines(w)
+	rows := m.rowLines(w, h)
 	texts := make([]string, len(rows))
 	for i, r := range rows {
 		texts[i] = r.text

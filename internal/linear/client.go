@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -341,11 +342,15 @@ func (c *Client) MyIssues(ctx context.Context) ([]Issue, error) {
 	return issues(ws), err
 }
 
+// TeamIssuesMax is the most Issues that TeamIssues reads of one team.
+const TeamIssuesMax = 100
+
 // TeamIssues lists the Issues of each team that have no assignee, in the
-// state types triage, backlog, and unstarted. It reads the 100 Issues of each
-// team that changed last. On an error it returns the Issues read so far.
+// state types triage, backlog, and unstarted. It reads the TeamIssuesMax
+// Issues of each team that changed last. On an error it returns the Issues
+// read so far.
 func (c *Client) TeamIssues(ctx context.Context, teamKeys []string) ([]Issue, error) {
-	q := `query($filter: IssueFilter) { issues(first: 100, orderBy: updatedAt, filter: $filter) { nodes { ...IssueFields } } }` + issueFields
+	q := `query($filter: IssueFilter) { issues(first: ` + strconv.Itoa(TeamIssuesMax) + `, orderBy: updatedAt, filter: $filter) { nodes { ...IssueFields } } }` + issueFields
 	var out []Issue
 	for _, key := range teamKeys {
 		var res struct {

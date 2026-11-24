@@ -2,6 +2,7 @@ package board
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -195,5 +196,217 @@ func TestASignedOutWorkspaceLosesItsTeamRows(t *testing.T) {
 	e.m = openAll(feed(e.m, mineWorkspacesMsg{}))
 	if out := screen(e.m); strings.Contains(out, "PD-1") || strings.Contains(out, "ENG-9") {
 		t.Fatalf("rows of a signed-out workspace:\n%s", out)
+	}
+}
+
+// bigTeam is teamEnv with the Team rows PD-1 to PD-n, in that order, and
+// Team open with its heading selected.
+func bigTeam(t *testing.T, n int) *workEnv {
+	t.Helper()
+	e := teamEnv(t, pdIssues(1, n)...)
+	e.m.sel = headingKey(groupTeam)
+	e.press("enter")
+	return e
+}
+
+// pdIssues is the Team Issues PD-from to PD-to, all of priority 2.
+func pdIssues(from, to int) []linear.Issue {
+	var team []linear.Issue
+	for i := from; i <= to; i++ {
+		team = append(team, teamIssue(fmt.Sprintf("PD-%d", i), "backlog", 2))
+	}
+	return team
+}
+
+// pdIDs is the IDs PD-from to PD-to.
+func pdIDs(from, to int) []string {
+	var ids []string
+	for _, is := range pdIssues(from, to) {
+		ids = append(ids, is.Identifier)
+	}
+	return ids
+}
+
+// pdRows lists the PD rows above the strip, in screen order.
+func pdRows(m Model) []string {
+	var ids []string
+	for _, l := range strings.Split(bodyOf(m), "\n") {
+		if f := strings.Fields(strings.TrimLeft(l, " ▸")); len(f) > 0 && strings.HasPrefix(f[0], "PD-") {
+			ids = append(ids, f[0])
+		}
+	}
+	return ids
+}
+
+// An open Team shows its first 10 rows and a more line. j stops on the more
+// line, and enter on it shows every row and selects the first one that was
+// hidden (PROD-BOARD-024).
+func TestAnOpenTeamShowsTenRowsAndEnterOnTheMoreLineShowsTheRest(t *testing.T) {
+	e := bigTeam(t, 15)
+	out := screen(e.m)
+	if got := pdRows(e.m); !slices.Equal(got, pdIDs(1, 10)) {
+		t.Fatalf("Team shows %v, want PD-1 to PD-10:\n%s", got, out)
+	}
+	inOrder(t, out, "Team 15", "PD-10", "+ 5 more rows", "Up next 1")
+	for range 11 {
+		e.press("j")
+	}
+	out = screen(e.m)
+	if l := lineOf(t, out, "+ 5 more rows"); !strings.Contains(l, "▸") {
+		t.Fatalf("11 j from the Team heading must select the more line:\n%s", out)
+	}
+	if f := footerAt(e.m, 100); !strings.Contains(f, "\n Team\n 5 more rows\n") || !strings.Contains(f, "enter show all") {
+		t.Fatalf("the strip on the more line must show Team, 5 more rows, and enter show all:\n%s", f)
+	}
+	e.press("enter")
+	out = screen(e.m)
+	if got := pdRows(e.m); !slices.Equal(got, pdIDs(1, 15)) || strings.Contains(out, "more row") {
+		t.Fatalf("enter on the more line shows %v, want PD-1 to PD-15 and no more line:\n%s", got, out)
+	}
+	if l := lineOf(t, out, "PD-11 "); !strings.Contains(l, "▸") {
+		t.Fatalf("enter must select PD-11, the first row that was hidden:\n%s", out)
+	}
+}
+
+// Closing Team brings its limit back (PROD-BOARD-024).
+func TestClosingTeamBringsBackItsLimit(t *testing.T) {
+	e := bigTeam(t, 15)
+	for range 11 {
+		e.press("j")
+	}
+	e.press("enter")
+	if got := pdRows(e.m); len(got) != 15 {
+		t.Fatalf("show all shows %v, want 15 rows", got)
+	}
+	e.m.sel = headingKey(groupTeam)
+	e.press("enter", "enter")
+	out := screen(e.m)
+	if got := pdRows(e.m); !slices.Equal(got, pdIDs(1, 10)) || !strings.Contains(out, "+ 5 more rows") {
+		t.Fatalf("after a close and an open, Team shows %v, want PD-1 to PD-10 and the more line:\n%s", got, out)
+	}
+}
+
+// The filter shows every matching Team row, with no more line, and esc
+// gives the limit back (PROD-BOARD-024).
+func TestTheFilterShowsEveryMatchingTeamRow(t *testing.T) {
+	e := bigTeam(t, 15)
+	e.press("/", "P", "D", "enter")
+	out := screen(e.m)
+	if got := pdRows(e.m); !slices.Equal(got, pdIDs(1, 15)) || strings.Contains(out, "more row") {
+		t.Fatalf("the filter shows %v, want every PD row and no more line:\n%s", got, out)
+	}
+	e.press("esc")
+	out = screen(e.m)
+	if got := pdRows(e.m); !slices.Equal(got, pdIDs(1, 10)) || !strings.Contains(out, "+ 5 more rows") {
+		t.Fatalf("esc must give back the limit, Team shows %v:\n%s", got, out)
+	}
+}
+
+// A tap on the more line shows every Team row, as enter does, and opens no
+// menu (PROD-BOARD-024).
+func TestATapOnTheMoreLineShowsEveryTeamRow(t *testing.T) {
+	e := bigTeam(t, 15)
+	e.m, _ = tap(t, e.m, "+ 5 more rows")
+	out := screen(e.m)
+	if got := pdRows(e.m); !slices.Equal(got, pdIDs(1, 15)) || strings.Contains(out, "back") {
+		t.Fatalf("a tap on the more line shows %v, want PD-1 to PD-15 and no menu:\n%s", got, out)
+	}
+	if l := lineOf(t, out, "PD-11 "); !strings.Contains(l, "▸") {
+		t.Fatalf("the tap must select PD-11, the first row that was hidden:\n%s", out)
+	}
+}
+
+// A selected Team row that moves past the limit selects the more line
+// (PROD-BOARD-005).
+func TestATeamRowThatMovesPastTheLimitSelectsTheMoreLine(t *testing.T) {
+	e := bigTeam(t, 15)
+	e.m.sel = "PD-2"
+	team := pdIssues(1, 15)
+	team[1].Priority = 0 // PD-2 sorts last
+	e.m = feed(e.m, mineIssuesMsg{ws: acme, live: true, team: true, issues: team})
+	out := screen(e.m)
+	if l := lineOf(t, out, "+ 5 more rows"); !strings.Contains(l, "▸") {
+		t.Fatalf("PD-2 moved past the limit, so the more line must be selected:\n%s", out)
+	}
+}
+
+// Rows past the limit of Team are not on screen, so they widen no column and
+// fill no Repo column (PROD-BOARD-023, PROD-BOARD-024).
+func TestRowsPastTheTeamLimitDoNotFitTheColumns(t *testing.T) {
+	ops := func(i int) linear.Issue {
+		is := teamIssue(fmt.Sprintf("OPS-%d", i), "backlog", 0)
+		is.Team.Key, is.Unblocked = "OPS", true
+		return is
+	}
+	board := func(team []linear.Issue) *workEnv {
+		e := teamEnv(t, team...)
+		e.m.opts.TeamRepos = func(key string) []string {
+			if key == "OPS" {
+				return []string{"acme/ops"}
+			}
+			return nil
+		}
+		e.m.height = 40
+		e.m = openAll(e.m)
+		e.m.sel = headingKey(groupTeam)
+		return e
+	}
+	only := board(pdIssues(1, 10))
+	team := pdIssues(1, 10)
+	for i := 1; i <= 20; i++ {
+		team = append(team, ops(i))
+	}
+	more := board(team)
+	want := lineOf(t, screen(only.m), "PD-1 ")
+	if got := lineOf(t, screen(more.m), "PD-1 "); got != want {
+		t.Errorf("rows past the limit changed the columns:\n got %q\nwant %q", got, want)
+	}
+	// With every row on screen, the OPS rows widen the status column and fill
+	// the Repo column, so the check above can fail.
+	for range 11 {
+		more.press("j")
+	}
+	more.press("enter")
+	out := screen(more.m)
+	if got := lineOf(t, out, "PD-1 "); got == want {
+		t.Errorf("with every row on screen the PD-1 line must change: %q", got)
+	}
+	if l := lineOf(t, out, "OPS-1 "); !strings.HasSuffix(strings.TrimRight(l, " "), "  ops") {
+		t.Errorf("with every row on screen the OPS-1 row must name its Repo: %q", l)
+	}
+}
+
+// The Team heading adds + to its count when the Board read 100 Issues of one
+// team, and so does the strip on it (PROD-BOARD-025).
+func TestTheTeamHeadingMarksTheFetchCap(t *testing.T) {
+	ops := func(i int) linear.Issue {
+		is := teamIssue(fmt.Sprintf("OPS-%d", i), "backlog", 2)
+		is.Team.Key = "OPS"
+		return is
+	}
+	for _, c := range []struct {
+		name          string
+		pd, ops       int
+		heading, rows string
+	}{
+		{"100 of PD", 100, 0, " Team 100+ …", " 100+ rows"},
+		{"99 of PD", 99, 0, " Team 99 …", " 99 rows"},
+		{"60 of PD and 40 of OPS", 60, 40, " Team 100 …", " 100 rows"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			team := pdIssues(1, c.pd)
+			for i := 1; i <= c.ops; i++ {
+				team = append(team, ops(i))
+			}
+			e := teamEnv(t, team...)
+			out := screen(e.m)
+			if !slices.Contains(strings.Split(out, "\n"), c.heading) {
+				t.Errorf("no line is the heading %q:\n%s", c.heading, out)
+			}
+			e.m.sel = headingKey(groupTeam)
+			if f := footerAt(e.m, 100); !strings.Contains(f, "\n Team\n"+c.rows+"\n") {
+				t.Errorf("the strip on the Team heading must count %q:\n%s", c.rows, f)
+			}
+		})
 	}
 }

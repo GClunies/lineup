@@ -20,7 +20,7 @@ The `[board]` table in the config sets the layout of the groups `needs_you`, `fo
 
 ## PROD-BOARD-005: The user opens and closes groups for one run
 
-`enter` or a tap on a group heading opens or closes that group for this run only. Needs you never closes. `d` shows and opens Done when it is hidden, and hides Done when it shows, for this run only, whatever `hidden` says. When a Task moves into a closed group, the selection goes to that group's heading. Any other lost selection goes to the first row, or to the first heading when every group is closed. A capture into a closed or hidden Backlog shows and opens Backlog for this run, and selects the new row.
+`enter` or a tap on a heading opens or closes its group for this run only. Needs you never closes. `d` shows and opens a hidden Done, and hides a shown Done, for this run only, whatever `hidden` says. When a closed group or the Team limit hides the selected row, the selection goes to that heading or the `+ N more rows` line. Any other lost selection goes to the first row, or to the first heading when every group is closed. A capture into a closed or hidden Backlog shows and opens it for this run, and selects the new row.
 
 ## PROD-BOARD-006: Each row shows one status word
 
@@ -28,7 +28,7 @@ Each row shows one status word in its own column after the title, and that colum
 
 ## PROD-BOARD-007: The strip shows the selected row in full
 
-The strip under the rows shows a rule, the selected row's full title, and its facts joined by ` · `: the ID, the Stage, the Repo, the PR number, and the note. An empty fact does not show, and the PR number shows only when the note does not name it. An Issue row shows its group in place of the Stage. The title and the facts wrap, so the strip never cuts them. Then come the Board message, until the next key, and the key hints. On a heading, the strip shows the group name and its row count.
+The strip under the rows shows a rule, the selected row's full title, and its facts joined by ` · `: the ID, the Stage, the Repo, the skill, the PR number, and the note. An empty fact does not show, and the PR number shows only when the note does not name it. An Issue row shows its group in place of the Stage. The title and the facts wrap, so the strip never cuts them. Then come the Board message, until the next key, and the key hints. On a heading, the strip shows the group name and row count.
 
 ## PROD-BOARD-008: The note of a Task says where its PR stands
 
@@ -52,7 +52,7 @@ On a Task row, `enter` focuses the Task's tab in Rex. When the Task has no live 
 
 ## PROD-BOARD-013: The keys on every row
 
-On every row, `j` and `k` move the selection through the headings and the rows of open groups. `d` shows or hides Done, `/` opens the filter, and `n` captures a new Issue. `R` makes the Scheduler poll GitHub for every started Task at once. `z` zooms the Orchestrator pane to full height, and back. `?` shows all keys, and `q` quits. A key that does not apply to the selected row does nothing. The footer hints name the keys of the selected row, drop hints from the end to fit, and always keep `? all keys`.
+On every row, `j` and `k` move the selection through the headings, the rows that show, and the `+ N more rows` line. `d` shows or hides Done, `/` opens the filter, and `n` captures a new Issue. `R` makes the Scheduler poll GitHub for every started Task at once. `z` zooms the Orchestrator pane to full height, and back. `?` shows all keys, and `q` quits. A key that does not apply to the selected row does nothing. The footer hints name the keys of the selected row, drop hints from the end to fit, and always keep `? all keys`.
 
 ## PROD-BOARD-014: Mouse and touch work as the keys do
 
@@ -89,6 +89,18 @@ While the Board cannot reach the Scheduler, it shows the view that the Scheduler
 ## PROD-BOARD-022: A Task names its Repo by the Repo's folder
 
 The Repo of a Task on the Board, in `lineup ls`, and in `lineup show` is the folder name of the Repo, for example `data`. If two Repos of Tasks on the Board share a folder name, each name adds the parent folder, for example `acme-data`.
+
+## PROD-BOARD-023: Each column fits the rows on screen
+
+Each column is as wide as its widest cell among the rows on screen, so a row out of view does not widen it. The column of the age or the priority, the Repo column, and the skill column each show only when at least half the rows on screen fill them. The title takes the rest of the width.
+
+## PROD-BOARD-024: An open Team shows at most 10 rows
+
+An open Team shows its first 10 rows. When it holds more, a dim line follows them, for example `+ 90 more rows`. The user can select that line, and the strip then shows Team and `90 more rows`. `enter` or a tap on the line shows every row of Team for this run and selects the first row that was hidden. Closing Team brings the limit back. While the filter holds text, Team shows every match.
+
+## PROD-BOARD-025: The Team heading marks the fetch cap
+
+When the Board reads 100 Issues of one team, the Team heading adds `+` to its count, for example `Team 100+`. The strip on that heading shows the same count, for example `100+ rows`.
 
 ## PROD-BOARD-026: A toast names lineup once
 
