@@ -144,9 +144,9 @@ type Worktrees interface {
 	// an uncommitted change or a commit that is on no remote. kept reports
 	// that the worktree stays.
 	RemoveReview(ctx context.Context, repo, path string, pr ReviewPR) (kept bool, err error)
-	// AddQA fetches the default branch into the Repo's main checkout, then
-	// adds the QA worktree of PR number, detached at commit, if it is
-	// missing. It returns the worktree's path (ARCH-QA-005).
+	// AddQA fetches commit, the merge commit, by its SHA into the Repo's main
+	// checkout, then adds the QA worktree of PR number, detached at commit, if
+	// it is missing. It returns the worktree's path (ARCH-QA-005).
 	AddQA(ctx context.Context, repo string, number int, commit string) (string, error)
 	// RemoveQA removes the QA worktree unless it holds an uncommitted
 	// change. kept reports that the worktree stays.

@@ -80,17 +80,11 @@ func DiffBase(ctx context.Context, dir string) (string, error) {
 	if _, err := os.Stat(dir); err != nil {
 		return "", err
 	}
-	return git(ctx, dir, "merge-base", "HEAD", defaultBranch(ctx, dir))
-}
-
-// defaultBranch is origin's default branch as the clone in dir names it, for
-// example origin/develop, or origin/main when the clone names none.
-func defaultBranch(ctx context.Context, dir string) string {
 	branch, err := git(ctx, dir, "symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD")
 	if err != nil || branch == "" {
-		return "origin/main"
+		branch = "origin/main"
 	}
-	return branch
+	return git(ctx, dir, "merge-base", "HEAD", branch)
 }
 
 // Remove deletes the worktree of the branch. A branch with no worktree is not

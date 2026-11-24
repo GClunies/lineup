@@ -37,10 +37,11 @@ func QAPath(main string, number int) string {
 	return filepath.Join(filepath.Dir(main), filepath.Base(main)+".qa-pr-"+strconv.Itoa(number))
 }
 
-// AddQA fetches origin's default branch into the main checkout, then adds the
-// QA worktree, detached at the merge commit, if it is missing (ARCH-QA-005).
+// AddQA fetches the merge commit by its SHA into the main checkout, so a PR
+// into any base branch works, then adds the QA worktree, detached at it, if
+// it is missing (ARCH-QA-005).
 func AddQA(ctx context.Context, main, path, commit string) error {
-	if err := fetch(ctx, main, strings.TrimPrefix(defaultBranch(ctx, main), "origin/")); err != nil {
+	if err := fetch(ctx, main, commit); err != nil {
 		return err
 	}
 	return addDetached(ctx, main, path, commit)

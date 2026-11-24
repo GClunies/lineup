@@ -7,17 +7,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
-// merge pushes a new commit to origin's develop, as a PR's merge does, and
-// gives its oid.
-func merge(t *testing.T, origin string) string {
+// merge pushes a new commit to origin's base branch, as a PR's merge does,
+// and gives its oid.
+func merge(t *testing.T, origin, base string) string {
 	t.Helper()
 	other := filepath.Join(filepath.Dir(origin), "merger")
 	sh(t, filepath.Dir(origin), "git", "clone", "-q", origin, other)
 	commit(t, other, "Merge pull request #7")
-	sh(t, other, "git", "push", "-q", "origin", "HEAD:develop")
+	sh(t, other, "git", "push", "-q", "origin", "HEAD:"+base)
 	return strings.TrimSpace(sh(t, other, "git", "rev-parse", "HEAD"))
 }
 
@@ -27,38 +26,27 @@ func TestQAPathSitsBesideTheMainCheckout(t *testing.T) {
 	}
 }
 
-// The main checkout does not have the merge commit yet. AddQA fetches the
-// default branch, so the worktree can check it out (ARCH-QA-005).
+// The main checkout does not have the merge commit yet. AddQA fetches it by
+// its SHA, so the worktree can check it out, also after a merge into a base
+// branch that is not the default branch (ARCH-QA-005).
 func TestAddQAChecksOutTheMergeCommitDetachedAndRepeats(t *testing.T) {
-	origin, main, _ := prRepo(t)
-	at := merge(t, origin)
-	path := QAPath(main, 7)
-	for range 2 {
-		if err := AddQA(context.Background(), main, path, at); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if got := strings.TrimSpace(sh(t, path, "git", "rev-parse", "HEAD")); got != at {
-		t.Fatalf("QA worktree at %s, want %s", got, at)
-	}
-	if err := exec.Command("git", "-C", path, "symbolic-ref", "-q", "HEAD").Run(); err == nil {
-		t.Fatal("the QA worktree is on a branch, want detached")
-	}
-}
-
-func TestAddQARetriesARefLockThatAnotherFetchHolds(t *testing.T) {
-	origin, main, _ := prRepo(t)
-	at := merge(t, origin)
-	lock := filepath.Join(main, ".git", "refs", "remotes", "origin", "develop.lock")
-	if err := os.MkdirAll(filepath.Dir(lock), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(lock, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	time.AfterFunc(1500*time.Millisecond, func() { os.Remove(lock) })
-	if err := AddQA(context.Background(), main, QAPath(main, 7), at); err != nil {
-		t.Fatalf("AddQA gave up on a ref lock: %v", err)
+	for _, base := range []string{"develop", "release"} {
+		t.Run(base, func(t *testing.T) {
+			origin, main, _ := prRepo(t)
+			at := merge(t, origin, base)
+			path := QAPath(main, 7)
+			for range 2 {
+				if err := AddQA(context.Background(), main, path, at); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := strings.TrimSpace(sh(t, path, "git", "rev-parse", "HEAD")); got != at {
+				t.Fatalf("QA worktree at %s, want %s", got, at)
+			}
+			if err := exec.Command("git", "-C", path, "symbolic-ref", "-q", "HEAD").Run(); err == nil {
+				t.Fatal("the QA worktree is on a branch, want detached")
+			}
+		})
 	}
 }
 
@@ -69,7 +57,7 @@ func TestRemoveQA(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			origin, main, _ := prRepo(t)
 			path := QAPath(main, 7)
-			if err := AddQA(context.Background(), main, path, merge(t, origin)); err != nil {
+			if err := AddQA(context.Background(), main, path, merge(t, origin, "develop")); err != nil {
 				t.Fatal(err)
 			}
 			if dirty {
