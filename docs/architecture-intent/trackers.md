@@ -4,7 +4,7 @@ This file states how lineup reaches its Trackers.
 
 ## ARCH-TRACK-001: Every Tracker sits behind one port
 
-Linear, GitHub Issues, and the Local Tracker are each one adapter behind the Scheduler's one Tracker port. The port looks up an Issue, begins its Task, writes the state for a lifecycle event, and reads the description. A mux implements the port and routes each call to the adapter that the Issue's Kind names. The Scheduler speaks only the port and holds no rule of one Tracker.
+Linear, GitHub Issues, and the Local Tracker are each one adapter behind the Scheduler's one Tracker port. The port looks up an Issue, begins its Task, writes the state for a lifecycle event, reads the description, and creates a fix Issue. A mux implements the port and routes each call to the adapter that the Issue's Kind names. The Scheduler speaks only the port and holds no rule of one Tracker.
 
 Because: the start, status, and create actions are the same for every Tracker, so a path for each Tracker builds them three times.
 Not: a separate browser or code path for each Tracker.
@@ -22,7 +22,7 @@ Each Issue that a Task holds carries its Kind: `linear`, `github`, or `local`. A
 
 ## ARCH-TRACK-004: lineup writes Tracker state only through maps
 
-The Scheduler sends the same four lifecycle events to every Tracker: `started`, `in_review`, `merged`, and `closed`. Each adapter turns an event into state only through its map. A Linear team's status map names a status, and the global GitHub label map names a label. The Local adapter maps `started`, `in_review`, and `merged` to its `status` field, and `closed` to nothing. A Linear event that the map leaves out writes nothing. A Stage change that is not an event, and every Needs you flag, writes nothing.
+The Scheduler sends the same five lifecycle events to every Tracker: `started`, `in_review`, `merged`, `closed`, and `qa_passed`. Each adapter turns an event into state only through its map. A Linear team's status map names a status, and the global GitHub label map names a label. The Local adapter maps `started`, `in_review`, and `merged` to its `status` field, and `closed` and `qa_passed` to nothing. A Linear event that the map leaves out writes nothing. A Stage change that is not an event, and every Needs you flag, writes nothing.
 
 Because: Linear's GitHub automation already moves some statuses, and a status for each Stage floods the team's views and fights that automation.
 Not: a Linear status for each Stage.

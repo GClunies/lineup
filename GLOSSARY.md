@@ -47,8 +47,12 @@ A PR that the user holds out of every review queue, at every head, until the use
 _Avoid_: Mute, snooze, ignore, hide
 
 **Task**:
-One unit of work on the Board, in exactly one Repo, done by one Worker in one isolated tab and worktree. A Task links to zero or one Issue, and it ends when its PR merges or the user closes it. A Task that ends goes to Done. A build Task then keeps its tab and worktree until the user closes the tab. If the user turns it on, lineup closes a merged build Task's tab when its Worker is idle, and removes the worktree some days later. A review Task closes its tab at each end.
+One unit of work on the Board, in exactly one Repo, done by one Worker in one isolated tab and worktree. A Task links to zero or one Issue, and it ends when its PR merges or the user closes it. A Task that ends goes to Done. A build Task then keeps its tab and worktree until the user closes the tab. If the user turns it on, lineup closes a merged build Task's tab when its Worker is idle, and removes the worktree some days later. A review Task and a QA Task close their tabs at each end.
 _Avoid_: Job, thread, card, item
+
+**QA Task**:
+A Task that checks a merged change after it runs, in a Repo with QA on. A build Task's merge adds it, with the ID `QA-<build ID>`, for example `QA-ENG-12`. Its own Worker waits and checks again until it gives a verdict. A pass ends it and writes `qa_passed` to the Tracker. A fail waits for the user in Needs you. It opens in the `qa` Rex session and never counts toward the WIP cap.
+_Avoid_: Verify Task, post-merge Task, deploy check
 
 **Ad hoc Task**:
 A Task with no Issue, made from the user's own words. Its ID has the form `AH-<n>`, or `<PREFIX>-<n>` when its Repo has a Repo prefix. Its tab opens in its Repo's session.
@@ -89,7 +93,7 @@ _Avoid_: Import, claim, enqueue
 ### Surfaces
 
 **Board**:
-The pane of the `my-lineup` tab beside the Orchestrator. It lists the build Tasks, the user's own Issues that have no Task, and the unassigned Issues of the user's teams, grouped as Needs you, Follow-up, Backlog, Team, Up next, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless it still keeps its tab or its worktree.
+The pane of the `my-lineup` tab beside the Orchestrator. It lists the build Tasks and QA Tasks, the user's own Issues that have no Task, and the unassigned Issues of the user's teams, grouped as Needs you, Follow-up, Backlog, Team, Up next, Working, Waiting, and Done. It lists no review Task. Its header counts the review Tasks that need the user. A Done Task leaves the Board when it is archived. It also leaves 7 days after it ends, unless it still keeps its tab or its worktree.
 _Avoid_: Dashboard, kanban, inbox
 
 **Archived**:
