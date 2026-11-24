@@ -603,15 +603,7 @@ func (g *Global) checkRepos() error {
 // reserved prefix, and a prefix that equals a Linear team key. Each check
 // ignores case. The team keys are those of every teams list, and teamKeys.
 func (g *Global) checkPrefixes(teamKeys []string) error {
-	teams := map[string]bool{}
-	for _, r := range g.file.Repos {
-		for _, t := range r.Teams {
-			teams[strings.ToLower(t)] = true
-		}
-	}
-	for _, t := range teamKeys {
-		teams[strings.ToLower(t)] = true
-	}
+	teams := g.teamKeys(teamKeys)
 	seen := map[string]string{}
 	for _, key := range slices.Sorted(maps.Keys(g.file.Repos)) {
 		p := g.file.Repos[key].Prefix
@@ -619,17 +611,11 @@ func (g *Global) checkPrefixes(teamKeys []string) error {
 			continue
 		}
 		where := fmt.Sprintf("repos.%q: prefix %q", key, strings.ToUpper(p))
-		switch {
-		case !prefixForm.MatchString(p):
-			return fmt.Errorf("%s must hold only letters, digits, and dashes, and must start and end with a letter or a digit", where)
-		case strings.HasSuffix(key, "/*"):
+		if strings.HasSuffix(key, "/*") {
 			return fmt.Errorf("%s needs an owner/repo key, the key of one Repo", where)
-		case slices.Contains(ReservedPrefixes, p):
-			return fmt.Errorf("%s is reserved: lineup starts its own IDs with %s", where, strings.ToUpper(strings.Join(ReservedPrefixes, ", ")))
-		case strings.HasPrefix(p, "qa-"):
-			return fmt.Errorf("%s starts with QA-, which starts the ID of each QA Task", where)
-		case teams[p]:
-			return fmt.Errorf("%s equals a Linear team key, so its IDs would read as Linear IDs", where)
+		}
+		if fault := prefixFault(p, teams); fault != "" {
+			return fmt.Errorf("%s %s", where, fault)
 		}
 		if other, ok := seen[p]; ok {
 			return fmt.Errorf("%s is also the prefix of repos.%q: each Repo needs its own prefix", where, other)
@@ -637,6 +623,63 @@ func (g *Global) checkPrefixes(teamKeys []string) error {
 		seen[p] = key
 	}
 	return nil
+}
+
+// teamKeys are the keys of every teams list, and extra, in lower case.
+func (g *Global) teamKeys(extra []string) map[string]bool {
+	teams := map[string]bool{}
+	for _, r := range g.file.Repos {
+		for _, t := range r.Teams {
+			teams[strings.ToLower(t)] = true
+		}
+	}
+	for _, t := range extra {
+		teams[strings.ToLower(t)] = true
+	}
+	return teams
+}
+
+// prefixFault is why the lower-case prefix p cannot start IDs, or "" when it
+// can. teams holds the Linear team keys in lower case.
+func prefixFault(p string, teams map[string]bool) string {
+	switch {
+	case !prefixForm.MatchString(p):
+		return "must hold only letters, digits, and dashes, and must start and end with a letter or a digit"
+	case slices.Contains(ReservedPrefixes, p):
+		return "is reserved: lineup starts its own IDs with " + strings.ToUpper(strings.Join(ReservedPrefixes, ", "))
+	case strings.HasPrefix(p, "qa-"):
+		return "starts with QA-, which starts the ID of each QA Task"
+	case teams[p]:
+		return "equals a Linear team key, so its IDs would read as Linear IDs"
+	}
+	return ""
+}
+
+// SuggestPrefix is a prefix for the Repo key, owner/repo: the shortest start
+// of the Repo name's letters and digits, of at least 3, that Load accepts
+// and no other table has. teamKeys are more Linear team keys to avoid. It
+// is "" when no start fits.
+func (g *Global) SuggestPrefix(key string, teamKeys []string) string {
+	_, repo, _ := strings.Cut(key, "/")
+	word := strings.ToLower(strings.Map(func(r rune) rune {
+		if r < 0x80 && (unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			return r
+		}
+		return -1
+	}, repo))
+	teams := g.teamKeys(teamKeys)
+	taken := map[string]bool{}
+	for k, t := range g.file.Repos {
+		if !strings.EqualFold(k, key) {
+			taken[t.Prefix] = true
+		}
+	}
+	for n := min(3, len(word)); n <= len(word); n++ {
+		if p := word[:n]; !taken[p] && prefixFault(p, teams) == "" {
+			return p
+		}
+	}
+	return ""
 }
 
 // CheckPrefixTeams refuses a prefix that equals one of the team keys, in any

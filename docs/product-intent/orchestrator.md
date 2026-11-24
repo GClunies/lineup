@@ -40,7 +40,7 @@ The Orchestrator never writes to a PR. Its settings deny each GitHub write to a 
 
 ## PROD-ORCH-010: The Orchestrator runs the Repo setup
 
-When `lineup add` fails with `repo not set up: <owner>/<repo>`, the Orchestrator runs `lineup repo detect <owner>/<repo> --json`. It asks for the Tracker, the review bot gate, and the Landing bar checks, with the detected value as the first option. It offers a Task that writes worktrunk hooks when the Repo has none. If the user picks Linear, it asks for the Linear teams next. Then it runs `lineup repo init <owner>/<repo>` with the answers, and runs the same `lineup add` again.
+When `lineup add` fails with `repo not set up: <owner>/<repo>`, the Orchestrator runs `lineup repo detect <owner>/<repo> --json`. It asks for the Tracker, the review bot gate, the Landing bar checks, and the prefix, with the detected value as the first option. The prefix question also offers **No prefix**. It offers a Task that writes worktrunk hooks when the Repo has none. If the user picks Linear, it asks for the Linear teams next. Then it runs `lineup repo init <owner>/<repo>` with the answers, and runs the same `lineup add` again.
 
 ## PROD-ORCH-011: The Orchestrator edits the review queues for the user
 

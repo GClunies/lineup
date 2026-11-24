@@ -120,6 +120,25 @@ func TestAgentRoleLeavesNeedsYouToThePalette(t *testing.T) {
 	}
 }
 
+func TestAgentRoleAsksForAPrefixInTheRepoSetup(t *testing.T) {
+	_, setup, ok := strings.Cut(string(agentRole), "\n## Repo setup\n")
+	if !ok {
+		t.Fatal("the role has no Repo setup section")
+	}
+	setup, _, _ = strings.Cut(setup, "\n## ")
+	for _, want := range []string{
+		"Ask the Tracker, Review bot, Landing bar, and Prefix questions below in one `AskUserQuestion` call.",
+		"| Prefix | `prefix` in upper case",
+		"Then **No prefix**",
+		"| `prefix=<p>`. A typed answer passes `prefix=<the answer>`. **No prefix** passes nothing. |",
+		"If it refuses the prefix, show the user its error and ask the Prefix question again.",
+	} {
+		if !strings.Contains(setup, want) {
+			t.Errorf("the Repo setup section has no %q", want)
+		}
+	}
+}
+
 func TestHubHasOneTabAndItCarriesTheAgent(t *testing.T) {
 	var tabs, agents []string
 	for _, tab := range agentTabs {
