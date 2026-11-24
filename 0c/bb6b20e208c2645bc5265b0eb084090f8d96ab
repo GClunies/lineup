@@ -1,0 +1,38 @@
+cmd/lineup/serve.go
+  s_6fdf04ba241df3::t_83255c2c9e8eeb 111
+cmd/lineup/wire.go
+  s_6fdf04ba241df3::t_e6e9f99c43a04f 421-422
+  s_6fdf04ba241df3::t_0da12366136047 588-590,594-595,599-620,622-623,625,627-643
+  s_6fdf04ba241df3::t_82cd16d6d69d1d 691-694,696,698-699
+  s_6fdf04ba241df3::t_bb207a688ab471 490
+  s_6fdf04ba241df3::t_81eda6daea3986 483-484,486,489
+  s_6fdf04ba241df3::t_f1614bc903ab47 695,697
+  s_6fdf04ba241df3::t_4bfcdff3768341 428-429,431-433
+internal/config/qa_test.go
+  s_6fdf04ba241df3::t_18feefe77a4bf2 119-147
+cmd/lineup/wire_test.go
+  s_6fdf04ba241df3::t_8374d19226e3a5 62-67,69,74-84,87-115
+  s_6fdf04ba241df3::t_b5b0aab5bb324f 10
+internal/config/config.go
+  s_6fdf04ba241df3::t_b14f3e21fafcb0 1098-1111
+internal/scheduler/ports.go
+  s_6fdf04ba241df3::t_1262403cd69d9a 299-301
+internal/scheduler/qa.go
+  s_6fdf04ba241df3::t_bcbd26a997c2a9 257-258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0cbb6b20e208c2645bc5265b0eb084090f8d96ab",
+  "prompts": {},
+  "sessions": {
+    "s_6fdf04ba241df3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1e03a85-2a6e-48c0-9cd0-da25aaf02f13",
+        "model": "unknown"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
