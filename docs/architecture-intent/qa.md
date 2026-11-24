@@ -27,4 +27,4 @@ Because: a wait of hours outlives a Scheduler restart, and a level check at each
 
 ## ARCH-QA-005: The QA worktree is detached at the merge commit
 
-The branch poll reads the merge commit of a merged PR, and the QA Task keeps it. The QA setup fetches the default branch into the Repo's main checkout, under the lock of the Repo, and runs `git worktree add --detach` at the merge commit. Each end of a QA Task removes that worktree with `git worktree remove`, unless it holds an uncommitted change.
+The branch poll reads the merge commit of a merged PR, and the QA Task keeps it. The QA setup fetches the merge commit by its SHA into the Repo's main checkout, under the lock of the Repo, and runs `git worktree add --detach` at it. Each end of a QA Task removes that worktree with `git worktree remove`, unless it holds an uncommitted change.

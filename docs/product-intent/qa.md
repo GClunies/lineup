@@ -44,7 +44,7 @@ QA failed waits for the user in Needs you, with the findings as its note. `lineu
 
 ## PROD-QA-011: A fix Issue goes to the build Task's Tracker
 
-Start a fix Task creates a new Issue in the Tracker of the build Task's Issue: in its Linear team and Project, in its GitHub repository, or in the Local Tracker with its Repo. An ad hoc build Task's fix Issue goes to the Local Tracker with its Repo. The title is `Fix QA of <build ID>: <title>`. The description holds the findings and the links to the Issue, the PR, and the merge commit. lineup assigns the Issue to the user, and the user starts it. The QA Task ends with the outcome fix filed, and its note names the new Issue.
+Start a fix Task creates a new Issue in the Tracker of the build Task's Issue: in its Linear team and Project, its GitHub repository, or the Local Tracker with its Repo. An ad hoc build Task's fix Issue goes to its Repo Tracker: the first of the Repo's `teams`, the Repo's GitHub repository, or else the Local Tracker. The title is `Fix QA of <build ID>: <title>`. The description holds the findings and links to the Issue, the PR, and the merge commit. lineup assigns the Issue to the user. The QA Task ends with the outcome fix filed, and its note names the new Issue.
 
 ## PROD-QA-012: The usual commands work on a QA Task
 
