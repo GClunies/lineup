@@ -1,0 +1,35 @@
+internal/config/repoinit_test.go
+  s_750b1f65664701::t_b3ada450544774 95,139,156,192,278-294
+  s_750b1f65664701::t_dfa5ff4c945e5c 295
+internal/config/repoinit.go
+  s_750b1f65664701::t_5c234486d93bcc 158-162
+  s_750b1f65664701::t_0d5a1f43d3ba35 198-199,202-205
+  s_750b1f65664701::t_4c85c4d4e84a8d 206
+cmd/lineup/repo.go
+  s_750b1f65664701::t_ffec27fd168ce0 54-56
+  s_750b1f65664701::t_2e7cc47bb329df 274-276
+  s_750b1f65664701::t_353330c57baeb2 38
+cmd/lineup/repo_test.go
+  s_750b1f65664701::t_12fa1f0a8c0622 244-272
+  s_750b1f65664701::t_c4055a9ff4a361 107-110
+docs/product-intent/repos.md
+  s_750b1f65664701::t_a1d8ffada50a4b 55
+cmd/lineup/service.go
+  s_750b1f65664701::t_3538d24feb4946 237-244,246,248,250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "78883600b7705be92c7e91287b7ecbe33ea373cd",
+  "prompts": {},
+  "sessions": {
+    "s_750b1f65664701": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "391a8ca9-c9b9-46a7-89e0-0dbc843223c9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
