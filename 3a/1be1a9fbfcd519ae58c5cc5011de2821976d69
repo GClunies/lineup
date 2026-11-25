@@ -1,0 +1,19 @@
+docs/architecture-intent/harness.md
+  s_f6fc9e3a3b5992::t_3e9244b9325b3b 62-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3a1be1a9fbfcd519ae58c5cc5011de2821976d69",
+  "prompts": {},
+  "sessions": {
+    "s_f6fc9e3a3b5992": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2445d902-30d8-4f94-8087-f0c02c4f387c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Gregory Clunies <greg.clunies@gmail.com>"
+    }
+  }
+}
