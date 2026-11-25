@@ -234,13 +234,20 @@ func (m manager) checkPrefixTeams(cfg *config.Global) error {
 	if m.teamKeys == nil || len(cfg.Prefixes()) == 0 {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	return cfg.CheckPrefixTeams(liveTeamKeys(context.Background(), m.teamKeys, os.Stderr, "restart"))
+}
+
+// liveTeamKeys reads the team keys of each signed-in Linear workspace for a
+// prefix check by the command cmd. If Linear does not answer, it says so on
+// w and gives the keys that it has.
+func liveTeamKeys(ctx context.Context, read func(context.Context) ([]string, error), w io.Writer, cmd string) []string {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	keys, err := m.teamKeys(ctx)
+	keys, err := read(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "lineup: the Linear team keys did not load, so restart checked the prefixes only against the teams lists: %v\n", err)
+		fmt.Fprintf(w, "lineup: the Linear team keys did not load, so %s checked the prefixes only against the teams lists: %v\n", cmd, err)
 	}
-	return cfg.CheckPrefixTeams(keys)
+	return keys
 }
 
 // linearTeamKeys reads the team keys of each signed-in Linear workspace.

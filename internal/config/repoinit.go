@@ -155,9 +155,11 @@ func insertTable(text, table string) (string, error) {
 // InitRepo adds the table of the Repo key, owner/repo, to the config file at
 // path, with a value for each key=value argument. It refuses a key that
 // already has a table, in any case. It checks the new text with the same
-// parse as Load, and writes nothing when that fails. A missing file becomes
-// a file with only the table. It returns the table.
-func InitRepo(path, key string, args []string) (string, error) {
+// parse as Load, and writes nothing when that fails. For a table with a
+// prefix, it also refuses a prefix that equals one of teamKeys, as lineup
+// restart does, and calls teamKeys only then. A missing file becomes a file
+// with only the table. It returns the table.
+func InitRepo(path, key string, args []string, teamKeys func() []string) (string, error) {
 	if _, repo, ok := splitKey(key); !ok || repo == "*" {
 		return "", fmt.Errorf("%q is not a Repo key: use owner/repo", key)
 	}
@@ -193,8 +195,14 @@ func InitRepo(path, key string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", path, err)
 	}
-	if _, err := parseGlobal(path, text); err != nil {
+	g, err := parseGlobal(path, text)
+	if err != nil {
 		return "", err
+	}
+	if t, _ := g.table(key); t.Prefix != "" && teamKeys != nil {
+		if err := g.CheckPrefixTeams(teamKeys()); err != nil {
+			return "", fmt.Errorf("%s: %w", path, err)
+		}
 	}
 	return table, writeAtomic(path, []byte(text), perm)
 }
