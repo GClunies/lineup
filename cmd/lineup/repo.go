@@ -35,6 +35,7 @@ type repoEnv struct {
 	facts      func(ctx context.Context, repo string) (github.RepoFacts, error)
 	hooks      func(ctx context.Context, checkout string) ([]worktree.Hook, error)
 	teams      func(ctx context.Context) ([]linearTeam, error)
+	teamKeys   func(ctx context.Context) ([]string, error)
 	restart    func() error
 }
 
@@ -50,8 +51,9 @@ func realRepoEnv() repoEnv {
 			}
 			return worktree.Hooks(ctx, bin, checkout)
 		},
-		teams:   linearTeams,
-		restart: restartScheduler,
+		teams:    linearTeams,
+		teamKeys: linearTeamKeys,
+		restart:  restartScheduler,
 	}
 }
 
@@ -269,7 +271,9 @@ func cmdRepo(ctx context.Context, args []string, out io.Writer, env repoEnv) err
 			}
 			rest = d.Init
 		}
-		table, err := config.InitRepo(env.configPath, key, rest)
+		table, err := config.InitRepo(env.configPath, key, rest, func() []string {
+			return liveTeamKeys(ctx, env.teamKeys, out, "repo init")
+		})
 		if err != nil {
 			return err
 		}

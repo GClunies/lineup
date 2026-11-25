@@ -92,7 +92,7 @@ func TestInitRepoAddsATableThatTheNextLoadReads(t *testing.T) {
 	if err := os.Chmod(path, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	table, err := InitRepo(path, "crexi/web", []string{"landing_bar.checks=all", "prefix=cw", "review_bot.min_review_score=4", "teams=WEB, APP"})
+	table, err := InitRepo(path, "crexi/web", []string{"landing_bar.checks=all", "prefix=cw", "review_bot.min_review_score=4", "teams=WEB, APP"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestAnEmptyTableSetsTheRepoUp(t *testing.T) {
 	if _, ok := loadPath(t, path).SetUp(lineup); ok {
 		t.Fatal("GClunies/lineup is set up before its table")
 	}
-	table, err := InitRepo(path, "GClunies/lineup", nil)
+	table, err := InitRepo(path, "GClunies/lineup", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestAnEmptyTableSetsTheRepoUp(t *testing.T) {
 
 func TestInitRepoMakesAMissingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "lineup", "config.toml")
-	if _, err := InitRepo(path, "GClunies/lineup", []string{"tracker=github"}); err != nil {
+	if _, err := InitRepo(path, "GClunies/lineup", []string{"tracker=github"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := readFile(t, path), "[repos.\"GClunies/lineup\"]\ntracker = \"github\"\n"; got != want {
@@ -189,7 +189,7 @@ func TestInitRepoRefusesABadTableAndKeepsTheFile(t *testing.T) {
 	} {
 		dir := t.TempDir()
 		path := write(t, filepath.Join(dir, "config.toml"), initBefore)
-		_, err := InitRepo(path, c.key, c.args)
+		_, err := InitRepo(path, c.key, c.args, nil)
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s %q: err = %v, want %q", c.key, c.args, err, c.want)
 		}
@@ -273,5 +273,23 @@ prefix = "not"
 		if got := g.SuggestPrefix(key, []string{"KINE"}); got != want {
 			t.Errorf("SuggestPrefix(%s) = %q, want %q", key, got, want)
 		}
+	}
+}
+
+func TestInitRepoRefusesAPrefixThatEqualsALiveTeamKey(t *testing.T) {
+	path := write(t, filepath.Join(t.TempDir(), "config.toml"), initBefore)
+	_, err := InitRepo(path, "crexi/web", []string{"prefix=kin"}, func() []string { return []string{"ENG", "KIN"} })
+	if want := `repos."crexi/web": prefix "KIN" equals a Linear team key`; err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("err = %v, want %q", err, want)
+	}
+	if got := readFile(t, path); got != initBefore {
+		t.Errorf("the file changed:\n%s", got)
+	}
+	asked := false
+	if _, err := InitRepo(path, "crexi/web", []string{"tracker=github"}, func() []string { asked = true; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if asked {
+		t.Error("a table with no prefix asked for the team keys")
 	}
 }

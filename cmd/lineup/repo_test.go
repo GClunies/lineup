@@ -104,6 +104,10 @@ func repoHome(t *testing.T) (env repoEnv, home string, calls *[]string) {
 		teams: func(context.Context) ([]linearTeam, error) {
 			return []linearTeam{{Workspace: "acme", Key: "PD", Name: "Platform Data"}, {Workspace: "acme", Key: "WEB", Name: "Web"}}, nil
 		},
+		teamKeys: func(context.Context) ([]string, error) {
+			*calls = append(*calls, "team keys")
+			return []string{"PD", "WEB"}, nil
+		},
 		restart: func() error { *calls = append(*calls, "restart"); return nil },
 	}
 	return env, home, calls
@@ -235,5 +239,34 @@ func TestRepoInitWritesTheGivenKeysAndRestartsOnlyAfterAWrite(t *testing.T) {
 	}
 	if len(*calls) != 0 {
 		t.Errorf("calls %q, want no restart and no detect after a refusal", *calls)
+	}
+}
+
+func TestRepoInitRefusesAPrefixThatEqualsALiveTeamKey(t *testing.T) {
+	env, _, calls := repoHome(t)
+	err := cmdRepo(context.Background(), []string{"init", "acme/web", "prefix=web"}, &bytes.Buffer{}, env)
+	if want := `repos."acme/web": prefix "WEB" equals a Linear team key`; err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("err = %v, want %q", err, want)
+	}
+	if got, _ := os.ReadFile(env.configPath); string(got) != repoConfig {
+		t.Errorf("the file changed:\n%s", got)
+	}
+	if want := []string{"team keys"}; !slices.Equal(*calls, want) {
+		t.Errorf("calls %q, want %q and no restart", *calls, want)
+	}
+}
+
+func TestRepoInitWarnsAndWritesWhenLinearDoesNotAnswer(t *testing.T) {
+	env, _, _ := repoHome(t)
+	env.teamKeys = func(context.Context) ([]string, error) { return nil, errors.New("no network") }
+	var out bytes.Buffer
+	if err := cmdRepo(context.Background(), []string{"init", "acme/web", "prefix=cw"}, &out, env); err != nil {
+		t.Fatal(err)
+	}
+	if want := "lineup: the Linear team keys did not load, so repo init checked the prefixes only against the teams lists: no network\n"; !strings.HasPrefix(out.String(), want) {
+		t.Errorf("out %q, want it to start with %q", out.String(), want)
+	}
+	if got, _ := os.ReadFile(env.configPath); !strings.Contains(string(got), "[repos.\"acme/web\"]\nprefix = \"cw\"\n") {
+		t.Errorf("file has no prefix:\n%s", got)
 	}
 }
