@@ -139,6 +139,78 @@ func TestAgentRoleAsksForAPrefixInTheRepoSetup(t *testing.T) {
 	}
 }
 
+// section is the text of the role's section under heading, up to the next
+// heading of the same level or higher.
+func section(t *testing.T, role, heading string) string {
+	t.Helper()
+	_, s, ok := strings.Cut(role, "\n"+heading+"\n")
+	if !ok {
+		t.Fatalf("the role has no %s section:\n%s", heading, role)
+	}
+	level := heading[:strings.Index(heading, " ")+1]
+	for _, end := range []string{"\n## ", "\n" + level} {
+		s, _, _ = strings.Cut(s, end)
+	}
+	return s
+}
+
+func TestTheOrchestratorSearchesForLinksBeforeItWritesAnIssue(t *testing.T) {
+	raw, _, err := agentFiles(agentRole, agentSettings, "/Users/g/issues", "/Users/g/.config/lineup/config.toml", "/Users/g/bin/lineup", "/Users/g/.claude/projects/-Users-g-state-lineup", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	role := string(raw)
+	if plans := section(t, role, "## Plans"); !strings.Contains(plans, "Before you create or change an Issue, find its links and show them to the user") {
+		t.Errorf("the Plans section does not send the agent to the links search:\n%s", plans)
+	}
+	links := section(t, role, "### Links")
+	for _, want := range []string{
+		// The search space (PROD-ORCH-013).
+		"GitHub Issues that are open", "Linear Issues that are not Done or Canceled",
+		"local Issues with status `backlog`, `todo`, `started`, or `in review`",
+		"`lineup ls --json` that are not Done, also ad hoc Tasks with no Issue",
+		"`gh pr list --repo <owner>/<repo> --state open`, also PRs that no Issue tracks",
+		"Search another Repo only when the Issue links to it", "whose API, topic, or table the Issue uses",
+		"the same Linear Project or milestone", "the other Issues that the same request creates",
+		"Leave out closed Issues, Done Tasks, and merged PRs",
+		// The evidence of the files.
+		"`gh pr diff <n> --repo <owner>/<repo> --name-only`", "`files` in `lineup show --json <task>`",
+		// The table and the approval (PROD-ORCH-015).
+		"| Candidate | Kind | Evidence | Record |", "with the count of items that you read there, also a count of 0",
+		"`AskUserQuestion`", "Write nothing before the user picks",
+	} {
+		if !strings.Contains(links, want) {
+			t.Errorf("the Links section has no %q", want)
+		}
+	}
+	// The link kinds, each a row with its record (PROD-ORCH-014).
+	for kind, record := range map[string]string{
+		"Duplicate":      "No new Issue. Offer to edit the other Issue.",
+		"Needs":          "`Blocked by` on the Issue that uses it, or `blocks` on the other",
+		"Reverse":        "`Blocked by <new Issue>` on the open Issue",
+		"Overlaps":       "`Blocked by` on the new Issue, with the overlap as the reason",
+		"Same file only": "A `Related:` link, with no block",
+	} {
+		row := regexp.MustCompile(`(?m)^\| ` + regexp.QuoteMeta(kind) + ` \|.*\| ` + regexp.QuoteMeta(record) + ` \|$`)
+		if !row.MatchString(links) {
+			t.Errorf("the Links section has no %s row that records %q", kind, record)
+		}
+	}
+	// Each Tracker says how to record a block both ways and a related Issue (PROD-TRACK-016).
+	for heading, wants := range map[string][]string{
+		"## GitHub": {"`Blocked by #12`: #12 blocks this Issue", "add `Blocked by #<this Issue>` to the body of #12", "`Related: #12`"},
+		"## Linear": {"linear issue relation add ENG-13 blocked-by ENG-12", "linear issue relation add ENG-12 blocks ENG-13", "linear issue relation add ENG-13 related ENG-12"},
+		"## Local":  {"`blocked_by: [LOCAL-7]` in `local-8.md` records that LOCAL-7 blocks LOCAL-8", "add `LOCAL-8` to `blocked_by` in `local-9.md`", "`Related: LOCAL-7`"},
+	} {
+		s := section(t, role, heading)
+		for _, want := range wants {
+			if !strings.Contains(s, want) {
+				t.Errorf("the %s section has no %q", heading, want)
+			}
+		}
+	}
+}
+
 func TestHubHasOneTabAndItCarriesTheAgent(t *testing.T) {
 	var tabs, agents []string
 	for _, tab := range agentTabs {
@@ -183,6 +255,7 @@ func TestAgentSettingsUnionAllowsEveryLineupCommand(t *testing.T) {
 		"lineup review https://github.com/o/r/pull/1", "lineup reviews --json", "lineup steer R-1 hi",
 		"linear issue update ENG-1", "linear issue relation add ENG-1 blocks ENG-2", "gh issue edit 12",
 		"gh pr view 1", "gh search prs --review-requested @me",
+		"gh pr list --repo o/r --state open", "gh pr diff 34 --repo o/r --name-only", "linear issue relation add ENG-13 related ENG-12",
 	}
 	// Every lineup command that the role tells the agent to run.
 	for _, m := range regexp.MustCompile("`(lineup [a-z]+)").FindAllStringSubmatch(string(agentRole), -1) {

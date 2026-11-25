@@ -266,6 +266,35 @@ func TestAddTakesAGitHubIssueOfARepositoryWithNoCheckout(t *testing.T) {
 	}
 }
 
+// lineup show lists the files that a build Task's worktree changed. A review
+// Task, and a build Task whose worktree is gone, list none (PROD-WORKER-016).
+func TestShowListsTheFilesThatABuildTaskChanged(t *testing.T) {
+	h := newHarness(t, filepath.Join(t.TempDir(), "state.db"), nil)
+	h.working()
+	h.gh.setReview(openPR(7, "h1"))
+	h.review(prURL7)
+	h.waitTab("claude reviewing")
+	build, review := h.task("ENG-1").Worktree, h.task("PR-7").Worktree
+	if build == "" || review == "" {
+		t.Fatalf("worktrees %q and %q, want both", build, review)
+	}
+	changed := []string{"README.md", "models/billing.sql"}
+	h.wt.mu.Lock()
+	h.wt.files = map[string][]string{build: changed, review: {"src/tooltip.ts"}}
+	h.wt.mu.Unlock()
+
+	if d := h.do(Request{Op: "show", Task: "ENG-1"}).(TaskDetail); !slices.Equal(d.Files, changed) {
+		t.Fatalf("show ENG-1 files = %q, want %q", d.Files, changed)
+	}
+	if d := h.do(Request{Op: "show", Task: "PR-7"}).(TaskDetail); d.Files != nil {
+		t.Fatalf("show PR-7 files = %q, want none for a review Task", d.Files)
+	}
+	h.wt.lose(build)
+	if d := h.do(Request{Op: "show", Task: "ENG-1"}).(TaskDetail); d.Files != nil {
+		t.Fatalf("show ENG-1 files = %q, want none when the worktree is gone", d.Files)
+	}
+}
+
 // The CLI and the Board can name a Task in any case. A GitHub name ignores
 // case, so owner/repo#12 matches in any case too.
 func TestEachOpFindsATaskByItsIDInAnyCase(t *testing.T) {

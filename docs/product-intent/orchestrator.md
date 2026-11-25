@@ -24,7 +24,7 @@ If `lineup add` fails with `wip cap full`, the Orchestrator asks the user. The o
 
 ## PROD-ORCH-006: The Orchestrator plans in the Trackers that are on
 
-The Orchestrator shapes the backlog in each Tracker that is on. It reads Issues, splits work into Issues, writes acceptance criteria, and records the order of Issues in the Tracker's own form. Before each turn, it learns from `lineup trackers` which Trackers are on, and it plans only in those. It writes each Issue so that one Worker can finish it in one Repo. It shows the user a split or an order before it creates or changes many Issues.
+The Orchestrator shapes the backlog in each Tracker that is on. It reads Issues, splits work into Issues, writes acceptance criteria, and records the links between Issues in the Tracker's own form. Before each turn, it learns from `lineup trackers` which Trackers are on, and it plans only in those. It writes each Issue so that one Worker can finish it in one Repo. It shows the user a split or an order before it creates or changes many Issues.
 
 ## PROD-ORCH-007: A plan starts no Task
 
@@ -49,3 +49,15 @@ When the user asks to add or change a review queue, the Orchestrator edits only 
 ## PROD-ORCH-012: Each `lineup restart` starts a new Orchestrator session
 
 Each `lineup restart` starts the Orchestrator as a new session, on the current Claude Code settings. The earlier sessions stay. When the user asks about an earlier conversation, the Orchestrator reads its earlier sessions.
+
+## PROD-ORCH-013: The Orchestrator searches the open work before it writes an Issue
+
+Before the Orchestrator creates or changes an Issue, it searches the open work for the Issue's links. It always reads the open Issues of the Repo's Tracker, the Tasks of the Repo that are not Done, and the open PRs of the Repo. It also reads the other Issues of the same request. It reads another Repo, or the same Linear Project or milestone, only when the Issue links to it. It leaves out closed Issues, Done Tasks, and merged PRs.
+
+## PROD-ORCH-014: The Orchestrator gives each link one kind
+
+The Orchestrator gives each link the first kind that fits. Duplicate: the other Issue covers the goal, so it writes no new Issue and offers to edit the other. Needs: one Issue uses what the other adds, changes, or removes, so it is blocked by the other. Reverse: an open Issue uses what the new Issue adds, so the open Issue is blocked by the new one. Overlaps: both change one function or doc section, so the new Issue is blocked by the other. Same file only: both change one file, so they are related.
+
+## PROD-ORCH-015: The user approves the links before the Orchestrator writes
+
+Before the Orchestrator writes an Issue, it shows the user one table. Each row holds a candidate, its link kind, the evidence, and the record that the Orchestrator will write. Under the table, it names each place that it searched, with a count, also a count of 0. It writes the Issues and the links only after the user approves the table.

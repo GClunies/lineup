@@ -73,6 +73,7 @@ const agentSettings = `{
       "Bash(gh search issues:*)",
       "Bash(gh pr view:*)",
       "Bash(gh pr list:*)",
+      "Bash(gh pr diff:*)",
       "Bash(gh search prs:*)",
       "Read(/{{issues}}/**)",
       "Edit(/{{issues}}/**)",

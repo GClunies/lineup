@@ -577,6 +577,8 @@ type fakeWorktrees struct {
 	// lists the worktrees whose folder is gone.
 	base string
 	gone []string
+	// files is the Changed list of each worktree.
+	files map[string][]string
 }
 
 func (w *fakeWorktrees) DiffBase(_ context.Context, worktree string) (string, error) {
@@ -586,6 +588,15 @@ func (w *fakeWorktrees) DiffBase(_ context.Context, worktree string) (string, er
 		return "", fmt.Errorf("%w: %s", ErrNoWorktree, worktree)
 	}
 	return cmp.Or(w.base, "base1"), nil
+}
+
+func (w *fakeWorktrees) Changed(_ context.Context, worktree string) ([]string, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if slices.Contains(w.gone, worktree) {
+		return nil, fmt.Errorf("%w: %s", ErrNoWorktree, worktree)
+	}
+	return w.files[worktree], nil
 }
 
 // rebase moves the DiffBase of every worktree to base.

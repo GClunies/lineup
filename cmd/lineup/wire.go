@@ -287,6 +287,14 @@ func (p worktreePort) DiffBase(ctx context.Context, wt string) (string, error) {
 	return base, err
 }
 
+func (p worktreePort) Changed(ctx context.Context, wt string) ([]string, error) {
+	files, err := worktree.Changed(ctx, wt)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("%w: %w", scheduler.ErrNoWorktree, err)
+	}
+	return files, err
+}
+
 func (p worktreePort) AddReview(ctx context.Context, repo string, pr scheduler.ReviewPR) (string, error) {
 	path := worktree.ReviewPath(repo, pr.Number)
 	return path, worktree.AddReview(ctx, repo, path, pr.Number, pr.Base, pr.Head)

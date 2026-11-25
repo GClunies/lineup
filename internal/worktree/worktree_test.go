@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -133,6 +134,57 @@ func TestDiffBaseFollowsTheDefaultBranch(t *testing.T) {
 	}
 	if _, err := DiffBase(ctx, root); err == nil || errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("DiffBase of a folder that is no worktree: err = %v, want a git error", err)
+	}
+}
+
+// put writes the file, with its folders, in the folder dir.
+func put(t *testing.T, dir, name, text string) {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Changed lists what the branch changed since it left origin's default
+// branch: its commits, its uncommitted changes, and its untracked files. It
+// lists no ignored file, and no file that only the default branch changed.
+func TestChangedListsTheFilesThatTheBranchChanged(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin")
+	sh(t, root, "git", "init", "-q", "-b", "trunk", origin)
+	for name, text := range map[string]string{".gitignore": "*.log\n", "README.md": "lineup\n", "old.txt": "moved\n", "kept.txt": "kept\n"} {
+		put(t, origin, name, text)
+	}
+	sh(t, origin, "git", "add", ".")
+	commit(t, origin, "first")
+	clone := filepath.Join(root, "clone")
+	sh(t, root, "git", "clone", "-q", origin, clone)
+	sh(t, clone, "git", "switch", "-q", "-c", "feat")
+	put(t, clone, "models/billing.sql", "select 1\n")
+	sh(t, clone, "git", "add", ".")
+	sh(t, clone, "git", "mv", "old.txt", "new.txt")
+	commit(t, clone, "feat")
+	put(t, clone, "README.md", "lineup, changed\n")
+	put(t, clone, "docs/new notes.md", "draft\n")
+	put(t, clone, "debug.log", "noise\n")
+	// kept.txt leaves the index, so git diff and git ls-files both name it.
+	sh(t, clone, "git", "rm", "-q", "--cached", "kept.txt")
+	put(t, origin, "upstream.txt", "later\n")
+	sh(t, origin, "git", "add", ".")
+	commit(t, origin, "second")
+	sh(t, clone, "git", "fetch", "-q")
+
+	want := []string{"README.md", "docs/new notes.md", "kept.txt", "models/billing.sql", "new.txt", "old.txt"}
+	if got, err := Changed(ctx, clone); err != nil || !slices.Equal(got, want) {
+		t.Fatalf("Changed = %q, %v, want %q", got, err, want)
+	}
+	if _, err := Changed(ctx, filepath.Join(root, "gone")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("Changed of a missing folder: err = %v, want fs.ErrNotExist", err)
 	}
 }
 

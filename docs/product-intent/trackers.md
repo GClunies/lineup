@@ -61,3 +61,7 @@ A Linear Issue's branch is the branch name that Linear gives the Issue. A GitHub
 ## PROD-TRACK-015: lineup refuses a Repo prefix that can clash
 
 lineup refuses to load a bad prefix, and the error names it. A prefix holds only letters, digits, and single dashes, with no dash at either end. It is not `LOCAL`, `AH`, `PR`, or `QA`, it does not start with `QA-`, and no two tables share it. An owner table holds no prefix. A prefix never equals a team key of a `teams` list. `lineup restart` also checks the team keys of each signed-in Linear workspace, and if Linear does not answer, it prints a warning and checks only the `teams` lists. Case does not count in these checks.
+
+## PROD-TRACK-016: Each Tracker records the links between Issues in its own form
+
+In GitHub, a body line `Blocked by #12` records a block, and a line `Related: #12` records a related Issue. To record that an Issue blocks #12, the Orchestrator writes `Blocked by` in the body of #12. In Linear, a `blocked-by`, `blocks`, or `related` relation records the link. In the Local Tracker, the `blocked_by` field records a block, and a line `Related: LOCAL-7` in the description records a related Issue. The reason of a link is a line in the description.
