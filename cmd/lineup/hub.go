@@ -44,8 +44,9 @@ const (
 
 // agentSettings gives the Orchestrator its status line, lets it run lineup
 // and edit the Trackers without a permission prompt, and keeps it from
-// writing to a PR. Only the user posts a review or merges outside lineup. It
-// also lets the Orchestrator read its earlier sessions (ARCH-ORCH-004).
+// posting to a PR. It leaves gh pr merge out of both lists, so the
+// Orchestrator can merge a PR in any repo. It also lets the Orchestrator read
+// its earlier sessions (ARCH-ORCH-004).
 const agentSettings = `{
   "statusLine": {"type": "command", "command": "echo Lineup"},
   "permissions": {
@@ -91,7 +92,6 @@ const agentSettings = `{
       "Bash(gh issue delete:*)",
       "Bash(gh pr review:*)",
       "Bash(gh pr comment:*)",
-      "Bash(gh pr merge:*)",
       "Bash(gh pr close:*)",
       "Bash(gh pr edit:*)",
       "Bash(gh api:*)"
