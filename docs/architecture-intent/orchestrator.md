@@ -23,11 +23,12 @@ The `UserPromptSubmit` hook of the Orchestrator runs `lineup trackers` and `line
 Because: a hook costs no agent turn, and Claude reads its instructions only when a session starts, so a later sign-in or ready PR reaches it only through a hook.
 Not: a background watch for Ready to land; a hook that prints only the lines that are new since the last turn.
 
-## ARCH-ORCH-004: The settings of the Orchestrator deny writes to a PR
+## ARCH-ORCH-004: The settings of the Orchestrator deny posts to a PR
 
-The Hub writes the Claude settings of the Orchestrator. They allow every `lineup` command, the Tracker reads and writes through `linear` and `gh issue`, `gh pr view`, `gh pr list`, `gh pr diff`, and `gh search prs`. They allow reads and edits of the Local Tracker folder and of the config file, and of nothing else in its folder. They allow reads, and no edits, of the folder where Claude keeps the Orchestrator's sessions. They deny `gh pr review`, `gh pr comment`, `gh pr merge`, `gh pr close`, `gh pr edit`, and `gh api`. They also deny each Issue delete, `gh issue close`, `gh issue reopen`, `linear issue start`, and `linear issue pull-request`.
+The Hub writes the Claude settings of the Orchestrator. They allow every `lineup` command, the Tracker reads and writes through `linear` and `gh issue`, `gh pr view`, `gh pr list`, `gh pr diff`, and `gh search prs`. They allow reads and edits of the Local Tracker folder and of the config file, and of nothing else in its folder. They allow reads, and no edits, of the folder where Claude keeps the Orchestrator's sessions. They deny `gh pr review`, `gh pr comment`, `gh pr close`, `gh pr edit`, and `gh api`. They also deny each Issue delete, `gh issue close`, `gh issue reopen`, `linear issue start`, and `linear issue pull-request`. They neither allow nor deny `gh pr merge`.
 
-Because: only the user posts to a PR, and only lineup moves an Issue through its lifecycle.
+Because: only the user posts to a PR, the Orchestrator merges a PR in any Repo when the user asks, and only lineup moves an Issue through its lifecycle.
+Not: a deny of `gh pr merge`, which kept the Orchestrator from merging a PR that has no build Task.
 
 ## ARCH-ORCH-005: The Orchestrator works in its own folder
 

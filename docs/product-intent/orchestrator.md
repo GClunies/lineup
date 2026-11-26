@@ -36,7 +36,7 @@ Before the Orchestrator writes an Issue from the user's words, it names the Dest
 
 ## PROD-ORCH-009: Only the user posts to a PR
 
-The Orchestrator never writes to a PR. Its settings deny each GitHub write to a PR, `gh api`, and each delete of an Issue. It never writes code, opens a PR, or reviews, explains, comments on, or approves a PR itself. Workers do that work in their own tabs. A review reaches GitHub only after the user decides it.
+The Orchestrator writes to a PR only to merge it when the user asks. It merges the PR of a build Task with `lineup merge`, and any other PR, in any Repo, with `gh pr merge`. Its settings deny each other GitHub write to a PR, `gh api`, and each delete of an Issue. It never writes code, opens a PR, or reviews, explains, comments on, or approves a PR itself. Workers do that work in their own tabs. A review reaches GitHub only after the user decides it.
 
 ## PROD-ORCH-010: The Orchestrator runs the Repo setup
 

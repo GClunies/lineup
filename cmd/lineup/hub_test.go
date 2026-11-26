@@ -270,11 +270,19 @@ func TestAgentSettingsUnionAllowsEveryLineupCommand(t *testing.T) {
 
 func TestAgentSettingsDenyKeepsGitHubWrites(t *testing.T) {
 	for _, cmd := range []string{
-		"gh pr review 1 --approve", "gh pr comment 1", "gh pr merge 1", "gh pr close 1", "gh pr edit 1",
+		"gh pr review 1 --approve", "gh pr comment 1", "gh pr close 1", "gh pr edit 1",
 		"gh api repos/o/r/pulls/1/reviews", "gh issue delete 12", "linear issue delete ENG-1",
 	} {
 		if allow, deny := permits(t, agentSettings, cmd); allow || !deny {
 			t.Errorf("the agent's settings do not deny %q", cmd)
+		}
+	}
+}
+
+func TestAgentSettingsLetTheAgentMergeAPR(t *testing.T) {
+	for _, cmd := range []string{"gh pr merge 1", "gh pr merge 12 --repo o/r --squash"} {
+		if _, deny := permits(t, agentSettings, cmd); deny {
+			t.Errorf("the agent's settings deny %q", cmd)
 		}
 	}
 }
